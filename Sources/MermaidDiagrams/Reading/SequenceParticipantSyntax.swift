@@ -1,3 +1,15 @@
+/**
+ * File: SequenceParticipantSyntax.swift
+ * -------------------------------------
+ * Layer: Core
+ * Description: Reads the participant named after `participant`, `actor`, `create`, `destroy`, `activate` and
+ *              `deactivate`, with its alias or its attributes, as Mermaid's lexer delimits them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Reads the participant named after `participant`, `actor`, `destroy`, `activate` and `deactivate`, as Mermaid's
 /// sequence grammar does: a name, then `as` and an alias, or `@{ … }` attributes.
 enum SequenceParticipantSyntax {
@@ -5,8 +17,10 @@ enum SequenceParticipantSyntax {
         let identifier: String
         /// The text after `as`, or nil.
         let alias: SequenceTextSyntax.WrittenText?
-        /// Whether `@{ … }` follows the name: attributes that set a shape or an alias, which are not laid out.
-        let hasAttributes: Bool
+        /// The text between `@{` and the first `}` after the name, which may set a shape or an alias, or nil.
+        let attributes: String?
+        /// The line `@{` is on.
+        let attributesLine: Int
     }
 
     /// Reads a name with its alias or attributes. A name without either runs to the end of the statement and may hold
@@ -18,14 +32,14 @@ enum SequenceParticipantSyntax {
         }
         guard !cursor.hasPrefix(attributesStart) else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         if let declaration = try readShortNameWithAliasOrAttributes(&cursor) { return declaration }
-        return Declaration(identifier: try readWideName(&cursor), alias: nil, hasAttributes: false)
+        return Declaration(identifier: try readWideName(&cursor), alias: nil, attributes: nil, attributesLine: cursor.line)
     }
 
     /// Reads a name that nothing may follow but the statement's end, for `destroy`, `activate` and `deactivate`.
     static func readName(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String {
         let line = cursor.line
         let declaration = try readDeclaration(&cursor)
-        guard declaration.alias == nil, !declaration.hasAttributes else { throw .invalidSyntax(line: line, problem: .unexpectedText(declaration.identifier)) }
+        guard declaration.alias == nil, declaration.attributes == nil else { throw .invalidSyntax(line: line, problem: .unexpectedText(declaration.identifier)) }
         return declaration.identifier
     }
 
@@ -38,22 +52,23 @@ enum SequenceParticipantSyntax {
         let identifier = lookahead.text(from: start, to: lookahead.position)
         var afterName = lookahead
         afterName.skipSpaces()
-        let hasAttributes = afterName.hasPrefix(attributesStart)
-        if hasAttributes {
-            try skipAttributes(&afterName)
+        let attributesLine = afterName.line
+        var attributes: String?
+        if afterName.hasPrefix(attributesStart) {
+            attributes = try readAttributes(&afterName)
             lookahead = afterName
             afterName.skipSpaces()
         }
         guard afterName.position > lookahead.position, isAtAlias(afterName) else {
-            guard hasAttributes else { return nil }
+            guard attributes != nil else { return nil }
             cursor = lookahead
-            return Declaration(identifier: identifier, alias: nil, hasAttributes: true)
+            return Declaration(identifier: identifier, alias: nil, attributes: attributes, attributesLine: attributesLine)
         }
         afterName.advance(by: aliasKeyword.count)
         afterName.skipSpaces()
         let alias = SequenceTextSyntax.readText(&afterName)
         cursor = afterName
-        return Declaration(identifier: identifier, alias: alias, hasAttributes: hasAttributes)
+        return Declaration(identifier: identifier, alias: alias, attributes: attributes, attributesLine: attributesLine)
     }
 
     /// A name to the end of the statement, spaces included. Before any of `< > : , @` the name must end at a `#` that
@@ -74,12 +89,16 @@ enum SequenceParticipantSyntax {
         return cursor.trimmedText(from: start, to: end.position)
     }
 
-    /// Moves past `@{ … }`.
-    private static func skipAttributes(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) {
+    /// Moves past `@{ … }` and returns the text between the braces, which ends at the first closing brace.
+    private static func readAttributes(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String {
         let openingLine = cursor.line
+        cursor.advance(by: attributesStart.count)
+        let start = cursor.position
         while let byte = cursor.peek(), byte != MermaidByte.closingBrace { cursor.advance() }
         guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedAttributes) }
+        let text = cursor.text(from: start, to: cursor.position)
         cursor.advance()
+        return text
     }
 
     /// `as` in any case, then a space, a tab, a line break or the end of the text.

@@ -1,3 +1,15 @@
+/**
+ * File: SequenceUniformLayout.swift
+ * ---------------------------------
+ * Layer: Tests
+ * Description: Lays a sequence diagram out with uniform-width text for tests, and reads its headers, footers and
+ *              lifelines.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 @testable import MermaidDiagrams
 
@@ -15,14 +27,14 @@ enum SequenceUniformLayout {
 }
 
 extension SequenceLayout {
-    /// The participants above the lifelines, in order.
+    /// The participants above the lifelines, in order: one per lifeline.
     var headers: [SequenceLayoutParticipant] {
-        Array(participants.prefix(participants.count / 2))
+        Array(participants.prefix(lifelines.count))
     }
 
-    /// The participants below the lifelines, in order.
+    /// The participants below the lifelines, in order: those not destroyed.
     var footers: [SequenceLayoutParticipant] {
-        Array(participants.suffix(participants.count / 2))
+        Array(participants.dropFirst(lifelines.count))
     }
 
     /// Each lifeline's x, in the participants' order.

@@ -1,6 +1,19 @@
+/**
+ * File: SequenceDiagramBuilder.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Collects a sequence diagram as its statements are read, with Mermaid's rules for participants, boxes,
+ *              created and destroyed participants, activations and blocks.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Collects a sequence diagram as its statements are read, with Mermaid's rules: participants by identifier in the
-/// order they are first named, activations counted so that only an active participant is deactivated, and blocks
-/// closed in order, each section in the block it belongs to.
+/// order they are first named, each in one box at most, activations counted so that only an active participant is
+/// deactivated, the message after `create` to the participant created and the one after `destroy` from or to the one
+/// destroyed, and blocks closed in order, each section in the block it belongs to.
 struct SequenceDiagramBuilder {
     private var diagram = SequenceDiagram()
     private let limits: MermaidDiagramLimits
@@ -12,6 +25,10 @@ struct SequenceDiagramBuilder {
     private var activationsOfUnnamedParticipants: [(eventIndex: Int, identifier: String, isStart: Bool)] = []
     /// The blocks open now, innermost last.
     private var openBlocks: [OpenBlock] = []
+    /// The index in `diagram.boxes` of the box open now, or nil.
+    private var openBoxIndex: Int?
+    /// The participants created or destroyed since the last message, which that message's target (or end) must be.
+    private var lifetimes = SequenceParticipantLifetimes()
 
     /// A block open while its statements are read: a framed block, a highlight or a box, with the line it opened on.
     private struct OpenBlock {
@@ -43,18 +60,52 @@ struct SequenceDiagramBuilder {
         return index
     }
 
-    /// `participant` or `actor`. A participant named before keeps its place; an alias gives it its text and its kind,
-    /// and a declaration without one changes nothing, as in Mermaid.
-    mutating func declareParticipant(_ identifier: String, kind: SequenceParticipantKind, alias: DiagramLabel?) throws(MermaidDiagramReadError) {
+    /// `participant` or `actor`, as Mermaid adds an actor. A participant named before keeps its place and joins the open
+    /// box unless it is in another one; an alias gives it its text and its kind, and a declaration without one changes
+    /// nothing else. The attributes' `type` sets the kind and their `alias` the text when no other alias is written (or
+    /// the one written is the identifier).
+    mutating func declareParticipant(_ identifier: String, kind: SequenceParticipantKind, alias: SequenceTextSyntax.WrittenText?,
+                                     attributes: SequenceParticipantAttributes?, line: Int) throws(MermaidDiagramReadError) {
+        let kind = attributes?.type.map(SequenceParticipantKind.init(attributeType:)) ?? kind
+        var label = alias?.label
+        if let attributeAlias = attributes?.alias, alias == nil || alias?.text == identifier {
+            label = DiagramLabelDecoder.label(from: attributeAlias, form: .plain)
+        }
         let isNew = participantIndexByIdentifier[identifier] == nil
         let index = try participantIndex(for: identifier)
-        guard isNew || alias != nil else { return }
+        if let openBoxIndex {
+            if let boxIndex = diagram.participants[index].boxIndex, boxIndex != openBoxIndex {
+                throw .invalidSyntax(line: line, problem: .sequence(.participantInTwoBoxes(identifier: identifier)))
+            }
+            diagram.participants[index].boxIndex = openBoxIndex
+        }
+        guard isNew || label != nil else { return }
         diagram.participants[index].kind = kind
-        if let alias { diagram.participants[index].label = alias }
+        diagram.participants[index].label = label ?? DiagramLabel(identifier)
     }
 
-    mutating func addMessage(_ message: SequenceMessage) throws(MermaidDiagramReadError) {
-        try append(.message(message))
+    /// `create participant` or `create actor`, which must name a participant not named yet.
+    mutating func createParticipant(_ identifier: String, kind: SequenceParticipantKind, alias: SequenceTextSyntax.WrittenText?,
+                                    attributes: SequenceParticipantAttributes?, line: Int) throws(MermaidDiagramReadError) {
+        guard participantIndexByIdentifier[identifier] == nil else {
+            throw .invalidSyntax(line: line, problem: .sequence(.createdParticipantAlreadyNamed(identifier: identifier)))
+        }
+        try declareParticipant(identifier, kind: kind, alias: alias, attributes: attributes, line: line)
+        lifetimes.create(identifier)
+    }
+
+    /// `destroy`: the participant's lifeline ends at the next message, which must be from or to it.
+    mutating func destroyParticipant(_ identifier: String) {
+        lifetimes.destroy(identifier, events: &diagram.events)
+    }
+
+    /// A message: the first after `create` must be to the participant created, else the first after `destroy` must be
+    /// from or to the participant destroyed. It creates or destroys the participants named since the last message.
+    mutating func addMessage(_ message: SequenceMessage, sourceIdentifier: String, targetIdentifier: String, line: Int) throws(MermaidDiagramReadError) {
+        try lifetimes.check(sourceIdentifier: sourceIdentifier, targetIdentifier: targetIdentifier, line: line)
+        let marked = lifetimes.marking(message, eventIndex: diagram.events.count, sourceIdentifier: sourceIdentifier,
+                                       targetIdentifier: targetIdentifier)
+        try append(.message(marked))
     }
 
     mutating func addNote(_ note: SequenceNote) throws(MermaidDiagramReadError) {
@@ -87,9 +138,11 @@ struct SequenceDiagramBuilder {
         openBlocks.append(OpenBlock(keyword: keyword, sectionKeyword: sectionKeyword, line: line, isBox: false))
     }
 
-    /// `box`, which groups participants and adds no event.
-    mutating func openBox(line: Int) {
-        diagram.statementsNotLaidOut.insert(.box)
+    /// `box`, which groups the participants declared before its `end` and adds no event.
+    mutating func openBox(_ box: SequenceBox, line: Int) throws(MermaidDiagramReadError) {
+        guard diagram.boxes.count < limits.maximumNodeCount else { throw .tooManyParticipants(limit: limits.maximumNodeCount) }
+        openBoxIndex = diagram.boxes.count
+        diagram.boxes.append(box)
         openBlocks.append(OpenBlock(keyword: "box", sectionKeyword: nil, line: line, isBox: true))
     }
 
@@ -104,15 +157,15 @@ struct SequenceDiagramBuilder {
     /// `end`.
     mutating func closeBlock(line: Int) throws(MermaidDiagramReadError) {
         guard let closed = openBlocks.popLast() else { throw .invalidSyntax(line: line, problem: .sequence(.endWithoutBlock)) }
-        if !closed.isBox { try append(.blockEnd) }
+        if closed.isBox {
+            openBoxIndex = nil
+        } else {
+            try append(.blockEnd)
+        }
     }
 
     mutating func addNumbering(_ numbering: SequenceNumbering) throws(MermaidDiagramReadError) {
         try append(.numbering(numbering))
-    }
-
-    mutating func noteStatementNotLaidOut(_ statement: SequenceStatementNotLaidOut) {
-        diagram.statementsNotLaidOut.insert(statement)
     }
 
     mutating func setTitle(_ title: String) {

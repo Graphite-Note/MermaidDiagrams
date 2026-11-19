@@ -1,3 +1,15 @@
+/**
+ * File: SequenceParserTests.swift
+ * -------------------------------
+ * Layer: Tests
+ * Description: Reads sequence diagrams: participants, boxes, attributes, messages and their arrows, notes, blocks,
+ *              numbering, and the typed errors of broken text.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -252,7 +264,7 @@ final class SequenceParserTests: XCTestCase {
 
     // MARK: Statements not laid out
 
-    func testStatementsNotLaidOutAreListedAndWhatTheModelHoldsIsKept() throws {
+    func testEveryStatementIsReadIntoTheModel() throws {
         let diagram = try sequence("""
             box Purple Group
             participant A
@@ -270,10 +282,19 @@ final class SequenceParserTests: XCTestCase {
             A-|\\B: Half
             A()->>B: Circle
             """)
-        XCTAssertEqual(diagram.statementsNotLaidOut, Set(SequenceStatementNotLaidOut.allCases))
+        XCTAssertTrue(diagram.statementsNotLaidOut.isEmpty, "Every statement is laid out")
         XCTAssertEqual(diagram.participantIdentifiers, ["A", "B", "C", "D"])
         XCTAssertEqual(diagram.participants[2].label, DiagramLabel("Store"))
-        XCTAssertEqual(diagram.messages.count, 3, "The half arrow is left out")
+        XCTAssertEqual(diagram.participants[2].kind, .database)
+        XCTAssertEqual(diagram.participants.map(\.boxIndex), [0, 0, nil, nil])
+        XCTAssertEqual(diagram.boxes, [SequenceBox(title: DiagramLabel("Group"), wrapsTitle: false,
+                                                   color: SequenceHighlightColor(red: 128.0 / 255, green: 0, blue: 128.0 / 255))])
+        let messages = diagram.messages
+        XCTAssertEqual(messages.count, 4)
+        XCTAssertTrue(messages[0].createsTarget)
+        XCTAssertTrue(messages[1].destroysSource)
+        XCTAssertEqual(messages[2].arrow, SequenceArrow(stroke: .solid, head: .solidHalf, halfHeadSide: .top))
+        XCTAssertTrue(messages[3].hasCentralConnectionAtSource)
     }
 
     func testABoxHoldsParticipantStatementsOnly() {

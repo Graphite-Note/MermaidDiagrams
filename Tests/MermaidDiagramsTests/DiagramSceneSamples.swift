@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -94,6 +94,29 @@ enum DiagramSceneSamples {
                 Note over Alice,Bob: A "note"
                 loop Every minute
                     Alice-)Bob: Ping
+                end
+            """),
+        ("sequence boxes, shapes and lifetimes", """
+            sequenceDiagram
+                autonumber
+                box navy Dark & <deep>
+                actor U as User
+                participant Q@{ "type": "queue", "alias": "Jobs" }
+                end
+                box rgb(255, 230, 200)
+                participant D@{ "type": "database" }
+                participant L@{ "type": "collections" }
+                end
+                participant B@{ "type": "boundary" }
+                U -|\\ Q: half on dark
+                Q ()->>() D: circles
+                create participant W@{ "type": "entity" } as Worker
+                D->>W: start
+                W /|-- L: back
+                destroy W
+                W-xB: done
+                rect rgb(0, 0, 0)
+                B->>B: self
                 end
             """),
         ("quadrant colored points", """
