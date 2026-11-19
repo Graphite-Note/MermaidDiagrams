@@ -6,7 +6,7 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 19/11/2026
  */
 
@@ -61,6 +61,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .wardleyMap(let map): WardleyMapLayoutEngine.layout(map, typography: typography).size
         case .eventModel(let eventModel): EventModelLayoutEngine.layout(eventModel, typography: typography).size
         case .railroad(let railroad): RailroadLayoutEngine.layout(railroad, typography: typography).size
+        case .block(let block): try BlockLayoutEngine.layout(block, typography: typography).size
         }
     }
 
@@ -73,7 +74,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples(),
              InfoDiagramCorpus.documentationExamples(), PacketDiagramCorpus.documentationExamples(), RadarChartCorpus.documentationExamples(),
              TreemapCorpus.documentationExamples(), VennCorpus.documentationExamples(), CynefinCorpus.documentationExamples(),
-             WardleyMapCorpus.documentationExamples(), EventModelCorpus.documentationExamples(), RailroadCorpus.documentationExamples()].flatMap { examples in examples }
+             WardleyMapCorpus.documentationExamples(), EventModelCorpus.documentationExamples(), RailroadCorpus.documentationExamples(),
+             BlockCorpus.documentationExamples()].flatMap { examples in examples }
             + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
@@ -95,8 +97,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        // The 422 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
-        XCTAssertEqual(examples.count, 429)
+        // The 452 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 459)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)
@@ -128,7 +130,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         XCTAssertGreaterThan(refusedCount, 1_000)
     }
 
-    /// Groups, composite states, mindmap branches, class namespaces and entity relationship groups nested as deep as the text limit allows are laid out on a secondary
+    /// Groups, composite states, mindmap branches, class namespaces, entity relationship groups and block composites nested as deep as the text limit allows are laid out on a secondary
     /// thread's stack without overflowing it, and their drawings are past the drawing limit, which a reader refuses.
     func testDeepNestingIsLaidOutOnASecondaryThreadStackAndIsPastTheDrawingLimit() {
         onSecondaryThreadStack {
@@ -143,7 +145,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
                 + String(repeating: "}\n", count: depth)
             let entityGroups = "erDiagram\n" + (0..<depth).map { level in "subgraph s\(level)\n" }.joined() + "A ||--o{ B : has\n"
                 + String(repeating: "end\n", count: depth)
-            for source in [flowchart, states, mindmap, namespaces, entityGroups] {
+            let blocks = "block\n" + String(repeating: "block\n", count: depth) + "a\n" + String(repeating: "end\n", count: depth)
+            for source in [flowchart, states, mindmap, namespaces, entityGroups, blocks] {
                 XCTAssertLessThanOrEqual(source.utf8.count, MermaidDiagramLimits.standard.maximumSourceBytes)
                 guard case .laidOut(let size) = Self.outcome(of: source, typography: typography) else {
                     XCTFail("Laid out: \(source.prefix(40))")

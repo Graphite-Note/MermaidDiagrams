@@ -5,7 +5,7 @@
  * Description: Reading Mermaid text: front matter, comments, directives and the diagram type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.11
+ * Version: 0.12
  * Date: 19/11/2026
  */
 
@@ -99,7 +99,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 26)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 27)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
@@ -153,5 +153,12 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta:clear\n\"a\"").items[.clear], ["a"])
         XCTAssertEqual(try WardleyMapReading.map("wardley-beta\ncomponent Tea [0.6, 0.8]").nodes.map(\.label), ["Tea"])
         XCTAssertEqual(readError("WARDLEY-BETA\ncomponent Tea [0.6, 0.8]"), .unsupportedDiagramType(keyword: "WARDLEY-BETA"))
+    }
+
+    func testTheKeywordsOfTheDiagramsLaidOutOnGridsReadTheirTypes() throws {
+        XCTAssertEqual(BlockReading.topBlocks(try BlockReading.block("%% blocks\nblock\n  a b")).count, 2)
+        XCTAssertEqual(try BlockReading.block("---\ntitle: Grid\n---\nblock-beta\n  a").title, "Grid")
+        XCTAssertEqual(readError("block:x\n  a"), .invalidSyntax(line: 1, problem: .block(.expectedKeyword)))
+        XCTAssertEqual(readError("blocks\n  a"), .unsupportedDiagramType(keyword: "blocks"))
     }
 }

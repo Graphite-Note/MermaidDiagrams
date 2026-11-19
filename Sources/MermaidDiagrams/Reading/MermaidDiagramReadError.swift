@@ -5,7 +5,7 @@
  * Description: Why a diagram's text was not read, and what each type's reader found where the syntax broke.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -165,4 +165,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case eventModeling(EventModelSyntaxProblem)
     /// A problem of a railroad diagram's syntax, in any of its four notations.
     case railroad(RailroadSyntaxProblem)
+    /// A problem of a block diagram's syntax.
+    case block(BlockSyntaxProblem)
 }

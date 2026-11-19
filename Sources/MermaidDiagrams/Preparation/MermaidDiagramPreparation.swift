@@ -6,7 +6,7 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -86,6 +86,7 @@ struct MermaidDiagramPreparationContext {
         case .wardleyMap(let map): prepared(map)
         case .eventModel(let eventModel): prepared(eventModel)
         case .railroad(let railroad): prepared(railroad)
+        case .block(let block): try prepared(block)
         }
     }
 

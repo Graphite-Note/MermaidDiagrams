@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -43,6 +43,7 @@ enum DiagramSceneBenchmark {
             (.wardleyMap, try WardleyMapCorpus.documentationExamples()),
             (.eventModel, try EventModelCorpus.documentationExamples()),
             (.railroad, try RailroadCorpus.documentationExamples()),
+            (.block, try BlockCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -113,6 +114,8 @@ enum DiagramSceneBenchmark {
             return laidOutChart(diagram, typography: typography)
         case .venn, .cynefin, .wardleyMap:
             return laidOutPlaneMap(diagram, typography: typography)
+        case .block:
+            return laidOutGridDiagram(diagram, typography: typography)
         }
     }
 
@@ -150,6 +153,8 @@ enum DiagramSceneBenchmark {
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
         case .venn, .cynefin, .wardleyMap:
+            return nil
+        case .block:
             return nil
         }
     }
@@ -189,6 +194,17 @@ enum DiagramSceneBenchmark {
         case .wardleyMap(let map):
             let layout = WardleyMapLayoutEngine.layout(map, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
+        default:
+            return nil
+        }
+    }
+
+    /// A diagram laid out on a grid: a block diagram.
+    private static func laidOutGridDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .block(let block):
+            let layOut = { try BlockLayoutEngine.layout(block, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         default:
             return nil
         }

@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -49,6 +49,7 @@ enum DiagramSceneSamples {
             ("wardley", try WardleyMapCorpus.documentationExamples()),
             ("eventmodeling", try EventModelCorpus.documentationExamples()),
             ("railroad", try RailroadCorpus.documentationExamples()),
+            ("block", try BlockCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -86,6 +87,7 @@ enum DiagramSceneSamples {
             ("wardley of 30 components", WardleyMapCorpus.generated(componentCount: 30)),
             ("event model of 30 frames", EventModelCorpus.generated(frameCount: 30)),
             ("railroad grammar of 12 rules", RailroadCorpus.generated(ruleCount: 12)),
+            ("block grid of 40 blocks", BlockCorpus.grid(blockCount: 40)),
         ]
     }
 
