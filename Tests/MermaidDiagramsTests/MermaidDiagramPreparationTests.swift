@@ -74,7 +74,7 @@ final class MermaidDiagramPreparationTests: XCTestCase {
     }
 
     func testAClassDefOfATreemapThatSetsWhatIsNotDrawnIsCounted() throws {
-        let prepared = try MermaidDiagramPreparation.prepare(source: "treemap\n\"a\": 1:::c1\nclassDef c1 font-size:20px,fill:red", typography: typography)
+        let prepared = try MermaidDiagramPreparation.prepare(source: "treemap\n\"a\": 1:::c1\nclassDef c1 opacity:0.5,fill:red", typography: typography)
         XCTAssertEqual(prepared.unappliedStatementCount, 1)
     }
 

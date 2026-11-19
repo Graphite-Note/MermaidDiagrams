@@ -6,7 +6,7 @@
  *              classes, and the documentation examples.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -269,6 +269,33 @@ final class TreemapLayoutTests: XCTestCase {
         let hot = try XCTUnwrap(parts.leafBoxes.first { $0.outline != nil })
         XCTAssertEqual(hot.stroke.lineWidth, 2)
         XCTAssertEqual(hot.fill, .color(DiagramColor(cssText: "red")!))
+    }
+
+    /// A class's font size is the size of a box's name and value, the name cut rather than shrunk, and written only where the
+    /// box is high enough for it; a bold class measures and draws its text bold, an italic one draws it slanted, and a class
+    /// of a lighter weight draws a section's name upright.
+    func testClassesSetTheSizeWeightAndSlantOfTheirBoxesTexts() throws {
+        let source = "treemap\n\"Section\":::small\n  \"A leaf whose name is long enough that ten points will not hold it\": 30:::small\n  \"Bold\": 30:::heavy\n\"Plain\": 40:::plain\n\"Huge\": 1:::huge\n"
+            + "classDef small font-size:10px,font-style:italic\nclassDef heavy font-weight:bold\nclassDef plain font-weight:normal\nclassDef huge font-size:200"
+        let diagram = try SimpleChartReading.treemap(source)
+        let chart = try layout(source)
+        let section = try XCTUnwrap(name(chart, diagram, "Section"))
+        XCTAssertEqual(section.name?.fontSize, 10)
+        XCTAssertEqual(section.value?.fontSize, 10)
+        let long = try XCTUnwrap(name(chart, diagram, "A leaf whose name is long enough that ten points will not hold it"))
+        XCTAssertEqual(long.name?.fontSize, 10, "A class's size is kept and the name is cut, not shrunk")
+        XCTAssertTrue(long.name?.lines[0].hasSuffix("\u{2026}") == true)
+        XCTAssertEqual(long.value?.fontSize, 10)
+        let bold = try XCTUnwrap(name(chart, diagram, "Bold"))
+        XCTAssertEqual(bold.name?.size.width, 4 * 9 * 16 / 16, "Measured in the bold, 9 points a character at 16")
+        XCTAssertNil(try XCTUnwrap(name(chart, diagram, "Huge")).name, "A box lower than the class's size is written without text")
+        let parts = TreemapDrawingParts(layout: chart)
+        XCTAssertEqual(parts.sectionNames.map(\.isBold), [true])
+        XCTAssertEqual(parts.sectionNames.map(\.isItalic), [true])
+        let leafStyles = parts.leafNames.map { text in [text.isBold, text.isItalic] }
+        XCTAssertEqual(Set(leafStyles), [[false, true], [true, false], [false, false]])
+        let plainScene = DiagramScene(layout: try layout("treemap\n\"S\":::plain\n  \"a\": 1\nclassDef plain font-weight:normal"))
+        XCTAssertEqual(plainScene.texts.filter { $0.part == .label }.map(\.isBold), [false, false], "A lighter weight is drawn upright, a section's name too")
     }
 
     func testTheSceneDrawsSectionsAsTintsThenLeavesInTheirSeriesColors() throws {

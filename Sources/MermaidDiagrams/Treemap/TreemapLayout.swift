@@ -5,7 +5,7 @@
  * Description: A laid-out treemap: its boxes with their texts and styles, and its title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -41,4 +41,6 @@ public struct TreemapLayoutBox: Equatable, Sendable {
     public let value: DiagramTextBlock?
     /// What the node's class sets, or nothing.
     public let style: DiagramElementStyle
+    /// What the node's class sets of its text: the size its name and value are written at, their weight and slant.
+    public let textStyle: TreemapClassTextStyle
 }

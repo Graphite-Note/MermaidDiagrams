@@ -5,7 +5,7 @@
  * Description: Writes a treemap's values by a d3-format specifier, the part of it Mermaid's treemap uses.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -35,9 +35,17 @@ struct TreemapValueFormat: Equatable, Sendable {
         signsPositive = groups[0] == "+"
         prefix = groups[1] ?? ""
         groupsThousands = groups[2] != nil
-        precision = groups[3].map { digits in digits.count > 2 ? Self.largestPrecision : min(Int(digits) ?? Self.largestPrecision, Self.largestPrecision) }
+        precision = groups[3].map(Self.precision(of:))
         dropsTrailingZeros = groups[4] != nil
         type = groups[5]?.first
+    }
+
+    /// The precision the digits after the `.` ask for, as JavaScript's `Number` reads them (leading zeros aside: `007` is 7),
+    /// at most `largestPrecision`.
+    private static func precision(of digits: String) -> Int {
+        let significant = digits.drop { digit in digit == "0" }
+        guard significant.count <= 2 else { return largestPrecision }
+        return min(Int(significant) ?? 0, largestPrecision)
     }
 
     /// The pattern's groups of `text`: sign, `$`, `,`, precision digits, `~` and type; nil when the text does not match.

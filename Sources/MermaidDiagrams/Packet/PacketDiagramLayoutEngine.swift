@@ -5,7 +5,7 @@
  * Description: Lays a packet diagram out with Pele's measurements.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -79,6 +79,7 @@ public enum PacketDiagramLayoutEngine {
         }, measurer: text, size: (size * labelScale).rounded(), smallestSize: (size * smallestLabelScale).rounded())
         var boxes: [PacketLayoutField] = []
         var bitNumbers: [DiagramTextBlock] = []
+        var bitNumberMeasurers = DiagramTextMeasurerSizes(text)
         for (rowIndex, row) in rows.enumerated() {
             let top = padding + CGFloat(rowIndex) * grid.rowPitch + grid.numbersHeight
             for piece in row {
@@ -90,7 +91,8 @@ public enum PacketDiagramLayoutEngine {
                 boxes.append(PacketLayoutField(frame: frame, firstBit: piece.firstBit, lastBit: piece.lastBit,
                                                label: fitter.block(of: piece.fieldIndex, width: width - labelMargin, in: frame)))
                 if options.showsBitNumbers {
-                    bitNumbers += Self.bitNumbers(piece, frame: frame, isDescending: options.isDescending, size: grid.bitNumberSize, measurer: text)
+                    bitNumbers += Self.bitNumbers(piece, frame: frame, isDescending: options.isDescending, size: grid.bitNumberSize,
+                                                  measurers: &bitNumberMeasurers)
                 }
             }
         }
@@ -99,11 +101,11 @@ public enum PacketDiagramLayoutEngine {
 
     /// The numbers above a box: the bit alone, centered, for a one-bit box; else the box's first bit at its left end and its
     /// last at its right (the other way round when the bits count from the right).
-    private static func bitNumbers(_ piece: PacketFieldPiece, frame: CGRect, isDescending: Bool, size: CGFloat,
-                                   measurer: some DiagramTextMeasuring) -> [DiagramTextBlock] {
+    private static func bitNumbers<Measurer: DiagramTextMeasuring>(_ piece: PacketFieldPiece, frame: CGRect, isDescending: Bool, size: CGFloat,
+                                                                   measurers: inout DiagramTextMeasurerSizes<Measurer>) -> [DiagramTextBlock] {
         let centerY = frame.minY - bitNumberRise - size * DiagramTextDrawing.baselineShiftRatio
         func number(_ bit: Int, centerX: (CGFloat) -> CGFloat) -> DiagramTextBlock {
-            var block = DiagramTextFitting.block(of: String(bit), fontSize: size, measurer: measurer)
+            var block = measurers.block(of: String(bit), fontSize: size)
             block.center = CGPoint(x: centerX(block.size.width), y: centerY)
             return block
         }
@@ -116,7 +118,7 @@ public enum PacketDiagramLayoutEngine {
     /// label, and most of them its width.
     private struct LabelFitter<Measurer: DiagramTextMeasuring> {
         let labels: [String]
-        let measurer: Measurer
+        var measurers: DiagramTextMeasurerSizes<Measurer>
         let size: CGFloat
         let smallestSize: CGFloat
         private var fitted: [FitKey: DiagramFittedText?] = [:]
@@ -128,7 +130,7 @@ public enum PacketDiagramLayoutEngine {
 
         init(labels: [String], measurer: Measurer, size: CGFloat, smallestSize: CGFloat) {
             self.labels = labels
-            self.measurer = measurer
+            measurers = DiagramTextMeasurerSizes(measurer)
             self.size = size
             self.smallestSize = smallestSize
         }
@@ -141,7 +143,7 @@ public enum PacketDiagramLayoutEngine {
             if let known = fitted[key] {
                 fit = known
             } else {
-                fit = DiagramTextFitting.fitted(labels[fieldIndex], maximumWidth: width, fontSize: size, minimumFontSize: smallestSize, measurer: measurer)
+                fit = DiagramTextFitting.fitted(labels[fieldIndex], maximumWidth: width, fontSize: size, minimumFontSize: smallestSize, measurers: &measurers)
                 fitted[key] = fit
             }
             guard let fit, fit.fontSize <= frame.height else { return nil }

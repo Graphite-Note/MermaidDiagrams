@@ -6,7 +6,7 @@
  *              then the text is cut and ends in an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -26,54 +26,59 @@ struct DiagramFittedText: Equatable, Sendable {
 }
 
 /// Fits a line of text into a width, as Pele's `common/fit-text.ts` does (a packet's fields, a treemap's boxes): first
-/// by shrinking the font by whole points down to a smallest size, then by cutting the text and adding an ellipsis.
-/// A width at another font size than the measurer's is its width in proportion, as Pele's metrics give it.
+/// by shrinking the font by whole points down to a smallest size, then by cutting the text and adding an ellipsis. Each
+/// width is measured at the size the text would be drawn at (`DiagramTextMeasurerSizes`), so that small text, which Core
+/// Text draws wider than in proportion, still fits.
 enum DiagramTextFitting {
     private static let ellipsis = "\u{2026}"
 
-    /// `text` fitted into `maximumWidth` starting at `fontSize` and not below `minimumFontSize`, measured as `measurer`
-    /// measures it; nil when the text is empty, no width is left, or not even one character fits.
-    static func fitted(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat, minimumFontSize: CGFloat,
-                       measurer: some DiagramTextMeasuring) -> DiagramFittedText? {
-        guard !text.isEmpty, maximumWidth > 0, measurer.fontSize > 0 else { return nil }
-        let widthPerPoint = measurer.width(of: text) / measurer.fontSize
-        var width = widthPerPoint * fontSize
+    /// `text` fitted into `maximumWidth` starting at `fontSize` and not below `minimumFontSize`, measured as `measurers`
+    /// measure it; nil when the text is empty, no width is left, or not even one character fits.
+    static func fitted<Measurer: DiagramTextMeasuring>(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat, minimumFontSize: CGFloat,
+                                                      measurers: inout DiagramTextMeasurerSizes<Measurer>) -> DiagramFittedText? {
+        guard !text.isEmpty, maximumWidth > 0, measurers.measurer.fontSize > 0 else { return nil }
+        var width = measurers.width(of: text, atFontSize: fontSize)
         if width <= maximumWidth { return DiagramFittedText(text: text, fontSize: fontSize, width: width) }
         // Width grows with the font size, so one division lands on the right size or just above it.
         var size = max(minimumFontSize, (fontSize * maximumWidth / width).rounded(.down))
         while size >= minimumFontSize {
-            width = widthPerPoint * size
+            width = measurers.width(of: text, atFontSize: size)
             if width <= maximumWidth { return DiagramFittedText(text: text, fontSize: size, width: width) }
             size -= 1
         }
-        return cut(text, maximumWidth: maximumWidth, fontSize: minimumFontSize, measurer: measurer)
+        return cut(text, maximumWidth: maximumWidth, fontSize: minimumFontSize, measurers: &measurers)
+    }
+
+    /// `fitted(_:maximumWidth:fontSize:minimumFontSize:measurers:)` with the sizes of one measurer.
+    static func fitted(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat, minimumFontSize: CGFloat,
+                       measurer: some DiagramTextMeasuring) -> DiagramFittedText? {
+        var measurers = DiagramTextMeasurerSizes(measurer)
+        return fitted(text, maximumWidth: maximumWidth, fontSize: fontSize, minimumFontSize: minimumFontSize, measurers: &measurers)
     }
 
     /// The longest start of `text` that ends in `…` and fits `maximumWidth` at `fontSize`, found by halving.
-    private static func cut(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat, measurer: some DiagramTextMeasuring) -> DiagramFittedText? {
+    private static func cut<Measurer: DiagramTextMeasuring>(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat,
+                                                           measurers: inout DiagramTextMeasurerSizes<Measurer>) -> DiagramFittedText? {
         let characters = Array(text.unicodeScalars)
         func start(_ length: Int) -> String {
             trimmedAtEnd(String(String.UnicodeScalarView(characters[..<length]))) + ellipsis
-        }
-        func width(of line: String) -> CGFloat {
-            measurer.width(of: line) * fontSize / measurer.fontSize
         }
         // The longest start that fits is found by doubling the length until one does not, then halving: a long text is
         // measured only as far as the width reaches.
         var low = 0
         var high = 1
-        while high < characters.count - 1, width(of: start(high)) <= maximumWidth {
+        while high < characters.count - 1, measurers.width(of: start(high), atFontSize: fontSize) <= maximumWidth {
             low = high
             high *= 2
         }
         high = min(high, characters.count - 1)
         while low < high {
             let middle = (low + high + 1) / 2
-            if width(of: start(middle)) <= maximumWidth { low = middle } else { high = middle - 1 }
+            if measurers.width(of: start(middle), atFontSize: fontSize) <= maximumWidth { low = middle } else { high = middle - 1 }
         }
         guard low > 0 else { return nil }
         let cutText = start(low)
-        let cutWidth = width(of: cutText)
+        let cutWidth = measurers.width(of: cutText, atFontSize: fontSize)
         return cutWidth <= maximumWidth ? DiagramFittedText(text: cutText, fontSize: fontSize, width: cutWidth) : nil
     }
 
@@ -84,14 +89,16 @@ enum DiagramTextFitting {
         return String(decoding: bytes, as: UTF8.self)
     }
 
-    /// One line of `text` at `fontSize`, measured as `measurer` measures it scaled to that size, its center at the origin.
+    /// One line of `text` at `fontSize`, measured as `measurer` measures it at that size, its center at the origin.
     static func block(of text: String, fontSize: CGFloat, measurer: some DiagramTextMeasuring) -> DiagramTextBlock {
-        DiagramTextBlock(line: text, width: width(of: text, atFontSize: fontSize, measurer: measurer), fontSize: fontSize)
+        var measurers = DiagramTextMeasurerSizes(measurer)
+        return measurers.block(of: text, fontSize: fontSize)
     }
 
     /// The width of `text` at `fontSize` where the measurer's own size differs.
     static func width(of text: String, atFontSize fontSize: CGFloat, measurer: some DiagramTextMeasuring) -> CGFloat {
-        measurer.fontSize > 0 ? measurer.width(of: text) * fontSize / measurer.fontSize : 0
+        var measurers = DiagramTextMeasurerSizes(measurer)
+        return measurers.width(of: text, atFontSize: fontSize)
     }
 }
 

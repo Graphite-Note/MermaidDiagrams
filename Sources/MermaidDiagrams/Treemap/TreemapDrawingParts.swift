@@ -5,7 +5,7 @@
  * Description: A laid-out treemap's geometry grouped by how it is painted.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -22,10 +22,12 @@ public struct TreemapBoxParts {
     public let stroke: DiagramStroke
 }
 
-/// A text of a treemap with its paint.
+/// A text of a treemap with its paint, its weight and its slant.
 public struct TreemapTextParts {
     public let block: DiagramTextBlock
     public let paint: DiagramPaint
+    public let isBold: Bool
+    public let isItalic: Bool
 }
 
 /// A laid-out treemap's geometry grouped by how it is painted, so that drawing it in any colors is a few fills, strokes and
@@ -33,7 +35,7 @@ public struct TreemapTextParts {
 /// sections' boxes and their names and totals, then the leaves' boxes and their names and values.
 public struct TreemapDrawingParts {
     public let sectionBoxes: [TreemapBoxParts]
-    /// The sections' names, drawn bold.
+    /// The sections' names, drawn bold unless their class sets a lighter weight.
     public let sectionNames: [TreemapTextParts]
     /// The sections' totals, drawn in the muted color unless a class colors the text.
     public let sectionValues: [TreemapTextParts]
@@ -58,18 +60,23 @@ public struct TreemapDrawingParts {
         for box in layout.boxes {
             let style = box.style
             let contrast = TreemapInk.paint(onFill: style.fill)
+            let isBold = box.textStyle.isBold ?? false
+            let isItalic = box.textStyle.isItalic ?? false
             if box.isSection {
                 if box.hasHeader { sectionBoxes.append(Self.sectionBox(box)) }
                 let namePaint = style.textColor.map(DiagramPaint.color) ?? contrast ?? .foreground
-                if let name = box.name { sectionNames.append(TreemapTextParts(block: name, paint: namePaint)) }
+                if let name = box.name {
+                    sectionNames.append(TreemapTextParts(block: name, paint: namePaint, isBold: box.textStyle.isBold ?? true, isItalic: isItalic))
+                }
                 if let value = box.value {
-                    sectionValues.append(TreemapTextParts(block: value, paint: style.textColor.map(DiagramPaint.color) ?? contrast ?? .muted))
+                    sectionValues.append(TreemapTextParts(block: value, paint: style.textColor.map(DiagramPaint.color) ?? contrast ?? .muted, isBold: isBold,
+                                                          isItalic: isItalic))
                 }
             } else {
                 leafBoxes.append(Self.leafBox(box))
                 let paint = style.textColor.map(DiagramPaint.color) ?? contrast ?? .background
-                if let name = box.name { leafNames.append(TreemapTextParts(block: name, paint: paint)) }
-                if let value = box.value { leafValues.append(TreemapTextParts(block: value, paint: paint)) }
+                if let name = box.name { leafNames.append(TreemapTextParts(block: name, paint: paint, isBold: isBold, isItalic: isItalic)) }
+                if let value = box.value { leafValues.append(TreemapTextParts(block: value, paint: paint, isBold: isBold, isItalic: isItalic)) }
             }
         }
         self.sectionBoxes = sectionBoxes

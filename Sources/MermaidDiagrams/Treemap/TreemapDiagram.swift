@@ -5,7 +5,7 @@
  * Description: A Mermaid treemap as its text describes it: sections and leaves in an outline, their classes and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -16,6 +16,8 @@ public struct TreemapDiagram: Equatable, Sendable {
     public internal(set) var nodes: [TreemapNode]
     /// What each class a `classDef` names sets, by the class's name: the look of the nodes that name it (`:::name`).
     public internal(set) var classStyles: [String: DiagramElementStyle]
+    /// What each class sets of its nodes' text (`font-size`, `font-weight`, `font-style`), by the class's name.
+    public internal(set) var classTextStyles: [String: TreemapClassTextStyle] = [:]
     /// The options its front matter and directives set.
     public internal(set) var options = TreemapOptions()
     /// `title …` in the treemap, else `title:` in the front matter, or nil.
@@ -24,8 +26,8 @@ public struct TreemapDiagram: Equatable, Sendable {
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
-    /// Style declarations of `classDef` statements read and not applied (a font size, an opacity): the drawing may differ
-    /// from Obsidian's.
+    /// Style declarations of `classDef` statements read and not applied (an opacity, a font family, a font size in `em`): the
+    /// drawing may differ from Obsidian's.
     public internal(set) var unappliedStatementCount: Int
 
     init(nodes: [TreemapNode] = [], classStyles: [String: DiagramElementStyle] = [:], title: String? = nil, accessibilityTitle: String? = nil,

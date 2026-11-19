@@ -5,7 +5,7 @@
  * Description: Fitting a line of text into a width as Pele's fit-text does: shrinking by whole points, then cutting.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -53,6 +53,26 @@ final class DiagramTextFittingTests: XCTestCase {
         let cut = fit(String(repeating: "x", count: 50_000), 100)
         XCTAssertEqual(cut?.text.count, 25, "Twenty-four characters of 4 points and the ellipsis")
         XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+    }
+
+    /// Core Text draws the system font wider at small sizes than its width at 16 points scaled down (it tracks it out), so a
+    /// text shrunk or cut to fit is measured in the font at the size it is drawn at, and is no wider than its room when drawn.
+    func testCoreTextTextIsMeasuredAtTheSizeItIsDrawnAt() throws {
+        let font = DiagramFont(postScriptName: nil, size: 16)
+        let measurer = CoreTextDiagramTextMeasurer(font: font)
+        let text = "Destination Port and more"
+        let proportional = measurer.width(of: text) * 8 / 16
+        let drawn = CoreTextDiagramTextMeasurer(font: font.resized(to: 8)).width(of: text)
+        XCTAssertGreaterThan(drawn, proportional * 1.03, "The system font is wider at 8 points than in proportion")
+        for room in [proportional, proportional + 2, (proportional + drawn) / 2, drawn, 80, 140] {
+            let fitted = try XCTUnwrap(DiagramTextFitting.fitted(text, maximumWidth: room, fontSize: 14, minimumFontSize: 8, measurer: measurer))
+            let width = CoreTextDiagramTextMeasurer(font: font.resized(to: fitted.fontSize)).width(of: fitted.text)
+            XCTAssertEqual(fitted.width, width, accuracy: 1e-9, "\(room)")
+            XCTAssertLessThanOrEqual(width, room, "\(room)")
+        }
+        let bold = CoreTextDiagramTextMeasurer(font: font, isBold: true)
+        XCTAssertEqual(DiagramTextFitting.width(of: text, atFontSize: 9, measurer: bold),
+                       CoreTextDiagramTextMeasurer(font: font.resized(to: 9), isBold: true).width(of: text), accuracy: 1e-9, "A bold measurer stays bold")
     }
 
     func testABlockIsOneLineOfTheFittedSizeAndLineHeight() {

@@ -5,7 +5,7 @@
  * Description: Writing a treemap's values by a d3-format specifier as Pele's format does, and JavaScript's rounding of numbers.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -34,6 +34,10 @@ final class TreemapValueFormatTests: XCTestCase {
         XCTAssertEqual(written("not a format", 1_234), "1,234")
         XCTAssertEqual(written("", 1_234), "1234")
         XCTAssertEqual(written(".999f", 1), "1." + String(repeating: "0", count: 20))
+        // The precision is read as a number, its leading zeros aside: `.007f` asks for 7 decimals, as `Number("007")` is 7.
+        XCTAssertEqual(written(".007f", 1), "1.0000000")
+        XCTAssertEqual(written(".000f", 1.5), "2")
+        XCTAssertEqual(written(".0000000000000000000000003f", 1), "1.000")
         XCTAssertEqual(written(String(repeating: "0", count: 50_000) + "x", 1_234), "1234")
     }
 

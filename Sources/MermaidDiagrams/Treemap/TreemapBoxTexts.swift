@@ -5,7 +5,7 @@
  * Description: Places the name and the value in a treemap's box as Pele does: in a section's header band, or centered in a leaf.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -21,8 +21,10 @@ struct TreemapBoxTexts {
 /// in a short header, its value at three quarters; a leaf's name from the text's size down to 9 points, its value at four
 /// fifths of that), and its rooms.
 struct TreemapBoxTextPlacement<Measurer: DiagramTextMeasuring> {
-    let text: Measurer
-    let boldText: Measurer
+    /// The text's measurer and the bold one, each with its copies at the sizes the boxes' texts are measured at.
+    private var text: DiagramTextMeasurerSizes<Measurer>
+    private var boldText: DiagramTextMeasurerSizes<Measurer>
+    private let fontSize: CGFloat
     /// A section's name in a full header, in points.
     let nameSize: CGFloat
     /// A section's name in a short header and every value in a header, in points.
@@ -40,34 +42,48 @@ struct TreemapBoxTextPlacement<Measurer: DiagramTextMeasuring> {
     private static var valueGap: CGFloat { 12 }
 
     init(text: Measurer, boldText: Measurer) {
-        self.text = text
-        self.boldText = boldText
+        self.text = DiagramTextMeasurerSizes(text)
+        self.boldText = DiagramTextMeasurerSizes(boldText)
         let size = text.fontSize
+        fontSize = size
         nameSize = (size * 0.875).rounded()
         smallSize = (size * 0.75).rounded()
         leastSize = (size * 0.5625).rounded()
     }
 
+    /// The width of `text` at `size` in a class's weight: bold when the class makes it bold.
+    private mutating func width(of text: String, atFontSize size: CGFloat, isBold: Bool) -> CGFloat {
+        isBold ? boldText.width(of: text, atFontSize: size) : self.text.width(of: text, atFontSize: size)
+    }
+
+    /// `text` fitted as `DiagramTextFitting` fits it, in the bold or the regular weight.
+    private mutating func fitted(_ text: String, maximumWidth: CGFloat, fontSize: CGFloat, minimumFontSize: CGFloat, isBold: Bool) -> DiagramFittedText? {
+        isBold ? DiagramTextFitting.fitted(text, maximumWidth: maximumWidth, fontSize: fontSize, minimumFontSize: minimumFontSize, measurers: &boldText)
+            : DiagramTextFitting.fitted(text, maximumWidth: maximumWidth, fontSize: fontSize, minimumFontSize: minimumFontSize, measurers: &self.text)
+    }
+
     /// The name and the value of a section's header band at `frame`, `header` points high. A short header holds a name only.
-    func headerTexts(name: String, value: String, frame: CGRect, header: CGFloat) -> TreemapBoxTexts {
+    /// A class's font size is the size of both, and the name is cut rather than shrunk; the name is measured bold.
+    mutating func headerTexts(name: String, value: String, frame: CGRect, header: CGFloat, textStyle: TreemapClassTextStyle) -> TreemapBoxTexts {
         let isShort = header < Self.fullHeader
-        let nameFontSize = isShort ? smallSize : nameSize
-        let valueFontSize = smallSize
+        let nameFontSize = textStyle.fontSize ?? (isShort ? smallSize : nameSize)
+        let valueFontSize = textStyle.fontSize ?? smallSize
         let room = frame.width - 2 * Self.headerSide - 4
-        let valueWidth = value.isEmpty ? 0 : DiagramTextFitting.width(of: value, atFontSize: valueFontSize, measurer: text)
+        let isBold = textStyle.isBold == true
+        let valueWidth = value.isEmpty ? 0 : width(of: value, atFontSize: valueFontSize, isBold: isBold)
         let hasRoomForValue = !isShort && valueWidth > 0 && room - valueWidth - Self.valueGap >= 3 * nameFontSize
         let centerY = frame.minY + header / 2 + 1
         var nameBlock: DiagramTextBlock?
         if nameFontSize * Self.lineRatio < header,
-           let fitted = DiagramTextFitting.fitted(name, maximumWidth: hasRoomForValue ? room - valueWidth - Self.valueGap : room, fontSize: nameFontSize,
-                                                  minimumFontSize: nameFontSize, measurer: boldText) {
+           let fitted = fitted(name, maximumWidth: hasRoomForValue ? room - valueWidth - Self.valueGap : room, fontSize: nameFontSize,
+                               minimumFontSize: nameFontSize, isBold: true) {
             var block = fitted.block
             block.center = CGPoint(x: frame.minX + Self.headerSide + 2 + fitted.width / 2, y: centerY)
             nameBlock = block
         }
         var valueBlock: DiagramTextBlock?
         if hasRoomForValue, valueFontSize * Self.lineRatio <= Self.fullHeader {
-            var block = DiagramTextFitting.block(of: value, fontSize: valueFontSize, measurer: text)
+            var block = DiagramTextBlock(line: value, width: valueWidth, fontSize: valueFontSize)
             block.center = CGPoint(x: frame.maxX - Self.headerSide - 2 - valueWidth / 2, y: centerY)
             valueBlock = block
         }
@@ -75,19 +91,27 @@ struct TreemapBoxTextPlacement<Measurer: DiagramTextMeasuring> {
     }
 
     /// The name, and under it the value when both fit, centered in a leaf's box: the name at the text's size or the largest the
-    /// box's height allows, shrunk down to the least size to fit the box's width, then cut.
-    func leafTexts(name: String, value: String, frame: CGRect) -> TreemapBoxTexts {
-        let tallest = min(text.fontSize, ((frame.height - 4) / Self.lineRatio).rounded(.down))
-        guard tallest >= leastSize,
-              let fitted = DiagramTextFitting.fitted(name, maximumWidth: frame.width - 8, fontSize: tallest, minimumFontSize: leastSize, measurer: text)
+    /// box's height allows, shrunk down to the least size to fit the box's width, then cut. A class's font size is the size of
+    /// both, when the box is high enough for it, and the name is cut rather than shrunk.
+    mutating func leafTexts(name: String, value: String, frame: CGRect, textStyle: TreemapClassTextStyle) -> TreemapBoxTexts {
+        let isBold = textStyle.isBold == true
+        let smallest = textStyle.fontSize ?? leastSize
+        let tallest: CGFloat
+        if let fixed = textStyle.fontSize {
+            tallest = fixed * Self.lineRatio <= frame.height - 4 ? fixed : 0
+        } else {
+            tallest = min(fontSize, ((frame.height - 4) / Self.lineRatio).rounded(.down))
+        }
+        guard tallest >= smallest,
+              let fitted = fitted(name, maximumWidth: frame.width - 8, fontSize: tallest, minimumFontSize: smallest, isBold: isBold)
         else { return TreemapBoxTexts(name: nil, value: nil) }
-        let valueFontSize = max(leastSize, (fitted.fontSize * 0.8).rounded())
+        let valueFontSize = textStyle.fontSize ?? max(leastSize, (fitted.fontSize * 0.8).rounded())
         let lineHeights = (fitted.fontSize + valueFontSize) * Self.lineRatio
         var nameBlock = fitted.block
-        if !value.isEmpty, lineHeights <= frame.height - 4,
-           DiagramTextFitting.width(of: value, atFontSize: valueFontSize, measurer: text) <= frame.width - 8 {
+        let valueWidth = value.isEmpty ? 0 : width(of: value, atFontSize: valueFontSize, isBold: isBold)
+        if !value.isEmpty, lineHeights <= frame.height - 4, valueWidth <= frame.width - 8 {
             nameBlock.center = CGPoint(x: frame.midX, y: frame.midY - lineHeights / 2 + fitted.fontSize * Self.lineRatio / 2)
-            var valueBlock = DiagramTextFitting.block(of: value, fontSize: valueFontSize, measurer: text)
+            var valueBlock = DiagramTextBlock(line: value, width: valueWidth, fontSize: valueFontSize)
             valueBlock.center = CGPoint(x: frame.midX, y: frame.midY + lineHeights / 2 - valueFontSize * Self.lineRatio / 2)
             return TreemapBoxTexts(name: nameBlock, value: valueBlock)
         }

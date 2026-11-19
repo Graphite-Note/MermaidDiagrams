@@ -5,7 +5,7 @@
  * Description: Reads a radar chart's statements after its `radar-beta` keyword: axes, curves, options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -106,8 +106,8 @@ struct RadarChartParser {
         } while acceptComma()
     }
 
-    /// The entries of a curve after its `{`, line breaks allowed around them, to its `}`: numbers, or axis names each with
-    /// a number (and an optional colon); never both.
+    /// The entries of a curve after its `{` to its `}`: numbers, or axis names each with a number (and an optional colon);
+    /// never both. Line breaks may come after the `{`, after a comma and before the `}`, not before a comma.
     private mutating func readEntries() throws(MermaidDiagramReadError) -> [(axisName: String?, value: Double)] {
         skipLineBreaks()
         let isNamed = RadarChartWords.isName(RadarChartWords.name(in: cursor))
@@ -126,8 +126,11 @@ struct RadarChartParser {
                 }
             }
             entries.append((axisName, try readNumber()))
-            skipLineBreaks()
-            guard acceptComma() else { break }
+            // The comma follows the entry on its line; line breaks may come after it, or before the `}`.
+            guard acceptComma() else {
+                skipLineBreaks()
+                break
+            }
             skipLineBreaks()
         }
         guard cursor.peek() == MermaidByte.closingBrace else { throw problem(.expectedClosingBrace) }

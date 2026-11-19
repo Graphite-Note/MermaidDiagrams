@@ -5,7 +5,7 @@
  * Description: Lays a treemap out with Pele's measurements.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -45,19 +45,21 @@ public enum TreemapLayoutEngine {
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let origin = CGPoint(x: padding + max(0, ((title?.size.width ?? 0) - CGFloat(width)) / 2), y: padding + titleHeight)
         let format = TreemapValueFormat(specifier: options.valueFormat)
-        let texts = TreemapBoxTextPlacement(text: text, boldText: boldText)
+        var texts = TreemapBoxTextPlacement(text: text, boldText: boldText)
         let layoutBoxes = placed.map { index -> TreemapLayoutBox in
             let box = boxes[index]
             let node = diagram.nodes[box.nodeIndex]
             let frame = CGRect(x: origin.x + CGFloat(box.x), y: origin.y + CGFloat(box.y), width: CGFloat(box.width), height: CGFloat(box.height))
             let name = DiagramLabelDecoder.decodingEntities(node.name).trimmingCharacters(in: .whitespacesAndNewlines)
             let value = options.showsValues ? format.text(box.value) : ""
+            let textStyle = node.className.flatMap { name in diagram.classTextStyles[name] } ?? TreemapClassTextStyle()
             let written = node.isSection
-                ? (box.isHeaded ? texts.headerTexts(name: name, value: value, frame: frame, header: CGFloat(box.header)) : TreemapBoxTexts(name: nil, value: nil))
-                : texts.leafTexts(name: name, value: value, frame: frame)
+                ? (box.isHeaded ? texts.headerTexts(name: name, value: value, frame: frame, header: CGFloat(box.header), textStyle: textStyle)
+                    : TreemapBoxTexts(name: nil, value: nil))
+                : texts.leafTexts(name: name, value: value, frame: frame, textStyle: textStyle)
             return TreemapLayoutBox(nodeIndex: box.nodeIndex, seriesIndex: box.series, frame: frame, isSection: node.isSection, hasHeader: box.isHeaded,
                                     cornerRadius: min(cornerRadius, min(frame.width, frame.height) / 4), name: written.name, value: written.value,
-                                    style: node.className.flatMap { name in diagram.classStyles[name] } ?? DiagramElementStyle())
+                                    style: node.className.flatMap { name in diagram.classStyles[name] } ?? DiagramElementStyle(), textStyle: textStyle)
         }
         let pageSize = CGSize(width: (max(CGFloat(width), title?.size.width ?? 0) + 2 * padding).rounded(.up),
                               height: (CGFloat(height) + titleHeight + 2 * padding).rounded(.up))

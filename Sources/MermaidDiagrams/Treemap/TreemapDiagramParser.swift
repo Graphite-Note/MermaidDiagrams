@@ -5,7 +5,7 @@
  * Description: Reads a treemap's rows after its `treemap` keyword and builds its hierarchy and its classes' styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -115,8 +115,9 @@ struct TreemapDiagramParser {
         diagram.accessibilityTitle = statements.accessibilityTitle
         diagram.accessibilityDescription = statements.accessibilityDescription
         for definition in classDefinitions {
-            let (style, unappliedCount) = TreemapClassStyle.reading(definition.styleText ?? "")
+            let (style, textStyle, unappliedCount) = TreemapClassStyle.reading(definition.styleText ?? "")
             diagram.classStyles[definition.name] = (diagram.classStyles[definition.name] ?? DiagramElementStyle()).overridden(by: style)
+            diagram.classTextStyles[definition.name] = (diagram.classTextStyles[definition.name] ?? TreemapClassTextStyle()).overridden(by: textStyle)
             diagram.unappliedStatementCount += unappliedCount
         }
     }

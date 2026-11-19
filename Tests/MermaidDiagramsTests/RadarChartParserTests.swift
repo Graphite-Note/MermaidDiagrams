@@ -6,7 +6,7 @@
  *              errors with their lines, and the limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -104,6 +104,15 @@ final class RadarChartParserTests: XCTestCase {
         XCTAssertNotNil(SimpleChartReading.readError("radar-beta\naxis a\ncurve c{-5}"))
         XCTAssertNotNil(SimpleChartReading.readError("radar-beta\naxis a\ncurve c{1.2.3}"))
         XCTAssertNotNil(SimpleChartReading.readError("radar-beta\naxis a\ncurve c{05}"))
+    }
+
+    /// Line breaks may come after an entry's comma and before the `}`, never before a comma: Mermaid's grammar takes a comma
+    /// right after the entry, and a line break there ends the entries, so the comma is unexpected.
+    func testALineBreakBeforeAnEntrysCommaIsRefused() throws {
+        XCTAssertEqual(try SimpleChartReading.radar("radar-beta\naxis a, b\ncurve c{\n  1,\n  2\n}").curves.first?.values, [1, 2])
+        XCTAssertEqual(SimpleChartReading.readError("radar-beta\naxis a, b\ncurve c{1\n, 2}"), .invalidSyntax(line: 4, problem: .radar(.expectedClosingBrace)))
+        XCTAssertEqual(SimpleChartReading.readError("radar-beta\naxis a, b\ncurve c{a 1 %% note\n, b 2}"),
+                       .invalidSyntax(line: 4, problem: .radar(.expectedClosingBrace)))
     }
 
     func testOptionsAreReadWithTheirKinds() throws {

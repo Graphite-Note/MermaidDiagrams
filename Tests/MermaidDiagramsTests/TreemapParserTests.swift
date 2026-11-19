@@ -6,7 +6,7 @@
  *              the lexer, errors with their lines, and the limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -125,8 +125,23 @@ final class TreemapParserTests: XCTestCase {
         XCTAssertEqual(style.style.strokeWidth, 2)
         XCTAssertEqual(style.style.strokeDashLengths, [5, 5])
         XCTAssertEqual(style.style.textColor, DiagramColor(cssText: "rgb(1,2,3)"))
-        XCTAssertEqual(style.unappliedCount, 2)
-        XCTAssertEqual(try SimpleChartReading.treemap("treemap\n\"a\": 1:::c1\nclassDef c1 font-size:20px").unappliedStatementCount, 1)
+        XCTAssertEqual(style.textStyle.fontSize, 20)
+        XCTAssertEqual(style.unappliedCount, 1, "The opacity is not drawn")
+        XCTAssertEqual(try SimpleChartReading.treemap("treemap\n\"a\": 1:::c1\nclassDef c1 font-size:20px").unappliedStatementCount, 0)
+        XCTAssertEqual(try SimpleChartReading.treemap("treemap\n\"a\": 1:::c1\nclassDef c1 font-size:2em").unappliedStatementCount, 1)
+    }
+
+    /// A class's font size (a number of points, or in px, above 0 and at most 200), its weight (bold from `bold`, `bolder` or
+    /// 600) and its slant (`italic`) are read as Pele's resolveStyle reads them; a later declaration or classDef wins.
+    func testClassesSetTheirTextsSizeWeightAndSlant() throws {
+        let diagram = try SimpleChartReading.treemap("treemap\n\"a\": 1:::big\nclassDef big font-size:10px,font-weight:700,font-style:italic\nclassDef thin font-weight:bold\nclassDef thin font-weight:normal,font-size:12\nclassDef bad font-size:0,font-size:201px,font-weight:x<y")
+        XCTAssertEqual(diagram.classTextStyles["big"], TreemapClassTextStyle(fontSize: 10, isBold: true, isItalic: true))
+        XCTAssertEqual(diagram.classTextStyles["thin"], TreemapClassTextStyle(fontSize: 12, isBold: false, isItalic: nil))
+        XCTAssertEqual(diagram.classTextStyles["bad"], TreemapClassTextStyle())
+        XCTAssertEqual(diagram.unappliedStatementCount, 3)
+        XCTAssertEqual(TreemapClassStyle.reading("font-weight:bolder !important").textStyle.isBold, true)
+        XCTAssertEqual(TreemapClassStyle.reading("font-weight:500").textStyle.isBold, false)
+        XCTAssertEqual(TreemapClassStyle.reading("font-style:oblique").textStyle.isItalic, false)
     }
 
     func testOptionsComeFromTheFrontMatterAndDirectives() throws {
