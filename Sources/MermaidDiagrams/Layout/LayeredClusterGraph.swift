@@ -1,3 +1,14 @@
+/**
+ * File: LayeredClusterGraph.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: A graph whose nodes sit in nested boxes, its edges and where a cluster layout puts them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// The way the ranks of a layout follow each other on a page whose y runs down.
@@ -94,6 +105,9 @@ struct LayeredClusterPlacement: Equatable {
     /// By edge, the center of its text's place, or nil.
     var edgeLabelCenters: [CGPoint?]
     var size: CGSize
+    /// The edges between a box and something inside it (or a box and itself), whose routes run straight from one end's
+    /// center to the other's, as Pele's compound layout draws them.
+    var strayEdgeIndices: Set<Int> = []
 }
 
 /// An edge's way across the page, in the edge's own direction: from its source's center (a node's, or a box's where
@@ -114,9 +128,4 @@ enum LayeredClusterLayoutError: Error, Equatable {
     case tooManyPoints
     /// A cluster sits inside itself through its parents.
     case clusterInsideItself
-    /// An edge joins a box and something inside it, or a box and itself.
-    case edgeIntoItsOwnCluster
-    /// Two edges must leave one rank of a box straight across the flow through the same side, where one would run
-    /// through the other's node; or one node must leave through both sides.
-    case crossFlowExitsShareARank
 }

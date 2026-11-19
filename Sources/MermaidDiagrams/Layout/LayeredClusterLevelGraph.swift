@@ -1,3 +1,14 @@
+/**
+ * File: LayeredClusterLevelGraph.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: The layered graph of one level of a cluster layout, with its border points and pinned nodes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// The layered graph of one level of a cluster layout, in its direction's flow space: its items as nodes (a box at its
@@ -15,7 +26,7 @@ struct LayeredClusterLevelGraph {
     ///   - heldOffset: How far across from an item's center an edge is held where it crosses the item's border
     ///     (item, edge index, whether the edge leaves the item, the level's direction).
     init(level: Int, hierarchy: LayeredClusterHierarchy, graph clusterGraph: LayeredClusterGraph, itemSize: (Int) -> CGSize,
-         heldOffset: (Int, Int, Bool, LayeredDirection) -> CGFloat) throws(LayeredClusterLayoutError) {
+         heldOffset: (Int, Int, Bool, LayeredDirection) -> CGFloat) {
         let direction = hierarchy.levelDirections[level]
         let items = hierarchy.levelItems[level]
         var localIndex: [Int: Int] = [:]
@@ -34,9 +45,9 @@ struct LayeredClusterLevelGraph {
             let inner = localIndex[crossing.innerItem] ?? 0
             let offset = heldOffset(crossing.innerItem, crossing.edgeIndex, crossing.isLeaving, direction)
             guard crossing.side == direction.startSide || crossing.side == direction.endSide else {
-                let pin: LayeredNodePlacement = crossing.side == .top || crossing.side == .left ? .firstInRank : .lastInRank
-                guard placements[inner] == .free || placements[inner] == pin else { throw .crossFlowExitsShareARank }
-                placements[inner] = pin
+                // As in Pele, the last crossing's side pins its node; an exit that shares a rank with another pinned to
+                // the same side, or leaves by the other side, runs straight to the border through what is in its way.
+                placements[inner] = crossing.side == .top || crossing.side == .left ? .firstInRank : .lastInRank
                 borderEdgeIndices.append(nil)
                 continue
             }
@@ -50,16 +61,5 @@ struct LayeredClusterLevelGraph {
         let isConstrained = placements.contains { placement in placement != .free }
         graph = LayeredGraph(nodeSizes: nodeSizes, edges: edges, nodePlacements: isConstrained ? placements : [])
         self.borderEdgeIndices = borderEdgeIndices
-    }
-
-    /// Fails when two items pinned to one side share a rank: the edge leaving the second straight across the flow
-    /// would run through the first.
-    func checkCrossFlowExits(in placement: LayeredPlacement) throws(LayeredClusterLayoutError) {
-        var rankCentersBySide: [LayeredNodePlacement: Set<CGFloat>] = [:]
-        for (node, nodePlacement) in graph.nodePlacements.enumerated() where nodePlacement == .firstInRank || nodePlacement == .lastInRank {
-            guard rankCentersBySide[nodePlacement, default: []].insert(placement.nodeCenters[node].y).inserted else {
-                throw .crossFlowExitsShareARank
-            }
-        }
     }
 }

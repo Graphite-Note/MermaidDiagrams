@@ -94,17 +94,30 @@ final class FlowchartClusterGraphTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(abs(laidOut.edges[1].path.start.x - leaving.x), FlowchartEdgePorts.portSeparation / 2 - accuracy)
     }
 
-    func testWhatIsNotLaidOutKeepsTheBlockAsCode() {
-        let sources = [
-            "flowchart TD\nsubgraph one\nA\nend\none --> one",
-            "flowchart TD\nsubgraph one\nA\nend\nA --> one",
-            "flowchart TB\nX --> A\nX --> B\nsubgraph S\ndirection LR\nA --> C\nB --> C\nend",
-        ]
-        for source in sources {
-            XCTAssertThrowsError(try layout(source), source) { error in
-                XCTAssertEqual(error as? FlowchartLayoutError, .subgraphsNotLaidOut, source)
-            }
-        }
+    func testAnEdgeBetweenAGroupAndANodeInsideItRunsFromCenterToCenter() throws {
+        let laidOut = try layout("flowchart TD\nsubgraph one\nA\nend\nA --> one")
+        let box = laidOut.clusters[0].frame
+        let node = laidOut.nodes[0].frame
+        XCTAssertEqual(laidOut.edges[0].path.start.x, node.midX, accuracy: accuracy)
+        XCTAssertEqual(laidOut.edges[0].path.start.y, node.midY, accuracy: accuracy)
+        let tip = try XCTUnwrap(laidOut.edges[0].targetMark?.tip)
+        XCTAssertEqual(tip.x, box.midX, accuracy: accuracy)
+        XCTAssertEqual(tip.y, box.midY, accuracy: accuracy)
+    }
+
+    func testAGroupLinkedToItselfLoopsFromTheMiddleOfItsBox() throws {
+        let laidOut = try layout("flowchart TD\nsubgraph one\nA\nend\none --> one")
+        let box = laidOut.clusters[0].frame
+        XCTAssertEqual(laidOut.edges.count, 1)
+        XCTAssertEqual(laidOut.edges[0].path.start.x, box.midX, accuracy: accuracy)
+        XCTAssertEqual(laidOut.edges[0].path.start.y, box.midY, accuracy: accuracy)
+    }
+
+    func testTwoNodesEnteredAcrossTheirGroupsFlowInOneRankAreLaidOut() throws {
+        // Pele runs each edge straight down to its node through the border; the second passes beside the first.
+        let laidOut = try layout("flowchart TB\nX --> A\nX --> B\nsubgraph S\ndirection LR\nA --> C\nB --> C\nend")
+        XCTAssertEqual(laidOut.edges.count, 4)
+        XCTAssertEqual(laidOut.clusters.count, 1)
     }
 
     func testTheLayoutPointLimitCountsTheBoxes() {

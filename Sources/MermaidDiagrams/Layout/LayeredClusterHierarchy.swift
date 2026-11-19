@@ -1,7 +1,19 @@
+/**
+ * File: LayeredClusterHierarchy.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: The levels of a cluster graph and its edges split between them: level edges, border crossings and stray edges.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// The levels of a cluster graph and its edges split between them. Items are the nodes, then the clusters (item
 /// `nodeCount + c` is cluster `c`); level 0 is the top and level `c + 1` the inside of cluster `c`'s box. An edge is laid
 /// out as a level edge between the two items that hold its ends where they sit side by side, and as a crossing of
-/// each box border it passes on the way down to either end.
+/// each box border it passes on the way down to either end. An edge between a box and something inside it is stray:
+/// it has no level edge and crosses no border, and runs straight from one end's center to the other's, as Pele draws it.
 struct LayeredClusterHierarchy {
     let nodeCount: Int
     /// The level each item sits in.
@@ -22,6 +34,8 @@ struct LayeredClusterHierarchy {
     var crossings: [[LayeredClusterCrossing]]
     /// For each level, the index into its crossings by `crossingKey`.
     let crossingIndices: [[Int: Int]]
+    /// The edges between a box and something inside it, or a box and itself.
+    let strayEdgeIndices: Set<Int>
 
     init(_ graph: LayeredClusterGraph) throws(LayeredClusterLayoutError) {
         nodeCount = graph.nodeSizes.count
@@ -41,11 +55,12 @@ struct LayeredClusterHierarchy {
         levelItems = Self.declaredItems(itemLevels: itemLevels, nodeCount: nodeCount, clusterCount: graph.clusters.count,
                                         clustersDeepestFirst: topDownLevels.dropFirst().reversed().map { level in level - 1 })
         var split = EdgeSplit(nodeCount: nodeCount, itemLevels: itemLevels, itemDepths: itemDepths, levelCount: graph.clusters.count + 1)
-        for (edgeIndex, edge) in graph.edges.enumerated() { try split.add(edge, at: edgeIndex) }
+        for (edgeIndex, edge) in graph.edges.enumerated() { split.add(edge, at: edgeIndex) }
         edgeLevels = split.edgeLevels
         levelEdges = split.levelEdges
         crossings = split.crossings
         crossingIndices = split.crossingIndices
+        strayEdgeIndices = split.strayEdgeIndices
     }
 
     func isCluster(_ item: Int) -> Bool { item >= nodeCount }
@@ -131,6 +146,7 @@ private struct EdgeSplit {
     var levelEdges: [[LayeredClusterLevelEdge]]
     var crossings: [[LayeredClusterCrossing]]
     var crossingIndices: [[Int: Int]]
+    var strayEdgeIndices: Set<Int> = []
 
     init(nodeCount: Int, itemLevels: [Int], itemDepths: [Int], levelCount: Int) {
         self.nodeCount = nodeCount
@@ -141,14 +157,19 @@ private struct EdgeSplit {
         crossingIndices = Array(repeating: [:], count: levelCount)
     }
 
-    mutating func add(_ edge: LayeredClusterEdge, at edgeIndex: Int) throws(LayeredClusterLayoutError) {
+    mutating func add(_ edge: LayeredClusterEdge, at edgeIndex: Int) {
         var source = item(of: edge.source)
         var target = item(of: edge.target)
         var sourcePath: [Int] = []
         var targetPath: [Int] = []
         while itemDepths[source] > itemDepths[target] { climb(&source, path: &sourcePath) }
         while itemDepths[target] > itemDepths[source] { climb(&target, path: &targetPath) }
-        guard source != target else { throw .edgeIntoItsOwnCluster }
+        guard source != target else {
+            // One end holds the other (Pele's compound layout calls the edge stray): drawn from center to center.
+            edgeLevels.append(itemLevels[source])
+            strayEdgeIndices.insert(edgeIndex)
+            return
+        }
         while itemLevels[source] != itemLevels[target] {
             climb(&source, path: &sourcePath)
             climb(&target, path: &targetPath)

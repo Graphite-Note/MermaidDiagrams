@@ -71,11 +71,11 @@ public enum FlowchartLayoutEngine {
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
-    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`). What is not laid out fails with `subgraphsNotLaidOut`.
+    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`). Only groups inside each other fail, with `subgraphsNotLaidOut`.
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
                                                                       font: DiagramFont, limits: MermaidDiagramLimits,
                                                                       spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
-        let clustered = try FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom)
+        let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom)
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)

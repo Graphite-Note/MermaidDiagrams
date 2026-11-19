@@ -1,3 +1,14 @@
+/**
+ * File: LayeredClusterLayout.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays out a graph whose nodes sit in nested boxes, as Pele's compound layout does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays out a graph whose nodes sit in nested boxes, as Pele's compound layout does: each box is laid out on its own,
@@ -56,13 +67,12 @@ struct LayeredClusterLayout {
             boxSizes[level] = CGSize(width: max(2 * padding.side, minimumWidth), height: padding.top + padding.bottom)
             return
         }
-        let levelGraph = try LayeredClusterLevelGraph(level: level, hierarchy: hierarchy, graph: graph, itemSize: itemSize(of:),
+        let levelGraph = LayeredClusterLevelGraph(level: level, hierarchy: hierarchy, graph: graph, itemSize: itemSize(of:),
                                                       heldOffset: heldOffset(of:edgeIndex:isLeaving:direction:))
         guard let placement = LayeredLayout.place(levelGraph.graph, spacing: spacing, maximumPointCount: maximumPointCount - pointCount) else {
             throw .tooManyPoints
         }
         pointCount += placement.nodeCenters.count + placement.edgeRoutes.reduce(0) { count, route in count + route.count - 2 }
-        try levelGraph.checkCrossFlowExits(in: placement)
         let box = LayeredClusterBox(direction: hierarchy.levelDirections[level], content: placement.extent, padding: padding, minimumWidth: minimumWidth)
         boxSizes[level] = box.size
         for (local, item) in items.enumerated() { itemCenters[item] = box.pagePoint(placement.nodeCenters[local]) }
@@ -143,12 +153,24 @@ struct LayeredClusterLayout {
             }
         }
         let frames = graph.clusters.indices.map { cluster in CGRect(origin: levelOrigins[cluster + 1], size: boxSizes[cluster + 1]) }
-        let labels = graph.edges.indices.map { edgeIndex in
+        func center(of end: LayeredClusterEnd) -> CGPoint {
+            switch end {
+            case .node(let node): pageCenters[node]
+            case .cluster(let cluster): CGPoint(x: frames[cluster].midX, y: frames[cluster].midY)
+            }
+        }
+        var routes = graph.edges.indices.map { edgeIndex in joinedRoute(of: edgeIndex, levelOrigins: levelOrigins) }
+        var labels = graph.edges.indices.map { edgeIndex in
             labelCenters[edgeIndex].map { center in moved(center, by: levelOrigins[hierarchy.edgeLevels[edgeIndex]]) }
         }
-        return LayeredClusterPlacement(nodeCenters: Array(pageCenters.prefix(graph.nodeSizes.count)), clusterFrames: frames,
-                                       edgeRoutes: graph.edges.indices.map { edgeIndex in joinedRoute(of: edgeIndex, levelOrigins: levelOrigins) },
-                                       edgeLabelCenters: labels, size: boxSizes[0])
+        for edgeIndex in hierarchy.strayEdgeIndices {
+            let start = center(of: graph.edges[edgeIndex].source)
+            let end = center(of: graph.edges[edgeIndex].target)
+            routes[edgeIndex] = LayeredClusterRoute(points: [start, end], segmentsRunVertically: [true])
+            labels[edgeIndex] = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+        }
+        return LayeredClusterPlacement(nodeCenters: Array(pageCenters.prefix(graph.nodeSizes.count)), clusterFrames: frames, edgeRoutes: routes,
+                                       edgeLabelCenters: labels, size: boxSizes[0], strayEdgeIndices: hierarchy.strayEdgeIndices)
     }
 
     private func moved(_ point: CGPoint, by origin: CGPoint) -> CGPoint {
