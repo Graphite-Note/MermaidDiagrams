@@ -5,7 +5,7 @@
  * Description: A laid-out sequence diagram's messages as paths: lines by stroke, heads, central connections' circles,
  *              grouped by the color Pele paints them in, and the number badges and text patches.
  *
- * Authors: Félix Chevalier, Bahey Shalash
+ * Authors: Bahey Shalash
  * Version: 0.1
  * Date: 19/11/2026
  */
@@ -28,7 +28,6 @@ public struct SequenceDrawingMessageLines {
     init(ink: DiagramColor?) {
         self.ink = ink
     }
-
 
     func add(_ message: SequenceLayoutMessage) {
         switch message.stroke {

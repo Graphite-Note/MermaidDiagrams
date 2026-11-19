@@ -122,6 +122,33 @@ final class SequenceBoxTests: XCTestCase {
         XCTAssertEqual(parts.messageTextInks, [SequenceTextInk.onDark])
     }
 
+    /// Pele's ink.ts sorts CSS's named colors into those white contrasts with more and the rest by name; the luminance
+    /// Swift computes for each sorts them the same way.
+    func testEveryNamedColorTakesTheTextColorPelesListsGiveIt() throws {
+        let dark = """
+            black blue blueviolet brown crimson darkblue darkcyan darkgreen darkmagenta darkolivegreen darkorchid darkred darkslateblue \
+            darkslategray darkviolet dimgray firebrick forestgreen green indigo maroon mediumblue mediumslateblue mediumvioletred midnightblue \
+            navy olive purple rebeccapurple royalblue saddlebrown seagreen sienna slateblue steelblue teal
+            """
+        let light = """
+            aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond burlywood cadetblue chartreuse chocolate coral \
+            cornflowerblue cornsilk cyan darkgoldenrod darkgray darkkhaki darkorange darksalmon darkseagreen darkturquoise deeppink \
+            deepskyblue dodgerblue floralwhite fuchsia gainsboro ghostwhite gold goldenrod gray greenyellow honeydew hotpink indianred ivory \
+            khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen \
+            lightpink lightsalmon lightseagreen lightskyblue lightslategray lightsteelblue lightyellow lime limegreen linen magenta \
+            mediumaquamarine mediumorchid mediumpurple mediumseagreen mediumspringgreen mediumturquoise mintcream mistyrose moccasin \
+            navajowhite oldlace olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff \
+            peru pink plum powderblue red rosybrown salmon sandybrown seashell silver skyblue slategray snow springgreen tan thistle tomato \
+            turquoise violet wheat white whitesmoke yellow yellowgreen
+            """
+        for (names, ink) in [(dark, SequenceTextInk.onDark), (light, SequenceTextInk.onLight)] {
+            for name in names.split(separator: " ").map(String.init) {
+                let color = try XCTUnwrap(SequenceHighlightColorSyntax.color(from: name), name)
+                XCTAssertEqual(SequenceTextInk.ink(on: color), ink, name)
+            }
+        }
+    }
+
     func testAMessageAcrossABoxEdgeOrOnAFaintHighlightKeepsItsColors() throws {
         let across = SequenceDrawingParts(layout: try layout("box navy Dark\nparticipant A\nend\nparticipant B\nA->>B: out"))
         XCTAssertTrue(across.inkedMessageLines.isEmpty)

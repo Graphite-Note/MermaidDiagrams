@@ -81,6 +81,16 @@ final class SequenceParticipantLifetimeTests: XCTestCase {
                        "The text, its padding, an activation and half the created box")
     }
 
+    /// Pele's header row is as tall as the participants not created later: a created figure, taller than the boxes,
+    /// moves neither the header nor the first message.
+    func testACreatedParticipantDoesNotSetTheHeaderRowsHeight() throws {
+        let plain = try layout("participant A\nparticipant B\nA->>B: hi")
+        let created = try layout("participant A\ncreate actor B\nA->>B: hi")
+        XCTAssertGreaterThan(created.participants[1].frame.height, plain.headers[0].frame.height, "The figure is the taller")
+        XCTAssertEqual(created.headers[0].frame, plain.headers[0].frame)
+        XCTAssertEqual(created.lifelines[0].top, plain.lifelines[0].top, accuracy: accuracy)
+    }
+
     func testADestroyedParticipantEndsInACrossAndIsNotMirrored() throws {
         let laidOut = try layout("A->>B: hi\ndestroy B\nA-xB: bye\nA->>A: after")
         let lineY = laidOut.messages[1].path.start.y
