@@ -28,6 +28,7 @@ extension MermaidDiagram {
         case .userJourney(let diagram): diagram.tasks.isEmpty
         case .sankey(let diagram): diagram.links.isEmpty
         case .venn(let diagram): diagram.subsets.isEmpty
+        case .cynefin: false
         case .gitGraph, .quadrantChart, .xyChart: false
         }
     }

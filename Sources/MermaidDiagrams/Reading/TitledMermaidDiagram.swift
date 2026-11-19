@@ -29,3 +29,4 @@ extension QuadrantChart: TitledMermaidDiagram {}
 extension XYChart: TitledMermaidDiagram {}
 extension SankeyDiagram: TitledMermaidDiagram {}
 extension VennDiagram: TitledMermaidDiagram {}
+extension CynefinDiagram: TitledMermaidDiagram {}

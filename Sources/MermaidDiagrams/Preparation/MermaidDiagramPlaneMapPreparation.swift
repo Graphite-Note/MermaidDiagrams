@@ -2,7 +2,8 @@
  * File: MermaidDiagramPlaneMapPreparation.swift
  * ---------------------------------------------
  * Layer: Core
- * Description: Prepares the diagrams drawn on a fixed plane, Venn diagrams, and says what a screen reader hears of them.
+ * Description: Prepares the diagrams drawn on a fixed plane, Venn diagrams and Cynefin frameworks, and says what a screen
+ *              reader hears of them.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -19,7 +20,30 @@ extension MermaidDiagramPreparationContext {
     }
 }
 
+extension MermaidDiagramPreparationContext {
+    func prepared(_ cynefin: CynefinDiagram) -> PreparedMermaidDiagram {
+        PreparedMermaidDiagram(kind: .cynefin, scene: DiagramScene(layout: CynefinLayoutEngine.layout(cynefin, typography: typography)),
+                               accessibility: MermaidDiagramAccessibility(cynefin: cynefin))
+    }
+}
+
 extension MermaidDiagramAccessibility {
+    /// Each domain that has items, in the order drawn, with its items, then each transition with its label: “Complex:
+    /// Investigate root cause, Run chaos experiment; Complex to Complicated: Pattern identified”.
+    init(cynefin diagram: CynefinDiagram) {
+        let domains = CynefinLayoutEngine.quadrants.map(\.domain) + [.confusion]
+        let itemTexts = domains.compactMap { domain -> String? in
+            guard let items = diagram.items[domain], !items.isEmpty else { return nil }
+            return domain.name + ": " + items.map(Self.spoken).joined(separator: ", ")
+        }
+        let transitionTexts = diagram.transitions.map { transition in
+            let names = transition.from.name + " to " + transition.to.name
+            return transition.label.map { label in names + ": " + Self.spoken(label) } ?? names
+        }
+        self.init(kind: .cynefin, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
+                  summary: itemTexts + transitionTexts, summarySeparator: "; ")
+    }
+
     /// Each set and stated overlap once, in the order written, with the texts written in it: “Frontend: React, Design
     /// Systems; Backend; Shared: OpenAPI”, an overlap without a label named by its sets (“A and B”). Mermaid's Venn grammar
     /// has no accessibility statements.

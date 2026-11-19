@@ -129,5 +129,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
     func testTheKeywordsOfTheDiagramsDrawnOnAPlaneReadTheirTypes() throws {
         XCTAssertEqual(try VennReading.venn("%% sets\nvenn-beta\n  set A").subsets.count, 1)
         XCTAssertEqual(readError("venn\n  set A"), .unsupportedDiagramType(keyword: "venn"))
+        XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta\n  complex\n    \"Probe\"").items[.complex], ["Probe"])
+        XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta:clear\n\"a\"").items[.clear], ["a"])
     }
 }

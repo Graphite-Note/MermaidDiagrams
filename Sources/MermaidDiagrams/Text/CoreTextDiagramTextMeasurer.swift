@@ -1,3 +1,14 @@
+/**
+ * File: CoreTextDiagramTextMeasurer.swift
+ * ---------------------------------------
+ * Layer: Core
+ * Description: Measures a diagram's text with Core Text, as it is drawn, in a font's regular, bold or italic.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import CoreText
 import Foundation
@@ -21,10 +32,13 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         self.init(font: diagramFont, isBold: false)
     }
 
-    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn.
-    init(font diagramFont: DiagramFont, isBold: Bool) {
+    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, and in its italic when `isItalic`.
+    init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false) {
         let regular = diagramFont.makeCoreTextFont()
-        font = isBold ? CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, .traitBold, .traitBold) ?? regular : regular
+        var traits: CTFontSymbolicTraits = []
+        if isBold { traits.insert(.traitBold) }
+        if isItalic { traits.insert(.traitItalic) }
+        font = traits.isEmpty ? regular : CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, traits, traits) ?? regular
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
         let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }

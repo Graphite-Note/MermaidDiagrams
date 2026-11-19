@@ -41,6 +41,7 @@ enum DiagramSceneSamples {
             ("journey", try UserJourneyCorpus.documentationExamples()), ("quadrantChart", try QuadrantChartCorpus.documentationExamples()),
             ("xychart", try XYChartCorpus.documentationExamples()), ("sankey", try SankeyCorpus.documentationExamples()),
             ("venn", try VennCorpus.documentationExamples()),
+            ("cynefin", try CynefinCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -66,6 +67,7 @@ enum DiagramSceneSamples {
             ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try sankeyEnergy()),
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
             ("venn of 8 sets", VennCorpus.generated(setCount: 8)),
+            ("cynefin of 40 items", CynefinCorpus.generated(itemCount: 40)),
         ]
     }
 

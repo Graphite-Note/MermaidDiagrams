@@ -35,6 +35,7 @@ enum DiagramSceneBenchmark {
             (.xyChart, try XYChartCorpus.documentationExamples()),
             (.sankey, try SankeyCorpus.documentationExamples() + ["sankey-beta\n\n " + SankeyCorpus.energyRows()]),
             (.venn, try VennCorpus.documentationExamples()),
+            (.cynefin, try CynefinCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -102,7 +103,7 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey:
             return laidOutChart(diagram, typography: typography)
-        case .venn:
+        case .venn, .cynefin:
             return laidOutPlaneMap(diagram, typography: typography)
         }
     }
@@ -136,17 +137,20 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
-        case .venn:
+        case .venn, .cynefin:
             return nil
         }
     }
 
-    /// A diagram drawn on a fixed plane laid out once: a Venn diagram.
+    /// A diagram drawn on a fixed plane laid out once: a Venn diagram or a Cynefin framework.
     private static func laidOutPlaneMap(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
         switch diagram {
         case .venn(let venn):
             let layOut = { try VennLayoutEngine.layout(venn, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .cynefin(let cynefin):
+            let layout = CynefinLayoutEngine.layout(cynefin, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
         default:
             return nil
         }

@@ -132,4 +132,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case expectedSankeyFields
     /// A problem of a Venn diagram's own syntax, or a union of sets it cannot take.
     case venn(VennSyntaxProblem)
+    /// A problem of a Cynefin framework's own syntax.
+    case cynefin(CynefinSyntaxProblem)
 }

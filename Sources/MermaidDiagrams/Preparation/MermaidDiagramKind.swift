@@ -26,6 +26,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
     case xyChart
     case sankey
     case venn
+    case cynefin
 
     /// Pele's name of the type, which its SVG's root class (`pele-<name>`) and role description carry.
     public var peleName: String {
@@ -45,6 +46,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .xyChart: "xychart"
         case .sankey: "sankey"
         case .venn: "venn"
+        case .cynefin: "cynefin"
         }
     }
 
@@ -66,6 +68,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .xyChart: "XY chart"
         case .sankey: "Sankey diagram"
         case .venn: "Venn diagram"
+        case .cynefin: "Cynefin framework"
         }
     }
 }
@@ -89,6 +92,7 @@ extension MermaidDiagram {
         case .xyChart: .xyChart
         case .sankey: .sankey
         case .venn: .venn
+        case .cynefin: .cynefin
         }
     }
 }

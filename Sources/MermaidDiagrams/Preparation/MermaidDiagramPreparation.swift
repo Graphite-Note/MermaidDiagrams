@@ -75,6 +75,7 @@ struct MermaidDiagramPreparationContext {
         case .xyChart(let chart): try prepared(chart)
         case .sankey(let sankey): try prepared(sankey)
         case .venn(let venn): try prepared(venn)
+        case .cynefin(let cynefin): prepared(cynefin)
         }
     }
 

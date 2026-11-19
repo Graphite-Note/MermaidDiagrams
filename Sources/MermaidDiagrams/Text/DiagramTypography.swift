@@ -1,3 +1,14 @@
+/**
+ * File: DiagramTypography.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: The measurers of a font's text in every size and weight the diagrams use, made once per font.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// The fonts a diagram's text is measured in: the nodes' font, its bold, and the smaller ones of edges, annotations,
@@ -15,6 +26,8 @@ public struct DiagramTypography {
     let rowText: CoreTextDiagramTextMeasurer
     /// The dates of a chart's axis: three quarters of the size.
     let axisText: CoreTextDiagramTextMeasurer
+    /// The bold and italic sizes of the diagrams drawn on a fixed plane: Cynefin frameworks and Wardley maps.
+    let planeMapText: PlaneMapTypography
 
     /// Edge text is seven eighths of the nodes' size, rounded, as in Pele.
     static let edgeTextScale: CGFloat = 0.875
@@ -32,5 +45,6 @@ public struct DiagramTypography {
         smallText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.smallTextScale).rounded()))
         rowText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.rowTextScale).rounded()))
         axisText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.axisTextScale).rounded()))
+        planeMapText = PlaneMapTypography(font: font)
     }
 }
