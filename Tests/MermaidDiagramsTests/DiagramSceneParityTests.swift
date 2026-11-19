@@ -2,8 +2,9 @@
  * File: DiagramSceneParityTests.swift
  * -----------------------------------
  * Layer: Tests
- * Description: Every sample of every diagram type paints the same pixels from its scene as from its type's own renderer,
- *              in a light palette at one pixel per point and a dark one at two.
+ * Description: Every sample of every diagram type paints the same pixels from its scene as its type's renderer painted it
+ *              before the scene, in a light palette at one pixel per point and a dark one at two; a class diagram's palette
+ *              names its scene's roles.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -15,7 +16,8 @@ import XCTest
 @testable import MermaidDiagramsBenchmark
 
 final class DiagramSceneParityTests: XCTestCase {
-    /// A diagram laid out: its scene, and its drawing by its type's renderer.
+    /// A diagram laid out: its scene, and its drawing by its type's renderer as it was before the scene
+    /// (`ReferenceRenderers`): each type's own renderer now paints its scene.
     private struct LaidOutDiagram {
         let scene: DiagramScene
         let drawnByRenderer: (CGContext, DiagramPalette) -> Void
@@ -55,10 +57,26 @@ final class DiagramSceneParityTests: XCTestCase {
                 DiagramSceneRenderer.draw(scene, in: context, palette: palette)
             })
             let byRenderer = try XCTUnwrap(DiagramScenePixels(size: scene.size, scale: 1) { context in
-                PieChartRenderer.draw(layout, in: context, palette: palette)
+                ReferencePieChartRenderer.draw(layout, in: context, palette: palette)
             })
             XCTAssertEqual(byScene.differingPixelCount(from: byRenderer), 0)
         }
+    }
+
+    /// A class diagram's own muted color and note surface reach its scene's muted and alternate surface roles.
+    func testAClassDiagramsRendererPaintsItsSceneInItsPalettesColors() throws {
+        let source = "classDiagram\n  class Shape {\n    <<interface>>\n    +area() double*\n  }\n  note for Shape \"Every shape has an area\"\n  Shape <|-- Square"
+        guard case .classDiagram(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { return XCTFail("A class diagram") }
+        let layout = try ClassDiagramLayoutEngine.layout(diagram, typography: DiagramSceneSamples.typography, limits: .standard)
+        let palette = ClassDiagramPalette(diagram: DiagramScenePaletteSamples.dark, muted: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1),
+                                          noteSurface: CGColor(srgbRed: 0, green: 0.5, blue: 0, alpha: 1))
+        let byRenderer = try XCTUnwrap(DiagramScenePixels(size: layout.size, scale: 1) { context in
+            ClassDiagramRenderer.draw(layout, in: context, palette: palette)
+        })
+        let byReference = try XCTUnwrap(DiagramScenePixels(size: layout.size, scale: 1) { context in
+            ReferenceClassDiagramRenderer.draw(layout, in: context, palette: palette)
+        })
+        XCTAssertEqual(byRenderer.differingPixelCount(from: byReference), 0)
     }
 
     private static func laidOut(_ diagram: MermaidDiagram) throws -> LaidOutDiagram {
@@ -66,30 +84,40 @@ final class DiagramSceneParityTests: XCTestCase {
         switch diagram {
         case .flowchart(let flowchart):
             let layout = try FlowchartLayoutEngine.layout(flowchart, typography: typography, limits: .standard)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in FlowchartRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceFlowchartRenderer.draw(layout, in: context, palette: palette)
+            }
         case .stateDiagram(let state):
             let layout = try StateDiagramLayoutEngine.layout(state, typography: typography, limits: .standard)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in StateDiagramRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceStateDiagramRenderer.draw(layout, in: context, palette: palette)
+            }
         case .classDiagram(let classes):
             let layout = try ClassDiagramLayoutEngine.layout(classes, typography: typography, limits: .standard)
             return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
-                ClassDiagramRenderer.draw(layout, in: context, palette: ClassDiagramPalette(diagram: palette, muted: palette.muted,
+                ReferenceClassDiagramRenderer.draw(layout, in: context, palette: ClassDiagramPalette(diagram: palette, muted: palette.muted,
                                                                                             noteSurface: palette.alternateSurface))
             }
         case .sequence(let sequence):
             let layout = try SequenceLayoutEngine.layout(sequence, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in SequenceRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceSequenceRenderer.draw(layout, in: context, palette: palette)
+            }
         case .entityRelationship(let entityRelationship):
             let layout = try EntityRelationshipLayoutEngine.layout(entityRelationship, typography: typography, limits: .standard)
             return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
-                EntityRelationshipRenderer.draw(layout, in: context, palette: palette)
+                ReferenceEntityRelationshipRenderer.draw(layout, in: context, palette: palette)
             }
         case .mindmap(let mindmap):
             let layout = MindmapLayoutEngine.layout(mindmap, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in MindmapRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceMindmapRenderer.draw(layout, in: context, palette: palette)
+            }
         case .timeline(let timeline):
             let layout = TimelineLayoutEngine.layout(timeline, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in TimelineRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceTimelineRenderer.draw(layout, in: context, palette: palette)
+            }
         default:
             return try laidOutChart(diagram, typography: typography)
         }
@@ -99,26 +127,40 @@ final class DiagramSceneParityTests: XCTestCase {
         switch diagram {
         case .pieChart(let chart):
             let layout = PieChartLayoutEngine.layout(chart, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in PieChartRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferencePieChartRenderer.draw(layout, in: context, palette: palette)
+            }
         case .ganttChart(let chart):
             let layout = try GanttLayoutEngine.layout(chart, typography: typography, now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone,
                                                       limits: .standard)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in GanttRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceGanttRenderer.draw(layout, in: context, palette: palette)
+            }
         case .gitGraph(let gitGraph):
             let layout = try GitGraphLayoutEngine.layout(gitGraph, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in GitGraphRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceGitGraphRenderer.draw(layout, in: context, palette: palette)
+            }
         case .userJourney(let journey):
             let layout = UserJourneyLayoutEngine.layout(journey, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in UserJourneyRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceUserJourneyRenderer.draw(layout, in: context, palette: palette)
+            }
         case .quadrantChart(let chart):
             let layout = QuadrantChartLayoutEngine.layout(chart, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in QuadrantChartRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceQuadrantChartRenderer.draw(layout, in: context, palette: palette)
+            }
         case .xyChart(let chart):
             let layout = try XYChartLayoutEngine.layout(chart, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in XYChartRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceXYChartRenderer.draw(layout, in: context, palette: palette)
+            }
         case .sankey(let sankey):
             let layout = try SankeyLayoutEngine.layout(sankey, typography: typography)
-            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in SankeyRenderer.draw(layout, in: context, palette: palette) }
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
+                ReferenceSankeyRenderer.draw(layout, in: context, palette: palette)
+            }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
             throw NotAChart()
         }

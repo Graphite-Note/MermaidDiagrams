@@ -1,3 +1,15 @@
+/**
+ * File: SequenceDrawingPartsTests.swift
+ * -------------------------------------
+ * Layer: Tests
+ * Description: A laid-out sequence diagram's geometry grouped by how it is painted, and the colors between its background
+ *              and its text.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -60,8 +72,8 @@ final class SequenceDrawingPartsTests: XCTestCase {
     }
 
     func testTheMixedRolesSitBetweenTheBackgroundAndTheForeground() {
-        let muted = SequenceRenderer.mixed(CGColor(gray: 1, alpha: 1), CGColor(srgbRed: 0x1F / 255, green: 0x1F / 255, blue: 0x1F / 255, alpha: 1),
-                                           share: SequenceDrawingParts.mutedShare)
+        let muted = DiagramPaint.mixed(CGColor(gray: 1, alpha: 1), CGColor(srgbRed: 0x1F / 255, green: 0x1F / 255, blue: 0x1F / 255, alpha: 1),
+                                         share: SequenceDrawingParts.mutedShare)
         XCTAssertEqual((muted.components?.first ?? 0) * 255, 0x6E, accuracy: 0.5)
     }
 }
