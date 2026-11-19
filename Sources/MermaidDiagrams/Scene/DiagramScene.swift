@@ -273,4 +273,10 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case wardleyNote = "wardley-note"
     case wardleyAccelerator = "wardley-accelerator"
     case wardleyDeaccelerator = "wardley-deaccelerator"
+    /// A C4 element's kind and a boundary's type, a technology, and a description.
+    case c4Type = "c4-type"
+    case c4Technology = "c4-techn"
+    case c4Description = "c4-descr"
+    /// The wider lines of the page's color under lines that cross the border of a filled box.
+    case casing = "casings"
 }

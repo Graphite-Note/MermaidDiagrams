@@ -29,7 +29,8 @@ final class MermaidDiagramReaderTests: XCTestCase {
 
     func testOtherDiagramTypesAreNamedByTheirKeyword() {
         XCTAssertEqual(readError("requirementDiagram\n  requirement test_req {\n  }"), .unsupportedDiagramType(keyword: "requirementDiagram"))
-        XCTAssertEqual(readError("C4Context\n  title System"), .unsupportedDiagramType(keyword: "C4Context"))
+        XCTAssertEqual(readError("C4Contexts\n  title System"), .unsupportedDiagramType(keyword: "C4Contexts"))
+        XCTAssertEqual(try C4Reading.c4("C4Context\n  title System\n  System(a, \"A\")").title, "System")
     }
 
     func testTheSequenceDiagramKeywordReadsASequenceDiagram() throws {
@@ -99,7 +100,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 26)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 27)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
@@ -127,6 +128,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertEqual(try flowchart("flowchart TD\nA --> B\n" + directive + "B --> C").edges.count, 2)
         XCTAssertEqual(try SequenceReading.sequence("sequenceDiagram\n" + directive + "Alice->>Bob: Hi").participantIdentifiers, ["Alice", "Bob"])
         XCTAssertEqual(try PieChartReading.pieChart("pie\n" + directive + "\"Dogs\" : 3").slices.count, 1)
+        XCTAssertEqual(try C4Reading.c4("C4Context\n" + directive + "System(a, \"A\")").shapes.count, 1)
         XCTAssertEqual(try GanttChartReading.ganttChart("gantt\n" + directive + "dateFormat YYYY-MM-DD\nsection A\nTask :a1, 2024-01-01, 3d").tasks.count, 1)
     }
 

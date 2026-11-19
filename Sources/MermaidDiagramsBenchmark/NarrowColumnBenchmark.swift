@@ -62,6 +62,10 @@ enum NarrowColumnBenchmark {
                 return (try? GanttLayoutEngine.layout(chart, typography: typography, now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone,
                                                       limits: .standard, availableWidth: width))?.size.width ?? 0 > 0
             }),
+            ("c4", try C4Corpus.documentationExamples(), { diagram, width in
+                guard case .c4(let c4) = diagram else { return false }
+                return (try? C4LayoutEngine.layout(c4, typography: typography, fittingWidth: width))?.size.width ?? 0 > 0
+            }),
         ]
     }
 

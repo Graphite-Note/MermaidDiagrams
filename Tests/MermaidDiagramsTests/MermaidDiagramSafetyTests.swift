@@ -61,6 +61,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .wardleyMap(let map): WardleyMapLayoutEngine.layout(map, typography: typography).size
         case .eventModel(let eventModel): EventModelLayoutEngine.layout(eventModel, typography: typography).size
         case .railroad(let railroad): RailroadLayoutEngine.layout(railroad, typography: typography).size
+        case .c4(let c4): try C4LayoutEngine.layout(c4, typography: typography).size
         }
     }
 
@@ -73,7 +74,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples(),
              InfoDiagramCorpus.documentationExamples(), PacketDiagramCorpus.documentationExamples(), RadarChartCorpus.documentationExamples(),
              TreemapCorpus.documentationExamples(), VennCorpus.documentationExamples(), CynefinCorpus.documentationExamples(),
-             WardleyMapCorpus.documentationExamples(), EventModelCorpus.documentationExamples(), RailroadCorpus.documentationExamples()].flatMap { examples in examples }
+             WardleyMapCorpus.documentationExamples(), EventModelCorpus.documentationExamples(), RailroadCorpus.documentationExamples(),
+             C4Corpus.documentationExamples()].flatMap { examples in examples }
             + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
@@ -95,8 +97,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        // The 422 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
-        XCTAssertEqual(examples.count, 429)
+        // The 428 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 435)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)
@@ -143,7 +145,9 @@ final class MermaidDiagramSafetyTests: XCTestCase {
                 + String(repeating: "}\n", count: depth)
             let entityGroups = "erDiagram\n" + (0..<depth).map { level in "subgraph s\(level)\n" }.joined() + "A ||--o{ B : has\n"
                 + String(repeating: "end\n", count: depth)
-            for source in [flowchart, states, mindmap, namespaces, entityGroups] {
+            let boundaries = "C4Deployment\n" + (0..<depth).map { level in "Node(n\(level),\"\"){\n" }.joined() + "System(s,\"S\")\n"
+                + String(repeating: "}\n", count: depth)
+            for source in [flowchart, states, mindmap, namespaces, entityGroups, boundaries] {
                 XCTAssertLessThanOrEqual(source.utf8.count, MermaidDiagramLimits.standard.maximumSourceBytes)
                 guard case .laidOut(let size) = Self.outcome(of: source, typography: typography) else {
                     XCTFail("Laid out: \(source.prefix(40))")

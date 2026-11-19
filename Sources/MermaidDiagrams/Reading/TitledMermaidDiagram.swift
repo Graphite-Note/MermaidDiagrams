@@ -35,3 +35,4 @@ extension TreemapDiagram: TitledMermaidDiagram {}
 extension VennDiagram: TitledMermaidDiagram {}
 extension CynefinDiagram: TitledMermaidDiagram {}
 extension WardleyMap: TitledMermaidDiagram {}
+extension C4Diagram: TitledMermaidDiagram {}
