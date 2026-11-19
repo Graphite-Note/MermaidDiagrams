@@ -6,7 +6,7 @@
  *              and laid out, or refused with a typed error, quickly and without a crash.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -35,7 +35,7 @@ final class LayeredDiagramSafetyTests: XCTestCase {
             let layout = SwimlaneLayoutEngine.layout(swimlane, typography: typography)
             XCTAssertTrue(layout.size.width.isFinite && layout.size.height.isFinite)
             _ = DiagramScene(layout: layout)
-            _ = SwimlaneLayoutEngine.layout(swimlane.turnedToRunDown ?? swimlane, typography: typography, spacing: .compact, columnWidth: 280)
+            _ = SwimlaneLayoutEngine.layout(swimlane.swimlaneTurnedToRunDown ?? swimlane, typography: typography, spacing: .compact, columnWidth: 280)
         default: XCTFail("not a requirement or swimlane diagram")
         }
         return true
@@ -95,7 +95,11 @@ final class LayeredDiagramSafetyTests: XCTestCase {
             ("text of emphasis markers", head + "requirement a {\ntext: \"" + String(repeating: "*a _b **c ", count: 4_500) + "\"\n}\n"),
             ("a name of 45,000 characters without spaces", head + "requirement " + String(repeating: "x", count: 45_000) + " {\n}\n"),
             ("text of entities and line breaks", head + "requirement a {\ntext: \"" + String(repeating: "#35;&amp;<br>", count: 3_500) + "\"\n}\n"),
-        ], seconds: 3, laidOutCount: 16)
+            ("blank lines and carriage returns before a comment", head + String(repeating: "\n \r", count: size / 3 - 30) + "%% c\nrequirement a {\n}\n"),
+            ("comment lines", head + String(repeating: "%% c\n", count: size / 5 - 10) + "requirement a {\n}\n"),
+            ("style lines with a color and no semicolon", head + String(repeating: "style a fill:#b\n", count: size / 16 - 5)),
+            ("style lines with a color and a semicolon far back", head + "a;\n" + String(repeating: "style a:#b\n", count: size / 11 - 5)),
+        ], seconds: 3, laidOutCount: 18)
     }
 
     /// Pele's swimlane worst cases (`tests/swimlane/stress.test.ts`), within the standard limits.

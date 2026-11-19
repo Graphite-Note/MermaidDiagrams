@@ -6,7 +6,7 @@
  *              line, a wide turn where the route turns from one way to the other, and a short straight run into a mark.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -18,18 +18,26 @@ import Foundation
 /// segment's flow, its handles half the way along it or less where it runs far across (Pele's `ease`); where the route turns
 /// from running one way to running the other, a turn as wide as it can be, taking the whole of a leg that ends at a node
 /// and half of a leg it shares with the next turn, its handles 0.62 of the way to the corner; a point part of the way along
-/// one straight run adds nothing. An end whose mark sits on a bend runs straight into it for a little first: a quarter of
-/// its last run, at most 6 points. `DiagramRouteDrawing`, which the other types draw with, turns no corner.
+/// one straight run adds nothing. An end that sits on a bend runs straight for a little first, as far as the largest mark
+/// on its side of its node needs (`startReach`, `endReach`, Pele's `sideReach`), so that the ends on one side turn equally
+/// far from it: by default its own mark's trim and 6 points, of which a quarter of its last run at most.
+/// `DiagramRouteDrawing`, which the other types draw with, turns no corner.
 enum DiagramTurningRouteDrawing {
     /// How far the handles of a turn reach along its legs: a little more than a circle's, which makes the turn fuller.
     static let handle: CGFloat = 0.62
     /// How far an edge runs straight before a mark at its end, where it has the room.
     static let lead: CGFloat = 6
 
-    /// - Parameter segmentsRunVertically: For each segment, whether its S leaves and arrives up or down the page.
+    /// - Parameters:
+    ///   - segmentsRunVertically: For each segment, whether its S leaves and arrives up or down the page.
+    ///   - startReach: How far from its source the edge starts to turn, where the other ends on that side of the node
+    ///     need it to; nil for its own mark's trim and the lead, or 0 without a mark.
+    ///   - endReach: The same at its target.
     /// - Returns: The path, and the unit directions the edge leaves its source and arrives at its target in.
-    static func path(through route: [CGPoint], segmentsRunVertically: [Bool], startTrim: CGFloat,
-                     endTrim: CGFloat) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) {
+    static func path(through route: [CGPoint], segmentsRunVertically: [Bool], startTrim: CGFloat, endTrim: CGFloat, startReach: CGFloat? = nil,
+                     endReach: CGFloat? = nil) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) {
+        let startReach = startReach ?? defaultReach(trim: startTrim)
+        let endReach = endReach ?? defaultReach(trim: endTrim)
         var points = route
         var axes = [segmentsRunVertically[0]] + segmentsRunVertically
         let startDirection = unit(points, 0, 1, isVertical: axes[1])
@@ -37,8 +45,10 @@ enum DiagramTurningRouteDrawing {
         points[0] = CGPoint(x: points[0].x + startDirection.dx * startTrim, y: points[0].y + startDirection.dy * startTrim)
         let last = points.count - 1
         points[last] = CGPoint(x: points[last].x - endDirection.dx * endTrim, y: points[last].y - endDirection.dy * endTrim)
-        let arrives = endTrim > 0 && (!isAligned(points, last) || turns(points, last - 1)) ? leadLength(run: along(points, last, endDirection)) : 0
-        let leaves = startTrim > 0 && (!isAligned(points, 1) || turns(points, 1)) ? leadLength(run: along(points, 1, startDirection)) : 0
+        let arrives = endReach > endTrim && (!isAligned(points, last) || turns(points, last - 1))
+            ? leadLength(reach: endReach, trim: endTrim, run: along(points, last, endDirection)) : 0
+        let leaves = startReach > startTrim && (!isAligned(points, 1) || turns(points, 1))
+            ? leadLength(reach: startReach, trim: startTrim, run: along(points, 1, startDirection)) : 0
         if arrives >= 1 {
             points.insert(CGPoint(x: points[last].x - endDirection.dx * arrives, y: points[last].y - endDirection.dy * arrives), at: last)
             axes.insert(axes[last], at: last)
@@ -96,9 +106,17 @@ enum DiagramTurningRouteDrawing {
         max(0.25, min(0.5, 4 * abs(along) / (abs(across) == 0 ? 1 : abs(across))))
     }
 
-    /// Of the way from an end's run to where it bends, what runs straight into its mark: a quarter, at most 6 points.
-    private static func leadLength(run: CGFloat) -> CGFloat {
-        min(lead, run / 4)
+    /// How far from its node an end with a mark of `trim` starts to turn on its own: past its mark and the lead.
+    static func defaultReach(trim: CGFloat) -> CGFloat {
+        trim > 0 ? trim + lead : 0
+    }
+
+    /// Of the way from an end's run to where it bends, what runs straight: the part that makes up for a larger mark beside
+    /// this one where it can be, and of the rest at most a quarter of what is left, so that the ends on one side of a node
+    /// turn equally far from it (Pele's `lead`).
+    private static func leadLength(reach: CGFloat, trim: CGFloat, run: CGFloat) -> CGFloat {
+        let room = min(max(0, reach - lead - trim), run / 4)
+        return room + min(reach - trim - room, (run - room) / 4)
     }
 
     private static func isAligned(_ points: [CGPoint], _ index: Int) -> Bool {

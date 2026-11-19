@@ -6,7 +6,7 @@
  *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -42,7 +42,7 @@ extension MermaidDiagramPreparationContext {
     /// measurements, as Pele's `turnToFit` and `tighten` draw it.
     func prepared(swimlane diagram: FlowchartDiagram) -> PreparedMermaidDiagram {
         let layout = SwimlaneLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: diagram.turnedToRunDown ?? diagram, regularSize: layout.size, laidOut: { turned in
+        let narrow = narrowScene(of: diagram.swimlaneTurnedToRunDown ?? diagram, regularSize: layout.size, laidOut: { turned in
             SwimlaneLayoutEngine.layout(turned, typography: typography, spacing: .compact, columnWidth: narrowestColumnWidth)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout), narrowScene: narrow,

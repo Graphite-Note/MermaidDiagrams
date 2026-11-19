@@ -6,7 +6,7 @@
  *              as a flowchart, its top-level groups lanes, laid out in lanes, drawn as a flowchart inside them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -49,5 +49,17 @@ public enum SwimlaneLayoutEngine {
         let page = SwimlanePageAssembly(diagram: diagram, measured: measured, graph: graph, placement: placement)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: titleText, maximumWidth: titleRoom) }
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+    }
+}
+
+extension FlowchartDiagram {
+    /// A swimlane diagram that runs across, turned to run down from the top, as Pele's `turnToFit` draws its flowchart
+    /// variant turned (`rootDir` "TB", whether it ran left or right); nil for one that runs down or up. Its groups keep their
+    /// directions, which a lane has no use for. A flowchart turns otherwise (`turnedToRunDown`).
+    public var swimlaneTurnedToRunDown: FlowchartDiagram? {
+        guard direction.runsAcross else { return nil }
+        var turned = self
+        turned.direction = .topToBottom
+        return turned
     }
 }

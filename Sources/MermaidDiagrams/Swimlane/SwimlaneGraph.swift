@@ -6,7 +6,7 @@
  *              graph: the groups, the nodes, and a lane for the nodes outside every group.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -53,16 +53,18 @@ struct SwimlaneGraph {
             subgraphBoxes[subgraph] = boxes.count
             boxes.append(Self.group(title: titles[subgraph], padding: padding))
         }
-        let loopSide: DiagramSide = diagram.direction.runsAcross ? .bottom : .right
         var nodeBoxes = [Int](repeating: 0, count: diagram.nodes.count)
         var hasLooseNode = false
         for node in diagram.nodes.indices {
             if let subgraph = nesting.representedSubgraphs[node] {
                 nodeBoxes[node] = subgraphBoxes[subgraph]
+                // A group has no size of its own, but its loops still widen it, which shows when it holds nothing.
+                boxes[subgraphBoxes[subgraph]].size = Self.layoutSize(of: node, base: .zero, measured: measured, flowRunsAcross: diagram.direction.runsAcross)
                 continue
             }
             nodeBoxes[node] = boxes.count
-            boxes.append(LaneLayoutBox(size: measured.layoutSize(of: node, loopSide: loopSide), parent: nil, isGroup: false))
+            boxes.append(LaneLayoutBox(size: Self.layoutSize(of: node, base: measured.shapeSizes[node], measured: measured,
+                                                             flowRunsAcross: diagram.direction.runsAcross), parent: nil, isGroup: false))
             if nesting.nodeSubgraphs[node] == nil { hasLooseNode = true }
         }
         looseLaneBox = hasLooseNode ? boxes.count : nil
@@ -75,6 +77,17 @@ struct SwimlaneGraph {
         self.nodeBoxes = nodeBoxes
         graph = LaneLayoutGraph(boxes: boxes, edges: Self.edges(of: diagram, measured: measured, nodeBoxes: nodeBoxes, edgeTextRoom: edgeTextRoom),
                                 direction: diagram.direction.layeredDirection, lanePadding: isTight ? 12 : 24)
+    }
+
+    /// A node's size in its rank: `base`, its shape's or none for a group's, grown on both sides across the flow by the room
+    /// each of its loops takes, as Pele's flowchart renderer grows the node it lays out (`SwimlaneSelfLoops.room`).
+    static func layoutSize(of node: Int, base: CGSize, measured: FlowchartMeasurement, flowRunsAcross: Bool) -> CGSize {
+        var size = base
+        for edgeIndex in measured.selfLoopEdgeIndices[node] {
+            let room = SwimlaneSelfLoops.room(textSize: measured.edgeTexts[edgeIndex]?.size, flowRunsAcross: flowRunsAcross)
+            if flowRunsAcross { size.height += 2 * room } else { size.width += 2 * room }
+        }
+        return size
     }
 
     /// Every edge between the boxes of its nodes, with its text's room.

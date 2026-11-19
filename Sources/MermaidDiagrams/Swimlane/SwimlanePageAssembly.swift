@@ -6,7 +6,7 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -36,23 +36,25 @@ struct SwimlanePageAssembly {
         placeSelfLoops()
     }
 
-    private var loopSide: DiagramSide { diagram.direction.runsAcross ? .bottom : .right }
-
     private func center(ofNode node: Int) -> CGPoint {
         let frame = placement.frames[graph.nodeBoxes[node]]
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
     private mutating func placeEdges() {
+        let reaches = sideReaches()
         for (edgeIndex, edge) in diagram.edges.enumerated() {
-            guard let route = placement.routes[edgeIndex] else { continue }
+            guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
             var points = route.points
+            let startReach = reach(at: points[0], box: graph.nodeBoxes[edge.sourceIndex], in: reaches)
+            let endReach = reach(at: points[points.count - 1], box: graph.nodeBoxes[edge.targetIndex], in: reaches)
             points[0] = onOutline(points[0], node: edge.sourceIndex)
             points[points.count - 1] = onOutline(points[points.count - 1], node: edge.targetIndex)
             edgePoints.append(points)
             let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
             let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-            let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: route.segmentsRunVertically, startTrim: startTrim, endTrim: endTrim)
+            let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: route.segmentsRunVertically, startTrim: startTrim, endTrim: endTrim,
+                                                        startReach: startReach, endReach: endReach)
             let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
             edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: drawn.path,
                                                    sourceMark: Self.mark(edge.sourceArrowhead, tip: points[0], direction: leaving),
@@ -61,45 +63,78 @@ struct SwimlanePageAssembly {
         }
     }
 
+    /// How far from each side of each box the edges that meet it start to turn, as Pele's `sideReach` sets it: as far as the
+    /// largest mark there needs, with the lead, for every edge on that side, so that none turns sooner than its neighbour and
+    /// crosses it. Keyed by box and side; an edge to itself or one not drawn counts for none.
+    private func sideReaches() -> [Int: CGFloat] {
+        var reaches: [Int: CGFloat] = [:]
+        for (edgeIndex, edge) in diagram.edges.enumerated() where edge.stroke != .invisible {
+            guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
+            let ends = [(route.points[0], graph.nodeBoxes[edge.sourceIndex], edge.sourceArrowhead),
+                        (route.points[route.points.count - 1], graph.nodeBoxes[edge.targetIndex], edge.targetArrowhead)]
+            for (point, box, arrowhead) in ends {
+                let trim = DiagramEdgeMark.lineTrim(for: arrowhead)
+                guard trim > 0, let key = sideKey(at: point, box: box) else { continue }
+                reaches[key] = max(reaches[key] ?? 0, DiagramTurningRouteDrawing.defaultReach(trim: trim))
+            }
+        }
+        return reaches
+    }
+
+    /// The reach of the side of `box` that `point` is on, 0 for a point on no side, as Pele's `sideReach` gives it.
+    private func reach(at point: CGPoint, box: Int, in reaches: [Int: CGFloat]) -> CGFloat {
+        sideKey(at: point, box: box).flatMap { key in reaches[key] } ?? 0
+    }
+
+    private func sideKey(at point: CGPoint, box: Int) -> Int? {
+        Self.side(of: point, on: placement.frames[box]).map { side in
+            let sideNumber = switch side {
+            case .top: 0
+            case .right: 1
+            case .bottom: 2
+            case .left: 3
+            }
+            return box * 4 + sideNumber
+        }
+    }
+
+    /// The side of `frame` that `point` lies on, within half a point, as Pele's `endSide` finds it, or nil.
+    static func side(of point: CGPoint, on frame: CGRect) -> DiagramSide? {
+        let offset = CGPoint(x: point.x - frame.midX, y: point.y - frame.midY)
+        if abs(abs(offset.y) - frame.height / 2) < 0.5 { return offset.y < 0 ? .top : .bottom }
+        if abs(abs(offset.x) - frame.width / 2) < 0.5 { return offset.x < 0 ? .left : .right }
+        return nil
+    }
+
     /// A route's end moved from its node's box onto the outline of the shape drawn in it, as Pele's `insetRoute` moves it;
     /// a group's end, and one on no side of its box, stay.
     private func onOutline(_ point: CGPoint, node: Int) -> CGPoint {
         guard graph.nesting.representedSubgraphs[node] == nil else { return point }
         let frame = placement.frames[graph.nodeBoxes[node]]
-        let offset = CGPoint(x: point.x - frame.midX, y: point.y - frame.midY)
-        let side: DiagramSide
-        if abs(abs(offset.y) - frame.height / 2) < 0.5 {
-            side = offset.y < 0 ? .top : .bottom
-        } else if abs(abs(offset.x) - frame.width / 2) < 0.5 {
-            side = offset.x < 0 ? .left : .right
-        } else {
-            return point
-        }
+        guard let side = Self.side(of: point, on: frame) else { return point }
         return FlowchartEdgePorts.outlinePoint(center: CGPoint(x: frame.midX, y: frame.midY), shape: diagram.nodes[node].shape,
-                                               size: measured.shapeSizes[node], side: side, offset: side.isHorizontal ? offset.x : offset.y)
+                                               size: measured.shapeSizes[node], side: side,
+                                               offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
     }
 
-    /// The loops of every node that has edges to itself; a group's from the middle of its box, as Pele loops a group whose
-    /// drawn node has no size.
+    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`SwimlaneSelfLoops`); a group's
+    /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
+    /// does not count among the loops drawn before the next one.
     private mutating func placeSelfLoops() {
         for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() {
             let isGroup = graph.nesting.representedSubgraphs[node] != nil
-            for (loopIndex, edgeIndex) in loopEdgeIndices.enumerated() {
+            var loopIndex = 0
+            for edgeIndex in loopEdgeIndices {
                 let edge = diagram.edges[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: center(ofNode: node), shape: diagram.nodes[node].shape, size: isGroup ? .zero : measured.shapeSizes[node],
-                                                   loopSide: loopSide, loopIndex: loopIndex, textSize: measured.edgeTexts[edgeIndex]?.size)
-                let arriving = Self.unitVector(from: loop.control2, to: loop.back)
-                let leaving = Self.unitVector(from: loop.control1, to: loop.leave)
-                let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
-                let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-                let start = CGPoint(x: loop.leave.x - leaving.dx * startTrim, y: loop.leave.y - leaving.dy * startTrim)
-                let end = CGPoint(x: loop.back.x - arriving.dx * endTrim, y: loop.back.y - arriving.dy * endTrim)
-                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke,
-                                                       path: DiagramPath(start: start, segments: [.curve(to: end, control1: loop.control1, control2: loop.control2)]),
-                                                       sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: leaving),
-                                                       targetMark: Self.mark(edge.targetArrowhead, tip: loop.back, direction: arriving),
-                                                       text: loop.textCenter.flatMap { center in Self.centered(measured.edgeTexts[edgeIndex], at: center) },
-                                                       style: edge.style)
+                defer { if edge.stroke != .invisible { loopIndex += 1 } }
+                let text = measured.edgeTexts[edgeIndex]
+                let loop = SwimlaneSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
+                                                  flowRunsAcross: diagram.direction.runsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
+                                                  textSize: text?.size)
+                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: loop.path,
+                                                       sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoStepAtLeave),
+                                                       targetMark: Self.mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving),
+                                                       text: Self.centered(text, at: loop.textCenter), style: edge.style)
             }
         }
     }
@@ -114,10 +149,6 @@ struct SwimlanePageAssembly {
         return text
     }
 
-    private static func unitVector(from start: CGPoint, to end: CGPoint) -> CGVector {
-        let length = max(((end.x - start.x) * (end.x - start.x) + (end.y - start.y) * (end.y - start.y)).squareRoot(), 0.0001)
-        return CGVector(dx: (end.x - start.x) / length, dy: (end.y - start.y) / length)
-    }
 }
 
 extension SwimlanePageAssembly {
