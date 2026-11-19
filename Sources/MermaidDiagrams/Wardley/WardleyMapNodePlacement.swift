@@ -6,7 +6,7 @@
  *              labels, a component's label in the first corner around it no link leaves through.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -49,7 +49,7 @@ extension WardleyMapPlacement {
             guard let label = anchorLabels[index] else { return [] }
             return [canvas.centered(label, at: CGPoint(x: center.x + (offsetX ?? 0), y: center.y + (offsetY ?? -3)))]
         }
-        guard let label = PlaneMapLabel.block(node.label, measurer: measurers.text) else { return [] }
+        guard let label = PlaneMapLabel.block(node.label, measurer: measurers.text, maximumWidth: canvas.textWidth) else { return [] }
         let lift = Self.labelLift + (node.sourcing != nil ? Self.sourcedLabelLift : 0)
         if offsetX != nil || offsetY != nil {
             return canvas.starting(label, x: center.x + (offsetX ?? lift), baseline: center.y + (offsetY ?? -lift))

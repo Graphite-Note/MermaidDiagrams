@@ -6,7 +6,7 @@
  *              where its type has one, what a screen reader says of it, or a typed failure of the right kind.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -109,6 +109,10 @@ final class MermaidDiagramPreparationTests: XCTestCase {
             XCTAssertLessThan(try XCTUnwrap(diagram.narrowScene, source).size.width, diagram.scene.size.width, source)
         }
         XCTAssertNil(try prepared(PieChartCorpus.pie(sliceCount: 8)).narrowScene, "A pie chart has no narrow layout")
+        let map = try prepared(try WardleyMapCorpus.documentationExamples()[0])
+        XCTAssertLessThanOrEqual(try XCTUnwrap(map.narrowScene, "A Wardley map is drawn tight to fit, as Pele's fitWidth draws it").size.width,
+                                 PreparedMermaidDiagram.standardNarrowestColumnWidth + 120)
+        XCTAssertLessThan(try XCTUnwrap(map.narrowScene).size.width, map.scene.size.width)
     }
 
     func testADiagramRefusedAsTooLargeIsNotLaidOutASecondTimeForANarrowColumn() {

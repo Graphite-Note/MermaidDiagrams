@@ -6,7 +6,7 @@
  *              list in a box, bold notes written from their point, and wide arrows with their names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -32,7 +32,7 @@ extension WardleyMapPlacement {
         let listed = map.annotations.filter { annotation in !(annotation.text ?? "").isEmpty }.sorted { first, second in first.number < second.number }
         guard !listed.isEmpty else { return }
         let lines = listed.compactMap { annotation in
-            PlaneMapLabel.block(JavaScriptNumberText.text(annotation.number) + ". " + (annotation.text ?? ""), measurer: measurers.text, maximumWidth: 320)
+            PlaneMapLabel.block(JavaScriptNumberText.text(annotation.number) + ". " + (annotation.text ?? ""), measurer: measurers.text, maximumWidth: canvas.annotationListWidth)
         }
         let width = (lines.map(\.size.width).max() ?? 0) + 20
         let height = lines.reduce(0) { total, line in total + line.size.height } + 14

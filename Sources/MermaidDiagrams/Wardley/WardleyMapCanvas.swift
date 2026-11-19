@@ -6,7 +6,7 @@
  *              projection from percent, the extent everything drawn reaches, and text centered or starting at a point.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -23,20 +23,43 @@ struct WardleyMapMeasurers<Measurer: DiagramTextMeasuring> {
     let titleText: Measurer
 }
 
-/// The plot in its own coordinates, its top left corner at the origin, and the extent of what is drawn around it.
+/// The plot in its own coordinates, its top left corner at the origin, the extent of what is drawn around it, and
+/// whether it is drawn tight for a narrow container, its labels wrapped narrower.
 struct WardleyMapCanvas {
     let plotWidth: CGFloat
     let plotHeight: CGFloat
+    let isTight: Bool
     private(set) var minimumX: CGFloat = 0
     private(set) var minimumY: CGFloat = 0
     private(set) var maximumX: CGFloat
     private(set) var maximumY: CGFloat
 
-    init(plotWidth: CGFloat, plotHeight: CGFloat) {
+    init(plotWidth: CGFloat, plotHeight: CGFloat, isTight: Bool = false) {
         self.plotWidth = plotWidth
         self.plotHeight = plotHeight
+        self.isTight = isTight
         maximumX = plotWidth
         maximumY = plotHeight
+    }
+
+    /// Where a component's label and the axes' titles wrap: nowhere, or tight from 64 to 120 points, half the plot.
+    var textWidth: CGFloat {
+        isTight ? max(64, min(120, plotWidth / 2)) : PlaneMapLabel.unwrappedWidth
+    }
+
+    /// Where an anchor's name wraps: nowhere, or tight at half the plot, at least 64 points.
+    var anchorTextWidth: CGFloat {
+        isTight ? max(64, plotWidth / 2) : PlaneMapLabel.unwrappedWidth
+    }
+
+    /// Where the annotations' list wraps: at 320 points, or tight at the plot less 20, at least 80.
+    var annotationListWidth: CGFloat {
+        isTight ? max(80, plotWidth - 20) : 320
+    }
+
+    /// Where the title wraps: nowhere, or tight at the plot's width, at least 80 points.
+    var titleWidth: CGFloat {
+        isTight ? max(80, plotWidth) : PlaneMapLabel.unwrappedWidth
     }
 
     /// An evolution in percent across the plot.

@@ -6,7 +6,7 @@
  *              or the options', the stages and axes, everything at its coordinates, then the title and the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -28,17 +28,45 @@ public enum WardleyMapLayoutEngine {
     /// Mermaid's four stages when the map names none.
     static let defaultStages = ["Genesis", "Custom Built", "Product", "Commodity"]
 
-    public static func layout(_ map: WardleyMap, typography: DiagramTypography) -> WardleyMapLayout {
+    /// The plot is never made narrower than this to fit a width: Pele's `fitWidth` floor.
+    static let narrowestPlotWidth: CGFloat = 160
+    /// Rounds of narrowing the plot by what is still too wide, after the first tight layout.
+    static let fittingRoundCount = 3
+
+    /// The map at its natural width; with `availableWidth`, when that is too wide, as Pele's `fitWidth` draws it for a
+    /// narrower container: tight (labels wrapped narrower), then its plot narrowed by what is still too wide, up to three
+    /// times and not below 160 points, the plot's height falling with its width down to three quarters.
+    public static func layout(_ map: WardleyMap, typography: DiagramTypography, fittingWidth availableWidth: CGFloat? = nil) -> WardleyMapLayout {
         let planeText = typography.planeMapText
         let measurers = WardleyMapMeasurers(text: typography.rowText, boldText: planeText.boldRowText, linkText: planeText.linkText,
                                             boldLinkText: planeText.boldLinkText, boldNumberText: planeText.boldSmallestText, titleText: typography.boldNodeText)
-        return layout(map, measurers: measurers, font: typography.font)
+        return layout(map, measurers: measurers, font: typography.font, fittingWidth: availableWidth)
     }
 
-    static func layout<Measurer: DiagramTextMeasuring>(_ map: WardleyMap, measurers: WardleyMapMeasurers<Measurer>, font: DiagramFont) -> WardleyMapLayout {
-        let plotWidth = plotSide(map.size?.width, option: map.options.width, fallback: defaultWidth)
-        let plotHeight = plotSide(map.size?.height, option: map.options.height, fallback: defaultHeight)
-        var placement = WardleyMapPlacement(map: map, measurers: measurers, canvas: WardleyMapCanvas(plotWidth: plotWidth, plotHeight: plotHeight), font: font)
+    static func layout<Measurer: DiagramTextMeasuring>(_ map: WardleyMap, measurers: WardleyMapMeasurers<Measurer>, font: DiagramFont,
+                                                       fittingWidth availableWidth: CGFloat? = nil) -> WardleyMapLayout {
+        let naturalWidth = plotSide(map.size?.width, option: map.options.width, fallback: defaultWidth)
+        let regular = layout(map, measurers: measurers, font: font, plotWidth: naturalWidth, naturalWidth: naturalWidth, isTight: false)
+        guard let availableWidth, availableWidth > 0, regular.size.width > availableWidth else { return regular }
+        let floor = min(narrowestPlotWidth, naturalWidth)
+        var plotWidth = naturalWidth
+        var fitted = layout(map, measurers: measurers, font: font, plotWidth: plotWidth, naturalWidth: naturalWidth, isTight: true)
+        var round = 0
+        while round < fittingRoundCount && fitted.size.width > availableWidth && plotWidth > floor {
+            plotWidth = max(floor, plotWidth - (fitted.size.width - availableWidth))
+            fitted = layout(map, measurers: measurers, font: font, plotWidth: plotWidth, naturalWidth: naturalWidth, isTight: true)
+            round += 1
+        }
+        return fitted
+    }
+
+    /// The map on a plot `plotWidth` wide, its height the map's less the margins, times the plot's share of its natural
+    /// width but not under three quarters; tight, its labels wrapped as Pele wraps them for a narrow container.
+    private static func layout<Measurer: DiagramTextMeasuring>(_ map: WardleyMap, measurers: WardleyMapMeasurers<Measurer>, font: DiagramFont,
+                                                               plotWidth: CGFloat, naturalWidth: CGFloat, isTight: Bool) -> WardleyMapLayout {
+        let plotHeight = plotSide(map.size?.height, option: map.options.height, fallback: defaultHeight) * max(leastHeightShare, plotWidth / naturalWidth)
+        let canvas = WardleyMapCanvas(plotWidth: plotWidth, plotHeight: plotHeight, isTight: isTight)
+        var placement = WardleyMapPlacement(map: map, measurers: measurers, canvas: canvas, font: font)
         placement.placeFrame()
         placement.placePipelines()
         placement.placeLinks()
@@ -48,6 +76,9 @@ public enum WardleyMapLayoutEngine {
         placement.placeNotesAndForces()
         return placement.finishedLayout()
     }
+
+    /// A narrowed plot keeps at least this share of its height, so that components keep some room between them.
+    static let leastHeightShare: CGFloat = 0.75
 
     /// A side of the plot: the map's own, else the option's, else `fallback`, kept from 200 to 10,000, less the margins.
     private static func plotSide(_ given: Double?, option: Double?, fallback: Double) -> CGFloat {
@@ -88,7 +119,7 @@ struct WardleyMapPlacement<Measurer: DiagramTextMeasuring> {
         for (index, node) in map.nodes.enumerated() {
             indexByIdentifier[node.identifier] = index
             if node.kind == .anchor {
-                anchorLabels[index] = PlaneMapLabel.block(node.label, measurer: measurers.boldText)
+                anchorLabels[index] = PlaneMapLabel.block(node.label, measurer: measurers.boldText, maximumWidth: canvas.anchorTextWidth)
             }
         }
     }
@@ -119,8 +150,8 @@ struct WardleyMapPlacement<Measurer: DiagramTextMeasuring> {
                 layout.gridLines.append(DiagramPath(start: CGPoint(x: 0, y: y), segments: [.line(to: CGPoint(x: width, y: y))]))
             }
         }
-        let evolution = PlaneMapLabel.block("Evolution", measurer: measurers.text)
-        let visibility = PlaneMapLabel.block("Visibility", measurer: measurers.text)
+        let evolution = PlaneMapLabel.block("Evolution", measurer: measurers.text, maximumWidth: canvas.textWidth)
+        let visibility = PlaneMapLabel.block("Visibility", measurer: measurers.text, maximumWidth: canvas.textWidth)
         let evolutionHeight = evolution?.size.height ?? 0
         layout.evolutionTitle = evolution.map { block in canvas.centered(block, at: CGPoint(x: width / 2, y: stageBottom + 6 + evolutionHeight / 2)) }
         layout.visibilityTitle = visibility.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: -16, y: height / 2)) }
@@ -131,7 +162,7 @@ struct WardleyMapPlacement<Measurer: DiagramTextMeasuring> {
     /// The title above the plot's middle, and everything moved so that the extent starts 8 points in and the title's 8
     /// points above it.
     mutating func finishedLayout() -> WardleyMapLayout {
-        let title = PlaneMapLabel.block(map.title, measurer: measurers.titleText)
+        let title = PlaneMapLabel.block(map.title, measurer: measurers.titleText, maximumWidth: canvas.titleWidth)
         let titleWidth = title?.size.width ?? 0
         let titleHeight = title.map { block in block.size.height + WardleyMapLayoutEngine.titleGap } ?? 0
         let left = min(canvas.minimumX, canvas.plotWidth / 2 - titleWidth / 2)

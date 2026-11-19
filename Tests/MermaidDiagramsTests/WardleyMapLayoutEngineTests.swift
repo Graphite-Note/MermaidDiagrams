@@ -124,6 +124,22 @@ final class WardleyMapLayoutEngineTests: XCTestCase {
         XCTAssertEqual(layout.links[1].line.start.y - origin.y, 504 - 0.5 * 504 + 13 * 0.8, accuracy: 1e-9)
     }
 
+    /// Pele's fitWidth for a 280-point container: the map at 846 points is drawn tight, then its plot narrowed by what is
+    /// still too wide (804 less 566: 238 points), its height 504 times three quarters, as it is narrower than that share;
+    /// a stage's name wraps at 48 points, a component's label at 64 to 120.
+    func testAMapTooWideForItsContainerIsDrawnTightAndNarrower() throws {
+        let source = "wardley-beta\ncomponent A [0.5, 0.5]\ncomponent Long label words here [0.2, 0.2]"
+        XCTAssertEqual(try WardleyMapReading.uniformLayout(source).size.width, 846)
+        let fitted = try WardleyMapReading.uniformLayout(source, fittingWidth: 280)
+        XCTAssertEqual(fitted.size.width, 280)
+        XCTAssertEqual(fitted.plot.size, CGSize(width: 238, height: 378))
+        XCTAssertEqual(fitted.stageLabels[1].lines, ["Custom", "Built"])
+        XCTAssertEqual(fitted.nodes[1].label.map { line in line.lines[0] }, ["Long label words", "here"], "Wrapped at 119 points, half the plot")
+        XCTAssertEqual(try WardleyMapReading.uniformLayout(source, fittingWidth: 900).size.width, 846, "It fits: drawn as it is")
+        let floor = try WardleyMapReading.uniformLayout(source, fittingWidth: 50)
+        XCTAssertEqual(floor.plot.width, 160, "Never narrower than 160 points")
+    }
+
     func testTheSceneHasPelesPartsInPelesOrder() throws {
         let scene = DiagramScene(layout: try WardleyMapReading.uniformLayout("wardley-beta\ntitle T\ncomponent A [0.2, 0.2]\ncomponent B [0.6, 0.6]\nA -> B"))
         let parts = scene.items.map { item -> DiagramScenePart in
