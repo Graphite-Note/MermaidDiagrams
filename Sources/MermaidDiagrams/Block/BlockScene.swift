@@ -6,7 +6,7 @@
  *              their titles, the edges and their marks, the blocks and arrows with their text, the edges' text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -15,14 +15,23 @@ import CoreGraphics
 extension DiagramScene {
     /// The block diagram's painting, in Pele's order: the bold title; each composite's box in the second surface at half
     /// opacity (the color its style fills it with at full) outlined in the border color, and its title in the muted
-    /// color; each edge's line in the line color, 2.5 points wide for `==` and dotted for `.-`, with its marks; each
-    /// block's shape or arrow in the surface color outlined in the border color, its colors as its style sets, and its
-    /// text; each edge's text on a patch of the page's color.
+    /// color; the casings of the edges that cross the border of a composite a style fills (`BlockEdgeInk`); each edge's
+    /// line in the line color (or in the ink of the filled composite that holds it), 2.5 points wide for `==` and dotted
+    /// for `.-`, with its marks; each block's shape or arrow in the surface color outlined in the border color, its
+    /// colors as its style sets, and its text; each edge's text on a patch of the page's color.
     public init(layout: BlockLayout) {
         var builder = DiagramSceneBuilder()
         builder.title(layout.title)
         for composite in layout.composites { BlockScenePaths.add(composite, to: &builder) }
-        for edge in layout.edges { BlockScenePaths.add(edge, to: &builder) }
+        let inks = BlockEdgeInk.inks(of: layout.edges, over: layout.composites)
+        for (edge, ink) in zip(layout.edges, inks) where ink == .cased { BlockScenePaths.addCasing(of: edge, to: &builder) }
+        for (edge, ink) in zip(layout.edges, inks) {
+            guard case .inked(let color) = ink else {
+                BlockScenePaths.add(edge, in: .line, to: &builder)
+                continue
+            }
+            BlockScenePaths.add(edge, in: .color(color), to: &builder)
+        }
         for node in layout.nodes { BlockScenePaths.add(node, to: &builder) }
         for edge in layout.edges {
             guard let text = edge.text else { continue }
@@ -54,14 +63,34 @@ enum BlockScenePaths {
                      isItalic: composite.appearance.isItalic, part: .clusterLabel)
     }
 
-    static func add(_ edge: BlockLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    /// The width a casing adds to the line it lies under, Pele's `CASE`.
+    static let casingExtraWidth: CGFloat = 4
+
+    /// `edge`'s line and marks in `paint`.
+    static func add(_ edge: BlockLayoutEdge, in paint: DiagramPaint, to builder: inout DiagramSceneBuilder) {
         let stroke = DiagramStroke(lineWidth: edge.isThick ? thickLineWidth : 1, dashLengths: edge.isDotted ? dottedDashLengths : [], lineCap: .round)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), .line, stroke, part: .edge)
+        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, stroke, part: .edge)
+        let (filled, stroked) = marks(of: edge)
+        builder.fill(filled, paint, part: .marker)
+        builder.stroke(stroked, paint, DiagramStroke(lineWidth: 1, lineCap: .round), part: .marker)
+    }
+
+    /// The stroke of the page's color under `edge` and its marks, 4 points wider than its line, with round ends and
+    /// corners, and its marks filled and outlined in it: Pele's `edgeCasing`.
+    static func addCasing(of edge: BlockLayoutEdge, to builder: inout DiagramSceneBuilder) {
+        let casing = DiagramStroke.rounded(lineWidth: (edge.isThick ? thickLineWidth : 1) + casingExtraWidth)
+        builder.stroke(DiagramEdgeDrawing.path(edge.path), .background, casing, part: .casing)
+        let (filled, stroked) = marks(of: edge)
+        builder.fillAndStroke(filled, fill: .background, stroke: .background, casing, part: .casing)
+        builder.stroke(stroked, .background, casing, part: .casing)
+    }
+
+    /// The marks at `edge`'s ends: those filled (arrows and circles) and those stroked (crosses).
+    private static func marks(of edge: BlockLayoutEdge) -> (filled: CGPath, stroked: CGPath) {
         let filled = CGMutablePath()
         let stroked = CGMutablePath()
         for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
-        builder.fill(filled, .line, part: .marker)
-        builder.stroke(stroked, .line, DiagramStroke(lineWidth: 1, lineCap: .round), part: .marker)
+        return (filled, stroked)
     }
 
     static func add(_ node: BlockLayoutNode, to builder: inout DiagramSceneBuilder) {

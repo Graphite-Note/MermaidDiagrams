@@ -275,4 +275,6 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case wardleyDeaccelerator = "wardley-deaccelerator"
     /// The text an architecture diagram's service shows in place of an icon.
     case iconText = "icon-text"
+    /// The wide strokes of the page's color under edges that cross the border of a filled box (Pele's casings).
+    case casing
 }

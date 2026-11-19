@@ -7,7 +7,7 @@
  *              typed error within seconds, and every number on their page finite.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -71,6 +71,10 @@ final class GridDiagramSafetyTests: XCTestCase {
             ("links without blocks", "block\n" + String(repeating: "--> ", count: 12_000)),
             ("one long identifier", "block\n" + String(repeating: "a", count: fifty - 10)),
             ("brackets only", "block\n" + String(repeating: "(([[{{", count: 8_000)),
+            ("blank lines and comment lines", "block\n" + String(repeating: "\n \n%% c\n", count: 5_500) + "a[\"x\n" + String(repeating: "%% c\n", count: 1_000) + "y\"]"),
+            ("filled composites under many edges", "block\ncolumns 40\nclassDef d fill:#222\n" + Self.repeated(1_000) { index in "block:g\(index)\nn\(index)\nend\n" }
+                + "class " + Self.repeated(1_000) { index in index == 0 ? "g0" : ",g\(index)" } + " d\n"
+                + Self.repeated(1_400) { index in "n\(index % 1_000)-->n\((index * 7 + 3) % 1_000)\n" }),
             ("prototype names", "block\n__proto__ constructor toString\nclassDef __proto__ fill:red\nclass constructor,toString __proto__\nstyle __proto__ fill:blue\n__proto__ --> constructor"),
         ]
         for (name, source) in cases {
