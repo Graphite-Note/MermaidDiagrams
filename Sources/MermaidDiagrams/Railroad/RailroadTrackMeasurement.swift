@@ -7,7 +7,7 @@
  *              is bounded.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -80,27 +80,42 @@ struct RailroadTrackBox {
 struct RailroadTrackMeasurement {
     let metrics: RailroadMetrics
 
+    /// The box of `expression`. Leaves and each kind of part are measured by functions of their own, so that this one,
+    /// which every level of a rule's tree passes through, keeps a small frame on the stack: a tree nested as deep as
+    /// `RailroadExpression.maximumNestingDepth` allows is measured on a secondary thread's 512 KiB stack, in a debug
+    /// build too.
     func box(of expression: RailroadExpression, room: CGFloat) -> RailroadTrackBox {
-        let arc = metrics.arc
         switch expression {
-        case .terminal(let value):
-            let text = RailroadText.shown(value)
-            let blanks = !text.isEmpty && text.allSatisfy { character in character == " " }
-            return leaf(.terminal, blanks ? String(repeating: "␣", count: text.count) : text, measurer: metrics.terminalText)
-        case .nonterminal(let name):
-            return leaf(.nonterminal, RailroadText.shown(name), measurer: metrics.nameText)
-        case .special(let text):
-            return leaf(.special, "? " + RailroadText.shown(text) + " ?", measurer: metrics.specialText)
-        case .sequence(let elements):
-            return sequence(elements.map { element in box(of: element, room: childRoom(room, around: 6 * arc)) }, room: room)
-        case .choice(let alternatives):
-            return choice(alternatives.map { alternative in box(of: alternative, room: childRoom(room, around: 4 * arc)) })
-        case .optional(let element):
-            return bypass(box(of: element, room: childRoom(room, around: 4 * arc)))
+        case .terminal(let value): terminalBox(value)
+        case .nonterminal(let name): nameBox(name)
+        case .special(let text): specialBox(text)
+        case .sequence(let elements): sequence(boxes(of: elements, room: childRoom(room, around: 6 * metrics.arc)), room: room)
+        case .choice(let alternatives): choice(boxes(of: alternatives, room: childRoom(room, around: 4 * metrics.arc)))
+        case .optional(let element): bypass(box(of: element, room: childRoom(room, around: 4 * metrics.arc)))
         case .repetition(let element, let minimum, let maximum):
-            let child = box(of: element, room: childRoom(room, around: (minimum == 0 ? 6 : 2) * arc))
-            return repetition(child, minimum: minimum, maximum: maximum)
+            repetition(box(of: element, room: childRoom(room, around: (minimum == 0 ? 6 : 2) * metrics.arc)), minimum: minimum, maximum: maximum)
         }
+    }
+
+    private func boxes(of expressions: [RailroadExpression], room: CGFloat) -> [RailroadTrackBox] {
+        expressions.map { expression in box(of: expression, room: room) }
+    }
+
+    /// A terminal's box: a text of blanks alone is drawn as that many visible blanks.
+    private func terminalBox(_ value: String) -> RailroadTrackBox {
+        let text = RailroadText.shown(value)
+        let blanks = !text.isEmpty && text.allSatisfy { character in character == " " }
+        return leaf(.terminal, blanks ? String(repeating: "␣", count: text.count) : text, measurer: metrics.terminalText)
+    }
+
+    /// A name's box, the name of a rule.
+    private func nameBox(_ name: String) -> RailroadTrackBox {
+        leaf(.nonterminal, RailroadText.shown(name), measurer: metrics.nameText)
+    }
+
+    /// A special sequence's box, its text between `? ` and ` ?`.
+    private func specialBox(_ text: String) -> RailroadTrackBox {
+        leaf(.special, "? " + RailroadText.shown(text) + " ?", measurer: metrics.specialText)
     }
 
     private func childRoom(_ room: CGFloat, around: CGFloat) -> CGFloat {

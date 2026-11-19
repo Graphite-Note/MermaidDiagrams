@@ -7,7 +7,7 @@
  *              folded rows inside rails.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -32,36 +32,47 @@ struct RailroadTrackPlacement {
         track.horizontal(to: end)
     }
 
-    /// Places `box` with its track entering at `left` on `baseline`.
+    /// Places `box` with its track entering at `left` on `baseline`. Each kind is placed by a function of its own, so that
+    /// this one, which every level of a rule's tree passes through, keeps a small frame on the stack: a tree nested as
+    /// deep as `RailroadExpression.maximumNestingDepth` allows is placed on a secondary thread's 512 KiB stack in a debug
+    /// build too.
     mutating func place(_ box: RailroadTrackBox, left: CGFloat, baseline: CGFloat) {
         let right = left + box.width
         switch box.kind {
         case .terminal, .nonterminal, .special: placeLeaf(box, left: left, baseline: baseline)
-        case .sequence:
-            var x = left
-            for (index, child) in box.children.enumerated() {
-                if index > 0 { line(from: x - metrics.gap, to: x, at: baseline) }
-                place(child, left: x, baseline: baseline)
-                x += child.width + metrics.gap
-            }
+        case .sequence: placeSequence(box, left: left, baseline: baseline)
         case .folded: placeFolded(box, left: left, right: right, baseline: baseline)
         case .choice: placeChoice(box, left: left, right: right, baseline: baseline)
-        case .bypass:
-            let child = box.children[0]
-            let childLeft = left + 2 * metrics.arc
-            line(from: left, to: childLeft, at: baseline)
-            line(from: childLeft + child.width, to: right, at: baseline)
-            track.move(to: CGPoint(x: left, y: baseline))
-            track.turn(.eastToNorth, radius: metrics.arc)
-            track.vertical(to: baseline - box.reach + metrics.arc)
-            track.turn(.northToEast, radius: metrics.arc)
-            track.horizontal(to: right - 2 * metrics.arc)
-            track.turn(.eastToSouth, radius: metrics.arc)
-            track.vertical(to: baseline - metrics.arc)
-            track.turn(.southToEast, radius: metrics.arc)
-            place(child, left: childLeft, baseline: baseline)
+        case .bypass: placeBypass(box, left: left, right: right, baseline: baseline)
         case .loop: placeLoop(box, left: left, right: right, baseline: baseline)
         }
+    }
+
+    /// The parts one after another on the baseline, the gap between them a straight track.
+    private mutating func placeSequence(_ box: RailroadTrackBox, left: CGFloat, baseline: CGFloat) {
+        var x = left
+        for (index, child) in box.children.enumerated() {
+            if index > 0 { line(from: x - metrics.gap, to: x, at: baseline) }
+            place(child, left: x, baseline: baseline)
+            x += child.width + metrics.gap
+        }
+    }
+
+    /// The part on the baseline, and a track above it from its left over to its right.
+    private mutating func placeBypass(_ box: RailroadTrackBox, left: CGFloat, right: CGFloat, baseline: CGFloat) {
+        let child = box.children[0]
+        let childLeft = left + 2 * metrics.arc
+        line(from: left, to: childLeft, at: baseline)
+        line(from: childLeft + child.width, to: right, at: baseline)
+        track.move(to: CGPoint(x: left, y: baseline))
+        track.turn(.eastToNorth, radius: metrics.arc)
+        track.vertical(to: baseline - box.reach + metrics.arc)
+        track.turn(.northToEast, radius: metrics.arc)
+        track.horizontal(to: right - 2 * metrics.arc)
+        track.turn(.eastToSouth, radius: metrics.arc)
+        track.vertical(to: baseline - metrics.arc)
+        track.turn(.southToEast, radius: metrics.arc)
+        place(child, left: childLeft, baseline: baseline)
     }
 
     private mutating func placeLeaf(_ box: RailroadTrackBox, left: CGFloat, baseline: CGFloat) {
