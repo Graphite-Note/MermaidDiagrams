@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramPageAssembly.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Puts a placed state diagram on the page: states, transitions, loops, notes and composite boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Puts a placed state diagram on the page: states at their centers, transitions from one state's side to the other's
@@ -17,6 +28,10 @@ struct StateDiagramPageAssembly {
     private var regionDividers: [DiagramPath] = []
     /// For each transition placed through boxes, the points it passes, its ends included: where it crosses a box's top.
     private var transitionPoints: [[CGPoint]] = []
+    /// The composites' boxes, by composite index, for a diagram laid out in boxes.
+    private var compositeFrames: [CGRect] = []
+    /// The centers of the notes beside composites, by note index.
+    private var compositeNoteCenters: [Int: CGPoint] = [:]
 
     init(diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings, axes: FlowchartFlowAxes) {
         self.diagram = diagram
@@ -64,6 +79,8 @@ struct StateDiagramPageAssembly {
     /// The states of a diagram laid out in boxes at their centers on the page; a composite state at the center of its box.
     mutating func placeStates(clustered: StateDiagramClusterGraph, placement: LayeredClusterPlacement) {
         self.clustered = clustered
+        compositeFrames = Array(placement.clusterFrames.prefix(diagram.composites.count))
+        for (noteIndex, node) in clustered.compositeSurroundings.noteNodes { compositeNoteCenters[noteIndex] = placement.nodeCenters[node] }
         stateCenters = diagram.states.indices.map { state in
             if let compositeIndex = clustered.compositeOfState[state] {
                 let frame = placement.clusterFrames[compositeIndex]
@@ -80,8 +97,14 @@ struct StateDiagramPageAssembly {
         for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
             let transition = diagram.transitions[transitionIndex]
-            ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: true, state: transition.sourceIndex))
-            ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: false, state: transition.targetIndex))
+            // A transition between a composite and a state inside it has a point inside the composite for its composite end.
+            let anchor = clustered.anchors[transitionIndex]?.anchor
+            if anchor?.isInward != true {
+                ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: true, state: transition.sourceIndex))
+            }
+            if anchor.map({ anchor in !anchor.isInward }) != true {
+                ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: false, state: transition.targetIndex))
+            }
         }
         var sizes = measured.stateSizes
         for (state, compositeIndex) in clustered.compositeOfState.enumerated() {
@@ -90,11 +113,18 @@ struct StateDiagramPageAssembly {
         let ports = StateDiagramEdgePorts(ends: ends, transitionCount: diagram.transitions.count, stateCenters: stateCenters,
                                           kinds: diagram.states.map(\.kind), stateSizes: sizes)
         for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
-            let route = placement.edgeRoutes[layoutIndex]
-            guard let sourcePoint = ports.sourcePoints[transitionIndex], let targetPoint = ports.targetPoints[transitionIndex] else { continue }
-            let points = [sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint]
+            var route = placement.edgeRoutes[layoutIndex]
+            if let anchored = clustered.anchors[transitionIndex]?.anchor {
+                route = Self.anchoredRoute(route, anchor: anchored, frame: placement.clusterFrames[anchored.compositeIndex],
+                                           direction: clustered.compositeDirections[anchored.compositeIndex], title: clustered.titles[anchored.compositeIndex])
+            }
+            let isInward = clustered.anchors[transitionIndex]?.anchor.isInward
+            guard let sourcePoint = isInward == true ? route.points.first : ports.sourcePoints[transitionIndex],
+                  let targetPoint = isInward == false ? route.points.last : ports.targetPoints[transitionIndex] else { continue }
+            let (points, segmentAxes) = Self.withoutPointsOnTheEnds([sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint],
+                                                                    segmentsRunVertically: route.segmentsRunVertically)
             transitionPoints.append(points)
-            let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: route.segmentsRunVertically, startTrim: 0,
+            let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: 0,
                                                  endTrim: DiagramEdgeMark.lineTrim(for: .arrow))
             let textCenter = placement.edgeLabelCenters[layoutIndex]
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
@@ -102,6 +132,43 @@ struct StateDiagramPageAssembly {
                 path: drawn.path, arrow: DiagramEdgeMark(arrowhead: .arrow, tip: targetPoint, direction: drawn.endDirection),
                 text: centered(measured.transitionTexts[transitionIndex], at: textCenter))
         }
+    }
+
+    /// The route of a transition between a composite and a state inside it, drawn on from its point inside the composite
+    /// to the composite's border: below the title on the side the box's flow starts from when it leaves the composite,
+    /// on the side its flow ends at when it arrives, as Pele draws it.
+    private static func anchoredRoute(_ route: LayeredClusterRoute, anchor: StateDiagramCompositeAnchor, frame: CGRect, direction: FlowchartDirection,
+                                      title: DiagramTextBlock?) -> LayeredClusterRoute {
+        let titleBand = title.map { title in title.size.height + 12 } ?? 0
+        let anchorPoint = anchor.isInward ? route.points[0] : route.points[route.points.count - 1]
+        let border: CGPoint
+        switch (direction, anchor.isInward) {
+        case (.topToBottom, true), (.bottomToTop, false): border = CGPoint(x: anchorPoint.x, y: frame.minY + titleBand)
+        case (.topToBottom, false), (.bottomToTop, true): border = CGPoint(x: anchorPoint.x, y: frame.maxY)
+        case (.leftToRight, true), (.rightToLeft, false): border = CGPoint(x: frame.minX, y: anchorPoint.y)
+        case (.leftToRight, false), (.rightToLeft, true): border = CGPoint(x: frame.maxX, y: anchorPoint.y)
+        }
+        let runsVertically = !direction.runsAcross
+        return anchor.isInward
+            ? LayeredClusterRoute(points: [border] + route.points, segmentsRunVertically: [runsVertically] + route.segmentsRunVertically)
+            : LayeredClusterRoute(points: route.points + [border], segmentsRunVertically: route.segmentsRunVertically + [runsVertically])
+    }
+
+    /// The route without a passing point that lies on its end: where an unseen box around a composite has no room above or
+    /// below it, the point where a transition crosses that box's border is where it meets the composite.
+    private static func withoutPointsOnTheEnds(_ points: [CGPoint], segmentsRunVertically: [Bool]) -> ([CGPoint], [Bool]) {
+        var points = points
+        var axes = segmentsRunVertically
+        func coincide(_ first: CGPoint, _ second: CGPoint) -> Bool { abs(first.x - second.x) < 0.01 && abs(first.y - second.y) < 0.01 }
+        while points.count > 2, axes.count > 1, coincide(points[points.count - 2], points[points.count - 1]) {
+            points.remove(at: points.count - 2)
+            axes.removeLast()
+        }
+        while points.count > 2, axes.count > 1, coincide(points[0], points[1]) {
+            points.remove(at: 1)
+            axes.removeFirst()
+        }
+        return (points, axes)
     }
 
     /// An end of a route through boxes: the side of its state or box that its first or last segment leaves or arrives
@@ -131,7 +198,11 @@ struct StateDiagramPageAssembly {
     /// The loops of every state that has transitions to itself.
     mutating func placeSelfLoops() {
         for (state, loopTransitionIndices) in measured.selfLoopTransitionIndices.enumerated() where !loopTransitionIndices.isEmpty {
-            let loops = StateDiagramSelfLoops.loops(center: stateCenters[state], size: measured.stateSizes[state], flowIsVertical: axes.flowIsVertical,
+            // A composite's loops hang off its box, beside it across the flow of the box around it.
+            let composite = clustered?.compositeOfState[state]
+            let size = composite.map { compositeFrames[$0].size } ?? measured.stateSizes[state]
+            let flowIsVertical = composite.map { clustered?.compositeSurroundings.containerRunsVertically[$0] ?? true } ?? axes.flowIsVertical
+            let loops = StateDiagramSelfLoops.loops(center: stateCenters[state], size: size, flowIsVertical: flowIsVertical,
                                                     textSizes: loopTransitionIndices.map { transitionIndex in measured.transitionTexts[transitionIndex]?.size })
             for (transitionIndex, loop) in zip(loopTransitionIndices, loops) {
                 transitions[transitionIndex] = StateDiagramLayoutTransition(
@@ -144,23 +215,46 @@ struct StateDiagramPageAssembly {
     /// Each note beside its state, with the dashed line from the state's side that faces it.
     func notes() -> [StateDiagramLayoutNote] {
         diagram.notes.enumerated().map { noteIndex, note in
-            let stateCenter = stateCenters[note.stateIndex]
-            let offset = surroundings.noteOffsets[noteIndex]
-            let size = measured.noteSizes[noteIndex]
-            let center = CGPoint(x: stateCenter.x + offset.dx, y: stateCenter.y + offset.dy)
-            let stateSide = noteSide(note.side)
-            let stateSize = measured.stateSizes[note.stateIndex]
-            let stackPosition = surroundings.noteStackPositions[noteIndex]
-            let offsets = StateDiagramEdgePorts.offsets(count: stackPosition.count, placement: diagram.states[note.stateIndex].kind.portPlacement,
-                                                        sideLength: stateSide.isHorizontal ? stateSize.width : stateSize.height)
-            let start = StateDiagramEdgePorts.sidePoint(center: stateCenter, size: stateSize, side: stateSide, offset: offsets[stackPosition.index])
-            let end = StateDiagramEdgePorts.sidePoint(center: center, size: size, side: opposite(stateSide), offset: 0)
-            let connector = DiagramRouteDrawing.path(through: [start, end], flowIsVertical: !axes.flowIsVertical, startTrim: 0, endTrim: 0).path
-            var text = measured.noteTexts[noteIndex]
-            text.center = center
-            return StateDiagramLayoutNote(frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height),
-                                          text: text, connector: connector)
+            if let center = compositeNoteCenters[noteIndex], let composite = clustered?.compositeOfState[note.stateIndex] {
+                return compositeNote(at: noteIndex, center: center, compositeFrame: compositeFrames[composite])
+            }
+            return stateNote(at: noteIndex, note: note)
         }
+    }
+
+    /// A note laid out beside a composite, with its dashed line from the middle of the composite's side that faces it.
+    private func compositeNote(at noteIndex: Int, center: CGPoint, compositeFrame: CGRect) -> StateDiagramLayoutNote {
+        let size = measured.noteSizes[noteIndex]
+        let frame = CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+        let isBeside = frame.maxX <= compositeFrame.minX || frame.minX >= compositeFrame.maxX
+        let compositeSide: DiagramSide = isBeside ? (frame.midX < compositeFrame.midX ? .left : .right) : (frame.midY < compositeFrame.midY ? .top : .bottom)
+        let compositeCenter = CGPoint(x: compositeFrame.midX, y: compositeFrame.midY)
+        let start = StateDiagramEdgePorts.sidePoint(center: compositeCenter, size: compositeFrame.size, side: compositeSide, offset: 0)
+        let end = StateDiagramEdgePorts.sidePoint(center: center, size: size, side: opposite(compositeSide), offset: 0)
+        let connector = DiagramRouteDrawing.path(through: [start, end], flowIsVertical: !isBeside, startTrim: 0, endTrim: 0).path
+        var text = measured.noteTexts[noteIndex]
+        text.center = center
+        return StateDiagramLayoutNote(frame: frame, text: text, connector: connector)
+    }
+
+    /// A note beside its state, where the state's surroundings put it.
+    private func stateNote(at noteIndex: Int, note: StateDiagramNote) -> StateDiagramLayoutNote {
+        let stateCenter = stateCenters[note.stateIndex]
+        let offset = surroundings.noteOffsets[noteIndex]
+        let size = measured.noteSizes[noteIndex]
+        let center = CGPoint(x: stateCenter.x + offset.dx, y: stateCenter.y + offset.dy)
+        let stateSide = noteSide(note.side)
+        let stateSize = measured.stateSizes[note.stateIndex]
+        let stackPosition = surroundings.noteStackPositions[noteIndex]
+        let offsets = StateDiagramEdgePorts.offsets(count: stackPosition.count, placement: diagram.states[note.stateIndex].kind.portPlacement,
+                                                    sideLength: stateSide.isHorizontal ? stateSize.width : stateSize.height)
+        let start = StateDiagramEdgePorts.sidePoint(center: stateCenter, size: stateSize, side: stateSide, offset: offsets[stackPosition.index])
+        let end = StateDiagramEdgePorts.sidePoint(center: center, size: size, side: opposite(stateSide), offset: 0)
+        let connector = DiagramRouteDrawing.path(through: [start, end], flowIsVertical: !axes.flowIsVertical, startTrim: 0, endTrim: 0).path
+        var text = measured.noteTexts[noteIndex]
+        text.center = center
+        return StateDiagramLayoutNote(frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height),
+                                      text: text, connector: connector)
     }
 
     /// The side of a state that faces its notes on `side`: across the flow, before or after it.

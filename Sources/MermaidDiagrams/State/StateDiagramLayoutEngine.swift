@@ -91,8 +91,6 @@ public enum StateDiagramLayoutEngine {
         } catch {
             throw .compositeStatesNotLaidOut
         }
-        // A transition between a composite and a state inside it is not drawn yet.
-        guard placement.strayEdgeIndices.isEmpty else { throw .compositeStatesNotLaidOut }
         var page = StateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings, axes: axes)
         page.placeStates(clustered: clustered, placement: placement)
         page.placeTransitions(clustered: clustered, placement: placement)
