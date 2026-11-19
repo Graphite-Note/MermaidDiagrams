@@ -165,4 +165,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case eventModeling(EventModelSyntaxProblem)
     /// A problem of a railroad diagram's syntax, in any of its four notations.
     case railroad(RailroadSyntaxProblem)
+    /// A problem of a C4 diagram's syntax, as Mermaid's Jison grammar finds it.
+    case c4(C4SyntaxProblem)
 }

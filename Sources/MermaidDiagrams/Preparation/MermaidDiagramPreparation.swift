@@ -86,6 +86,7 @@ struct MermaidDiagramPreparationContext {
         case .wardleyMap(let map): prepared(map)
         case .eventModel(let eventModel): prepared(eventModel)
         case .railroad(let railroad): prepared(railroad)
+        case .c4(let c4): try prepared(c4)
         }
     }
 
