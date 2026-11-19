@@ -1,5 +1,18 @@
+/**
+ * File: SequenceParser.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Reads a sequence diagram's statements after its keyword, as Mermaid's sequence grammar does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Reads a sequence diagram's statements after its `sequenceDiagram` keyword, as Mermaid's sequence grammar does:
-/// participant declarations, messages, notes, activations, blocks, `autonumber`, `title` and accessibility text.
+/// participant declarations with their attributes, boxes, created and destroyed participants, messages with every
+/// arrow and central connection, notes, activations, blocks, menus (read and dropped, as Pele draws nothing for them),
+/// `autonumber`, `title` and accessibility text.
 /// Keywords are read in any case; statements end at a line break or a semicolon; `%%` and `#` start a comment.
 struct SequenceParser {
     private var cursor: MermaidTextCursor
@@ -55,14 +68,10 @@ struct SequenceParser {
 
     private mutating func readKeywordStatement(_ keyword: Keyword, line: Int) throws(MermaidDiagramReadError) {
         switch keyword {
-        case .participant, .actor: try readDeclaration(kind: keyword == .actor ? .actor : .participant)
+        case .participant, .actor: try readDeclaration(kind: keyword == .actor ? .actor : .participant, isCreation: false, line: line)
         case .create: try readCreation(line: line)
-        case .destroy:
-            builder.noteStatementNotLaidOut(.participantDestruction)
-            _ = try SequenceParticipantSyntax.readName(&cursor)
-        case .box:
-            _ = SequenceTextSyntax.readText(&cursor)
-            builder.openBox(line: line)
+        case .destroy: builder.destroyParticipant(try SequenceParticipantSyntax.readName(&cursor))
+        case .box: try builder.openBox(SequenceBoxSyntax.box(from: SequenceTextSyntax.readUnprefixedText(&cursor)), line: line)
         case .loop: try readBlockOpening(.loop, keyword: keyword, line: line)
         case .opt: try readBlockOpening(.optional, keyword: keyword, line: line)
         case .alt: try readBlockOpening(.alternatives, keyword: keyword, line: line)
@@ -81,31 +90,53 @@ struct SequenceParser {
         case .title: readTitle()
         case .accessibilityTitle: builder.setAccessibilityTitle(readAccessibilityLine())
         case .accessibilityDescription: builder.setAccessibilityDescription(try readAccessibilityDescription())
-        case .link, .links, .properties, .details:
-            builder.noteStatementNotLaidOut(.participantMenu)
-            skipStatement()
+        case .link, .links, .properties, .details: try readMenu()
         }
     }
 
     // MARK: Participants and messages
 
-    /// `participant A`, `participant A as Alice`, `actor A@{ … }`.
-    private mutating func readDeclaration(kind: SequenceParticipantKind) throws(MermaidDiagramReadError) {
+    /// `participant A`, `participant A as Alice`, `actor A@{ "type": "database" }`, or the same after `create`.
+    private mutating func readDeclaration(kind: SequenceParticipantKind, isCreation: Bool, line: Int) throws(MermaidDiagramReadError) {
         let declaration = try SequenceParticipantSyntax.readDeclaration(&cursor)
-        if declaration.hasAttributes { builder.noteStatementNotLaidOut(.participantAttributes) }
-        try builder.declareParticipant(declaration.identifier, kind: kind, alias: declaration.alias?.label)
+        let attributes = try declaration.attributes.map { text throws(MermaidDiagramReadError) in
+            guard let attributes = SequenceParticipantAttributes(text: text) else {
+                throw .invalidSyntax(line: declaration.attributesLine, problem: .sequence(.invalidParticipantAttributes(identifier: declaration.identifier)))
+            }
+            return attributes
+        }
+        if isCreation {
+            try builder.createParticipant(declaration.identifier, kind: kind, alias: declaration.alias, attributes: attributes, line: line)
+        } else {
+            try builder.declareParticipant(declaration.identifier, kind: kind, alias: declaration.alias, attributes: attributes, line: line)
+        }
     }
 
-    /// `create participant A` or `create actor A`.
+    /// `create participant A` or `create actor A`; `create destroy A`, which Mermaid's grammar also takes, creates a
+    /// plain participant.
     private mutating func readCreation(line: Int) throws(MermaidDiagramReadError) {
         cursor.skipSpaces()
         var lookahead = cursor
-        guard let keyword = Self.readKeyword(&lookahead), keyword == .participant || keyword == .actor else {
+        guard let keyword = Self.readKeyword(&lookahead), keyword == .participant || keyword == .actor || keyword == .destroy else {
             throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt()))
         }
         cursor = lookahead
-        builder.noteStatementNotLaidOut(.participantCreation)
-        try readDeclaration(kind: keyword == .actor ? .actor : .participant)
+        if keyword == .destroy {
+            try builder.createParticipant(try SequenceParticipantSyntax.readName(&cursor), kind: .participant, alias: nil, attributes: nil, line: line)
+            return
+        }
+        try readDeclaration(kind: keyword == .actor ? .actor : .participant, isCreation: true, line: line)
+    }
+
+    /// `link A: Wiki @ https://…`, `links A: {…}`, `properties A: {…}` or `details A: id`: the participant is named, and
+    /// the menu is dropped, as Pele draws nothing for it.
+    private mutating func readMenu() throws(MermaidDiagramReadError) {
+        cursor.skipSpaces()
+        guard let name = SequenceTextSyntax.readParticipantName(&cursor) else {
+            throw .invalidSyntax(line: cursor.line, problem: .sequence(.expectedParticipant))
+        }
+        guard SequenceTextSyntax.readColonText(&cursor) != nil else { throw .invalidSyntax(line: cursor.line, problem: .sequence(.expectedText)) }
+        _ = try builder.participantIndex(for: name)
     }
 
     /// `A->>B: text`, with `+` or `-` before the target to start the target's activation or end the source's, and
@@ -117,7 +148,7 @@ struct SequenceParser {
         }
         cursor.skipSpaces()
         let hasSourceConnection = readCentralConnection()
-        guard let written = SequenceArrowSyntax.readOperator(&cursor) else {
+        guard let arrow = SequenceArrowSyntax.readArrow(&cursor) else {
             let isAtStatementEnd = cursor.peek().map(MermaidByte.endsStatement) ?? true
             throw .invalidSyntax(line: cursor.line, problem: isAtStatementEnd ? .sequence(.expectedArrow) : .unexpectedText(cursor.excerpt()))
         }
@@ -132,15 +163,11 @@ struct SequenceParser {
             throw .invalidSyntax(line: cursor.line, problem: .sequence(.expectedParticipant))
         }
         guard let text = SequenceTextSyntax.readColonText(&cursor) else { throw .invalidSyntax(line: cursor.line, problem: .sequence(.expectedText)) }
-        if hasSourceConnection || hasTargetConnection { builder.noteStatementNotLaidOut(.centralConnection) }
         let sourceIndex = try builder.participantIndex(for: sourceName)
         let targetIndex = try builder.participantIndex(for: targetName)
-        switch written {
-        case .arrow(let arrow):
-            try builder.addMessage(SequenceMessage(sourceIndex: sourceIndex, targetIndex: targetIndex, arrow: arrow, text: text.label, wrapsText: text.wraps))
-        case .halfArrow:
-            builder.noteStatementNotLaidOut(.halfArrow)
-        }
+        let message = SequenceMessage(sourceIndex: sourceIndex, targetIndex: targetIndex, arrow: arrow, text: text.label, wrapsText: text.wraps,
+                                      hasCentralConnectionAtSource: hasSourceConnection, hasCentralConnectionAtTarget: hasTargetConnection)
+        try builder.addMessage(message, sourceIdentifier: sourceName, targetIdentifier: targetName, line: line)
         if activatesTarget { try builder.activate(targetName) }
         if deactivatesSource { try builder.deactivate(sourceName, line: line) }
     }
@@ -316,11 +343,6 @@ struct SequenceParser {
 
     private func isAtComment() -> Bool {
         cursor.hasPrefix(Self.commentStart) || cursor.peek() == SequenceTextSyntax.numberSign
-    }
-
-    /// Moves to the end of a statement that is not read: the next line break or semicolon.
-    private mutating func skipStatement() {
-        while let byte = cursor.peek(), !MermaidByte.endsStatement(byte) || byte == MermaidByte.carriageReturn { cursor.advance() }
     }
 
     /// A statement ends at a line break, a semicolon, a comment or the end of the text; anything else is an error.

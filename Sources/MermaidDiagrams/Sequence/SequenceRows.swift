@@ -1,9 +1,23 @@
+/**
+ * File: SequenceRows.swift
+ * ------------------------
+ * Layer: Core
+ * Description: Places a sequence diagram's events top to bottom as Pele does while it draws: messages, notes, block
+ *              lines and activations each in the next row, created participants at their messages, crosses where
+ *              lifelines end.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Places a sequence diagram's events top to bottom, as Pele does while it draws: each message, note, block line
-/// and activation takes the next row under the one before, and the participants are drawn above the first row and
-/// mirrored under the last. Coordinates are relative to the first lifeline and the participants' top; the layout
-/// moves them onto the page once everything is placed.
+/// and activation takes the next row under the one before, and the participants are drawn above the first row (a
+/// created one beside the message that creates it) and mirrored under the last (but a destroyed one). Coordinates are
+/// relative to the first lifeline and the top of the boxes, or of the participants without boxes; the layout moves them
+/// onto the page once everything is placed.
 struct SequenceRows<Measurer: DiagramTextMeasuring> {
     let diagram: SequenceDiagram
     let columns: SequenceColumns
@@ -11,12 +25,21 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
     private(set) var extents: SequenceExtents
     /// Where the next row starts.
     private(set) var y: CGFloat
-    /// Where the participants above the lifelines end and the lifelines start.
-    let lifelineTop: CGFloat
+    /// Where the participants above the lifelines end, but those created later.
+    let headerBottom: CGFloat
+    /// For each participant, the top of its box above its lifeline, and where its lifeline starts and ends (nil: at the
+    /// last row).
+    private(set) var participantTops: [CGFloat]
+    private(set) var lifelineStarts: [CGFloat]
+    private(set) var lifelineEnds: [CGFloat?]
+    /// The centers of the crosses that end destroyed lifelines.
+    private(set) var destructions: [CGPoint] = []
     /// For each participant, where each of its open activations started, innermost last.
     private(set) var activationStarts: [[CGFloat]]
     /// For each block, where its frame starts.
     private var frameTops: [CGFloat]
+    /// The blocks open now, innermost last.
+    private var openFrameIndices: [Int] = []
     /// For each block, its sections so far.
     private var frameSections: [[SequenceLayoutBlockSection]]
     private var frameTextPatches: [[CGRect]]
@@ -32,8 +55,16 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
         self.columns = columns
         self.extents = extents
         self.measurers = measurers
-        lifelineTop = columns.participantSizes.map(\.height).max() ?? 0
-        y = lifelineTop + SequenceSpacing.firstRowGap
+        let created = Set(diagram.events.compactMap { event -> Int? in
+            guard case .message(let message) = event, message.createsTarget else { return nil }
+            return message.targetIndex
+        })
+        let rowHeight = columns.participantSizes.enumerated().filter { index, _ in !created.contains(index) }.map { _, size in size.height }.max() ?? 0
+        headerBottom = columns.boxRuns.topRoom + rowHeight
+        participantTops = columns.participantSizes.map { size in columns.boxRuns.topRoom + rowHeight - size.height }
+        lifelineStarts = Array(repeating: headerBottom, count: diagram.participants.count)
+        lifelineEnds = Array(repeating: nil, count: diagram.participants.count)
+        y = headerBottom + SequenceSpacing.firstRowGap
         activationStarts = Array(repeating: [], count: diagram.participants.count)
         frameTops = Array(repeating: 0, count: extents.frames.count)
         frameSections = Array(repeating: [], count: extents.frames.count)
@@ -67,6 +98,23 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
 
     mutating func moveDown(to row: CGFloat) {
         y = max(y, row)
+    }
+
+    // MARK: Created and destroyed participants
+
+    /// A created participant's box centered on the line of the message that creates it, its lifeline under it.
+    mutating func placeCreatedParticipant(_ participantIndex: Int, centeredAt lineY: CGFloat) {
+        participantTops[participantIndex] = lineY - columns.participantSizes[participantIndex].height / 2
+        lifelineStarts[participantIndex] = participantTops[participantIndex] + columns.participantSizes[participantIndex].height
+    }
+
+    /// Ends a destroyed participant's lifeline at a cross under the message line at `lineY`, and moves the next row
+    /// below the cross.
+    mutating func destroy(_ participantIndex: Int, under lineY: CGFloat) {
+        let center = CGPoint(x: columns.centers[participantIndex], y: lineY + SequenceSpacing.destructionDepth)
+        lifelineEnds[participantIndex] = center.y
+        destructions.append(center)
+        moveDown(to: center.y + SequenceSpacing.destructionHalfSize)
     }
 
     // MARK: Activations
@@ -122,6 +170,7 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
 
     private mutating func startFrame(_ frameIndex: Int?) {
         guard let frameIndex else { return }
+        openFrameIndices.append(frameIndex)
         let frame = extents.frames[frameIndex]
         guard frame.kind.keyword != nil else {
             frameTops[frameIndex] = y + SequenceSpacing.highlightGap
@@ -145,7 +194,7 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
             text?.center = center
             if let patch = textPatch(around: center, size: CGSize(width: width, height: height)) { frameTextPatches[frameIndex].append(patch) }
         }
-        frameSections[frameIndex].append(SequenceLayoutBlockSection(lineY: lineY, text: text))
+        frameSections[frameIndex].append(SequenceLayoutBlockSection(lineY: lineY, text: text, textBackground: nil))
         y += SequenceSpacing.frameGap + (text?.size.height ?? 0)
     }
 
@@ -156,6 +205,7 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
         let bottom = y + SequenceSpacing.frameGap
         let frame = CGRect(x: extent.left, y: top, width: extent.right - extent.left, height: bottom - top)
         y = bottom
+        openFrameIndices.removeAll { open in open == frameIndex }
         guard var keyword = extent.keyword else {
             if case .highlight(let color) = extent.kind { highlights.append(SequenceLayoutHighlight(frame: frame, color: color)) }
             return
@@ -168,8 +218,32 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
             title?.center = center
             if let patch = textPatch(around: center, size: size) { frameTextPatches[frameIndex].append(patch) }
         }
-        blocks.append(SequenceLayoutBlock(frame: frame, tab: tab, keyword: keyword, title: title, sections: frameSections[frameIndex],
-                                          textPatches: frameTextPatches[frameIndex]))
+        let sections = frameSections[frameIndex].map { section in
+            SequenceLayoutBlockSection(lineY: section.lineY, text: section.text, textBackground: section.text.flatMap(backgroundOfBlockText))
+        }
+        blocks.append(SequenceLayoutBlock(frame: frame, tab: tab, keyword: keyword, title: title, titleBackground: title.flatMap(backgroundOfBlockText),
+                                          sections: sections, textPatches: frameTextPatches[frameIndex]))
+    }
+
+    // MARK: Colors under texts and lines
+
+    /// The color under a block's text, when no patch is behind it.
+    private func backgroundOfBlockText(_ text: DiagramTextBlock) -> SequenceHighlightColor? {
+        guard textPatch(around: text.center, size: text.size) == nil else { return nil }
+        return colorUnder(from: text.frame.minX, to: text.frame.maxX)
+    }
+
+    /// Pele's `fillUnder`: the color of the innermost `rect` open now (nil when it names none), else of the first box
+    /// run that holds `left` to `right`, else nil.
+    func colorUnder(from left: CGFloat, to right: CGFloat) -> SequenceHighlightColor? {
+        for frameIndex in openFrameIndices.reversed() {
+            if case .highlight(let color) = extents.frames[frameIndex].kind { return color }
+        }
+        for run in columns.boxRuns.runs {
+            let edges = columns.boxRuns.edges(of: run, centers: columns.centers, sizes: columns.participantSizes)
+            if left >= edges.left, right <= edges.right { return diagram.boxes[run.boxIndex].color }
+        }
+        return nil
     }
 
     // MARK: Text patches

@@ -1,3 +1,14 @@
+/**
+ * File: SequenceSpacing.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: Pele's measurements of a sequence diagram at Mermaid's default configuration.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Pele's measurements of a sequence diagram at Mermaid's default configuration, in points.
@@ -65,4 +76,19 @@ enum SequenceSpacing {
     /// shorter by `textPatchInset` at the top and the bottom.
     static let textPatchOutset: CGFloat = 3
     static let textPatchInset: CGFloat = 2
+    /// Around a box's participants, above them under its title, and below them (Mermaid's `boxMargin`).
+    static let boxPadding: CGFloat = 10
+    /// Between a box's title and the participants under it.
+    static let boxTitleGap: CGFloat = 4
+    /// How far a box's title sits below the box's top, beyond half the padding.
+    static let boxTitleDepth: CGFloat = 2
+    /// The radius of a central connection's circle on a lifeline.
+    static let centralConnectionRadius: CGFloat = 4
+    /// What a number badge keeps from a central connection's circle.
+    static let centralConnectionNumberGap: CGFloat = 2
+    /// How far below its last message a destroyed participant's cross is centered, and half its width.
+    static let destructionDepth: CGFloat = 16
+    static let destructionHalfSize: CGFloat = 6
+    /// What a created participant's box keeps above the message that creates it, and what the next row keeps below.
+    static let creationRoom: CGFloat = 6
 }

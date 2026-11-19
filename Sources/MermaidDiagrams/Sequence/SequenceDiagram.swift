@@ -1,7 +1,20 @@
+/**
+ * File: SequenceDiagram.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: A Mermaid sequence diagram as its text describes it: participants, boxes, events and titles.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid sequence diagram (`sequenceDiagram`) as its text describes it: the participants in the order they first
 /// appear, and what happens between them, top to bottom, in the order it is written.
 public struct SequenceDiagram: Equatable, Sendable {
     public internal(set) var participants: [SequenceParticipant]
+    /// The `box … end` groups, in the order they are written; a participant names its own (`SequenceParticipant.boxIndex`).
+    public internal(set) var boxes: [SequenceBox]
     /// Messages, notes, activations, blocks and numbering, in the order they are written. A message written with `+`
     /// or `-` is followed by the activation it starts or ends, as in Mermaid.
     public internal(set) var events: [SequenceEvent]
@@ -11,14 +24,15 @@ public struct SequenceDiagram: Equatable, Sendable {
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
-    /// The kinds of statement read whose meaning the model does not hold yet. A diagram with any is not laid out:
-    /// drawn without them it would look complete and be wrong. What the model can hold of such a statement is kept
-    /// (a participant in a box or created later is a participant); a message with a half arrow is left out of `events`.
+    /// Always empty now: every statement the reader reads is laid out. It held the kinds of statement read but not laid
+    /// out yet (boxes, created and destroyed participants, menus, attributes, half arrows, central connections) and is
+    /// kept, with `SequenceStatementNotLaidOut` and `SequenceLayoutError`, for readers that still name them.
     public internal(set) var statementsNotLaidOut: Set<SequenceStatementNotLaidOut>
 
-    init(participants: [SequenceParticipant] = [], events: [SequenceEvent] = [], title: String? = nil, accessibilityTitle: String? = nil,
-         accessibilityDescription: String? = nil, statementsNotLaidOut: Set<SequenceStatementNotLaidOut> = []) {
+    init(participants: [SequenceParticipant] = [], boxes: [SequenceBox] = [], events: [SequenceEvent] = [], title: String? = nil,
+         accessibilityTitle: String? = nil, accessibilityDescription: String? = nil, statementsNotLaidOut: Set<SequenceStatementNotLaidOut> = []) {
         self.participants = participants
+        self.boxes = boxes
         self.events = events
         self.title = title
         self.accessibilityTitle = accessibilityTitle
@@ -27,7 +41,8 @@ public struct SequenceDiagram: Equatable, Sendable {
     }
 }
 
-/// A kind of statement a sequence diagram may hold that is read but not laid out yet.
+/// A kind of statement a sequence diagram may hold that was read but not laid out. Every one is laid out now and none
+/// is produced; the cases are kept for readers that name them (Graphite's wording of a refusal).
 public enum SequenceStatementNotLaidOut: Hashable, Sendable, CaseIterable {
     /// `box … end`: participants grouped under a title and a color.
     case box

@@ -1,3 +1,15 @@
+/**
+ * File: SequenceTextSyntax.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Reads the names and texts of a sequence diagram's statements, as Mermaid's sequence grammar delimits
+ *              them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Reads the names and texts of a sequence diagram's statements, as Mermaid's sequence grammar delimits them.
 enum SequenceTextSyntax {
     /// Text read to the end of a statement, without its `wrap:` or `nowrap:` prefix.
@@ -40,6 +52,11 @@ enum SequenceTextSyntax {
     /// its entity codes (`#9829;`, `#quot;`) whole, so a `#` that starts one is text. A `wrap:` or `nowrap:` prefix
     /// says whether the text wraps.
     static func readText(_ cursor: inout MermaidTextCursor) -> WrittenText {
+        withoutWrapPrefix(readUnprefixedText(&cursor))
+    }
+
+    /// The text of a statement to its end, as `readText` reads it, trimmed, with any `wrap:` prefix kept.
+    static func readUnprefixedText(_ cursor: inout MermaidTextCursor) -> String {
         let start = cursor.position
         while let byte = cursor.peek(), byte != MermaidByte.newline, byte != MermaidByte.semicolon {
             if byte == numberSign {
@@ -49,7 +66,7 @@ enum SequenceTextSyntax {
             }
             cursor.advance()
         }
-        return withoutWrapPrefix(cursor.trimmedText(from: start, to: cursor.position))
+        return cursor.trimmedText(from: start, to: cursor.position)
     }
 
     /// `:` and the text after it, as a message or a note ends. Nil when no colon follows.

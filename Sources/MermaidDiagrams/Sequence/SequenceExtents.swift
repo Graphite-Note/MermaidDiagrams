@@ -1,3 +1,15 @@
+/**
+ * File: SequenceExtents.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: How far across the page each note, block, box and the whole sequence diagram reach, worked out before
+ *              the rows are placed, as Pele does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// How far across the page each note, block and the whole diagram reach, worked out before the rows are placed as
@@ -23,6 +35,10 @@ struct SequenceExtents {
         frameIndexOfEvent = Array(repeating: nil, count: diagram.events.count)
         for (index, size) in columns.participantSizes.enumerated() {
             extend(from: columns.centers[index] - size.width / 2, to: columns.centers[index] + size.width / 2)
+        }
+        for run in columns.boxRuns.runs {
+            let edges = columns.boxRuns.edges(of: run, centers: columns.centers, sizes: columns.participantSizes)
+            extend(from: edges.left, to: edges.right)
         }
         var openFrameIndices: [Int] = []
         for (eventIndex, event) in diagram.events.enumerated() {
@@ -56,7 +72,8 @@ struct SequenceExtents {
         maximumX = max(maximumX, right)
     }
 
-    /// The reach of a message across the page; a message that wraps wraps again to the room between its lifelines.
+    /// The reach of a message across the page, and of the participant it creates; a message that wraps wraps again to
+    /// the room between its lifelines.
     private mutating func placeMessage<Measurer>(_ message: SequenceMessage, at eventIndex: Int, columns: SequenceColumns,
                                                  measurers: SequenceTextMeasurers<Measurer>) -> (CGFloat, CGFloat) {
         let source = columns.centers[message.sourceIndex]
@@ -72,7 +89,9 @@ struct SequenceExtents {
             let room = right - left - 2 * SequenceSpacing.messagePadding - SequenceSpacing.activationWidth
             eventTexts[eventIndex] = measurers.messageBlock(message.text, wrappingWidth: max(SequenceSpacing.wrappingWidth, room))
         }
-        return (left, right)
+        guard message.createsTarget else { return (left, right) }
+        let createdHalfWidth = columns.participantSizes[message.targetIndex].width / 2
+        return target > source ? (left, right + createdHalfWidth) : (left - createdHalfWidth, right)
     }
 
     /// Where a note goes across the page: beside its lifeline, centered over it, or across the lifelines it spans

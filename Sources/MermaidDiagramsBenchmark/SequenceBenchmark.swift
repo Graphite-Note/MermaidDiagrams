@@ -1,17 +1,32 @@
+/**
+ * File: SequenceBenchmark.swift
+ * -----------------------------
+ * Layer: Benchmark
+ * Description: Times reading, laying out and painting sequence diagrams: the documentation examples, the ones with
+ *              shapes, boxes, created and destroyed participants and central connections, one typical example and a
+ *              generated conversation.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import MermaidDiagrams
 
-/// The sequence diagram measurements of `MermaidDiagramsBenchmark`: the documentation examples that lay out,
-/// the second of them alone (autonumber, an actor, aliases, an activation and a note over the four participants),
+/// The sequence diagram measurements of `MermaidDiagramsBenchmark`: the documentation examples, those that use
+/// participant shapes, boxes, created and destroyed participants and central connections (examples 5 to 17), the
+/// second of them alone (autonumber, an actor, aliases, an activation and a note over the four participants),
 /// and a generated conversation of 200 messages, with the heap one laid-out example holds.
 extension MermaidDiagramsBenchmark {
     static func reportSequenceDiagrams(typography: DiagramTypography) throws {
         let examples = try SequenceCorpus.documentationExamples()
-        let drawable = examples.filter { source in (try? sequenceLayout(source, typography)) != nil } // Statements not laid out yet.
+        let drawable = examples.filter { source in (try? sequenceLayout(source, typography)) != nil } // Every example since 0.2.
         print("sequence documentation examples drawn: \(drawable.count) of \(examples.count)")
         let typical = examples[1]
         let cases: [(name: String, sources: [String])] = [
             ("sequence documentation examples", drawable),
+            ("sequence examples with shapes, boxes, lifetimes and central connections", Array(examples[5...17])),
             ("sequence example with autonumber, an actor, an activation and a note", [typical]),
             ("sequence conversation, 10 participants and 200 messages", [SequenceCorpus.conversation(participantCount: 10, messageCount: 200)]),
         ]

@@ -1,3 +1,15 @@
+/**
+ * File: SequenceLayoutEngineTests.swift
+ * -------------------------------------
+ * Layer: Tests
+ * Description: Lays sequence diagrams out in Pele's measurements with uniform-width text: participants, messages,
+ *              notes, blocks, activations, numbers and the title.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -234,10 +246,11 @@ final class SequenceLayoutEngineTests: XCTestCase {
         XCTAssertEqual(laidOut.size, CGSize(width: 40 + 16, height: 6 + 20 + 16))
     }
 
-    func testStatementsNotLaidOutAreRefused() {
-        XCTAssertThrowsError(try layout("box Group\nparticipant A\nend")) { error in
-            XCTAssertEqual(error as? SequenceLayoutError, .statementsNotLaidOut([.box]))
-        }
+    func testABoxIsLaidOutBehindItsParticipants() throws {
+        let laidOut = try layout("box Group\nparticipant A\nend")
+        let box = try XCTUnwrap(laidOut.boxes.first)
+        XCTAssertTrue(box.frame.contains(laidOut.headers[0].frame))
+        XCTAssertTrue(box.frame.contains(laidOut.footers[0].frame))
     }
 
     func testEverythingDrawnIsInsideTheSize() throws {

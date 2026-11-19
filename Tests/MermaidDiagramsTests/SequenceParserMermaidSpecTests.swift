@@ -1,3 +1,14 @@
+/**
+ * File: SequenceParserMermaidSpecTests.swift
+ * ------------------------------------------
+ * Layer: Tests
+ * Description: The parsing cases of Mermaid 12.1.0's sequenceDiagram.spec.js, as Pele's compatibility suite keeps them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -63,6 +74,10 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
         case .arrow: return stroke
         case .cross: return stroke + "_CROSS"
         case .open: return stroke + "_POINT"
+        case .solidHalf, .stickHalf:
+            let side = arrow.halfHeadSide == .top ? "TOP" : "BOTTOM"
+            let name = (arrow.head == .solidHalf ? "SOLID_" : "STICK_") + (arrow.pointsBackwards ? "ARROW_\(side)_REVERSE" : side)
+            return arrow.stroke == .dotted ? name + "_DOTTED" : name
         }
     }
 
@@ -418,7 +433,7 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
         }
     }
 
-    func testMenusBoxesCreationAndDestructionAreReadAndNotLaidOut() throws {
+    func testMenusBoxesCreationAndDestructionAreRead() throws {
         let menus = try read("""
 
             sequenceDiagram
@@ -429,9 +444,12 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
             link a: Tests @ https://tests.contoso.com/?svc=alice@contoso.com
             properties b: {"class": "external-service-actor", "icon": "@computer"}
             """)
-        XCTAssertEqual(menus.statementsNotLaidOut, [.participantMenu])
+        XCTAssertTrue(menus.statementsNotLaidOut.isEmpty)
+        XCTAssertEqual(menus.participantIdentifiers, ["a", "b", "c"])
         let box = try read("\nsequenceDiagram\nbox green Group 1\nparticipant a as Alice\nparticipant b as Bob\nend\nparticipant c as Charlie\n")
-        XCTAssertEqual(box.statementsNotLaidOut, [.box])
+        XCTAssertEqual(box.boxes.map(\.title), [DiagramLabel("Group 1")])
+        XCTAssertEqual(box.boxes.map(\.color), [SequenceHighlightColor(red: 0, green: 128.0 / 255, blue: 0)])
+        XCTAssertEqual(box.participants.map(\.boxIndex), [0, 0, nil])
         XCTAssertEqual(box.participantIdentifiers, ["a", "b", "c"])
         let lifetimes = try read("""
 
@@ -443,8 +461,9 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
               destroy c
               b ->> c : Bye c !
             """)
-        XCTAssertEqual(lifetimes.statementsNotLaidOut, [.participantCreation, .participantDestruction])
         XCTAssertEqual(lifetimes.participantIdentifiers, ["a", "b", "c"])
+        XCTAssertEqual(lifetimes.messages.map(\.createsTarget), [false, true, false, false], "createdActors c: 1")
+        XCTAssertEqual(lifetimes.messages.map(\.destroysTarget), [false, false, false, true], "destroyedActors c: 3")
     }
 
     func testShouldHandleTheSameActorDeclaredSeveralTimes() throws {
@@ -465,7 +484,7 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
         XCTAssertEqual(list[0], MermaidMessage(type: "SOLID", from: "Alice", to: "Bob", lines: [""]))
     }
 
-    func testHalfArrowsAndCentralConnectionsAreReadAndNotLaidOut() throws {
+    func testHalfArrowsAndCentralConnectionsAreRead() throws {
         let halfArrows = try read("""
 
                 sequenceDiagram
@@ -481,16 +500,24 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
                     Bob //- Alice: Hello Alice, how are you?
                     Bob \\\\- Alice: Hello Alice, how are you?
             """)
-        XCTAssertEqual(halfArrows.statementsNotLaidOut, [.halfArrow])
         XCTAssertEqual(halfArrows.participantIdentifiers, ["Bob", "Alice"])
+        XCTAssertEqual(halfArrows.messages.map(\.arrow), [
+            SequenceArrow(stroke: .solid, head: .solidHalf, halfHeadSide: .top), SequenceArrow(stroke: .solid, head: .solidHalf, halfHeadSide: .bottom),
+            SequenceArrow(stroke: .solid, head: .stickHalf, halfHeadSide: .bottom), SequenceArrow(stroke: .solid, head: .stickHalf, halfHeadSide: .top),
+            SequenceArrow(stroke: .solid, head: .solidHalf, pointsBackwards: true, halfHeadSide: .bottom),
+            SequenceArrow(stroke: .solid, head: .solidHalf, pointsBackwards: true, halfHeadSide: .top),
+            SequenceArrow(stroke: .solid, head: .stickHalf, pointsBackwards: true, halfHeadSide: .top),
+            SequenceArrow(stroke: .solid, head: .stickHalf, pointsBackwards: true, halfHeadSide: .bottom),
+        ])
         let central = try read("\n    sequenceDiagram\n    actor Bob\n    actor Alice\n      Alice ()<<->>() Bob: hey?\n    ")
-        XCTAssertEqual(central.statementsNotLaidOut, [.centralConnection])
         XCTAssertEqual(messages(central).map(\.type), ["BIDIRECTIONAL_SOLID"])
+        XCTAssertEqual(central.messages.map(\.hasCentralConnectionAtSource), [true])
+        XCTAssertEqual(central.messages.map(\.hasCentralConnectionAtTarget), [true])
     }
 
     // MARK: extended participant syntax
 
-    func testParticipantAttributesAreReadAndNotLaidOut() throws {
+    func testParticipantAttributesAreRead() throws {
         let diagram = try read("""
 
               sequenceDiagram
@@ -502,17 +529,17 @@ final class SequenceParserMermaidSpecTests: XCTestCase {
                   actor A@{ "type" : "database" } AS Database Server
                   Alice->>+Carl: Hi Carl
             """)
-        XCTAssertEqual(diagram.statementsNotLaidOut, [.participantAttributes])
         XCTAssertEqual(diagram.participantIdentifiers, ["Alice", "Carl", "Harry", "kebab-case", "web-ui", "A"])
+        XCTAssertEqual(diagram.participants.map(\.kind), [.database, .database, .database, .control, .entity, .database])
         XCTAssertEqual(diagram.participants.map(\.label.lines), [["Alice"], ["Carl"], ["Harry"], ["Kebab-Cased"], ["Web UI"], ["Database Server"]])
         XCTAssertEqual(messages(diagram).count, 2)
     }
 
     func testShouldFailForAttributesMissingTheirClosingBrace() {
         XCTAssertTrue(fails("\n    sequenceDiagram\n      participant E@{ \"type\": \"entity\"\n      E ->> E: process\n  "))
-        // Mermaid also refuses attributes that are not valid YAML; Graphite does not read their contents, and the
-        // diagram stays code because its attributes are not laid out.
-        XCTAssertEqual(try read("sequenceDiagram\nparticipant D@{ \"type: \"entity\" }").statementsNotLaidOut, [.participantAttributes])
+        // Mermaid also refuses attributes that are not valid YAML.
+        XCTAssertEqual(SequenceReading.readError("sequenceDiagram\nparticipant D@{ \"type: \"entity\" }"),
+                       .invalidSyntax(line: 2, problem: .sequence(.invalidParticipantAttributes(identifier: "D"))))
     }
 
     func testShouldFailWhenAnAliasConflictsOrHasNoSpace() {

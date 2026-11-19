@@ -1,8 +1,22 @@
+/**
+ * File: SequenceColumns.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: Where each sequence participant's lifeline runs across the page, as Pele places them: apart by their
+ *              boxes, by the messages and notes between them, and by the boxes they are grouped in.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Where each participant's lifeline runs across the page, as Pele places them: neighbours at least their boxes'
-/// half widths and the participant gap apart, and further where a message or a note between them needs the room. A
-/// message across several lifelines widens each gap it crosses by an equal share of what is missing.
+/// half widths and the participant gap apart (and a box's padding further for each in a box when their boxes differ),
+/// and further where a message or a note between them needs the room. A message across several lifelines widens each
+/// gap it crosses by an equal share of what is missing; a box whose title is wider than its participants pushes its
+/// neighbours away.
 struct SequenceColumns {
     let participantTexts: [DiagramTextBlock]
     let participantSizes: [CGSize]
@@ -14,6 +28,8 @@ struct SequenceColumns {
     let numberTexts: [String?]
     /// The width of each event's number badge, or 0.
     let numberWidths: [CGFloat]
+    /// The boxes' runs of participants, with how far each grows for its title.
+    let boxRuns: SequenceBoxRuns
 
     init<Measurer>(diagram: SequenceDiagram, measurers: SequenceTextMeasurers<Measurer>) {
         participantTexts = diagram.participants.map { participant in measurers.participantBlock(participant.label) }
@@ -35,15 +51,34 @@ struct SequenceColumns {
                 eventTexts.append(text)
             case .message(let message):
                 let text = measurers.messageBlock(message.text, wrappingWidth: message.wrapsText ? SequenceSpacing.wrappingWidth : nil)
+                let createdHalfWidth = message.createsTarget ? participantSizes[message.targetIndex].width / 2 : 0
+                let connectionsWidth = message.hasCentralConnectionAtSource || message.hasCentralConnectionAtTarget
+                    ? 4 * SequenceSpacing.centralConnectionRadius : 0
                 requirements.addMessage(from: message.sourceIndex, to: message.targetIndex, textWidth: text.size.width,
-                                        numberWidth: numberWidths[eventIndex])
+                                        extraWidth: numberWidths[eventIndex] + createdHalfWidth + connectionsWidth, numberWidth: numberWidths[eventIndex])
                 eventTexts.append(text)
             case .activationStart, .activationEnd, .blockStart, .blockSection, .blockEnd, .numbering:
                 eventTexts.append(nil)
             }
         }
         self.eventTexts = eventTexts
-        centers = requirements.centers(participantWidths: participantSizes.map(\.width))
+        let participants = diagram.participants
+        var gaps = requirements.gaps(participantWidths: participantSizes.map(\.width)) { gapIndex in
+            SequenceBoxRuns.room(between: participants[gapIndex], and: participants[gapIndex + 1])
+        }
+        var boxRuns = SequenceBoxRuns(diagram: diagram, measurers: measurers)
+        boxRuns.widen(&gaps, centers: Self.centers(gaps: gaps, count: participants.count), sizes: participantSizes)
+        self.boxRuns = boxRuns
+        centers = Self.centers(gaps: gaps, count: participants.count)
+    }
+
+    /// Each lifeline's x from the gaps between neighbours, the first at 0.
+    private static func centers(gaps: [CGFloat], count: Int) -> [CGFloat] {
+        guard count > 0 else { return [] }
+        var centers = [CGFloat(0)]
+        centers.reserveCapacity(count)
+        for gap in gaps { centers.append(centers[centers.count - 1] + gap) }
+        return centers
     }
 
     /// The width each gap between lifelines, or each run of gaps, must have at least.
@@ -69,13 +104,15 @@ struct SequenceColumns {
             }
         }
 
-        mutating func addMessage(from source: Int, to target: Int, textWidth: CGFloat, numberWidth: CGFloat) {
+        /// A message's need: a loop's room beside its participant, or the text, padding, activation and `extraWidth`
+        /// (the number, a created participant's half box, central connections' circles) between two lifelines.
+        mutating func addMessage(from source: Int, to target: Int, textWidth: CGFloat, extraWidth: CGFloat, numberWidth: CGFloat) {
             if source == target {
                 require(from: source, to: source + 1, width: SequenceSpacing.selfLoopWidth + SequenceSpacing.selfLoopTextGap + textWidth
                             + SequenceSpacing.selfLoopTextRoom + SequenceSpacing.activationWidth + numberWidth)
             } else {
                 require(from: min(source, target), to: max(source, target),
-                        width: textWidth + 2 * SequenceSpacing.messagePadding + SequenceSpacing.activationWidth + numberWidth)
+                        width: textWidth + 2 * SequenceSpacing.messagePadding + SequenceSpacing.activationWidth + extraWidth)
             }
         }
 
@@ -85,12 +122,12 @@ struct SequenceColumns {
             widthByRun[key] = max(widthByRun[key] ?? 0, width)
         }
 
-        /// Each lifeline's x: each gap is the wider of its boxes' needs and its own requirement, then each run of
-        /// several gaps, the narrowest runs first, shares out what it still lacks.
-        func centers(participantWidths: [CGFloat]) -> [CGFloat] {
-            guard participantCount > 1 else { return participantWidths.map { _ in 0 } }
+        /// Each gap between neighbours: the wider of its boxes' needs (with `boxRoom`) and its own requirement; then each
+        /// run of several gaps, the narrowest runs first, shares out what it still lacks.
+        func gaps(participantWidths: [CGFloat], boxRoom: (Int) -> CGFloat) -> [CGFloat] {
+            guard participantCount > 1 else { return [] }
             var gaps = (0..<(participantCount - 1)).map { gapIndex in
-                max(participantWidths[gapIndex] / 2 + participantWidths[gapIndex + 1] / 2 + SequenceSpacing.participantGap,
+                max(participantWidths[gapIndex] / 2 + participantWidths[gapIndex + 1] / 2 + SequenceSpacing.participantGap + boxRoom(gapIndex),
                     widthByRun[gapIndex * participantCount + gapIndex + 1] ?? 0)
             }
             let runs = widthByRun.compactMap { key, width -> (first: Int, last: Int, width: CGFloat)? in
@@ -106,10 +143,7 @@ struct SequenceColumns {
                 let share = (run.width - total) / CGFloat(run.last - run.first)
                 for gapIndex in run.first..<run.last { gaps[gapIndex] += share }
             }
-            var centers = [CGFloat(0)]
-            centers.reserveCapacity(participantCount)
-            for gap in gaps { centers.append(centers[centers.count - 1] + gap) }
-            return centers
+            return gaps
         }
     }
 }
