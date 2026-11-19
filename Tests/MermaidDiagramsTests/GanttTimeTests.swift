@@ -1,3 +1,14 @@
+/**
+ * File: GanttTimeTests.swift
+ * --------------------------
+ * Layer: Tests
+ * Description: Gantt times, time zones and the fallback date forms.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -47,9 +58,11 @@ final class GanttTimeTests: XCTestCase {
         XCTAssertEqual(GanttFallbackDate.parse("2014-01-06T10:30:00.5+02:00", zone: paris)?.milliseconds,
                        try time(2014, 1, 6, 9, 30).milliseconds + 500)
         XCTAssertEqual(GanttFallbackDate.parse("2014-1-6", zone: paris), try time(2014, 1, 6))
-        XCTAssertEqual(GanttFallbackDate.parse("2014/01/06 9:15", zone: paris), nil, "A time needs two digits for its hour")
+        XCTAssertEqual(GanttFallbackDate.parse("2014/01/06 9:15", zone: paris), try time(2014, 1, 6, 9, 15), "Not ISO: V8's legacy parser reads one digit")
         XCTAssertEqual(GanttFallbackDate.parse("2014/01/06 09:15", zone: paris), try time(2014, 1, 6, 9, 15))
-        for text in ["March 7, 2014", "2014-13-01", "0", "", "2014-01-06T25:00", "20000-01-01T00:00"] {
+        XCTAssertEqual(GanttFallbackDate.parse("March 7, 2014", zone: paris), try time(2014, 3, 7))
+        XCTAssertEqual(GanttFallbackDate.parse("0", zone: paris), try time(2000, 1, 1))
+        for text in ["2014-13-01", "", "2014-01-06T25:00", "20000-01-01T00:00", "Mar 5 20000"] {
             XCTAssertNil(GanttFallbackDate.parse(text, zone: paris), text)
         }
     }
