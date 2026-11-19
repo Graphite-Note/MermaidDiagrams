@@ -7,7 +7,7 @@
  *              limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -165,6 +165,17 @@ final class BlockParserTests: XCTestCase {
     /// A comment line is left out, a `%%` alone is a block's name, as Pele's preprocessing leaves it.
     func testCommentLinesAreLeftOut() throws {
         XCTAssertEqual(try top("block\n  %% a comment\n  a\n  %%").map(\.identifier), ["a", "%%"])
+    }
+
+    /// A comment line inside a quoted text is taken out with its line break and the blank lines before it, as Pele's
+    /// preprocessing takes it out, so the text keeps no line of it; errors still name the lines as written.
+    func testACommentLineInsideAQuotedTextLeavesNoLine() throws {
+        XCTAssertEqual(try top("block\n  a[\"one\n%% a comment\ntwo\"]").map(\.label), ["one\ntwo"])
+        XCTAssertEqual(try top("block\n  a[\"one\n\n   \n  %% a comment\ntwo\"] b").map(\.label), ["one\ntwo", "b"])
+        XCTAssertEqual(try top("block\r\n  a[\"one\r\n  %% a comment\r\ntwo\"]").map(\.label), ["one\ntwo"])
+        XCTAssertEqual(BlockReading.readError("block\n  %% one\n\n  %% two\n  a --> "),
+                       .invalidSyntax(line: 5, problem: .block(.expectedBlockIdentifier)))
+        XCTAssertEqual(BlockReading.readError("block\n  a\n  %% one\n  %% two\n  end"), .invalidSyntax(line: 5, problem: .block(.expectedStatement)))
     }
 
     /// Blocks, space cells and links are counted against the limits before they are made.

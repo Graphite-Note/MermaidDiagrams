@@ -6,7 +6,7 @@
  *              every link of a statement kept, each error with its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -16,7 +16,7 @@
 /// checked against the limits as it is read.
 struct BlockParser {
     private let tokens: [BlockToken]
-    private let bytes: [UInt8]
+    private let source: BlockPreparedSource
     private let limits: MermaidDiagramLimits
     private var index = 0
     private(set) var statements: [BlockStatement] = []
@@ -26,9 +26,9 @@ struct BlockParser {
     private var edgeCount = 0
 
     static func parse(_ cursor: MermaidTextCursor, keyword: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> BlockDiagram {
-        let bytes = BlockSourcePreparation.prepared(cursor.bytes)
-        let tokens = BlockLexer.tokens(of: bytes, from: cursor.position - keyword.utf8.count)
-        var parser = BlockParser(tokens: tokens, bytes: bytes, limits: limits)
+        let source = BlockPreparedSource(cursor.bytes, from: cursor.position - keyword.utf8.count)
+        let tokens = BlockLexer.tokens(of: source.bytes, from: source.start)
+        var parser = BlockParser(tokens: tokens, source: source, limits: limits)
         let top = try parser.document()
         var hierarchy = BlockHierarchy(statements: parser.statements, generatedIdentifierCount: parser.generatedIdentifierCount)
         hierarchy.set(top)
@@ -200,36 +200,12 @@ struct BlockParser {
     /// The error at the current token: the lexer's where it stopped, else `problem`, on the token's line.
     private func failure(_ problem: BlockSyntaxProblem) -> MermaidDiagramReadError {
         let start = tokens[index].start
-        let line = PlaneMapByte.line(of: start, in: bytes)
-        if kind == .unrecognized { return .invalidSyntax(line: line, problem: .unexpectedText(PlaneMapByte.excerpt(at: start, in: bytes))) }
+        let line = source.line(of: start)
+        if kind == .unrecognized { return .invalidSyntax(line: line, problem: .unexpectedText(PlaneMapByte.excerpt(at: start, in: source.bytes))) }
         return .invalidSyntax(line: line, problem: .block(problem))
     }
 
     private static func trimmed(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-/// What Pele's preprocessing does to a block diagram's text before its lexer reads it, in place so that lines keep their
-/// numbers: a line whose first characters are `%%` and more is a comment, blanked; a line break written `\r\n` keeps its
-/// `\n`, and a `\r` alone becomes one.
-enum BlockSourcePreparation {
-    static func prepared(_ bytes: [UInt8]) -> [UInt8] {
-        guard bytes.contains(PlaneMapByte.percent) || bytes.contains(PlaneMapByte.carriageReturn) else { return bytes }
-        var prepared = bytes
-        var lineStart = 0
-        for index in prepared.indices where prepared[index] == PlaneMapByte.carriageReturn {
-            prepared[index] = index + 1 < prepared.count && prepared[index + 1] == PlaneMapByte.lineFeed ? PlaneMapByte.space : PlaneMapByte.lineFeed
-        }
-        while lineStart < prepared.count {
-            let lineEnd = prepared[lineStart...].firstIndex(of: PlaneMapByte.lineFeed) ?? prepared.count
-            var first = lineStart
-            while first < lineEnd, PlaneMapByte.isSpace(prepared[first]) { first += 1 }
-            if first + 2 < lineEnd, prepared[first] == PlaneMapByte.percent, prepared[first + 1] == PlaneMapByte.percent {
-                for blank in first..<lineEnd { prepared[blank] = PlaneMapByte.space }
-            }
-            lineStart = lineEnd + 1
-        }
-        return prepared
     }
 }
