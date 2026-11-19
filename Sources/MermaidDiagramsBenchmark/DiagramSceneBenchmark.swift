@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -34,6 +34,7 @@ enum DiagramSceneBenchmark {
             (.userJourney, try UserJourneyCorpus.documentationExamples()), (.quadrantChart, try QuadrantChartCorpus.documentationExamples()),
             (.xyChart, try XYChartCorpus.documentationExamples()),
             (.sankey, try SankeyCorpus.documentationExamples() + ["sankey-beta\n\n " + SankeyCorpus.energyRows()]),
+            (.venn, try VennCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -101,6 +102,8 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey:
             return laidOutChart(diagram, typography: typography)
+        case .venn:
+            return laidOutPlaneMap(diagram, typography: typography)
         }
     }
 
@@ -132,6 +135,19 @@ enum DiagramSceneBenchmark {
             let layOut = { try SankeyLayoutEngine.layout(sankey, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
+            return nil
+        case .venn:
+            return nil
+        }
+    }
+
+    /// A diagram drawn on a fixed plane laid out once: a Venn diagram.
+    private static func laidOutPlaneMap(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .venn(let venn):
+            let layOut = { try VennLayoutEngine.layout(venn, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        default:
             return nil
         }
     }

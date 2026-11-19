@@ -1,0 +1,131 @@
+/**
+ * File: VennAppearance.swift
+ * --------------------------
+ * Layer: Core
+ * Description: What a Venn diagram's `style` statements make of a set, an overlap or a text, as Pele's resolveStyle
+ *              splits them between a shape and its text, and the text color Pele's ink picks over a fill.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
+import Foundation
+
+/// The look a Venn diagram's styles give one target: its fill and stroke with their opacities, its text color, and
+/// whether any of a shape's properties is written at all (an overlap is outlined only then).
+public struct VennAppearance: Equatable, Sendable {
+    public internal(set) var fill: DiagramColor?
+    public internal(set) var fillOpacity: Double?
+    public internal(set) var stroke: DiagramColor?
+    public internal(set) var strokeOpacity: Double?
+    public internal(set) var strokeWidth: CGFloat?
+    public internal(set) var strokeDashLengths: [CGFloat]?
+    /// `opacity`: of the shape and of its text.
+    public internal(set) var opacity: Double?
+    /// `color`: the text's.
+    public internal(set) var textColor: DiagramColor?
+    /// Whether a property of the shape is written with a value (`style.shape !== ''` in Pele), read here or not.
+    public internal(set) var hasShapeDeclaration = false
+    /// Whether `fill-opacity` is written, read or not.
+    public internal(set) var writesFillOpacity = false
+    /// Whether `color` is written, read or not: a text that writes one keeps it over the color picked for its fill.
+    public internal(set) var writesTextColor = false
+    /// Whether `fill-opacity` or `opacity` is written as something other than a plain number, which may still be low.
+    public internal(set) var writesUnreadOpacity = false
+
+    /// The properties of a shape, as Pele's `SHAPE_PROPS`.
+    static let shapeProperties: Set<String> = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-dashoffset",
+                                               "stroke-linecap", "stroke-linejoin", "stroke-opacity", "opacity", "rx", "ry"]
+
+    /// The look of `declarations` in order, a later one of a property winning: `fill`, `stroke`, `stroke-width`,
+    /// `stroke-dasharray` and `color` as a flowchart's are read, the opacities as numbers from 0 to 1 or percentages.
+    init(_ declarations: [VennStyleDeclaration]) {
+        for declaration in declarations {
+            let property = declaration.property.lowercased()
+            let value = Self.valueWithoutImportance(declaration.value)
+            guard !value.isEmpty else { continue }
+            if Self.shapeProperties.contains(property) { hasShapeDeclaration = true }
+            if property == "fill-opacity" { writesFillOpacity = true }
+            if property == "color" { writesTextColor = true }
+            apply(property, value)
+        }
+    }
+
+    init() {}
+
+    private mutating func apply(_ property: String, _ value: String) {
+        switch property {
+        case "fill-opacity":
+            fillOpacity = Self.amount(value)
+            if fillOpacity == nil { writesUnreadOpacity = true }
+        case "stroke-opacity": strokeOpacity = Self.amount(value)
+        case "opacity":
+            opacity = Self.amount(value)
+            if opacity == nil { writesUnreadOpacity = true }
+        case "fill", "stroke", "stroke-width", "stroke-dasharray", "color":
+            let style = DiagramElementStyle.reading(property + ":" + value).style
+            switch property {
+            case "fill": fill = style.fill
+            case "stroke": stroke = style.stroke
+            case "stroke-width": strokeWidth = style.strokeWidth
+            case "stroke-dasharray": strokeDashLengths = style.strokeDashLengths
+            default: textColor = style.textColor
+            }
+        default: break
+        }
+    }
+
+    /// Whether the declaration is drawn: its property is one read here and its value is of its form.
+    static func applies(_ declaration: VennStyleDeclaration) -> Bool {
+        let property = declaration.property.lowercased()
+        let value = valueWithoutImportance(declaration.value)
+        switch property {
+        case "fill-opacity", "stroke-opacity", "opacity": return amount(value) != nil
+        case "fill", "stroke", "stroke-width", "stroke-dasharray", "color":
+            return !DiagramElementStyle.reading(property + ":" + value).hasUnappliedDeclaration
+        default: return false
+        }
+    }
+
+    /// `!important` taken out, as Pele takes it out, and the spaces at the ends.
+    private static func valueWithoutImportance(_ value: String) -> String {
+        value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// A plain number from 0 to 1, or a percentage, clamped to 0 to 1; nil for anything else (`calc(…)`).
+    static func amount(_ value: String) -> Double? {
+        let isPercentage = value.hasSuffix("%")
+        let digits = isPercentage ? String(value.dropLast()) : value
+        guard digits.utf8.allSatisfy({ byte in PlaneMapByte.isDigit(byte) || numberPunctuation.contains(byte) }),
+              let number = Double(digits), number.isFinite else { return nil }
+        return min(max(number / (isPercentage ? 100 : 1), 0), 1)
+    }
+
+    /// What a plain number may hold besides digits: a sign, a point, an exponent.
+    private static let numberPunctuation: Set<UInt8> = [PlaneMapByte.plus, PlaneMapByte.hyphen, PlaneMapByte.period, UInt8(ascii: "e"), UInt8(ascii: "E")]
+
+    /// The text color Pele's `ink` picks over this look's fill for text whose own look is `text`: the dark or the light
+    /// text color by the fill's luminance, when the fill is a color read, at least half opaque, and the text sets no color
+    /// of its own; nil otherwise, and the text keeps its usual color.
+    func ink(forTextOf text: VennAppearance) -> DiagramColor? {
+        guard !text.writesTextColor, !writesUnreadOpacity, let fill, fill.alpha * (fillOpacity ?? 1) * (opacity ?? 1) >= 0.5 else { return nil }
+        return Self.luminance(of: fill) > Self.evenLuminance ? Self.textOnLight : Self.textOnDark
+    }
+
+    /// Pele's `--pele-fg-on-light` and `--pele-fg-on-dark` fallbacks: #1f1f1f and white.
+    static let textOnLight = DiagramColor(red: 31.0 / 255, green: 31.0 / 255, blue: 31.0 / 255)
+    static let textOnDark = DiagramColor(red: 1, green: 1, blue: 1)
+
+    private static func linear(_ channel: Double) -> Double {
+        channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+
+    static func luminance(of color: DiagramColor) -> Double {
+        0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
+    }
+
+    /// The luminance where #1f1f1f and white contrast equally.
+    static let evenLuminance = (1.05 * (luminance(of: textOnLight) + 0.05)).squareRoot() - 0.05
+}

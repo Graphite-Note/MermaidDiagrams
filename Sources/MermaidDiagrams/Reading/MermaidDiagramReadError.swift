@@ -1,3 +1,14 @@
+/**
+ * File: MermaidDiagramReadError.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: Why a diagram's text was not read, and what broke its syntax.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Why a diagram's text was not read. Each case carries facts; the words are the caller's.
 public enum MermaidDiagramReadError: Error, Equatable, Sendable {
     /// The text declares no diagram: it is empty, or holds only comments and front matter.
@@ -119,4 +130,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     /// A Sankey diagram's row is not three fields separated by commas (`source,target,value`), or a line break does
     /// not follow the keyword.
     case expectedSankeyFields
+    /// A problem of a Venn diagram's own syntax, or a union of sets it cannot take.
+    case venn(VennSyntaxProblem)
 }

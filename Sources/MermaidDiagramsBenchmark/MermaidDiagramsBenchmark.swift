@@ -6,7 +6,7 @@
  *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -66,6 +66,7 @@ struct MermaidDiagramsBenchmark {
         try QuadrantChartBenchmark.run(typography: typography)
         try XYChartBenchmark.run(typography: typography)
         try SankeyBenchmark.run(typography: typography)
+        try VennBenchmark.run(typography: typography)
         try DiagramSceneBenchmark.run(typography: typography)
     }
 

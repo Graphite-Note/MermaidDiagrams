@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -40,6 +40,7 @@ enum DiagramSceneSamples {
             ("gantt", try GanttChartCorpus.documentationExamples()), ("gitGraph", try GitGraphCorpus.documentationExamples()),
             ("journey", try UserJourneyCorpus.documentationExamples()), ("quadrantChart", try QuadrantChartCorpus.documentationExamples()),
             ("xychart", try XYChartCorpus.documentationExamples()), ("sankey", try SankeyCorpus.documentationExamples()),
+            ("venn", try VennCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -64,6 +65,7 @@ enum DiagramSceneSamples {
             ("journey of 20 tasks", UserJourneyCorpus.generated(taskCount: 20)), ("quadrant of 30 points", QuadrantChartCorpus.generated(pointCount: 30)),
             ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try sankeyEnergy()),
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
+            ("venn of 8 sets", VennCorpus.generated(setCount: 8)),
         ]
     }
 

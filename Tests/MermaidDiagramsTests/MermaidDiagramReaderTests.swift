@@ -4,9 +4,9 @@
  * Layer: Tests
  * Description: Reading Mermaid text: front matter, comments, directives and the diagram type.
  *
- * Authors: Félix Chevalier
- * Version: 0.10
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.11
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -124,5 +124,10 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertFalse(diagram.setsGitGraphOptions)
         XCTAssertEqual(diagram.branches.map(\.name), ["trunk"])
         XCTAssertEqual(diagram.commits.count, 1)
+    }
+
+    func testTheKeywordsOfTheDiagramsDrawnOnAPlaneReadTheirTypes() throws {
+        XCTAssertEqual(try VennReading.venn("%% sets\nvenn-beta\n  set A").subsets.count, 1)
+        XCTAssertEqual(readError("venn\n  set A"), .unsupportedDiagramType(keyword: "venn"))
     }
 }

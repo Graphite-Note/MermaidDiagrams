@@ -5,7 +5,7 @@
  * Description: The diagram types drawn, with Pele's name of each and what a screen reader calls one without a title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -25,6 +25,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
     case quadrantChart
     case xyChart
     case sankey
+    case venn
 
     /// Pele's name of the type, which its SVG's root class (`pele-<name>`) and role description carry.
     public var peleName: String {
@@ -43,6 +44,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .quadrantChart: "quadrantChart"
         case .xyChart: "xychart"
         case .sankey: "sankey"
+        case .venn: "venn"
         }
     }
 
@@ -63,6 +65,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .quadrantChart: "Quadrant chart"
         case .xyChart: "XY chart"
         case .sankey: "Sankey diagram"
+        case .venn: "Venn diagram"
         }
     }
 }
@@ -85,6 +88,7 @@ extension MermaidDiagram {
         case .quadrantChart: .quadrantChart
         case .xyChart: .xyChart
         case .sankey: .sankey
+        case .venn: .venn
         }
     }
 }
