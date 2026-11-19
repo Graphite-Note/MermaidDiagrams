@@ -6,7 +6,7 @@
  *              painter of every diagram type.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -33,20 +33,32 @@ public enum DiagramSceneRenderer {
     private static func paint(_ shape: DiagramSceneShape, colors: inout DiagramPaintColors, in context: CGContext) {
         switch shape.painting {
         case .fill(let paint):
-            context.setFillColor(colors.color(of: paint))
-            context.addPath(shape.path)
-            context.fillPath()
+            fill(shape.path, with: paint, colors: &colors, in: context)
         case .stroke(let paint, let stroke):
-            context.setStrokeColor(colors.color(of: paint))
-            context.setLineWidth(stroke.lineWidth)
-            context.setLineDash(phase: 0, lengths: stroke.dashLengths)
-            context.setLineCap(stroke.lineCap)
-            context.setLineJoin(stroke.lineJoin)
-            context.addPath(shape.path)
-            context.strokePath()
+            self.stroke(shape.path, with: paint, stroke, colors: &colors, in: context)
+        case .fillAndStroke(let fillPaint, let strokePaint, let stroke):
+            fill(shape.path, with: fillPaint, colors: &colors, in: context)
+            self.stroke(shape.path, with: strokePaint, stroke, colors: &colors, in: context)
         case .gradientFill(let gradient):
             fill(shape.path, with: gradient, colors: &colors, in: context)
         }
+    }
+
+    private static func fill(_ path: CGPath, with paint: DiagramPaint, colors: inout DiagramPaintColors, in context: CGContext) {
+        context.setFillColor(colors.color(of: paint))
+        context.addPath(path)
+        context.fillPath()
+    }
+
+    private static func stroke(_ path: CGPath, with paint: DiagramPaint, _ stroke: DiagramStroke, colors: inout DiagramPaintColors,
+                               in context: CGContext) {
+        context.setStrokeColor(colors.color(of: paint))
+        context.setLineWidth(stroke.lineWidth)
+        context.setLineDash(phase: 0, lengths: stroke.dashLengths)
+        context.setLineCap(stroke.lineCap)
+        context.setLineJoin(stroke.lineJoin)
+        context.addPath(path)
+        context.strokePath()
     }
 
     /// The path filled with the gradient at its opacity, the end colors carried on past the gradient's ends.

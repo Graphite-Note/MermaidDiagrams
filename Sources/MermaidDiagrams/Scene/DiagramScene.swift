@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -15,8 +15,8 @@ import CoreGraphics
 /// A laid-out diagram's painting, whatever its type: the page it was laid out on and what is painted on it, back to front.
 /// Shapes and text name their colors by `DiagramPalette`'s roles (`DiagramPaint`), so a change of theme paints the same
 /// scene again in other colors without reading or laying out again. Core Graphics draws it (`DiagramSceneRenderer`), SVG
-/// writes it (`DiagramSVGWriter`), and a view can paint it as its own shapes: each item is one fill or stroke of one path,
-/// whatever its type painted alike already merged into that path, or one placed text.
+/// writes it (`DiagramSVGWriter`), and a view can paint it as its own shapes: each item is one fill, stroke, or fill and
+/// stroke of one path, whatever its type painted alike already merged into that path, or one placed text.
 public struct DiagramScene: Sendable {
     /// The page, its origin at the top left and its y running down, in points.
     public let size: CGSize
@@ -54,7 +54,7 @@ public enum DiagramSceneItem: Sendable {
     case text(DiagramSceneText)
 }
 
-/// A path filled or stroked once: everything of a diagram painted alike and one after the other, in one path.
+/// A path filled, stroked, or filled and stroked once: everything of a diagram painted alike and one after the other, in one path.
 public struct DiagramSceneShape: Sendable {
     private let storage: DiagramPathStorage
     public let painting: DiagramShapePainting
@@ -93,6 +93,9 @@ public enum DiagramShapePainting: Hashable, Sendable {
     case fill(DiagramPaint)
     /// Its outline, in one paint and stroke.
     case stroke(DiagramPaint, DiagramStroke)
+    /// Its inside in the first paint, then its outline in the second paint and the stroke, as an outlined box is
+    /// painted: one shape where a fill and a stroke of the same path would be two.
+    case fillAndStroke(DiagramPaint, DiagramPaint, DiagramStroke)
     /// Its inside, in a gradient between two paints (a Sankey diagram's bands).
     case gradientFill(DiagramLinearGradient)
 }

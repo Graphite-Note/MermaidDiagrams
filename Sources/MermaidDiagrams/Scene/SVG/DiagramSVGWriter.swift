@@ -6,7 +6,7 @@
  *              no external reference.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -20,15 +20,19 @@ import CoreGraphics
 public struct DiagramSVGWriter: Sendable {
     public var colors: DiagramSVGColors
     /// What the document's ids start with (`<prefix>-title`, `<prefix>-gradient-1`), so that several documents can share
-    /// a page: letters, digits, `-` and `_` only, else `pele`.
-    public var identifierPrefix: String
+    /// a page: letters, digits, `-` and `_` only, else `pele`, whether it is given to `init` or set afterwards, as it is
+    /// written into attributes unescaped.
+    public var identifierPrefix: String {
+        get { safeIdentifierPrefix }
+        set { safeIdentifierPrefix = Self.safeIdentifierPrefix(newValue) }
+    }
     /// Whether the page is filled in the background color first; Pele leaves it to the page behind the drawing.
     public var paintsBackground: Bool
+    private var safeIdentifierPrefix: String
 
     public init(colors: DiagramSVGColors = .peleVariables, identifierPrefix: String = "pele", paintsBackground: Bool = false) {
         self.colors = colors
-        let isSafe = !identifierPrefix.isEmpty && identifierPrefix.unicodeScalars.allSatisfy(Self.isIdentifierCharacter)
-        self.identifierPrefix = isSafe ? identifierPrefix : "pele"
+        safeIdentifierPrefix = Self.safeIdentifierPrefix(identifierPrefix)
         self.paintsBackground = paintsBackground
     }
 
@@ -70,6 +74,11 @@ public struct DiagramSVGWriter: Sendable {
         case .palette: return family
         case .peleVariables: return "var(--pele-font,\(family))"
         }
+    }
+
+    /// `prefix` when it is made of identifier characters only, else `pele`.
+    private static func safeIdentifierPrefix(_ prefix: String) -> String {
+        !prefix.isEmpty && prefix.unicodeScalars.allSatisfy(isIdentifierCharacter) ? prefix : "pele"
     }
 
     /// Letters, digits, `-` and `_` of ASCII: what an SVG id is made of here.

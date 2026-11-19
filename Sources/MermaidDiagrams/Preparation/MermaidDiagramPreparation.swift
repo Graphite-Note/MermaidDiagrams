@@ -6,7 +6,7 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -33,11 +33,14 @@ public enum MermaidDiagramPreparation {
         return try prepare(diagram, typography: typography, limits: limits, narrowestColumnWidth: narrowestColumnWidth, now: now, timeZone: timeZone)
     }
 
-    /// A diagram already read, prepared. A layout's own refusal says more than "nothing to draw", so it is kept.
+    /// A diagram already read, prepared. A layout's own refusal says more than "nothing to draw", so it is kept. A diagram
+    /// that is refused anyway, as it has nothing to draw or as its regular scene is beyond the drawing limit, is never laid
+    /// out a second time for a narrow column.
     public static func prepare(_ diagram: MermaidDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits = .standard,
                                narrowestColumnWidth: CGFloat? = PreparedMermaidDiagram.standardNarrowestColumnWidth, now: Date = Date(),
                                timeZone: TimeZone = .current) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
-        let context = MermaidDiagramPreparationContext(typography: typography, limits: limits, narrowestColumnWidth: narrowestColumnWidth, now: now,
+        let context = MermaidDiagramPreparationContext(typography: typography, limits: limits,
+                                                       narrowestColumnWidth: diagram.hasNothingToDraw ? nil : narrowestColumnWidth, now: now,
                                                        timeZone: timeZone)
         let prepared = try context.prepared(diagram)
         if diagram.hasNothingToDraw { throw .nothingToDraw }
@@ -75,11 +78,13 @@ struct MermaidDiagramPreparationContext {
     }
 
     /// The scene of `turned` (the diagram turned to run down) laid out for a narrow column, when the regular layout is
-    /// wider than the narrowest column and the turned one is narrower than it and within the drawing limit; else nil, and
-    /// nothing is laid out a second time. A turned diagram whose layout fails keeps its regular layout alone.
+    /// within the drawing limit and wider than the narrowest column, and the turned one is narrower than it and within the
+    /// limit; else nil, and nothing is laid out a second time. A regular layout beyond the limit is refused whatever the
+    /// narrow one would be, so it is not laid out again. A turned diagram whose layout fails keeps its regular layout alone.
     func narrowScene<Diagram, Layout>(of turned: Diagram?, regularSize: CGSize, laidOut: (Diagram) throws -> Layout,
                                       scene: (Layout) -> DiagramScene) -> DiagramScene? {
-        guard let narrowestColumnWidth, regularSize.width > narrowestColumnWidth, let turned, let layout = try? laidOut(turned) else { return nil }
+        guard let narrowestColumnWidth, regularSize.width > narrowestColumnWidth, limits.allowsDrawing(regularSize), let turned,
+              let layout = try? laidOut(turned) else { return nil }
         let narrow = scene(layout)
         guard narrow.size.width < regularSize.width, limits.allowsDrawing(narrow.size) else { return nil }
         return narrow

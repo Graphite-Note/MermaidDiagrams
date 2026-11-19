@@ -6,7 +6,7 @@
  *              mindmaps and Git graphs, as the reading view says it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -19,10 +19,13 @@ extension MermaidDiagramAccessibility {
                   summary: nodeTexts + diagram.subgraphs.map(\.title.spokenText).filter { title in !title.isEmpty })
     }
 
-    /// The names of the states drawn as boxes, in the order the diagram names them.
+    /// The names of the composite states, then of the states drawn as boxes, in the order the diagram names them: a
+    /// composite state is named by its box's title, before the states it holds.
     init(stateDiagram diagram: StateDiagram, layout: StateDiagramLayout) {
+        let compositeNames = layout.composites.compactMap { composite in composite.title?.lines.joined(separator: " ") }
+        let stateNames = layout.states.compactMap { state in state.name?.lines.joined(separator: " ") }
         self.init(kind: .stateDiagram, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: layout.states.compactMap { state in state.name?.lines.joined(separator: " ") })
+                  summary: compositeNames + stateNames)
     }
 
     /// The name of each class as its box shows it, in the order the diagram names them.

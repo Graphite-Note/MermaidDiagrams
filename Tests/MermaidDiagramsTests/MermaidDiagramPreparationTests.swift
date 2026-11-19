@@ -6,7 +6,7 @@
  *              where its type has one, what a screen reader says of it, or a typed failure of the right kind.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -87,6 +87,9 @@ final class MermaidDiagramPreparationTests: XCTestCase {
                        ["Revenue: jan 5000, feb 6000.5", "Line: jan 1, feb 2, mar 3"])
         XCTAssertEqual(try prepared("xychart\n  bar [3, 4]").accessibility.summary, ["Bars: 3, 4"])
         XCTAssertEqual(try prepared("journey\n  a: 9").accessibility.summary, ["a: 5"], "The level the face shows")
+        let composite = "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Active\n  state Active {\n    Loading --> Ready\n  }"
+        XCTAssertEqual(try prepared(composite).accessibility.summary, ["Active", "Idle", "Loading", "Ready"],
+                       "A composite state is named by its box's title, before the states drawn as boxes")
     }
 
     func testAWideDiagramIsLaidOutAgainForANarrowColumnAndShownWhereTheColumnNeedsIt() throws {
@@ -106,6 +109,25 @@ final class MermaidDiagramPreparationTests: XCTestCase {
             XCTAssertLessThan(try XCTUnwrap(diagram.narrowScene, source).size.width, diagram.scene.size.width, source)
         }
         XCTAssertNil(try prepared(PieChartCorpus.pie(sliceCount: 8)).narrowScene, "A pie chart has no narrow layout")
+    }
+
+    func testADiagramRefusedAsTooLargeIsNotLaidOutASecondTimeForANarrowColumn() {
+        let limits = MermaidDiagramLimits(maximumSourceBytes: 50_000, maximumNodeCount: 5_000, maximumEdgeCount: 5_000, maximumLayoutPointCount: 50_000,
+                                          maximumDrawingSideLength: 400)
+        let context = MermaidDiagramPreparationContext(typography: typography, limits: limits, narrowestColumnWidth: 280, now: GanttChartCorpus.now,
+                                                       timeZone: GanttChartCorpus.timeZone)
+        let narrowPage = DiagramScene(size: CGSize(width: 200, height: 300), font: typography.font, items: [])
+        var layoutCount = 0
+        let layOut = { (turned: String) -> String in
+            layoutCount += 1
+            return turned
+        }
+        XCTAssertNil(context.narrowScene(of: "turned", regularSize: CGSize(width: 500, height: 100), laidOut: layOut) { _ in narrowPage },
+                     "The regular scene is beyond the limit, so the diagram is refused whatever its narrow scene")
+        XCTAssertEqual(layoutCount, 0)
+        XCTAssertEqual(context.narrowScene(of: "turned", regularSize: CGSize(width: 390, height: 100), laidOut: layOut) { _ in narrowPage }?.size,
+                       narrowPage.size)
+        XCTAssertEqual(layoutCount, 1)
     }
 
     func testAPreparedDiagramWritesItsSVGWithItsTitleAndDescription() throws {

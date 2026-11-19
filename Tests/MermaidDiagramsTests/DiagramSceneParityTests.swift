@@ -7,7 +7,7 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -27,6 +27,7 @@ final class DiagramSceneParityTests: XCTestCase {
         var comparedTypes: Set<String> = []
         var comparedCount = 0
         var comparedNames: Set<String> = []
+        var italicTextCount = 0
         for sample in try DiagramSceneSamples.all() {
             guard let diagram = try? DiagramSceneSamples.read(sample), let laidOut = try? Self.laidOut(diagram) else { continue }
             comparedTypes.insert(String(describing: diagram).prefix { character in character != "(" }.description)
@@ -41,11 +42,13 @@ final class DiagramSceneParityTests: XCTestCase {
             }
             comparedCount += 1
             comparedNames.insert(sample.name)
+            italicTextCount += laidOut.scene.texts.filter(\.isItalic).count
         }
         for (name, _) in DiagramSceneSamples.styled { XCTAssertTrue(comparedNames.contains(name), name) }
         XCTAssertEqual(comparedTypes.count, 14, "\(comparedTypes.sorted())")
-        // The samples' texts the layouts refuse (a collapsed group, options not drawn) are left out: 320 are drawn.
-        XCTAssertGreaterThanOrEqual(comparedCount, 320)
+        XCTAssertGreaterThan(italicTextCount, 0, "Abstract class members, in italics, are compared (static ones underlined beside them)")
+        // The samples' texts the layouts refuse (a collapsed group, options not drawn) are left out: 321 are drawn.
+        XCTAssertGreaterThanOrEqual(comparedCount, 321)
     }
 
     /// A theme change paints the same scene again: nothing in it holds a color.

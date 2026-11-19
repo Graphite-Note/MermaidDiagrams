@@ -2,11 +2,11 @@
  * File: DiagramSVGBody.swift
  * --------------------------
  * Layer: Core
- * Description: Writes a scene's items as SVG elements: a path per shape, a text per placed text, and the gradients they
- *              name.
+ * Description: Writes a scene's items as SVG elements: a path per shape (one for a fill and its stroke), a text per placed
+ *              text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -41,6 +41,10 @@ struct DiagramSVGBody {
             painting = " fill=\"\(fill.color)\"" + DiagramSVGWriter.opacity(fill.opacity, "fill-opacity")
         case .stroke(let paint, let stroke):
             painting = " fill=\"none\"" + Self.strokeAttributes(colors.text(of: paint), stroke)
+        case .fillAndStroke(let fillPaint, let strokePaint, let stroke):
+            let fill = colors.text(of: fillPaint)
+            painting = " fill=\"\(fill.color)\"" + DiagramSVGWriter.opacity(fill.opacity, "fill-opacity")
+                + Self.strokeAttributes(colors.text(of: strokePaint), stroke)
         case .gradientFill(let gradient):
             gradientCount += 1
             let identifier = "\(identifierPrefix)-gradient-\(gradientCount)"
@@ -80,11 +84,14 @@ struct DiagramSVGBody {
             + "<stop offset=\"1\" stop-color=\"\(end.color)\"\(DiagramSVGWriter.opacity(end.opacity, "stop-opacity"))/></linearGradient>"
     }
 
-    /// One `text` per placed text, centered on each line's middle; several lines in `tspan`s.
+    /// One `text` per placed text, centered on each line's middle; several lines in `tspan`s. Each keeps its spaces
+    /// (`xml:space="preserve"`), as Core Text measured and drew them: SVG would otherwise run several into one and drop
+    /// those at a line's ends, which moves centered text.
     private mutating func add(_ text: DiagramSceneText) {
         let paint = colors.text(of: text.paint)
         let number = DiagramSVGSyntax.number
         var attributes = " class=\"pele-\(text.part.rawValue)\" font-size=\"\(number(text.block.fontSize))\" fill=\"\(paint.color)\""
+            + " xml:space=\"preserve\""
         attributes += DiagramSVGWriter.opacity(paint.opacity, "fill-opacity")
         if text.isBold { attributes += " font-weight=\"bold\"" }
         if text.isItalic { attributes += " font-style=\"italic\"" }
@@ -98,7 +105,7 @@ struct DiagramSVGBody {
                 + DiagramSVGSyntax.escaped(line.text) + "</text>"
             return
         }
-        content += "<text\(attributes) text-anchor=\"middle\" xml:space=\"preserve\">"
+        content += "<text\(attributes) text-anchor=\"middle\">"
         for line in lines {
             content += "<tspan x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\">\(DiagramSVGSyntax.escaped(line.text))</tspan>"
         }

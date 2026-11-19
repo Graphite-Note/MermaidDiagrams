@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -114,6 +114,22 @@ enum DiagramSceneSamples {
                 Moving --> Crash
                 note right of Moving : a "note" & more
                 Crash --> [*]
+            """),
+        ("class members and note", """
+            classDiagram
+                class Shape {
+                    <<interface>>
+                    +String name$
+                    +area()* double
+                    +count()$ int
+                    -List~Point~ points
+                }
+                class Circle {
+                    +radius
+                    +draw()*
+                }
+                Shape <|-- Circle : is a
+                note for Circle "Drawn & <filled>"
             """),
     ]
 

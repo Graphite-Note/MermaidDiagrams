@@ -3,10 +3,10 @@
  * ---------------------------------
  * Layer: Benchmark
  * Description: Times, per diagram type on its documentation examples, reading and laying out, making the scene from the
- *              layout, the whole preparation, painting the scene and writing its SVG.
+ *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -16,7 +16,7 @@ import MermaidDiagrams
 
 /// Times what the scene adds to reading and laying out, per type on its documentation examples (and the Sankey energy
 /// flows): read and layout once, the scene made from a kept layout, the whole preparation (read, layout, scene and what a
-/// screen reader says, without a narrow layout), the scene painted into a bitmap at two pixels per point, and its SVG
+/// screen reader says) without a narrow layout and with the default narrowest column, as Graphite calls it, the scene painted into a bitmap at two pixels per point, and its SVG
 /// written with Pele's variables.
 enum DiagramSceneBenchmark {
     /// One diagram laid out, and how to make its scene from that layout.
@@ -50,12 +50,16 @@ enum DiagramSceneBenchmark {
             for source in sources { _ = (try? read(source)).map { diagram in laidOut(diagram, typography: typography) } }
         }
         let scene = measure(count) { for diagram in laidOutDiagrams { _ = diagram.scene() } }
-        let preparation = measure(count) {
-            for source in sources {
-                _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
-                                                           timeZone: GanttChartCorpus.timeZone)
+        let prepare = { (narrowestColumnWidth: CGFloat?) in
+            measure(count) {
+                for source in sources {
+                    _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: narrowestColumnWidth,
+                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+                }
             }
         }
+        let preparation = prepare(nil)
+        let preparationWithNarrowScene = prepare(PreparedMermaidDiagram.standardNarrowestColumnWidth)
         let contexts = scenes.map { scene in MermaidDiagramsBenchmark.bitmapContext(size: scene.size) }
         let painting = measure(count) {
             for (scene, context) in zip(scenes, contexts) {
@@ -67,7 +71,7 @@ enum DiagramSceneBenchmark {
         let svgBytes = scenes.map { scene in writer.document(of: scene, diagramType: kind.peleName).utf8.count }.reduce(0, +) / count
         let itemCount = scenes.map(\.items.count).reduce(0, +) / count
         print("\(kind.peleName) scenes (\(count) examples, \(itemCount) items each): read and layout \(readingAndLayout); scene from layout \(scene); "
-              + "prepared \(preparation); scene painting \(painting); SVG \(svg), \(svgBytes) bytes")
+              + "prepared \(preparation), with the narrow layout as Graphite asks for it \(preparationWithNarrowScene); scene painting \(painting); SVG \(svg), \(svgBytes) bytes")
     }
 
     private static func read(_ source: String) throws -> MermaidDiagram {

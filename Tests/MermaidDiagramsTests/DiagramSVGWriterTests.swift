@@ -6,7 +6,7 @@
  *              a text per text, in either color mode; hostile text is escaped; numbers are compact.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -33,6 +33,8 @@ final class DiagramSVGWriterTests: XCTestCase {
                 XCTAssertEqual(reading.elements(named: "path").count, scene.shapes.count, sample.name)
                 let texts = reading.elements(named: "text")
                 XCTAssertEqual(texts.map(\.text), scene.texts.map { text in text.block.lines.joined() }, sample.name)
+                XCTAssertEqual(texts.filter { text in text.attributes["xml:space"] != "preserve" }.count, 0,
+                               "\(sample.name): every text keeps its spaces, of one line as of several")
                 XCTAssertFalse(document.contains("<script") || document.contains("href") || document.contains("url(h"), sample.name)
             }
             writtenCount += 1
@@ -76,6 +78,18 @@ final class DiagramSVGWriterTests: XCTestCase {
         XCTAssertTrue(written.contains("stop-color=\"#4c78a8\""))
         XCTAssertTrue(written.contains("url(#note-7-gradient-1)"))
         XCTAssertEqual(DiagramSVGWriter(identifierPrefix: "x\" onload=\"").identifierPrefix, "pele")
+    }
+
+    func testAnIdentifierPrefixSetAfterTheWriterIsMadeIsCheckedAsOneGivenToIt() throws {
+        let sankey = try MermaidDiagramPreparation.prepare(source: try DiagramSceneSamples.sankeyEnergy(), typography: DiagramSceneSamples.typography)
+        var writer = DiagramSVGWriter()
+        writer.identifierPrefix = "x\"/><script>alert(1)</script><g a=\""
+        XCTAssertEqual(writer.identifierPrefix, "pele")
+        let document = writer.document(of: sankey.scene, diagramType: "sankey", title: "Energy")
+        XCTAssertFalse(document.contains("<script"))
+        XCTAssertNotNil(DiagramSVGDocumentReading.read(document), "Well-formed XML")
+        writer.identifierPrefix = "note-8"
+        XCTAssertTrue(writer.document(of: sankey.scene, diagramType: "sankey", title: "Energy").contains("aria-labelledby=\"note-8-title\""))
     }
 
     func testMixturesTurnedTextAndDashesAreWrittenAsSVGSays() throws {
