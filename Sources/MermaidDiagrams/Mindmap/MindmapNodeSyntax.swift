@@ -1,3 +1,14 @@
+/**
+ * File: MindmapNodeSyntax.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Reads an outline's node, a mindmap's or a kanban board's: its identifier, its text and its shape.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import Foundation
 
 /// What one line of a mindmap says about a node: its identifier, its text and its shape.
@@ -12,12 +23,13 @@ struct MindmapNodeDefinition {
 /// a Markdown string (`"`…`"`) it may hold delimiters. Any opening delimiter pairs with any closing one, and the pair
 /// gives the shape. Every label is read as Markdown, as Pele reads a mindmap's.
 enum MindmapNodeSyntax {
-    /// Reads the node at the cursor, which is past the line's indentation.
-    static func readNode(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> MindmapNodeDefinition {
+    /// Reads the node at the cursor, which is past the line's indentation. A kanban board's identifier also ends at `@`,
+    /// where its metadata starts (`identifierEndsAtAtSign`).
+    static func readNode(_ cursor: inout MermaidTextCursor, identifierEndsAtAtSign: Bool = false) throws(MermaidDiagramReadError) -> MindmapNodeDefinition {
         var identifier: String?
         if openingDelimiter(at: cursor) == nil {
             let start = cursor.position
-            while let byte = cursor.peek(), !endsIdentifier(byte) { cursor.advance() }
+            while let byte = cursor.peek(), !endsIdentifier(byte), !(identifierEndsAtAtSign && byte == MermaidByte.atSign) { cursor.advance() }
             guard cursor.position > start else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
             identifier = cursor.trimmedText(from: start, to: cursor.position)
         }
@@ -70,9 +82,9 @@ enum MindmapNodeSyntax {
         }
     }
 
-    /// A node's text read as Markdown, as Pele reads a mindmap's. Text without an emphasis marker reads the same as
-    /// plain text, which the decoder takes the short way.
-    private static func label(_ text: String) -> DiagramLabel {
+    /// A node's text read as Markdown, as Pele reads a mindmap's and a kanban board's. Text without an emphasis marker
+    /// reads the same as plain text, which the decoder takes the short way.
+    static func label(_ text: String) -> DiagramLabel {
         let hasEmphasisMarker = text.utf8.contains { byte in byte == asterisk || byte == MermaidByte.underscore }
         return DiagramLabelDecoder.label(from: text, form: hasEmphasisMarker ? .markdown : .plain)
     }
