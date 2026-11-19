@@ -4,9 +4,9 @@
  * Layer: Tests
  * Description: Reading flowcharts: nodes, edges, groups, statements and errors.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -92,7 +92,7 @@ final class FlowchartParserTests: XCTestCase {
     func testAttributesNameTheShapeAndTheText() throws {
         let diagram = try flowchart("A@{ shape: diam, label: \"Is it, really?\" }\nB@{shape: cloud}\nC@{ icon: \"fa:user\",\n  shape: cyl }")
         XCTAssertEqual(diagram.nodes[0], FlowchartNode(identifier: "A", label: DiagramLabel("Is it, really?"), shape: .diamond))
-        XCTAssertEqual(diagram.nodes[1].shape, .rectangle, "A shape not drawn yet is drawn as a rectangle")
+        XCTAssertEqual(diagram.nodes[1].shape, .cloud)
         XCTAssertEqual(diagram.nodes[2].shape, .cylinder)
     }
 

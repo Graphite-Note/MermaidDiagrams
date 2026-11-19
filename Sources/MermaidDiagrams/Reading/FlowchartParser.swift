@@ -4,9 +4,9 @@
  * Layer: Core
  * Description: Reads a flowchart's statements after its keyword.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 19/11/2026
  */
 
 /// Reads a flowchart's statements after its `flowchart` or `graph` keyword: the direction, then chains of nodes and
@@ -119,7 +119,7 @@ struct FlowchartParser {
         return indices
     }
 
-    /// A node: its identifier, then its shape and text or its attributes, then any `:::class`.
+    /// A node: its identifier, then its shape and text or its attributes, then any `:::class`, then any attributes.
     private mutating func readNode() throws(MermaidDiagramReadError) -> Int? {
         let line = cursor.line
         guard let identifier = cursor.readIdentifier() else {
@@ -140,6 +140,8 @@ struct FlowchartParser {
             cursor.advance(by: Self.classMarker.count)
             if let className = cursor.readIdentifier() { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
         }
+        // Attributes may also follow a shape in brackets and its classes (`C[Hello]@{ shape: circle }`), as Pele reads them.
+        if FlowchartNodeSyntax.isAtAttributes(cursor) { builder.define(nodeAt: index, as: try FlowchartNodeSyntax.readAttributes(&cursor)) }
         return index
     }
 

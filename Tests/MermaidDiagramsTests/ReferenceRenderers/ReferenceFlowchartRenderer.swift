@@ -6,7 +6,7 @@
  *              DiagramSceneParityTests compares the scene's pixels with.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -36,6 +36,10 @@ enum ReferenceFlowchartRenderer {
         for edgeText in parts.edgeTexts { text.draw(edgeText, color: palette.foreground, in: context) }
         fill(parts.nodeFills, color: palette.surface, in: context)
         stroke(parts.nodeOutlines, width: FlowchartDrawingParts.lineWidth, color: palette.border, in: context)
+        for layer in parts.layeredNodeShapes {
+            draw(layer, fill: palette.surface, stroke: palette.border, strokesFilledOnly: false, width: FlowchartDrawingParts.lineWidth, palette: palette,
+                 in: context)
+        }
         drawStyledNodes(parts.styledNodes, in: context, palette: palette)
         for nodeText in parts.nodeTexts { text.draw(nodeText, color: palette.foreground, in: context) }
         for node in parts.styledNodes { text.draw(node.text, color: node.style.textColor?.cgColor ?? palette.foreground, in: context) }
@@ -59,6 +63,15 @@ enum ReferenceFlowchartRenderer {
     /// The nodes with colors of their own: the inside in the fill they set, the outline in their stroke.
     private static func drawStyledNodes(_ nodes: [FlowchartStyledNodeParts], in context: CGContext, palette: DiagramPalette) {
         for node in nodes {
+            if !node.layers.isEmpty {
+                context.setLineDash(phase: 0, lengths: node.style.strokeDashLengths ?? [])
+                for layer in node.layers {
+                    draw(layer, fill: node.style.fill?.cgColor ?? palette.surface, stroke: node.style.stroke?.cgColor ?? palette.border,
+                         strokesFilledOnly: node.style.stroke != nil, width: node.lineWidth, palette: palette, in: context)
+                }
+                context.setLineDash(phase: 0, lengths: [])
+                continue
+            }
             if let shape = node.fill { fill(shape, color: node.style.fill?.cgColor ?? palette.surface, in: context) }
             context.setLineDash(phase: 0, lengths: node.style.strokeDashLengths ?? [])
             stroke(node.outline, width: node.lineWidth, color: node.style.stroke?.cgColor ?? palette.border, in: context)
@@ -84,6 +97,23 @@ enum ReferenceFlowchartRenderer {
             for _ in 0...depth { fill(patches, color: boxFill, in: context) }
         }
         for title in clusters.crossedTitles { text.draw(title, color: palette.muted, in: context) }
+    }
+
+    /// A piece of a shape painted piece by piece: filled, then stroked, as it says.
+    private static func draw(_ layer: FlowchartShapeLayer, fill fillColor: CGColor, stroke strokeColor: CGColor, strokesFilledOnly: Bool, width: CGFloat,
+                             palette: DiagramPalette, in context: CGContext) {
+        switch layer.painting {
+        case .filledAndOutlined:
+            fill(layer.path, color: fillColor, in: context)
+            stroke(layer.path, width: width, color: strokeColor, in: context)
+        case .outlined: stroke(layer.path, width: width, color: strokeColor, in: context)
+        case .filledInLineColorAndOutlined:
+            fill(layer.path, color: palette.line, in: context)
+            stroke(layer.path, width: width, color: strokeColor, in: context)
+        case .filledOnly:
+            fill(layer.path, color: fillColor, in: context)
+            if strokesFilledOnly { stroke(layer.path, width: width, color: strokeColor, in: context) }
+        }
     }
 
     private static func clusterFill(_ palette: DiagramPalette) -> CGColor {

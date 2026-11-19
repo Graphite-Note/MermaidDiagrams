@@ -1,7 +1,20 @@
+/**
+ * File: FlowchartShapeDrawing.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: The outline and inner lines of each flowchart node shape, Pele's, as Core Graphics paths in a frame.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// The outline of each node shape, Pele's, as Core Graphics paths in a frame: the filled outline, and the lines
-/// drawn over it (a subroutine's inner sides, a cylinder's front rim, a double circle's inner circle).
+/// drawn over it (a subroutine's inner sides, a cylinder's front rim, a double circle's inner circle). The classic
+/// shapes are drawn here, the others by `FlowchartExtendedShapeDrawing`; the shapes painted piece by piece have
+/// `layers` instead of an outline.
 enum FlowchartShapeDrawing {
     /// The corner radius of a rectangle: Pele's `--pele-radius`.
     static let rectangleCornerRadius: CGFloat = 4
@@ -12,7 +25,7 @@ enum FlowchartShapeDrawing {
     /// How far a double circle's inner circle is inside its outer one.
     static let doubleCircleGap: CGFloat = 5
 
-    /// The filled and stroked outline, or nil for a shape drawn as text alone.
+    /// The filled and stroked outline, or nil for a shape drawn as text alone, as lines alone or piece by piece.
     static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
         let width = frame.width
         let height = frame.height
@@ -27,7 +40,13 @@ enum FlowchartShapeDrawing {
         case .text: return nil
         case .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid:
             return polygon(corners(of: shape, width: width, height: height), around: CGPoint(x: frame.midX, y: frame.midY))
+        default: return FlowchartExtendedShapeDrawing.outline(of: shape, in: frame)
         }
+    }
+
+    /// The pieces of a shape painted piece by piece, back to front, or nil for a shape painted as its outline and lines.
+    static func layers(of shape: FlowchartNodeShape, in frame: CGRect) -> [FlowchartShapeLayer]? {
+        FlowchartLayeredShapeDrawing.layers(of: shape, in: frame)
     }
 
     /// The lines drawn over the filled outline, or nil.
@@ -51,6 +70,7 @@ enum FlowchartShapeDrawing {
         case .rectangle, .roundedRectangle, .stadium, .circle, .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid,
              .invertedTrapezoid, .text:
             return nil
+        default: return FlowchartExtendedShapeDrawing.innerLines(of: shape, in: frame)
         }
     }
 
@@ -72,7 +92,7 @@ enum FlowchartShapeDrawing {
         case .leanLeft: return [corner(left, top), corner(right - slant, top), corner(right, bottom), corner(left + slant, bottom)]
         case .trapezoid: return [corner(left + slant, top), corner(right - slant, top), corner(right, bottom), corner(left, bottom)]
         case .invertedTrapezoid: return [corner(left, top), corner(right, top), corner(right - slant, bottom), corner(left + slant, bottom)]
-        case .rectangle, .roundedRectangle, .stadium, .subroutine, .cylinder, .circle, .doubleCircle, .text: return []
+        default: return []
         }
     }
 
@@ -84,7 +104,7 @@ enum FlowchartShapeDrawing {
     }
 
     /// A cylinder's body: the top cap's far half, the right side, the bottom cap's near half, the left side.
-    private static func cylinderBody(in frame: CGRect) -> CGPath {
+    static func cylinderBody(in frame: CGRect) -> CGPath {
         let capDepth = FlowchartShapeGeometry.cylinderCapDepth(width: frame.width)
         let radiusX = frame.width / 2
         let path = CGMutablePath()

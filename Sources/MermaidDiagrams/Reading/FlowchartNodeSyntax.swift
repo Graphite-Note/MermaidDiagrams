@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartNodeSyntax.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import Foundation
 
 /// What a node's brackets or `@{ … }` say about it: its shape, its text, or both.
@@ -16,6 +27,7 @@ enum FlowchartNodeSyntax {
         (Array("(((".utf8), [(Array(")))".utf8), .doubleCircle)]),
         (Array("((".utf8), [(Array("))".utf8), .circle)]),
         (Array("([".utf8), [(Array("])".utf8), .stadium)]),
+        (Array("(-".utf8), [(Array("-)".utf8), .ellipse), (Array("/)".utf8), .ellipse), (Array("))".utf8), .ellipse)]),
         (Array("(".utf8), [(Array(")".utf8), .roundedRectangle)]),
         (Array("[[".utf8), [(Array("]]".utf8), .subroutine)]),
         (Array("[(".utf8), [(Array(")]".utf8), .cylinder)]),
@@ -43,8 +55,8 @@ enum FlowchartNodeSyntax {
         cursor.peek() == MermaidByte.atSign && cursor.peek(1) == MermaidByte.openingBrace
     }
 
-    /// Reads `@{ key: value, … }`. `shape`, `label` and `view: collapsed` are kept; a shape not drawn yet is drawn as a
-    /// rectangle, and other keys (`icon`, `img`, `pos`, …) are read and left.
+    /// Reads `@{ key: value, … }`. `shape`, `label` and `view: collapsed` are kept, a shape Mermaid does not know refused
+    /// (`FlowchartNodeShape.named`); other keys (`icon`, `img`, `pos`, …) are read and left.
     static func readAttributes(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartNodeDefinition {
         let openingLine = cursor.line
         cursor.advance(by: 2)
@@ -57,9 +69,13 @@ enum FlowchartNodeSyntax {
                 cursor.advance()
                 return definition
             }
+            let attributeLine = cursor.line
             let (key, value) = try readAttribute(&cursor, openingLine: openingLine)
             switch key.lowercased() {
-            case "shape": definition.shape = FlowchartNodeShape(shapeName: value) ?? .rectangle
+            case "shape":
+                // An empty name, as Pele reads `shape:` with nothing after it, changes nothing.
+                let name = FlowchartTextSyntax.unquoted(value).text
+                if !name.isEmpty { definition.shape = try FlowchartNodeShape.named(name, line: attributeLine) }
             case "label":
                 let written = FlowchartTextSyntax.unquoted(value)
                 definition.label = DiagramLabelDecoder.label(from: written.text, form: written.form)

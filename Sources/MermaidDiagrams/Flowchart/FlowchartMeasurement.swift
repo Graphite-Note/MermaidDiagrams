@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartMeasurement.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A flowchart's text measured and its shapes sized: what the layout needs before it places anything.
@@ -17,7 +28,9 @@ struct FlowchartMeasurement {
         var textOffsets: [CGFloat] = []
         nodeTexts.reserveCapacity(diagram.nodes.count)
         for node in diagram.nodes {
-            let text = DiagramTextBlock(label: node.label, measurer: nodeText, maximumWidth: wrappingWidth)
+            // A shape drawn without text (a start, a fork, a junction) measures none, as Pele lays out no label for it.
+            let label = node.shape.holdsText ? node.label : DiagramLabel(lines: [])
+            let text = DiagramTextBlock(label: label, measurer: nodeText, maximumWidth: wrappingWidth)
             let (size, textOffset) = FlowchartShapeGeometry.size(of: node.shape, textSize: text.size)
             nodeTexts.append(text)
             shapeSizes.append(size)

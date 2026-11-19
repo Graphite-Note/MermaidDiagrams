@@ -5,8 +5,8 @@
  * Description: The nodes and edges a flowchart gave colors of their own, painted apart.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 01/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
@@ -18,18 +18,27 @@ public struct FlowchartStyledNodeParts {
     public let fill: CGPath?
     /// The shape's outline and inner lines to stroke.
     public let outline: CGPath
+    /// The pieces of a shape painted piece by piece, back to front, in place of `fill` and `outline`; empty for the others.
+    public let layers: [FlowchartShapeLayer]
     public let text: DiagramTextBlock
     public let style: DiagramElementStyle
 
     init(node: FlowchartLayoutNode, style: DiagramElementStyle) {
+        text = node.text
+        self.style = style
+        if let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) {
+            self.layers = layers
+            fill = nil
+            outline = CGMutablePath()
+            return
+        }
+        layers = []
         let outlines = CGMutablePath()
         let outline = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame)
         if let outline { outlines.addPath(outline) }
         if let innerLines = FlowchartShapeDrawing.innerLines(of: node.shape, in: node.frame) { outlines.addPath(innerLines) }
         fill = outline
         self.outline = outlines
-        text = node.text
-        self.style = style
     }
 
     /// The width of the outline: the diagram's usual unless the style sets one.
