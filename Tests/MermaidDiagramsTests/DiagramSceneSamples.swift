@@ -49,6 +49,8 @@ enum DiagramSceneSamples {
             ("wardley", try WardleyMapCorpus.documentationExamples()),
             ("eventmodeling", try EventModelCorpus.documentationExamples()),
             ("railroad", try RailroadCorpus.documentationExamples()),
+            ("requirement", try RequirementCorpus.documentationExamples()),
+            ("swimlane", try SwimlaneCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -86,6 +88,8 @@ enum DiagramSceneSamples {
             ("wardley of 30 components", WardleyMapCorpus.generated(componentCount: 30)),
             ("event model of 30 frames", EventModelCorpus.generated(frameCount: 30)),
             ("railroad grammar of 12 rules", RailroadCorpus.generated(ruleCount: 12)),
+            ("requirements of 12 boxes", RequirementCorpus.generated(requirementCount: 12)),
+            ("swimlane process of 16 steps", SwimlaneCorpus.process(laneCount: 4, stepCount: 16)),
         ]
     }
 

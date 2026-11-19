@@ -43,6 +43,8 @@ enum DiagramSceneBenchmark {
             (.wardleyMap, try WardleyMapCorpus.documentationExamples()),
             (.eventModel, try EventModelCorpus.documentationExamples()),
             (.railroad, try RailroadCorpus.documentationExamples()),
+            (.requirement, try RequirementCorpus.documentationExamples()),
+            (.swimlane, try SwimlaneCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -113,6 +115,22 @@ enum DiagramSceneBenchmark {
             return laidOutChart(diagram, typography: typography)
         case .venn, .cynefin, .wardleyMap:
             return laidOutPlaneMap(diagram, typography: typography)
+        case .requirement, .swimlane:
+            return laidOutLayeredDiagram(diagram, typography: typography)
+        }
+    }
+
+    /// A requirement diagram or a swimlane diagram, the layered types added after the first graphs.
+    private static func laidOutLayeredDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .requirement(let requirement):
+            let layOut = { try RequirementLayoutEngine.layout(requirement, typography: typography, limits: .standard) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .swimlane(let swimlane):
+            let layout = SwimlaneLayoutEngine.layout(swimlane, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        default:
+            return nil
         }
     }
 
@@ -150,6 +168,8 @@ enum DiagramSceneBenchmark {
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
         case .venn, .cynefin, .wardleyMap:
+            return nil
+        case .requirement, .swimlane:
             return nil
         }
     }

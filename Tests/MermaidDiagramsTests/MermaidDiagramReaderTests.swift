@@ -28,7 +28,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
     }
 
     func testOtherDiagramTypesAreNamedByTheirKeyword() {
-        XCTAssertEqual(readError("requirementDiagram\n  requirement test_req {\n  }"), .unsupportedDiagramType(keyword: "requirementDiagram"))
+        XCTAssertEqual(readError("zenuml\n  Alice->Bob: Hi"), .unsupportedDiagramType(keyword: "zenuml"))
         XCTAssertEqual(readError("C4Context\n  title System"), .unsupportedDiagramType(keyword: "C4Context"))
     }
 
@@ -99,7 +99,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 26)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 28)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {

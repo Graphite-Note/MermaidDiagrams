@@ -31,3 +31,5 @@
 `treemap-docs.json`: the 8 treemap examples of Mermaid's documentation, as Pele collects them (`tests/corpus/treemap-docs.json`, same licenses), used unchanged.
 `eventmodeling-docs.json`: the 12 event model examples of Mermaid's documentation, as Pele collects them (`tests/corpus/eventmodeling-docs.json`, same licenses), used unchanged.
 `railroad-docs.json`: the 14 railroad diagram examples of Mermaid's documentation, in its four notations, as Pele collects them (`tests/corpus/railroad-docs.json`, same licenses), used unchanged.
+`requirement-docs.json`: the 9 requirement diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/requirement-docs.json`, same licenses), used unchanged.
+`swimlane-docs.json`: the 13 swimlane diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/swimlane-docs.json`, same licenses), used unchanged.

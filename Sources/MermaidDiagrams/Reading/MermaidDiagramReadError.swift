@@ -165,4 +165,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case eventModeling(EventModelSyntaxProblem)
     /// A problem of a railroad diagram's syntax, in any of its four notations.
     case railroad(RailroadSyntaxProblem)
+    /// A problem of a requirement diagram's own syntax, or more style copies than Pele allows.
+    case requirement(RequirementSyntaxProblem)
 }

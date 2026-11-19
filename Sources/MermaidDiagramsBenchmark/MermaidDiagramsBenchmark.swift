@@ -78,6 +78,7 @@ struct MermaidDiagramsBenchmark {
         try PlaneMapBenchmarks.run(typography: typography)
         try EventModelBenchmark.run(typography: typography)
         try RailroadBenchmark.run(typography: typography)
+        try LayeredDiagramBenchmarks.run(typography: typography)
     }
 
     private static func report(_ name: String, sources: [String], typography: DiagramTypography) throws {

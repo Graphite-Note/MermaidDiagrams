@@ -39,6 +39,9 @@ public enum MermaidDiagram: Equatable, Sendable {
     case wardleyMap(WardleyMap)
     case eventModel(EventModelDiagram)
     case railroad(RailroadDiagram)
+    case requirement(RequirementDiagram)
+    /// A swimlane diagram: a flowchart whose top-level groups are lanes, read as a flowchart is.
+    case swimlane(FlowchartDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -104,6 +107,10 @@ public enum MermaidDiagramReader {
             return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case _ where RailroadNotation(typeKeyword: keyword) != nil:
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        // Pele detects any text that starts with `requirement` as a requirement diagram; its lexer then reads the keyword.
+        case _ where keyword.hasPrefix("requirement"):
+            return .requirement(titled(try RequirementParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        case "swimlane-beta": return .swimlane(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

@@ -273,4 +273,7 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case wardleyNote = "wardley-note"
     case wardleyAccelerator = "wardley-accelerator"
     case wardleyDeaccelerator = "wardley-deaccelerator"
+    /// A requirement's or an element's stereotype (`«Requirement»`), and the names of its fields.
+    case stereotype
+    case field
 }
