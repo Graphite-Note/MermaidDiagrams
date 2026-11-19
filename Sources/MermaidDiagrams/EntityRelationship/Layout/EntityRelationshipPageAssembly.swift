@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipPageAssembly.swift
+ * ------------------------------------------
+ * Layer: Core
+ * Description: Puts a placed entity relationship diagram on the page.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Puts a placed entity relationship diagram on the page: boxes at their centers, relationships from one box's side
@@ -7,9 +18,15 @@ struct EntityRelationshipPageAssembly {
     let diagram: EntityRelationshipDiagram
     let measured: EntityRelationshipMeasurement
     let axes: FlowchartFlowAxes
-    private(set) var boxCenters: [CGPoint] = []
+    var boxCenters: [CGPoint] = []
     /// By relationship index; nil until the relationship is placed.
     private var relationships: [EntityRelationshipLayoutRelationship?]
+    /// For a diagram laid out in its groups' boxes: the group each entity stands for (an entity not drawn), or nil.
+    var representedSubgraphs: [Int?] = []
+    /// For each relationship placed through boxes, the points it passes: where it crosses a group's top.
+    var relationshipPoints: [[CGPoint]] = []
+    /// The groups' boxes.
+    var subgraphBoxes: [FlowchartLayoutCluster] = []
 
     /// A route whose two ends are this close, and not in line, curves from box to box without straight runs.
     static let shortestRouteWithStraightRuns = 3 * EntityRelationshipCardinalityMark.length
@@ -77,12 +94,26 @@ struct EntityRelationshipPageAssembly {
             label: centered(measured.labels[index], at: labelCenter))
     }
 
+    /// A relationship through `points`, each segment an S along the flow `segmentsRunVertically` gives it.
+    mutating func setRelationship(at index: Int, along points: [CGPoint], segmentsRunVertically: [Bool], labelCenter: CGPoint) {
+        let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentsRunVertically, startTrim: 0, endTrim: 0)
+        let relationship = diagram.relationships[index]
+        let first = points[0]
+        let last = points[points.count - 1]
+        relationships[index] = EntityRelationshipLayoutRelationship(
+            identification: relationship.identification, path: drawn.path,
+            firstEntityMark: EntityRelationshipCardinalityMark(cardinality: relationship.firstEntityCardinality, tip: first,
+                                                               direction: CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)),
+            secondEntityMark: EntityRelationshipCardinalityMark(cardinality: relationship.secondEntityCardinality, tip: last, direction: drawn.endDirection),
+            label: centered(measured.labels[index], at: labelCenter))
+    }
+
     /// The loops of every entity that has relationships with itself.
     mutating func placeSelfRelationships() {
         for (entity, indices) in measured.selfRelationshipIndices.enumerated() where !indices.isEmpty {
             let loops = EntityRelationshipSelfLoops.loops(center: boxCenters[entity], boxSize: measured.boxes[entity].size, bands: measured.loopBands[entity],
                                                           labelSizes: indices.map { index in measured.labels[index]?.size },
-                                                          leavesBelow: measured.loopsLeaveBelow)
+                                                          leavesBelow: measured.loopsLeaveBelow[entity])
             for (loop, index) in zip(loops, indices) {
                 let relationship = diagram.relationships[index]
                 relationships[index] = EntityRelationshipLayoutRelationship(
@@ -127,12 +158,15 @@ struct EntityRelationshipPageAssembly {
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
     /// title, and centered under the title when the title is wider.
     func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> EntityRelationshipLayout {
-        let entities = measured.boxes.enumerated().map { entity, box in
+        // An entity that stands for a group is its box, not an entity.
+        let drawnEntities = measured.boxes.enumerated().filter { entity, _ in representedSubgraphs.isEmpty || representedSubgraphs[entity] == nil }
+        let entities = drawnEntities.map { entity, box in
             let origin = CGVector(dx: boxCenters[entity].x - box.size.width / 2, dy: boxCenters[entity].y - box.size.height / 2)
             return EntityRelationshipLayoutEntity(frame: CGRect(origin: .zero, size: box.size), name: box.name, rows: box.rows).translated(by: origin)
         }
         let placedRelationships = relationships.compactMap { relationship in relationship }
-        let bounds = EntityRelationshipLayoutBounds.union(entities: entities, relationships: placedRelationships)
+        var bounds = EntityRelationshipLayoutBounds.union(entities: entities, relationships: placedRelationships)
+        for box in subgraphBoxes { bounds = bounds.union(box.frame) }
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
         let titleHeight = title == nil ? 0 : titleSize.height + titleGap
@@ -141,6 +175,7 @@ struct EntityRelationshipPageAssembly {
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
         return EntityRelationshipLayout(size: size, font: font, entities: entities.map { entity in entity.translated(by: offset) },
-                                        relationships: placedRelationships.map { relationship in relationship.translated(by: offset) }, title: placedTitle)
+                                        relationships: placedRelationships.map { relationship in relationship.translated(by: offset) }, title: placedTitle,
+                                        subgraphs: subgraphBoxes.map { box in box.translated(by: offset) })
     }
 }

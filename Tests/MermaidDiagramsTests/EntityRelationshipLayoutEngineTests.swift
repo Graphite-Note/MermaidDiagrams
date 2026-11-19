@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipLayoutEngineTests.swift
+ * -----------------------------------------------
+ * Layer: Tests
+ * Description: Entity relationship diagrams laid out in Pele's measurements.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -164,8 +175,8 @@ final class EntityRelationshipLayoutEngineTests: XCTestCase {
         XCTAssertEqual(laidOut.entities[1].frame.minY - laidOut.entities[0].frame.maxY, 64, accuracy: accuracy)
     }
 
-    func testSubgraphsAndTheLayoutLimitAreRefused() throws {
-        XCTAssertThrowsError(try layout("erDiagram\nsubgraph group\nA\nend")) { error in
+    func testAGroupRelatedToItselfAndTheLayoutLimitAreRefused() throws {
+        XCTAssertThrowsError(try layout("erDiagram\nsubgraph group\nA\nend\ngroup ||--|| group : itself")) { error in
             XCTAssertEqual(error as? EntityRelationshipLayoutError, .subgraphsNotLaidOut)
         }
         var limits = MermaidDiagramLimits.standard

@@ -5,8 +5,8 @@
  * Description: EntityRelationshipRenderer's Core Graphics painting as it was before the scene, the reference
  *              DiagramSceneParityTests compares the scene's pixels with.
  *
- * Authors: Félix Chevalier
- * Version: 0.1
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -23,6 +23,7 @@ enum ReferenceEntityRelationshipRenderer {
         context.saveGState()
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        ReferenceFlowchartRenderer.drawClusters(parts.subgraphs, text: &text, in: context, palette: palette)
         stroke(parts.identifyingLines, width: lineWidth, color: palette.line, in: context)
         context.setLineDash(phase: 0, lengths: EntityRelationshipDrawingParts.nonIdentifyingDashLengths)
         stroke(parts.nonIdentifyingLines, width: lineWidth, color: palette.line, in: context)

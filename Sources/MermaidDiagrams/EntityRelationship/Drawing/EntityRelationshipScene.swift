@@ -6,14 +6,14 @@
  *              Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
 import CoreGraphics
 
 extension DiagramScene {
-    /// The entity relationship diagram's painting: the lines and their marks, the labels on their patches, the boxes
+    /// The entity relationship diagram's painting: the groups' boxes and titles, the lines and their marks, the labels on their patches, the boxes
     /// with their striped rows, outlines and header dividers, the boxes' text, the title. Types, keys and comments are
     /// in the foreground at `EntityRelationshipDrawingParts.mutedTextOpacity`.
     public init(layout: EntityRelationshipLayout) {
@@ -27,6 +27,7 @@ extension EntityRelationshipDrawingParts {
     /// Every line is drawn one point wide with round caps and joins.
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
+        subgraphs.addBoxes(to: &builder)
         builder.stroke(identifyingLines, .line, line, part: .edge)
         builder.stroke(nonIdentifyingLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.nonIdentifyingDashLengths), part: .edge)
         builder.fill(markFills, .background, part: .marker)
