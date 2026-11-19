@@ -173,6 +173,8 @@ final class DiagramSceneParityTests: XCTestCase {
             throw NoReferenceRenderer()
         case .block, .architecture:
             throw NoReferenceRenderer()
+        case .requirement, .swimlane:
+            throw NoReferenceRenderer()
         }
     }
 

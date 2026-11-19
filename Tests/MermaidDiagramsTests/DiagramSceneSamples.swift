@@ -52,6 +52,8 @@ enum DiagramSceneSamples {
             ("c4", try C4Corpus.documentationExamples()),
             ("block", try BlockCorpus.documentationExamples()),
             ("architecture", try ArchitectureCorpus.documentationExamples()),
+            ("requirement", try RequirementCorpus.documentationExamples()),
+            ("swimlane", try SwimlaneCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -92,6 +94,8 @@ enum DiagramSceneSamples {
             ("c4 of 20 systems in 3 boundaries", C4Corpus.generated(shapeCount: 20, boundaryCount: 3, relationCount: 30)),
             ("block grid of 40 blocks", BlockCorpus.grid(blockCount: 40)),
             ("architecture of 20 services", ArchitectureCorpus.generated(serviceCount: 20)),
+            ("requirements of 12 boxes", RequirementCorpus.generated(requirementCount: 12)),
+            ("swimlane process of 16 steps", SwimlaneCorpus.process(laneCount: 4, stepCount: 16)),
         ]
     }
 

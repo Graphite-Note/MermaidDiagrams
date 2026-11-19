@@ -34,3 +34,5 @@
 `c4-docs.json`: the 6 C4 diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/c4-docs.json`, same licenses), used unchanged.
 `block-docs.json`: the 30 block diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/block-docs.json`, same licenses), used unchanged.
 `architecture-docs.json`: the 6 architecture diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/architecture-docs.json`, same licenses), used unchanged.
+`requirement-docs.json`: the 9 requirement diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/requirement-docs.json`, same licenses), used unchanged.
+`swimlane-docs.json`: the 13 swimlane diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/swimlane-docs.json`, same licenses), used unchanged.

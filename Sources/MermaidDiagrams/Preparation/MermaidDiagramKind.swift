@@ -40,6 +40,8 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
     case c4
     case block
     case architecture
+    case requirement
+    case swimlane
 
     /// Pele's name of the type, which its SVG's root class (`pele-<name>`) and role description carry.
     public var peleName: String {
@@ -73,6 +75,8 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .c4: "c4"
         case .block: "block"
         case .architecture: "architecture"
+        case .requirement: "requirement"
+        case .swimlane: "swimlane"
         }
     }
 
@@ -108,6 +112,8 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .c4: "C4 diagram"
         case .block: "Block diagram"
         case .architecture: "Architecture diagram"
+        case .requirement: "Requirement diagram"
+        case .swimlane: "Swimlane diagram"
         }
     }
 }
@@ -145,6 +151,8 @@ extension MermaidDiagram {
         case .c4: .c4
         case .block: .block
         case .architecture: .architecture
+        case .requirement: .requirement
+        case .swimlane: .swimlane
         }
     }
 }

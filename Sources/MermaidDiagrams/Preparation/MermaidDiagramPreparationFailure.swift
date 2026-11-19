@@ -32,6 +32,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
     case vennLayout(VennLayoutError)
     case c4Layout(C4LayoutError)
     case blockLayout(BlockLayoutError)
+    case requirementLayout(RequirementLayoutError)
 
     /// What kind of refusal it is.
     public enum Category: Equatable, Sendable {
@@ -59,6 +60,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
              .entityRelationshipLayout(.tooManyLayoutPoints), .ganttLayout(.tooManyScheduledDays): .beyondLimits
         case .vennLayout(.tooManyOverlaps): .beyondLimits
         case .c4Layout(.relationToUnknownElement): .refusedContent
+        case .requirementLayout(.tooManyLayoutPoints): .beyondLimits
         case .ganttLayout(.unreadableDate), .ganttLayout(.noDayLeftAfterExclusions), .xyChartLayout(.noSeries), .sankeyLayout(.circularLinks): .refusedContent
         case .blockLayout(.columnsNotAnInteger): .refusedContent
         }

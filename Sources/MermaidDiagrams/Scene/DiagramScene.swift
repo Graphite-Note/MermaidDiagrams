@@ -281,4 +281,7 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case casing = "casings"
     /// The text an architecture diagram's service shows in place of an icon.
     case iconText = "icon-text"
+    /// A requirement's or an element's stereotype (`«Requirement»`), and the names of its fields.
+    case stereotype
+    case field
 }

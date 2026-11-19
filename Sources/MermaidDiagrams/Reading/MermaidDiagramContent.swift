@@ -39,6 +39,8 @@ extension MermaidDiagram {
         case .c4(let diagram): diagram.shapes.isEmpty && diagram.boundaries.count == 1
         case .block(let diagram): diagram.drawsNoBlock
         case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
+        case .requirement(let diagram): diagram.requirements.isEmpty && diagram.elements.isEmpty
+        case .swimlane(let diagram): diagram.nodes.isEmpty && diagram.subgraphs.isEmpty
         case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }

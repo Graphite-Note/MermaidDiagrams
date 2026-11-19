@@ -46,6 +46,8 @@ enum DiagramSceneBenchmark {
             (.c4, try C4Corpus.documentationExamples()),
             (.block, try BlockCorpus.documentationExamples()),
             (.architecture, try ArchitectureCorpus.documentationExamples()),
+            (.requirement, try RequirementCorpus.documentationExamples()),
+            (.swimlane, try SwimlaneCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -121,6 +123,22 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .block, .architecture:
             return laidOutGridDiagram(diagram, typography: typography)
+        case .requirement, .swimlane:
+            return laidOutLayeredDiagram(diagram, typography: typography)
+        }
+    }
+
+    /// A requirement diagram or a swimlane diagram, the layered types added after the first graphs.
+    private static func laidOutLayeredDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .requirement(let requirement):
+            let layOut = { try RequirementLayoutEngine.layout(requirement, typography: typography, limits: .standard) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .swimlane(let swimlane):
+            let layout = SwimlaneLayoutEngine.layout(swimlane, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        default:
+            return nil
         }
     }
 
@@ -155,11 +173,8 @@ enum DiagramSceneBenchmark {
             return laidOutSimpleChart(diagram, typography: typography)
         case .kanban, .treeView, .ishikawa, .eventModel, .railroad:
             return laidOutOutlineOrTrackDiagram(diagram, typography: typography)
-        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
-            return nil
-        case .venn, .cynefin, .wardleyMap, .c4:
-            return nil
-        case .block, .architecture:
+        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph,
+             .venn, .cynefin, .wardleyMap, .c4, .block, .architecture, .requirement, .swimlane:
             return nil
         }
     }

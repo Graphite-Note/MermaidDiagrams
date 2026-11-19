@@ -171,4 +171,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case block(BlockSyntaxProblem)
     /// A problem of an architecture diagram's syntax, or a statement its database refuses.
     case architecture(ArchitectureSyntaxProblem)
+    /// A problem of a requirement diagram's own syntax, or more style copies than Pele allows.
+    case requirement(RequirementSyntaxProblem)
 }

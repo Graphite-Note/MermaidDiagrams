@@ -82,8 +82,8 @@ final class MermaidDiagramPreparationTests: XCTestCase {
         XCTAssertEqual(failure("flowchart LR\n  A --> B[unclosed"), .reading(.invalidSyntax(line: 2, problem: .unclosedShape(closingText: "]"))))
         XCTAssertEqual(failure("flowchart LR\n  A --> B[unclosed")?.category, .unreadable)
         XCTAssertEqual(failure("%% only a comment"), .reading(.noDiagram))
-        XCTAssertEqual(failure("requirementDiagram\n  requirement r {\n  }"), .reading(.unsupportedDiagramType(keyword: "requirementDiagram")))
-        XCTAssertEqual(failure("requirementDiagram")?.category, .typeNotDrawn)
+        XCTAssertEqual(failure("zenuml\n  Alice->Bob: Hi"), .reading(.unsupportedDiagramType(keyword: "zenuml")))
+        XCTAssertEqual(failure("zenuml")?.category, .typeNotDrawn)
         XCTAssertEqual(failure("flowchart LR"), .nothingToDraw)
         XCTAssertEqual(failure("flowchart LR\n  A --> B", limits: MermaidDiagramLimits(maximumSourceBytes: 10, maximumNodeCount: 10, maximumEdgeCount: 10,
                                                                                        maximumLayoutPointCount: 10))?.category, .beyondLimits)

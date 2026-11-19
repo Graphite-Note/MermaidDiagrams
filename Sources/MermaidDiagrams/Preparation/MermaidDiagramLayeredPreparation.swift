@@ -1,0 +1,65 @@
+/**
+ * File: MermaidDiagramLayeredPreparation.swift
+ * --------------------------------------------
+ * Layer: Core
+ * Description: The preparation of the layered types added after the first graphs, requirement diagrams and swimlane
+ *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
+extension MermaidDiagramPreparationContext {
+    /// A requirement diagram, and for a narrow column the diagram turned to run down when it runs across, as Pele's
+    /// `turnToFit` turns it.
+    func prepared(_ diagram: RequirementDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
+        let layout: RequirementLayout
+        do { layout = try RequirementLayoutEngine.layout(diagram, typography: typography, limits: limits) } catch { throw .requirementLayout(error) }
+        let narrow = narrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
+            try RequirementLayoutEngine.layout(turned, typography: typography, limits: limits)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .requirement, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(requirement: diagram),
+                                      unappliedStatementCount: diagram.unappliedStatementCount)
+    }
+}
+
+extension MermaidDiagramAccessibility {
+    /// Each requirement and element by its kind and name, then each relation as its two ends around its kind: “Requirement
+    /// test_req”, “test_entity satisfies test_req”.
+    init(requirement diagram: RequirementDiagram) {
+        let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
+        let elements = diagram.elements.map { element in "Element \(element.name)" }
+        let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
+        self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
+                  summary: requirements + elements + relations)
+    }
+}
+
+extension MermaidDiagramPreparationContext {
+    /// A swimlane diagram, and for a narrow column the diagram turned to run down when it runs across, in Pele's tight
+    /// measurements, as Pele's `turnToFit` and `tighten` draw it.
+    func prepared(swimlane diagram: FlowchartDiagram) -> PreparedMermaidDiagram {
+        let layout = SwimlaneLayoutEngine.layout(diagram, typography: typography)
+        let narrow = narrowScene(of: diagram.swimlaneTurnedToRunDown ?? diagram, regularSize: layout.size, laidOut: { turned in
+            SwimlaneLayoutEngine.layout(turned, typography: typography, spacing: .compact, columnWidth: narrowestColumnWidth)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(swimlane: diagram),
+                                      unappliedStatementCount: diagram.unappliedStatementCount)
+    }
+}
+
+extension MermaidDiagramAccessibility {
+    /// Each lane's title, then the text of each node drawn, as a flowchart's: “Customer, Warehouse, Browse catalogue, Pay”.
+    init(swimlane diagram: FlowchartDiagram) {
+        let flowchart = MermaidDiagramAccessibility(flowchart: diagram)
+        let nesting = FlowchartClusterNesting(diagram: diagram)
+        let laneTitles = diagram.subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
+            .map { subgraph in diagram.subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
+        let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
+        let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
+        self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description, summary: laneTitles + nodeTexts)
+    }
+}
