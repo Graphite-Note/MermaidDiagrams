@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -34,6 +34,8 @@ enum DiagramSceneBenchmark {
             (.userJourney, try UserJourneyCorpus.documentationExamples()), (.quadrantChart, try QuadrantChartCorpus.documentationExamples()),
             (.xyChart, try XYChartCorpus.documentationExamples()),
             (.sankey, try SankeyCorpus.documentationExamples() + ["sankey-beta\n\n " + SankeyCorpus.energyRows()]),
+            (.eventModel, try EventModelCorpus.documentationExamples()),
+            (.railroad, try RailroadCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -99,7 +101,7 @@ enum DiagramSceneBenchmark {
         case .gitGraph(let gitGraph):
             let layOut = { try GitGraphLayoutEngine.layout(gitGraph, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
-        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey:
+        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey, .eventModel, .railroad:
             return laidOutChart(diagram, typography: typography)
         }
     }
@@ -131,6 +133,12 @@ enum DiagramSceneBenchmark {
         case .sankey(let sankey):
             let layOut = { try SankeyLayoutEngine.layout(sankey, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .eventModel(let eventModel):
+            let layout = EventModelLayoutEngine.layout(eventModel, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .railroad(let railroad):
+            let layout = RailroadLayoutEngine.layout(railroad, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
         }

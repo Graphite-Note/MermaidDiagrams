@@ -6,7 +6,7 @@
  *              or it is too large to draw, with the kind of refusal.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -63,6 +63,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
         case .noDiagram, .invalidSyntax: .unreadable
         case .unsupportedDiagramType: .typeNotDrawn
         case .sourceTooLarge, .tooManyNodes, .tooManyEdges, .tooManyParticipants, .tooManySequenceStatements, .tooManyChartValues: .beyondLimits
+        case .nestingTooDeep: .beyondLimits
         }
     }
 }

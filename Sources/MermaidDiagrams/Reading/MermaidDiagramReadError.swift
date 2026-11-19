@@ -1,3 +1,14 @@
+/**
+ * File: MermaidDiagramReadError.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: Why a diagram's text was not read, and what each type's reader found where the syntax broke.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Why a diagram's text was not read. Each case carries facts; the words are the caller's.
 public enum MermaidDiagramReadError: Error, Equatable, Sendable {
     /// The text declares no diagram: it is empty, or holds only comments and front matter.
@@ -16,6 +27,8 @@ public enum MermaidDiagramReadError: Error, Equatable, Sendable {
     case tooManySequenceStatements(limit: Int)
     /// An XY chart holds more categories and values, over all its series, than `MermaidDiagramLimits.maximumNodeCount`.
     case tooManyChartValues(limit: Int)
+    /// A railroad diagram's expression nests deeper than `RailroadExpression.maximumNestingDepth`.
+    case nestingTooDeep(limit: Int)
 }
 
 /// What a reader found where the syntax broke.
@@ -119,4 +132,8 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     /// A Sankey diagram's row is not three fields separated by commas (`source,target,value`), or a line break does
     /// not follow the keyword.
     case expectedSankeyFields
+    /// A problem of an event model's own syntax, or two frames of one number.
+    case eventModeling(EventModelSyntaxProblem)
+    /// A problem of a railroad diagram's syntax, in any of its four notations.
+    case railroad(RailroadSyntaxProblem)
 }

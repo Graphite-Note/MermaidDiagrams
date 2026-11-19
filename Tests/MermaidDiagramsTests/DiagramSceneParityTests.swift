@@ -7,7 +7,7 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -166,8 +166,12 @@ final class DiagramSceneParityTests: XCTestCase {
             }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
             throw NotAChart()
+        case .eventModel, .railroad:
+            throw NoReferenceRenderer()
         }
     }
 
     private struct NotAChart: Error {}
+    /// A type drawn from its scene from the start, with no renderer of its own before the scene to compare it with.
+    private struct NoReferenceRenderer: Error {}
 }
