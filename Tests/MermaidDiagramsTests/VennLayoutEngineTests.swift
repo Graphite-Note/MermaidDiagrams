@@ -183,11 +183,41 @@ final class VennLayoutEngineTests: XCTestCase {
     }
 
     func testStylesMergeByTargetAndUnreadDeclarationsAreCounted() throws {
-        let diagram = try VennReading.venn("venn-beta\n  set A\n  style A fill:red, font-weight:bold\n  style A fill:#00f, stroke-width: 3\n  style A rx:4")
-        XCTAssertEqual(diagram.unappliedDeclarationCount, 2)
+        let diagram = try VennReading.venn("venn-beta\n  set A\n  style A fill:red, font-weight:bold\n  style A fill:#00f, stroke-width: 3\n  style A rx:4, font-size:20px")
+        XCTAssertEqual(diagram.unappliedDeclarationCount, 2, "rx and font-size")
         let layout = try VennReading.uniformLayout("venn-beta\n  set A\n  style A fill:red, font-weight:bold\n  style A fill:#00f, stroke-width: 3")
         XCTAssertEqual(layout.sets[0].appearance.fill, DiagramColor(red: 0, green: 0, blue: 1))
         XCTAssertEqual(layout.sets[0].appearance.strokeWidth, 3)
+    }
+
+    /// As Pele's resolveStyle reads them: `font-weight` bold, bolder or from 600 and `font-style` italic; a set's or an
+    /// overlap's label is measured in them (Pele's `base`), a text drawn in them and measured as it is; `hsl(…)` in quotes
+    /// is a color.
+    func testBoldItalicAndHSLStyles() throws {
+        let layout = try VennReading.uniformLayout("""
+            venn-beta
+              set A["Alpha"]
+                text t1["Note"]
+              set B
+              style A font-weight:700, font-style:italic
+              style t1 font-weight:bold, color:"hsl(120, 100%, 25%)"
+              style B fill:"hsla(0, 100%, 50%, 0.5)", font-weight:normal
+            """)
+        let alpha = layout.regions[0].lines[0]
+        XCTAssertTrue(alpha.isBold)
+        XCTAssertTrue(alpha.isItalic)
+        XCTAssertEqual(alpha.text.size.width, 5 * 9, "Measured in bold: one point wider a character with the test's measurer")
+        let note = layout.regions[0].lines[1]
+        XCTAssertTrue(note.isBold)
+        XCTAssertFalse(note.isItalic)
+        XCTAssertEqual(note.text.size.width, 4 * 6.5, "A text is measured as it is, whatever its style")
+        XCTAssertEqual(note.color, DiagramColor(red: 0, green: 0.5, blue: 0))
+        XCTAssertEqual(layout.sets[1].appearance.fill, DiagramColor(red: 1, green: 0, blue: 0, alpha: 0.5))
+        XCTAssertFalse(layout.regions[1].lines[0].isBold)
+        let scene = DiagramScene(layout: layout)
+        XCTAssertTrue(scene.texts.contains { text in text.isBold && text.isItalic && text.part == .label })
+        XCTAssertTrue(scene.texts.contains { text in text.isBold && text.part == .vennText })
+        XCTAssertEqual(try VennReading.venn("venn-beta\n  set A\n  style A font-weight:300, font-style:oblique, fill:\"hsl(1, 2, 3)\"").unappliedDeclarationCount, 3)
     }
 
     func testOverlapsPastTheLayoutLimitAreRefused() throws {

@@ -6,7 +6,7 @@
  *              circles, and each region's lines around its roomiest point in the colors Pele's ink picks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -43,7 +43,7 @@ extension VennRegionDrafts {
                 let height = Double(line.block.size.height)
                 let block = PlaneMapLabel.placed(line.block, at: CGPoint(x: centerX, y: top + height / 2))
                 lines.append(VennLayoutRegionLine(text: block, isRegionText: line.kind == .regionText, color: own.textColor ?? fill?.ink(forTextOf: own),
-                                                  opacity: own.opacity))
+                                                  opacity: own.opacity, isBold: own.isBold, isItalic: own.isItalic))
                 top += height
             }
             return VennLayoutRegion(sets: region.sets, lines: lines)

@@ -6,7 +6,7 @@
  *              overlap with its text at its roomiest point, the scale grown until each region holds its text, the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -33,8 +33,12 @@ public enum VennLayoutEngine {
 
     public static func layout(_ diagram: VennDiagram, typography: DiagramTypography,
                               limits: MermaidDiagramLimits = .standard) throws(VennLayoutError) -> VennLayout {
-        try layout(diagram, measurers: VennMeasurers(setText: typography.nodeText, overlapText: typography.edgeText, regionText: typography.rowText,
-                                                     titleText: typography.boldNodeText), font: typography.font, limits: limits)
+        let font = typography.font
+        let measurers = VennMeasurers(setText: typography.nodeText, overlapText: typography.edgeText, regionText: typography.rowText,
+                                      titleText: typography.boldNodeText, restyled: { base, isBold, isItalic in
+                                          CoreTextDiagramTextMeasurer(font: font.resized(to: base.fontSize), isBold: isBold, isItalic: isItalic)
+                                      })
+        return try layout(diagram, measurers: measurers, font: font, limits: limits)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: VennDiagram, measurers: VennMeasurers<Measurer>, font: DiagramFont,
@@ -85,10 +89,12 @@ public enum VennLayoutEngine {
     }
 }
 
-/// The measurers of a Venn diagram's text: a set's label, an overlap's, a region's texts, the title in bold.
+/// The measurers of a Venn diagram's text: a set's label, an overlap's, a region's texts, the title in bold, and a
+/// measurer's text in bold or italic, made only for a label whose style asks for it.
 struct VennMeasurers<Measurer: DiagramTextMeasuring> {
     let setText: Measurer
     let overlapText: Measurer
     let regionText: Measurer
     let titleText: Measurer
+    let restyled: (_ base: Measurer, _ isBold: Bool, _ isItalic: Bool) -> Measurer
 }

@@ -5,7 +5,7 @@
  * Description: Reads a Venn diagram for a test, and lays one out with text of fixed widths.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -34,7 +34,10 @@ enum VennReading {
         let measurers = VennMeasurers(setText: UniformWidthTextMeasurer(characterWidth: 8, fontSize: 16, lineHeight: 24),
                                       overlapText: UniformWidthTextMeasurer(characterWidth: 7, fontSize: 14, lineHeight: 21),
                                       regionText: UniformWidthTextMeasurer(characterWidth: 6.5, fontSize: 13, lineHeight: 20),
-                                      titleText: UniformWidthTextMeasurer(characterWidth: 8, fontSize: 16, lineHeight: 24))
+                                      titleText: UniformWidthTextMeasurer(characterWidth: 8, fontSize: 16, lineHeight: 24),
+                                      restyled: { base, isBold, _ in
+                                          isBold ? UniformWidthTextMeasurer(characterWidth: base.width(of: "m") + 1, fontSize: base.fontSize, lineHeight: base.lineHeight) : base
+                                      })
         return try VennLayoutEngine.layout(try venn(source), measurers: measurers, font: DiagramFont(postScriptName: nil, size: 16), limits: limits)
     }
 }

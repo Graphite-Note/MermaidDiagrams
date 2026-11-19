@@ -26,6 +26,9 @@ public struct VennAppearance: Equatable, Sendable {
     public internal(set) var opacity: Double?
     /// `color`: the text's.
     public internal(set) var textColor: DiagramColor?
+    /// `font-weight` bold, bolder or from 600, and `font-style` italic: the text's, as Pele's `resolveStyle` reads them.
+    public internal(set) var isBold = false
+    public internal(set) var isItalic = false
     /// Whether a property of the shape is written with a value (`style.shape !== ''` in Pele), read here or not.
     public internal(set) var hasShapeDeclaration = false
     /// Whether `fill-opacity` is written, read or not.
@@ -67,12 +70,14 @@ public struct VennAppearance: Equatable, Sendable {
         case "fill", "stroke", "stroke-width", "stroke-dasharray", "color":
             let style = DiagramElementStyle.reading(property + ":" + value).style
             switch property {
-            case "fill": fill = style.fill
-            case "stroke": stroke = style.stroke
+            case "fill": fill = style.fill ?? Self.functionColor(value)
+            case "stroke": stroke = style.stroke ?? Self.functionColor(value)
             case "stroke-width": strokeWidth = style.strokeWidth
             case "stroke-dasharray": strokeDashLengths = style.strokeDashLengths
-            default: textColor = style.textColor
+            default: textColor = style.textColor ?? Self.functionColor(value)
             }
+        case "font-weight": isBold = value == "bold" || value == "bolder" || (Double(value).map { weight in weight >= Self.boldWeight } ?? false)
+        case "font-style": isItalic = value == "italic"
         default: break
         }
     }
@@ -85,8 +90,12 @@ public struct VennAppearance: Equatable, Sendable {
         if isUnsafe(value) { return true }
         switch property {
         case "fill-opacity", "stroke-opacity", "opacity": return amount(value) != nil
-        case "fill", "stroke", "stroke-width", "stroke-dasharray", "color":
+        case "fill", "stroke", "color":
+            return !DiagramElementStyle.reading(property + ":" + value).hasUnappliedDeclaration || functionColor(value) != nil
+        case "stroke-width", "stroke-dasharray":
             return !DiagramElementStyle.reading(property + ":" + value).hasUnappliedDeclaration
+        case "font-weight": return ["bold", "bolder", "normal", "400"].contains(value) || (Double(value).map { weight in weight >= boldWeight } ?? false)
+        case "font-style": return value == "italic" || value == "normal"
         default: return false
         }
     }
@@ -103,6 +112,24 @@ public struct VennAppearance: Equatable, Sendable {
     }
 
     private static let unsafePattern = #"url\s*\(|expression\s*\(|javascript:|[<>{};\\]|@import|image-set|/\*"#
+
+    /// The weight from which a text is bold, as Pele's `resolveStyle` reads `font-weight`.
+    static let boldWeight = 600.0
+
+    /// A color written as CSS's `hsl(…)`, `hsla(…)` or `rgb(…)` with spaces, which a style's other colors do not read. The
+    /// comma syntax takes, as CSS and Pele's `ink` do, an hsl()'s saturation and lightness in percent and an rgb()'s
+    /// channels all in percent or none.
+    private static func functionColor(_ value: String) -> DiagramColor? {
+        guard value.hasSuffix(")"), let opening = value.firstIndex(of: "(") else { return nil }
+        let arguments = value[value.index(after: opening)..<value.index(before: value.endIndex)]
+        if arguments.contains(",") {
+            let isHSL = value.lowercased().hasPrefix("hsl")
+            let channels = arguments.split(separator: ",", omittingEmptySubsequences: false).prefix(3).dropFirst(isHSL ? 1 : 0)
+            let percentCount = channels.filter { channel in PlaneMapText.trimmed(String(channel)).hasSuffix("%") }.count
+            guard isHSL ? percentCount == 2 : percentCount == 0 || percentCount == 3 else { return nil }
+        }
+        return SequenceHighlightColorSyntax.color(from: value).map { color in DiagramColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha) }
+    }
 
     /// `!important` taken out, as Pele takes it out, and the spaces at the ends.
     private static func valueWithoutImportance(_ value: String) -> String {

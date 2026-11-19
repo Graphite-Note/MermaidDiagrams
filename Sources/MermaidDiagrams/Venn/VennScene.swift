@@ -6,7 +6,7 @@
  *              fifth of their opacity, the overlaps a style outlines, then each region's text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -39,7 +39,7 @@ extension DiagramScene {
             for line in region.lines {
                 let usual: DiagramPaint = line.isRegionText ? .muted : .foreground
                 let paint = (line.color.map(DiagramPaint.color) ?? usual).atOpacity(CGFloat(line.opacity ?? 1))
-                builder.text(line.text, paint, part: line.isRegionText ? .vennText : .label)
+                builder.text(line.text, paint, isBold: line.isBold, isItalic: line.isItalic, part: line.isRegionText ? .vennText : .label)
             }
         }
         self = builder.scene(size: layout.size, font: layout.font)

@@ -6,7 +6,7 @@
  *              and stated overlap, its style, its roomiest point, and its lines of text measured and wrapped.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -31,12 +31,15 @@ struct VennRegionDraft {
     }
 }
 
-/// A line of a region: its text's identifier for one of the region's texts, else nil for the label, and its block.
+/// A line of a region: its text's identifier for one of the region's texts, else nil for the label, its block, and
+/// whether it is measured in bold or italic (a label whose region's style asks for it).
 struct VennRegionLineDraft {
     let textIdentifier: String?
     let raw: String
     let kind: Kind
     var block: DiagramTextBlock
+    var isBold = false
+    var isItalic = false
 
     enum Kind {
         case setLabel
@@ -65,11 +68,11 @@ struct VennRegionDrafts {
         var indexByKey: [[String]: Int] = [:]
         for key in keys {
             guard let subset = stated[key],
-                  let draft = try Self.draft(of: subset, placement: placement, neighbors: neighbors, measurers: measurers, work: &work, limits: limits)
+                  let draft = try Self.draft(of: subset, appearance: appearance(of: key), placement: placement, neighbors: neighbors,
+                                             measurers: measurers, work: &work, limits: limits)
             else { continue }
             indexByKey[key] = drafts.count
-            drafts.append(VennRegionDraft(key: key, sets: draft.sets, inside: draft.inside, spot: draft.spot, lines: draft.lines,
-                                          appearance: appearance(of: key), isAcross: draft.isAcross))
+            drafts.append(draft)
         }
         for text in diagram.texts {
             guard let index = indexByKey[text.sets],
@@ -79,9 +82,11 @@ struct VennRegionDrafts {
     }
 
     /// A stated set's or overlap's region: its sets once each, its circles, its roomiest point clear of the other circles
-    /// that cut into its smallest (else across them, when they leave less than a fifth of its radius), and its label.
-    /// The circles weighed are added to `work`, which the layout limit bounds.
-    private static func draft<Measurer: DiagramTextMeasuring>(of subset: VennSubset, placement: VennCirclePlacement, neighbors: [[Int]],
+    /// that cut into its smallest (else across them, when they leave less than a fifth of its radius), and its label,
+    /// measured in the bold and italic its style writes. The circles weighed are added to `work`, which the layout limit
+    /// bounds.
+    private static func draft<Measurer: DiagramTextMeasuring>(of subset: VennSubset, appearance: VennAppearance, placement: VennCirclePlacement,
+                                                              neighbors: [[Int]],
                                                               measurers: VennMeasurers<Measurer>, work: inout Int,
                                                               limits: MermaidDiagramLimits) throws(VennLayoutError) -> VennRegionDraft? {
         let circles = placement.circles
@@ -99,10 +104,11 @@ struct VennRegionDrafts {
         if isAcross { spot = VennRegionSpot.find(in: circles, inside: inside, outside: []) }
         var lines: [VennRegionLineDraft] = []
         if let text = subset.label ?? (subset.sets.count == 1 ? subset.sets[0] : nil),
-           let line = line(text, identifier: nil, kind: sets.count == 1 ? .setLabel : .overlapLabel, measurers: measurers) {
+           let line = line(text, identifier: nil, kind: sets.count == 1 ? .setLabel : .overlapLabel, isBold: appearance.isBold,
+                           isItalic: appearance.isItalic, measurers: measurers) {
             lines.append(line)
         }
-        return VennRegionDraft(key: subset.sets, sets: sets, inside: inside, spot: spot, lines: lines, appearance: VennAppearance(), isAcross: isAcross)
+        return VennRegionDraft(key: subset.sets, sets: sets, inside: inside, spot: spot, lines: lines, appearance: appearance, isAcross: isAcross)
     }
 
     /// The look of a target's merged styles.
@@ -144,10 +150,11 @@ struct VennRegionDrafts {
         return neighbors
     }
 
-    private static func line<Measurer: DiagramTextMeasuring>(_ raw: String, identifier: String?, kind: VennRegionLineDraft.Kind,
-                                                             measurers: VennMeasurers<Measurer>) -> VennRegionLineDraft? {
-        guard let block = PlaneMapLabel.block(raw, measurer: measurers.measurer(for: kind)) else { return nil }
-        return VennRegionLineDraft(textIdentifier: identifier, raw: raw, kind: kind, block: block)
+    private static func line<Measurer: DiagramTextMeasuring>(_ raw: String, identifier: String?, kind: VennRegionLineDraft.Kind, isBold: Bool = false,
+                                                             isItalic: Bool = false, measurers: VennMeasurers<Measurer>) -> VennRegionLineDraft? {
+        let measurer = measurers.measurer(for: kind, isBold: isBold, isItalic: isItalic)
+        guard let block = PlaneMapLabel.block(raw, measurer: measurer) else { return nil }
+        return VennRegionLineDraft(textIdentifier: identifier, raw: raw, kind: kind, block: block, isBold: isBold, isItalic: isItalic)
     }
 
     /// How much the circles grow, at `scale`, for every region with room to hold its text: at most 1.6.
@@ -167,7 +174,8 @@ struct VennRegionDrafts {
             let room = max(drafts[regionIndex].spot.margin * scale * VennLayoutEngine.wrappingShare, VennLayoutEngine.narrowestWrap)
             for lineIndex in drafts[regionIndex].lines.indices where Double(drafts[regionIndex].lines[lineIndex].block.size.width) > room {
                 let line = drafts[regionIndex].lines[lineIndex]
-                if let block = PlaneMapLabel.block(line.raw, measurer: measurers.measurer(for: line.kind), maximumWidth: CGFloat(room)) {
+                let measurer = measurers.measurer(for: line.kind, isBold: line.isBold, isItalic: line.isItalic)
+                if let block = PlaneMapLabel.block(line.raw, measurer: measurer, maximumWidth: CGFloat(room)) {
                     drafts[regionIndex].lines[lineIndex].block = block
                 }
             }
@@ -176,11 +184,12 @@ struct VennRegionDrafts {
 }
 
 extension VennMeasurers {
-    func measurer(for kind: VennRegionLineDraft.Kind) -> Measurer {
-        switch kind {
+    func measurer(for kind: VennRegionLineDraft.Kind, isBold: Bool, isItalic: Bool) -> Measurer {
+        let base = switch kind {
         case .setLabel: setText
         case .overlapLabel: overlapText
         case .regionText: regionText
         }
+        return isBold || isItalic ? restyled(base, isBold, isItalic) : base
     }
 }

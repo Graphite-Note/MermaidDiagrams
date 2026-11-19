@@ -6,7 +6,7 @@
  *              in each region with its color, and the title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -62,6 +62,10 @@ public struct VennLayoutRegionLine: Equatable, Sendable {
     public let color: DiagramColor?
     /// The `opacity` its style writes, or nil.
     public let opacity: Double?
+    /// Drawn in bold or italic as its style writes: a label measured so too, a text measured upright and regular as Pele
+    /// measures it.
+    public let isBold: Bool
+    public let isItalic: Bool
 }
 
 /// Why a Venn diagram is not laid out.
