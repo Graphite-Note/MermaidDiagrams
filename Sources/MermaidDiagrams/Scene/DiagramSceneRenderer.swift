@@ -6,7 +6,7 @@
  *              painter of every diagram type.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -79,14 +79,14 @@ public enum DiagramSceneRenderer {
     private static func draw(_ placed: DiagramSceneText, colors: inout DiagramPaintColors, text: inout DiagramTextDrawing, in context: CGContext) {
         let color = colors.color(of: placed.paint)
         guard let rotation = placed.rotation else {
-            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, in: context)
+            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, isMonospaced: placed.isMonospaced, in: context)
         }
         context.saveGState()
         context.translateBy(x: placed.block.center.x, y: placed.block.center.y)
         context.rotate(by: rotation)
         var centered = placed.block
         centered.center = .zero
-        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, in: context)
+        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, isMonospaced: placed.isMonospaced, in: context)
         context.restoreGState()
     }
 }

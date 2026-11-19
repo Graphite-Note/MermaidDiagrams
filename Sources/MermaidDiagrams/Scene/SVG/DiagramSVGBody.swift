@@ -6,7 +6,7 @@
  *              text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -23,6 +23,15 @@ struct DiagramSVGBody {
     init(colors: DiagramSVGColors, identifierPrefix: String) {
         self.colors = colors
         self.identifierPrefix = identifierPrefix
+    }
+
+    /// The system's monospaced fonts, behind Pele's `--pele-font-mono` when the colors are Pele's variables.
+    private var monospacedFontFamily: String {
+        let family = "ui-monospace,SFMono-Regular,Menlo,monospace"
+        switch colors {
+        case .palette: return family
+        case .peleVariables: return "var(--pele-font-mono,\(family))"
+        }
     }
 
     mutating func add(_ item: DiagramSceneItem) {
@@ -95,6 +104,7 @@ struct DiagramSVGBody {
         attributes += DiagramSVGWriter.opacity(paint.opacity, "fill-opacity")
         if text.isBold { attributes += " font-weight=\"bold\"" }
         if text.isItalic { attributes += " font-style=\"italic\"" }
+        if text.isMonospaced { attributes += " font-family=\"\(monospacedFontFamily)\"" }
         if let rotation = text.rotation {
             let center = text.block.center
             attributes += " transform=\"rotate(\(number(rotation * 180 / .pi)) \(number(center.x)) \(number(center.y)))\""

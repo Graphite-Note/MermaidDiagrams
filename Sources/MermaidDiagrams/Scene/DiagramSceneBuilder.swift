@@ -6,7 +6,7 @@
  *              before it when both are painted alike, opaque and apart, and a fill and the stroke of its path into one.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -47,15 +47,17 @@ struct DiagramSceneBuilder {
         add(path, painting: .gradientFill(gradient), part: part)
     }
 
-    mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, rotation: CGFloat? = nil,
-                       part: DiagramScenePart) {
+    mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
+                       rotation: CGFloat? = nil, part: DiagramScenePart) {
         guard let block, !block.lines.isEmpty else { return }
         finishRun()
-        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, rotation: rotation, part: part)))
+        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced,
+                                                    rotation: rotation, part: part)))
     }
 
-    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, part: DiagramScenePart) {
-        for block in blocks { text(block, paint, isBold: isBold, part: part) }
+    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
+                        part: DiagramScenePart) {
+        for block in blocks { text(block, paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced, part: part) }
     }
 
     /// The diagram's title, bold in the foreground color.

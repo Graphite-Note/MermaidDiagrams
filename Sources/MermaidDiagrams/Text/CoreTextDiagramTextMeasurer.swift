@@ -1,3 +1,15 @@
+/**
+ * File: CoreTextDiagramTextMeasurer.swift
+ * ---------------------------------------
+ * Layer: Core
+ * Description: Measures a line of text with Core Text in a diagram's font, regular, bold, italic or monospaced, as it is
+ *              drawn.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import CoreText
 import Foundation
@@ -21,10 +33,14 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         self.init(font: diagramFont, isBold: false)
     }
 
-    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn.
-    init(font diagramFont: DiagramFont, isBold: Bool) {
-        let regular = diagramFont.makeCoreTextFont()
-        font = isBold ? CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, .traitBold, .traitBold) ?? regular : regular
+    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, in its italic when `isItalic`,
+    /// and in the system's monospaced font at its size when `isMonospaced` (a railroad diagram's terminals).
+    init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false, isMonospaced: Bool = false) {
+        let regular = isMonospaced ? diagramFont.makeMonospacedCoreTextFont() : diagramFont.makeCoreTextFont()
+        var traits: CTFontSymbolicTraits = []
+        if isBold { traits.insert(.traitBold) }
+        if isItalic { traits.insert(.traitItalic) }
+        font = traits.isEmpty ? regular : CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, traits, traits) ?? regular
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
         let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }
