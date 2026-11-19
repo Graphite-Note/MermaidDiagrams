@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramParser.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Reads a class diagram's statements after its keyword.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Reads a class diagram's statements after its `classDiagram` or `classDiagram-v2` keyword: classes with their
 /// labels, annotations and members (`class Name["Label"] <<interface>> { … }`, `Name : +member`), relations
 /// (`A "1" *-- "*" B : label`), annotations (`<<interface>> Name`), notes, namespaces, the direction and the
@@ -12,7 +23,11 @@ struct ClassDiagramParser {
         var parser = ClassDiagramParser(cursor: cursor, builder: ClassDiagramBuilder(limits: limits))
         try parser.expectStatementEnd()
         try parser.readStatements()
-        return parser.builder.finished()
+        var diagram = parser.builder.finished()
+        if case .boolean(false) = MermaidConfigurationOptions(section: "class", in: cursor.bytes).values["hierarchicalNamespaces"] {
+            diagram.hierarchicalNamespaces = false
+        }
+        return diagram
     }
 
     private mutating func readStatements() throws(MermaidDiagramReadError) {

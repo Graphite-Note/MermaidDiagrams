@@ -6,8 +6,8 @@
  *              that is not drawn says why.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 04/11/2026
+ * Version: 0.3
+ * Date: 19/11/2026
  */
 import XCTest
 @testable import MermaidDiagrams
@@ -18,7 +18,7 @@ import XCTest
 final class ClassDiagramCorpusTests: XCTestCase {
     private let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
 
-    func testEveryDocumentationExampleIsReadAndDrawnOrRefusedForItsNamespaces() throws {
+    func testEveryDocumentationExampleIsReadAndDrawn() throws {
         let examples = try ClassDiagramCorpus.documentationExamples()
         XCTAssertEqual(examples.count, 38)
         var drawnCount = 0
@@ -35,9 +35,9 @@ final class ClassDiagramCorpusTests: XCTestCase {
                 refusals.append(error)
             }
         }
-        // The five examples with namespaces are not laid out yet; the count only rises.
-        XCTAssertEqual(drawnCount, 33)
-        XCTAssertEqual(refusals, Array(repeating: .namespacesNotLaidOut, count: 5))
+        // Every example is drawn, the five with namespaces in their boxes.
+        XCTAssertEqual(drawnCount, 38)
+        XCTAssertEqual(refusals, [])
     }
 
     func testPelesFourClassDiagramAndTheGeneratedHierarchiesAreDrawnWithoutOverlap() throws {

@@ -5,8 +5,8 @@
  * Description: ClassDiagramRenderer's Core Graphics painting as it was before the scene, the reference
  *              DiagramSceneParityTests compares the scene's pixels with.
  *
- * Authors: Félix Chevalier
- * Version: 0.1
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -25,11 +25,13 @@ enum ReferenceClassDiagramRenderer {
         context.saveGState()
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        ReferenceFlowchartRenderer.drawClusters(parts.namespaces, text: &text, in: context, palette: palette.scenePalette)
         stroke(parts.solidLines, color: colors.line, in: context)
         stroke(parts.dashedLines, color: colors.line, dash: ClassDiagramDrawingParts.dashedDashLengths, in: context)
         stroke(parts.dottedLines, color: colors.line, dash: ClassDiagramDrawingParts.dottedDashLengths, in: context)
         fill(parts.filledMarks, color: colors.line, in: context)
         stroke(parts.strokedMarks, color: colors.line, in: context)
+        ReferenceFlowchartRenderer.drawCrossedClusterTitles(parts.namespaces, text: &text, in: context, palette: palette.scenePalette)
         fill(parts.edgeTextPatches, color: colors.background, in: context)
         for block in parts.edgeTexts { text.draw(block, color: colors.foreground, in: context) }
         for block in parts.cardinalities { text.draw(block, color: palette.muted, in: context) }

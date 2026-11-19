@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramPageAssembly.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Puts a placed class diagram on the page: nodes at their centers, relations from one box's side to the other's
@@ -21,6 +32,10 @@ struct ClassDiagramPageAssembly {
     private(set) var nodeCenters: [CGPoint] = []
     /// By the index of the measurement's edge; nil until the edge is placed.
     private var edges: [ClassDiagramLayoutEdge?]
+    /// The namespaces' boxes, for a diagram laid out in them.
+    private var namespaces: [FlowchartLayoutCluster] = []
+    /// For each relation placed through boxes, the points it passes: where it crosses a namespace's top.
+    private var edgePoints: [[CGPoint]] = []
 
     init(measured: ClassDiagramMeasurement, markRowHeight: CGFloat, axes: FlowchartFlowAxes) {
         self.measured = measured
@@ -73,17 +88,26 @@ struct ClassDiagramPageAssembly {
         ]
     }
 
+    /// The edge through `ports`; `segmentsRunVertically` gives each segment's flow for a route through boxes, else every
+    /// segment follows the diagram's.
     private func edgeAlong(_ ports: [CGPoint], edgeIndex: Int, ends: (source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End),
-                           textCenter: CGPoint) -> ClassDiagramLayoutEdge {
+                           textCenter: CGPoint, segmentsRunVertically: [Bool]? = nil) -> ClassDiagramLayoutEdge {
         let edge = measured.edges[edgeIndex]
         var points = ports
-        if let straight = straightEnd(from: points[0], toward: points[1], end: ends.source) { points.insert(straight, at: 1) }
+        var segmentAxes = segmentsRunVertically
+        if let straight = straightEnd(from: points[0], toward: points[1], end: ends.source) {
+            points.insert(straight, at: 1)
+            if let first = segmentAxes?.first { segmentAxes?.insert(first, at: 0) }
+        }
         if let straight = straightEnd(from: points[points.count - 1], toward: points[points.count - 2], end: ends.target) {
             points.insert(straight, at: points.count - 1)
+            if let last = segmentAxes?.last { segmentAxes?.append(last) }
         }
-        let drawn = DiagramRouteDrawing.path(through: points, flowIsVertical: axes.flowIsVertical,
-                                             startTrim: ClassDiagramMarkGeometry.lineTrim(for: edge.sourceEnd),
-                                             endTrim: ClassDiagramMarkGeometry.lineTrim(for: edge.targetEnd))
+        let startTrim = ClassDiagramMarkGeometry.lineTrim(for: edge.sourceEnd)
+        let endTrim = ClassDiagramMarkGeometry.lineTrim(for: edge.targetEnd)
+        let drawn = segmentAxes.map { segmentAxes in
+            DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: startTrim, endTrim: endTrim)
+        } ?? DiagramRouteDrawing.path(through: points, flowIsVertical: axes.flowIsVertical, startTrim: startTrim, endTrim: endTrim)
         let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
         return ClassDiagramLayoutEdge(line: edge.line, path: drawn.path,
                                       sourceMark: mark(edge.sourceEnd, tip: points[0], direction: leaving),
@@ -107,6 +131,56 @@ struct ClassDiagramPageAssembly {
         case .bottom: return CGPoint(x: port.x, y: port.y + length)
         case .left: return CGPoint(x: port.x - length, y: port.y)
         case .right: return CGPoint(x: port.x + length, y: port.y)
+        }
+    }
+
+    /// The nodes of a diagram laid out in namespaces' boxes, at their centers on the page.
+    mutating func placeNodes(pageCenters: [CGPoint]) {
+        nodeCenters = pageCenters
+    }
+
+    /// The relations of a diagram laid out in namespaces' boxes, along their routes on the page: each end on the side its
+    /// route leaves or arrives by, spread along it with the others there; each segment an S along its own flow.
+    mutating func placeEdges(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
+        let ends = clustered.layoutEdgeIndices.enumerated().flatMap { layoutIndex, edgeIndex in
+            pageRouteEnds(of: edgeIndex, route: placement.edgeRoutes[layoutIndex])
+        }
+        let ports = ClassDiagramEdgePorts(ends: ends, edgeCount: measured.edges.count, nodeCenters: nodeCenters, sizes: measured.sizes,
+                                          markRowHeight: markRowHeight)
+        for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
+            let route = placement.edgeRoutes[layoutIndex]
+            guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
+            let points = [sourcePort] + route.points.dropFirst().dropLast() + [targetPort]
+            edgePoints.append(points)
+            let textCenter = placement.edgeLabelCenters[layoutIndex] ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
+            edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
+                                         segmentsRunVertically: route.segmentsRunVertically)
+        }
+    }
+
+    /// The two ends of a route on the page, each on the side its first or last segment leaves or arrives by.
+    private func pageRouteEnds(of edgeIndex: Int, route: LayeredClusterRoute) -> [ClassDiagramEdgePorts.End] {
+        let edge = measured.edges[edgeIndex]
+        func end(isSourceEnd: Bool) -> ClassDiagramEdgePorts.End {
+            let points = route.points
+            let point = isSourceEnd ? points[0] : points[points.count - 1]
+            let next = isSourceEnd ? points[1] : points[points.count - 2]
+            let runsVertically = isSourceEnd ? route.segmentsRunVertically[0] : route.segmentsRunVertically[route.segmentsRunVertically.count - 1]
+            let side: DiagramSide = runsVertically ? (next.y > point.y ? .bottom : .top) : (next.x > point.x ? .right : .left)
+            let bend = runsVertically ? next.x - point.x : next.y - point.y
+            let cardinality = isSourceEnd ? edge.sourceCardinality : edge.targetCardinality
+            return ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: isSourceEnd, node: isSourceEnd ? edge.source : edge.target, side: side,
+                                             neighborAlongSide: runsVertically ? next.x : next.y, cardinalityWidth: cardinality?.size.width ?? 0,
+                                             isTextAfter: axes.flowIsVertical ? bend >= 0 : bend > 0)
+        }
+        return [end(isSourceEnd: true), end(isSourceEnd: false)]
+    }
+
+    /// The namespaces' boxes, each title along its box's top, clear of the relations where it can be.
+    mutating func placeNamespaces(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
+        namespaces = placement.clusterFrames.enumerated().map { index, frame in
+            let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: edgePoints) }
+            return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[index], isTitleCrossed: title?.isCrossed ?? false)
         }
     }
 
@@ -173,7 +247,8 @@ struct ClassDiagramPageAssembly {
             guard let placed = edges[edgeIndex] else { continue }
             if edge.relationIndex == nil { noteLinks.append(placed) } else { relations.append(placed) }
         }
-        let bounds = ClassDiagramLayoutBounds.union(frames: classes.map(\.frame) + notes.map(\.frame) + interfaces.map(\.frame), edges: relations + noteLinks)
+        let bounds = ClassDiagramLayoutBounds.union(frames: classes.map(\.frame) + notes.map(\.frame) + interfaces.map(\.frame) + namespaces.map(\.frame),
+                                                    edges: relations + noteLinks)
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
         let titleHeight = title == nil ? 0 : titleSize.height + titleGap
@@ -185,7 +260,8 @@ struct ClassDiagramPageAssembly {
                                   notes: notes.map { note in note.translated(by: offset) },
                                   interfaces: interfaces.map { text in text.translated(by: offset) },
                                   relations: relations.map { edge in edge.translated(by: offset) },
-                                  noteLinks: noteLinks.map { edge in edge.translated(by: offset) }, title: placedTitle)
+                                  noteLinks: noteLinks.map { edge in edge.translated(by: offset) }, title: placedTitle,
+                                  namespaces: namespaces.map { namespace in namespace.translated(by: offset) })
     }
 
     /// The classes' boxes, the notes and the interfaces' names at their nodes' centers.

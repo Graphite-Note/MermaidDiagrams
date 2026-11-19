@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramDrawingParts.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: A laid-out class diagram's geometry grouped by how it is painted.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out class diagram's geometry grouped by how it is painted, so that drawing it in any colors is a handful of
@@ -39,6 +50,8 @@ public struct ClassDiagramDrawingParts {
     public let noteTexts: [DiagramTextBlock]
     /// The title, drawn bold, or nil.
     public let title: DiagramTextBlock?
+    /// The namespaces' boxes, painted as a flowchart's groups are; empty parts for a diagram without namespaces.
+    public let namespaces: FlowchartClusterDrawingParts
 
     public static let lineWidth: CGFloat = 1
     public static let dashedDashLengths: [CGFloat] = [6, 4]
@@ -52,6 +65,7 @@ public struct ClassDiagramDrawingParts {
     static let underlineDropRatio: CGFloat = 0.12
 
     public init(layout: ClassDiagramLayout) {
+        namespaces = FlowchartClusterDrawingParts(clusters: layout.namespaces)
         let lines = LinePaths(edges: layout.relations + layout.noteLinks)
         solidLines = lines.solid
         dashedLines = lines.dashed
