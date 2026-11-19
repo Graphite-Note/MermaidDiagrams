@@ -161,4 +161,24 @@ final class ClassDiagramNamespaceTests: XCTestCase {
         }
         XCTAssertNoThrow(try MermaidDiagramReader.read("classDiagram\nnamespace a.b.c.d.e {\nclass A\nclass B\nclass C\nclass D\nclass E\n}", limits: limits))
     }
+
+    /// Three relations leave one class's bottom, spread along it; each crosses its namespace's border close by and runs
+    /// straight down to it before it curves, as Pele moves the crossing into line with the spread end.
+    func testRelationsSpreadAlongAClassRunStraightToTheirNamespacesBorder() throws {
+        let laidOut = try layout("classDiagram\nnamespace N {\nclass A\n}\nA --> B\nA --> C\nA --> D")
+        let box = try XCTUnwrap(laidOut.namespaces.first).frame
+        for relation in laidOut.relations {
+            let start = relation.path.start
+            var points = [start]
+            for segment in relation.path.segments {
+                switch segment {
+                case .line(let end): points.append(end)
+                case .curve(let end, _, _): points.append(end)
+                }
+            }
+            let insideBox = points.filter { point in point.y <= box.maxY + accuracy }
+            XCTAssertTrue(insideBox.contains { point in abs(point.y - box.maxY) < accuracy }, "\(points)")
+            for point in insideBox { XCTAssertEqual(point.x, start.x, accuracy: accuracy, "\(points)") }
+        }
+    }
 }

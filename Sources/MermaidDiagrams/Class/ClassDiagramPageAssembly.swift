@@ -5,7 +5,7 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -140,17 +140,20 @@ struct ClassDiagramPageAssembly {
     }
 
     /// The relations of a diagram laid out in namespaces' boxes, along their routes on the page: each end on the side its
-    /// route leaves or arrives by, spread along it with the others there; each segment an S along its own flow.
+    /// route leaves or arrives by, spread along it with the others there, running straight to its namespace's border
+    /// where that is close (`ClassDiagramBorderRuns`); each segment an S along its own flow.
     mutating func placeEdges(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
         let ends = clustered.layoutEdgeIndices.enumerated().flatMap { layoutIndex, edgeIndex in
             pageRouteEnds(of: edgeIndex, route: placement.edgeRoutes[layoutIndex])
         }
         let ports = ClassDiagramEdgePorts(ends: ends, edgeCount: measured.edges.count, nodeCenters: nodeCenters, sizes: measured.sizes,
                                           markRowHeight: markRowHeight)
+        let borderRuns = ClassDiagramBorderRuns(graph: clustered.graph, clusterFrames: placement.clusterFrames, ends: ends)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
             guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
-            let points = [sourcePort] + route.points.dropFirst().dropLast() + [targetPort]
+            let points = borderRuns.straightened([sourcePort] + route.points.dropFirst().dropLast() + [targetPort],
+                                                 source: ends[2 * layoutIndex], target: ends[2 * layoutIndex + 1])
             edgePoints.append(points)
             let textCenter = placement.edgeLabelCenters[layoutIndex] ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
