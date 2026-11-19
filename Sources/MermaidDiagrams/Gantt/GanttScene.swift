@@ -35,7 +35,9 @@ extension GanttDrawingParts {
         builder.fill(excludedDays, .alternateSurface, part: .axis)
         builder.stroke(gridLines, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.gridDashLengths, lineJoin: .round), part: .axis)
         builder.stroke(axisLines, .border, line, part: .axis)
-        builder.stroke(todayLine, .accent, DiagramStroke(lineWidth: Self.todayLineWidth, lineJoin: .round), part: .marker)
+        builder.stroke(verticalMarkerLines, .line, DiagramStroke(lineWidth: Self.verticalMarkerLineWidth, dashLengths: Self.verticalMarkerDashLengths),
+                       part: .marker)
+        builder.stroke(todayLine, todayLinePaint, todayLineStroke, part: .marker)
         builder.fill(todayMark, .accent, part: .marker)
         for taskFill in Self.taskFillOrder { if let path = taskFills[taskFill] { builder.fill(path, Self.paint(of: taskFill), part: .node) } }
         for taskStroke in Self.taskStrokeOrder {
@@ -44,7 +46,20 @@ extension GanttDrawingParts {
         for labelColor in Self.labelColorOrder { builder.texts(taskTexts[labelColor] ?? [], Self.paint(of: labelColor), part: .label) }
         builder.texts(sectionNames, .foreground, part: .clusterLabel)
         builder.texts(axisDates, .muted, part: .axisLabel)
+        builder.texts(verticalMarkerTexts, .foreground, part: .label)
         builder.title(title)
+    }
+
+    /// Today's line in the accent color, or the color and opacity `todayMarker` writes.
+    var todayLinePaint: DiagramPaint {
+        let paint = todayLineStyle?.color.map(DiagramPaint.color) ?? .accent
+        return todayLineStyle?.opacity.map { opacity in paint.atOpacity(opacity) } ?? paint
+    }
+
+    /// Two points wide with round joins, or as `todayMarker` writes it.
+    var todayLineStroke: DiagramStroke {
+        DiagramStroke(lineWidth: todayLineStyle?.lineWidth ?? Self.todayLineWidth, dashLengths: todayLineStyle?.dashLengths ?? [],
+                      lineCap: todayLineStyle?.lineCap ?? .butt, lineJoin: todayLineStyle?.lineJoin ?? .round)
     }
 
     static func paint(of taskFill: GanttTaskFill) -> DiagramPaint {

@@ -1,8 +1,21 @@
+/**
+ * File: GanttFallbackDate.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: The dates JavaScript's Date reads that Mermaid falls back to when a start date does not fit
+ *              dateFormat.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// The dates JavaScript's `Date` reads that Mermaid falls back to when a start date does not fit `dateFormat`, among
 /// the forms read here: an ISO date (`2014-01-06`, `2014-01`, `2014`), which JavaScript takes at midnight UTC; an ISO
 /// date and time (`2014-01-06T10:00`, seconds and milliseconds optional), on the wall clock unless `Z` or an offset
 /// follows; and a year, a month and a day of one or two digits apart by `-` or `/` (`2014-1-6`, `202-12-01`), on the
-/// wall clock, a time after a space optional. JavaScript reads other forms (`March 7, 2014`) that are not read here.
+/// wall clock, a time after a space optional; then what V8's legacy parser reads (`JavaScriptDateReading`: month names, a
+/// day, a year of two or four digits, times with AM or PM, zones).
 enum GanttFallbackDate {
     /// Mermaid refuses a fallback date whose year is further than this from year 0.
     static let largestYear: Int64 = 10_000
@@ -11,6 +24,21 @@ enum GanttFallbackDate {
     private static let letterT = UInt8(ascii: "T")
 
     static func parse(_ text: String, zone: GanttTimeZone) -> GanttTime? {
+        isoDate(text, zone: zone) ?? legacyDate(text, zone: zone)
+    }
+
+    /// A date V8's legacy parser reads (`March 7, 2014`, `7 Mar 2014 10:30 PM`, `Fri, 07 Mar 2014 10:00:00 GMT`, `3/7/2014`):
+    /// on the wall clock, or at the offset the text names.
+    private static func legacyDate(_ text: String, zone: GanttTimeZone) -> GanttTime? {
+        guard let fields = JavaScriptDateReading.read(text), abs(fields.year) <= largestYear,
+              let time = GanttTime(year: fields.year, month: fields.month, day: fields.day, hour: fields.hour, minute: fields.minute, second: fields.second,
+                                   millisecond: fields.millisecond - (fields.offsetMinutes ?? 0) * GanttTime.millisecondsPerMinute) else { return nil }
+        return fields.offsetMinutes == nil ? GanttTime(year: fields.year, month: fields.month, day: fields.day, hour: fields.hour, minute: fields.minute,
+                                                       second: fields.second, millisecond: fields.millisecond)
+            : zone.wallClockTime(unixMilliseconds: time.milliseconds)
+    }
+
+    private static func isoDate(_ text: String, zone: GanttTimeZone) -> GanttTime? {
         let bytes = Array(text.utf8)
         let timeSeparator = bytes.firstIndex { byte in byte == letterT || byte == MermaidByte.space }
         let dateBytes = Array(bytes[..<(timeSeparator ?? bytes.count)])

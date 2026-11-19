@@ -1,3 +1,15 @@
+/**
+ * File: MindmapDrawingParts.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: A laid-out mindmap's geometry grouped by how it is painted: each branch's links and nodes, the root,
+ *              the text, the title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out mindmap's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -49,7 +61,7 @@ public struct MindmapDrawingParts {
                 : Branch(branchIndex: branchIndex, links: links[branchIndex], nodeOutlines: outlines[branchIndex])
         }
         self.rootOutline = rootOutline
-        nodeTexts = layout.nodes.map(\.text)
+        nodeTexts = layout.nodes.flatMap { node in node.isTextLeftAligned ? node.text.leftAlignedLines() : [node.text] }
         title = layout.title
     }
 }

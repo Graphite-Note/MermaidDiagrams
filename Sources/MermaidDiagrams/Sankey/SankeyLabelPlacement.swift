@@ -1,5 +1,17 @@
+/**
+ * File: SankeyLabelPlacement.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Where each Sankey node's label goes, as Pele places them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// Where each Sankey node's label goes, as Pele places them: beside its bar, after it in the chart's left half and
-/// before it in the right half, its middle at the bar's. A label that would run into another tries the other side,
+/// before it in the right half (outlined labels: after it from the column of the fullest node on, else before it), its
+/// middle at the bar's. A label that would run into another tries the other side,
 /// then a line up or down on either side, where it runs into no other label or bar, stays within the room the labels
 /// first took, and stays nearer its own bar than any other bar of its column; else it stays. Only up to 300 nodes are
 /// placed with that care.
@@ -35,7 +47,10 @@ struct SankeyLabelPlacement {
     /// The labels near each band of the chart's height, by band: a label is in the two bands on either side of its own.
     private var labelsByBand: [Int: [Int]] = [:]
 
-    init(nodes: [SankeyPlacement.Node], widths: [Double], fontSize: Double, chartSize: (width: Double, height: Double), nodeWidth: Double) {
+    /// `centralLayer` is the column from which labels stand after their bars, when the labels are outlined; nil puts them
+    /// after the bars of the chart's left half.
+    init(nodes: [SankeyPlacement.Node], widths: [Double], fontSize: Double, chartSize: (width: Double, height: Double), nodeWidth: Double,
+         centralLayer: Int? = nil) {
         self.nodes = nodes
         self.nodeWidth = nodeWidth
         halfHeight = fontSize * Self.halfHeightRatio
@@ -43,7 +58,7 @@ struct SankeyLabelPlacement {
         maximumX = chartSize.width
         maximumY = chartSize.height
         for (node, width) in zip(nodes, widths) {
-            let isAfter = node.x < chartSize.width / 2
+            let isAfter = centralLayer.map { central in node.layer >= central } ?? (node.x < chartSize.width / 2)
             let left = isAfter ? node.x + nodeWidth + Self.labelGap : node.x - Self.labelGap - width
             let middle = node.y + node.height / 2
             minimumX = min(minimumX, left)

@@ -1,3 +1,14 @@
+/**
+ * File: SankeyPage.swift
+ * ----------------------
+ * Layer: Core
+ * Description: The page around a Sankey chart and its labels, as Pele sizes it.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -29,9 +40,9 @@ struct SankeyPage {
     }
 
     /// A node's bar, at least a point tall.
-    func node(_ node: SankeyPlacement.Node, seriesIndex: Int) -> SankeyLayoutNode {
+    func node(_ node: SankeyPlacement.Node, seriesIndex: Int, color: DiagramColor?) -> SankeyLayoutNode {
         SankeyLayoutNode(seriesIndex: seriesIndex, frame: CGRect(x: CGFloat(node.x) + offset.dx, y: CGFloat(node.y) + offset.dy,
-                                                                 width: CGFloat(nodeWidth), height: max(CGFloat(node.height), 1)))
+                                                                 width: CGFloat(nodeWidth), height: max(CGFloat(node.height), 1)), color: color)
     }
 
     /// A band from its source bar's right side to its target bar's left side, at least a point thick.

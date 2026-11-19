@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphLayoutEngine.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays a Git graph out in Pele's style: lanes, commits, ids, tags, branch names and the title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a Git graph out in Pele's style: one lane per branch, 44 points apart or as far as their ids, tags and names
@@ -17,7 +28,6 @@ public enum GitGraphLayoutEngine {
     /// `smallText` measures ids and tags, `branchText` branch names and `titleText` the title, in bold.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: GitGraphDiagram, smallText: Measurer, branchText: Measurer, titleText: Measurer,
                                                        font: DiagramFont) throws(GitGraphLayoutError) -> GitGraphLayout {
-        guard !diagram.setsGitGraphOptions else { throw .optionsNotApplied }
         let geometry = GitGraphGeometry(direction: diagram.direction)
         let room = GitGraphRoom(diagram: diagram, smallText: smallText, branchText: branchText, isVertical: geometry.isVertical)
         let positions = GitGraphPositions(diagram: diagram, room: room)

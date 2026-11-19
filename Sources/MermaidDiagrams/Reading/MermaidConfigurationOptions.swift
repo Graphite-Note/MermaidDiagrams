@@ -5,8 +5,8 @@
  * Description: The options a diagram's front matter and its `%%{init: …}%%` directives give its type.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 17/11/2026
+ * Version: 0.4
+ * Date: 19/11/2026
  */
 
 import Foundation
@@ -26,27 +26,139 @@ struct MermaidConfigurationOptions {
     }
 
     private(set) var values: [String: Value] = [:]
+    /// The options inside an option that is a mapping, by their path from the section with the names joined by dots
+    /// (`xAxis.showLabel`, `nodeColors.Coal`); the mapping itself is a collection in `values`, or here when it is
+    /// itself nested.
+    private(set) var nestedValues: [String: Value] = [:]
 
     /// The options under `config:` and then `section:` in the front matter at the start of `bytes`, with those the
     /// directives after it set under `section` over them; none without either.
     init(section: String, in bytes: [UInt8]) {
         let frontMatter = Self.frontMatter(of: bytes)
         var keys: [(indent: Int, key: String)] = []
-        for line in frontMatter.lines {
+        let lines = frontMatter.lines
+        let frontMatterBytes = Array(frontMatter.lines.joined(separator: "\n").utf8)
+        let lineStarts = Self.lineStarts(of: lines)
+        var flowBudget = Self.flowReadingBudget(bytes: frontMatterBytes.count)
+        var topLevelDisplayMode: DirectiveValue?
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            index += 1
             let indent = line.prefix { character in character == " " }.count
             let content = line.trimmingCharacters(in: .whitespaces)
-            guard !content.isEmpty, !content.hasPrefix("#"), let (key, written) = Self.keyAndValue(content) else { continue }
+            guard !content.isEmpty, !content.hasPrefix("#"), let (key, written, valueOffset) = Self.keyAndValue(content) else { continue }
             while let last = keys.last, last.indent >= indent { keys.removeLast() }
-            let isOption = keys.map(\.key) == ["config", section]
+            let path = keys.map(\.key) + [key]
+            let isOption = path.count >= 2 && path[0] == "config" && path[1] == section
             if written.isEmpty {
-                if isOption { values[key] = .collection }
+                if isOption { record(.collection, named: path.dropFirst(2).joined(separator: ".")) }
                 keys.append((indent, key))
+            } else if let flowStart = written.first, flowStart == "{" || flowStart == "[", Self.isRelevant(path, section: section) {
+                // The collection may go on over later lines: it ends where it closes.
+                let valueStart = lineStarts[index - 1] + line.prefix { character in character == " " || character == "\t" }.utf8.count + valueOffset
+                guard let (value, end) = Self.flowValue(in: frontMatterBytes, from: valueStart, budget: &flowBudget) else {
+                    if isOption { record(.collection, named: path.dropFirst(2).joined(separator: ".")) }
+                    continue
+                }
+                record(value, at: path, section: section)
+                while index < lines.count, lineStarts[index] < end { index += 1 }
             } else if isOption {
-                values[key] = Self.value(written)
+                record(Self.value(written), named: path.dropFirst(2).joined(separator: "."))
+            } else if path == ["displayMode"], section == Self.ganttSection {
+                topLevelDisplayMode = Self.value(written)
             }
         }
-        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: frontMatter.end, to: &values)
+        // The front matter's own `displayMode`, when it is set, is the Gantt chart's over its `config:`, as Pele moves it there.
+        if let topLevelDisplayMode, let mode = Self.javaScriptText(topLevelDisplayMode) { record(.text(mode), named: "displayMode") }
+        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: frontMatter.end, to: &self)
     }
+
+    /// Where each line starts in the lines joined by line breaks, in bytes.
+    private static func lineStarts(of lines: [Substring]) -> [Int] {
+        var starts: [Int] = []
+        var start = 0
+        for line in lines {
+            starts.append(start)
+            start += line.utf8.count + 1
+        }
+        return starts
+    }
+
+    /// The flow value at `start`, read while `budget` lasts: a collection read costs its own length, one that does not read
+    /// as much as the rest of the text, which it may have run through.
+    private static func flowValue(in bytes: [UInt8], from start: Int, budget: inout Int) -> (value: DirectiveValue, end: Int)? {
+        let read = budget > 0 ? MermaidFlowCollectionReader.read(bytes, from: start) : nil
+        budget -= (read?.end ?? bytes.count) - start
+        return budget >= 0 ? read : nil
+    }
+
+    /// How many bytes of flow collections the front matter's lines may have read in all, so that a text of many
+    /// collections that never close costs no more than a few readings of its length. A collection that reads costs its own
+    /// length, so the collections of a front matter that all read never exhaust it.
+    private static func flowReadingBudget(bytes: Int) -> Int {
+        4 * bytes + 1_024
+    }
+
+    /// Whether a value at `path` can hold the section's options: it is on the way to them (`config`, or `config` and
+    /// the section) or inside them.
+    private static func isRelevant(_ path: [String], section: String) -> Bool {
+        let target = ["config", section]
+        return path.count >= target.count ? path.starts(with: target) : target.starts(with: path)
+    }
+
+    /// Records `value`, read from a flow collection written at `path` (the keys from the top of the front matter),
+    /// as the section's options: the part of it under `config:` and the section.
+    private mutating func record(_ value: DirectiveValue, at path: [String], section: String) {
+        let target = ["config", section]
+        guard path.count < target.count else {
+            record(value, named: path.dropFirst(target.count).joined(separator: "."))
+            return
+        }
+        var node = value
+        for key in target.dropFirst(path.count) {
+            guard case .object(let object) = node, let next = object[key] else { return }
+            node = next
+        }
+        record(node, named: "")
+    }
+
+    /// Leaves no option.
+    mutating func removeAll() {
+        values = [:]
+        nestedValues = [:]
+    }
+
+    /// Records `value` under `name` (empty for the section itself): a scalar as it is; a mapping as a collection and,
+    /// each entry by its path, its options; an array as a collection.
+    mutating func record(_ value: DirectiveValue, named name: String, depth: Int = 0) {
+        if case .object(let object) = value {
+            if !name.isEmpty { store(.collection, named: name) }
+            guard depth < MermaidFlowCollectionReader.deepestNesting else { return }
+            for (key, entry) in object where !Self.prototypeKeys.contains(key) {
+                record(entry, named: name.isEmpty ? key : name + "." + key, depth: depth + 1)
+            }
+        } else if let read = value.optionValue {
+            store(read, named: name)
+        } else {
+            removeValue(named: name)
+        }
+    }
+
+    private mutating func record(_ value: Value, named name: String) {
+        store(value, named: name)
+    }
+
+    private mutating func store(_ value: Value, named name: String) {
+        guard !name.isEmpty else { return }
+        if name.contains(".") { nestedValues[name] = value } else { values[name] = value }
+    }
+
+    private mutating func removeValue(named name: String) {
+        if name.contains(".") { nestedValues.removeValue(forKey: name) } else { values.removeValue(forKey: name) }
+    }
+
+    private static let prototypeKeys: Set<String> = ["__proto__", "constructor", "prototype"]
 
     /// The lines between the opening `---` and the closing one, the opening first in the text after blank space, and
     /// where the text after the closing one starts; no lines and 0 without front matter.
@@ -69,8 +181,9 @@ struct MermaidConfigurationOptions {
     private static let byteOrderMark: [UInt8] = [0xEF, 0xBB, 0xBF]
     private static let fence = Array("---".utf8)
 
-    /// `key: value` or `key:`, the key plain or quoted: the key and the value as written, empty when none follows.
-    private static func keyAndValue(_ content: String) -> (String, String)? {
+    /// `key: value` or `key:`, the key plain or quoted: the key, the value as written (empty when none follows) and where
+    /// the value starts, in bytes from the start of `content`.
+    private static func keyAndValue(_ content: String) -> (key: String, value: String, valueOffset: Int)? {
         guard !content.hasPrefix("- ") else { return nil }
         var key: String
         var rest: Substring
@@ -86,7 +199,8 @@ struct MermaidConfigurationOptions {
             key = String(content[..<colon]).trimmingCharacters(in: .whitespaces)
             rest = content[after...]
         }
-        return (key, withoutComment(rest.trimmingCharacters(in: .whitespaces)))
+        let valueStart = rest.firstIndex { character in character != " " && character != "\t" } ?? rest.endIndex
+        return (key, withoutComment(rest.trimmingCharacters(in: .whitespaces)), content.utf8.distance(from: content.startIndex, to: valueStart))
     }
 
     /// A plain value without the comment after it (` #`); a quoted one as it is.
@@ -95,18 +209,46 @@ struct MermaidConfigurationOptions {
         return written[..<comment.lowerBound].trimmingCharacters(in: .whitespaces)
     }
 
-    private static func value(_ written: String) -> Value {
-        if let first = written.first, first == "{" || first == "[" { return .collection }
+    /// A value written after its key on the same line: a collection, a quoted text, or a plain scalar as Pele reads it
+    /// (`MermaidFlowCollectionReader.scalar`), which is null for `null`, `~` and their spellings.
+    private static func value(_ written: String) -> DirectiveValue {
+        if let first = written.first, first == "{" || first == "[" { return .object([:]) }
         if let first = written.first, first == "\"" || first == "'", written.count >= 2, written.last == first {
             return .text(String(written.dropFirst().dropLast()))
         }
-        if written == "true" || written == "false" { return .boolean(written == "true") }
-        if isNumber(written), let number = Double(written) { return .number(number) }
-        return .text(written)
+        return MermaidFlowCollectionReader.scalar(written)
+    }
+
+    /// The section whose options take the front matter's own `displayMode`.
+    private static let ganttSection = "gantt"
+
+    /// `String(value)` as JavaScript writes a value that is truthy, as Pele tests the front matter's `displayMode`; nil for
+    /// a falsy one (`false`, zero, not-a-number, empty text, null).
+    private static func javaScriptText(_ value: DirectiveValue) -> String? {
+        switch value {
+        case .text(let text): text.isEmpty ? nil : text
+        case .boolean(let boolean): boolean ? "true" : nil
+        case .number(let number): number == 0 || number.isNaN ? nil : JavaScriptNumberText.text(number)
+        case .object: "[object Object]"
+        case .array: elementText(value)
+        case .null: nil
+        }
+    }
+
+    /// `String(value)` for a value inside an array: an array's items joined by commas, null as nothing.
+    private static func elementText(_ value: DirectiveValue) -> String {
+        switch value {
+        case .text(let text): text
+        case .boolean(let boolean): boolean ? "true" : "false"
+        case .number(let number): JavaScriptNumberText.text(number)
+        case .object: "[object Object]"
+        case .array(let items): items.map(elementText).joined(separator: ",")
+        case .null: ""
+        }
     }
 
     /// Whether the text is a number of YAML's JSON schema: a sign, digits with a fraction and an exponent.
-    private static func isNumber(_ written: String) -> Bool {
+    static func isNumber(_ written: String) -> Bool {
         var bytes = Substring(written).utf8[...]
         if let sign = bytes.first, sign == UInt8(ascii: "+") || sign == UInt8(ascii: "-") { bytes = bytes.dropFirst() }
         let integerDigits = bytes.prefix { byte in MermaidByte.isDigit(byte) }.count

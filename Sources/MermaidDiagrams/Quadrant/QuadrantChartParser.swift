@@ -1,3 +1,14 @@
+/**
+ * File: QuadrantChartParser.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Reads a quadrant chart's statements from their tokens, as Mermaid's quadrant grammar does.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// Reads a quadrant chart's statements after its `quadrantChart` keyword from their tokens (`QuadrantChartLexer`), as
 /// Mermaid's quadrant grammar does: `title …`, `x-axis low --> high` and `y-axis low --> high` (the high end may be
 /// left out; an arrow with nothing after it is drawn after the low end's text), `quadrant-1` to `quadrant-4` and
@@ -14,7 +25,9 @@ struct QuadrantChartParser {
         var parser = QuadrantChartParser(tokens: try QuadrantChartLexer.tokens(after: cursor), bytes: cursor.bytes,
                                          builder: QuadrantChartBuilder(limits: limits))
         try parser.readStatements()
-        return parser.builder.chart
+        var chart = parser.builder.chart
+        chart.options = QuadrantChartOptions(MermaidConfigurationOptions(section: "quadrantChart", in: cursor.bytes))
+        return chart
     }
 
     private init(tokens: [QuadrantChartToken], bytes: [UInt8], builder: QuadrantChartBuilder) {

@@ -1,3 +1,15 @@
+/**
+ * File: GanttChart.swift
+ * ----------------------
+ * Layer: Core
+ * Description: A Gantt chart as its text describes it: settings, sections, tasks, options and what its tasks are
+ *              marked with.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid Gantt chart (`gantt`) as its text describes it: its settings, its sections and its tasks in the order
 /// they are written. Dates stay as written: what they mean depends on `dateFormat`, the other tasks and the day the
 /// chart is drawn, and is worked out when the chart is scheduled.
@@ -20,7 +32,7 @@ public struct GanttChart: Equatable, Sendable {
     /// `tickInterval`, where the axis' dates fall (`1week`, `2day`); empty when the chart sets none, and the axis then
     /// chooses them.
     public internal(set) var tickInterval: String
-    /// `weekday …`: the day a week of `tickInterval` starts on.
+    /// `weekday …`, else the config's `weekday`: the day a week of `tickInterval` starts on.
     public internal(set) var weekStart: GanttWeekday
     /// `excludes …`: lowercased words, in the order first written: `weekends`, day names and dates.
     public internal(set) var excludedDays: [String]
@@ -32,11 +44,13 @@ public struct GanttChart: Equatable, Sendable {
     /// The `section …` names, in the order written.
     public internal(set) var sections: [String]
     public internal(set) var tasks: [GanttTask]
-    /// Statements read that the chart is not drawn with yet, in the order first written.
+    /// Statements read that the chart is not drawn with: always empty (`GanttStatementNotDrawn`).
     public internal(set) var statementsNotDrawn: [GanttStatementNotDrawn]
-    /// `displayMode: compact` under the front matter's `config:` and `gantt:`: tasks of a section that follow each other
-    /// share a row.
+    /// `displayMode: compact` under the front matter's `config:` and `gantt:`, or as the front matter's own key: the tasks of
+    /// a section that follow each other share a row (`GanttRowAssignment`).
     public internal(set) var isCompact = false
+    /// The options the front matter and the directives set.
+    public internal(set) var options = GanttOptions()
 
     init() {
         title = nil
@@ -76,6 +90,12 @@ public struct GanttTask: Equatable, Sendable {
     public let endText: String
     /// The identifier of the task written before it, whatever its section, or nil for the first task.
     public let previousTaskIdentifier: String?
+    /// Tagged `vert`: a vertical line across the chart at its start, its text under the axis, instead of a row.
+    public internal(set) var isVertical = false
+    /// Named by a `click` statement written after it: Pele only marks it so, and runs no call.
+    public internal(set) var isClickable = false
+    /// The link a `click … href "…"` gives it, as written, or nil.
+    public internal(set) var link: String?
 }
 
 /// The first day of the weekend that `excludes weekends` leaves out, with the day after it.
@@ -101,12 +121,15 @@ public enum GanttTodayMarker: Equatable, Sendable {
     case standard
     /// `todayMarker off`.
     case hidden
-    /// `todayMarker` with CSS declarations for the line; they are read and not applied, and the standard line is drawn.
+    /// `todayMarker` with CSS declarations for the line (`stroke:red,stroke-width:3px`): the line takes the stroke's color,
+    /// width, dashes, caps, joins and opacity they write (`GanttTodayLineStyle`) and the small triangle on top of it is left
+    /// out, as Pele does for any declaration of a line.
     case styled(String)
 }
 
-/// A statement of a Gantt chart that is read and not drawn yet. A chart with one is shown as its text: drawn without
-/// it, it would look complete and be wrong.
+/// A statement of a Gantt chart that is read and not drawn. None is left out now: `click` only marks its task, as Pele
+/// does, and `vert` tasks are drawn as vertical markers. The type stays, with `GanttChart.statementsNotDrawn` always
+/// empty, because code that names it still compiles.
 public enum GanttStatementNotDrawn: Equatable, Sendable {
     /// `click`: a link or a script call on a task.
     case click

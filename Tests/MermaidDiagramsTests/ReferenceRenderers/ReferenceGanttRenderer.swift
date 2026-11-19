@@ -27,7 +27,19 @@ enum ReferenceGanttRenderer {
         stroke(parts.gridLines, width: GanttDrawingParts.lineWidth, color: palette.border, in: context)
         context.setLineDash(phase: 0, lengths: [])
         stroke(parts.axisLines, width: GanttDrawingParts.lineWidth, color: palette.border, in: context)
-        stroke(parts.todayLine, width: GanttDrawingParts.todayLineWidth, color: palette.accent, in: context)
+        context.setLineDash(phase: 0, lengths: GanttDrawingParts.verticalMarkerDashLengths)
+        context.setLineJoin(.miter)
+        stroke(parts.verticalMarkerLines, width: GanttDrawingParts.verticalMarkerLineWidth, color: palette.line, in: context)
+        context.setLineJoin(.round)
+        context.setLineDash(phase: 0, lengths: parts.todayLineStyle?.dashLengths ?? [])
+        context.setLineCap(parts.todayLineStyle?.lineCap ?? .butt)
+        context.setLineJoin(parts.todayLineStyle?.lineJoin ?? .round)
+        let todayColor = parts.todayLineStyle?.color?.cgColor ?? palette.accent
+        stroke(parts.todayLine, width: parts.todayLineStyle?.lineWidth ?? GanttDrawingParts.todayLineWidth,
+               color: parts.todayLineStyle?.opacity.map { opacity in todayColor.copy(alpha: todayColor.alpha * opacity) ?? todayColor } ?? todayColor, in: context)
+        context.setLineDash(phase: 0, lengths: [])
+        context.setLineCap(.butt)
+        context.setLineJoin(.round)
         fill(parts.todayMark, color: palette.accent, in: context)
         for (taskFill, path) in parts.taskFills { fill(path, color: color(of: taskFill, in: palette), in: context) }
         for (taskStroke, path) in parts.taskOutlines {
@@ -38,6 +50,7 @@ enum ReferenceGanttRenderer {
         }
         for name in parts.sectionNames { text.draw(name, color: palette.foreground, in: context) }
         for date in parts.axisDates { text.draw(date, color: palette.muted, in: context) }
+        for label in parts.verticalMarkerTexts { text.draw(label, color: palette.foreground, in: context) }
         if let title = parts.title { text.draw(title, color: palette.foreground, isBold: true, in: context) }
         context.restoreGState()
     }

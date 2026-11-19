@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphDiagram.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: A Git graph as its text describes it once its statements are played: commits, branches and options.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid Git graph (`gitGraph`) as its text describes it, once its statements have been played as Mermaid plays
 /// them: the commits in the order they were made, each on its branch with its parents, and the branches in the order
 /// their lanes are drawn.
@@ -14,22 +25,17 @@ public struct GitGraphDiagram: Equatable, Sendable {
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
-    /// Whether the front matter or a `%%{init: …}%%` directive sets an option of Git graphs that is not applied
-    /// (`GitGraphOptions.setsOptionsNotApplied`): the layout refuses such a graph rather than draw it otherwise than
-    /// Mermaid does.
-    public internal(set) var setsGitGraphOptions: Bool
     /// The options the front matter and the directives set, which are applied.
     public internal(set) var options = GitGraphOptions()
 
     init(direction: GitGraphDirection = .leftToRight, title: String? = nil, commits: [GitGraphCommit] = [], branches: [GitGraphBranch] = [],
-         accessibilityTitle: String? = nil, accessibilityDescription: String? = nil, setsGitGraphOptions: Bool = false) {
+         accessibilityTitle: String? = nil, accessibilityDescription: String? = nil) {
         self.direction = direction
         self.title = title
         self.commits = commits
         self.branches = branches
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
-        self.setsGitGraphOptions = setsGitGraphOptions
     }
 }
 

@@ -1,3 +1,14 @@
+/**
+ * File: GanttChartParser.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: Reads a Gantt chart's statements after its keyword as Mermaid's Gantt grammar does.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Reads a Gantt chart's statements after its `gantt` keyword, as Mermaid's Gantt grammar does: keywords are read
 /// in any case; a setting's value runs to `#`, `;` or the end of the line, and a title or section to the end of the
 /// line; any other text up to a colon is a task, whose data runs from the colon to `#`, `;` or the end of the line.
@@ -17,9 +28,12 @@ struct GanttChartParser {
     /// Reads the Gantt chart whose `gantt` keyword ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> GanttChart {
         var parser = GanttChartParser(cursor: cursor, limits: limits)
-        if case .text(let mode) = MermaidConfigurationOptions(section: "gantt", in: cursor.bytes).values["displayMode"] {
-            parser.chart.isCompact = mode.lowercased() == "compact"
-        }
+        let options = MermaidConfigurationOptions(section: "gantt", in: cursor.bytes)
+        // Pele compares the mode and looks the weekday up as written: `Compact` is not compact, `Monday` starts no week.
+        if case .text(let mode) = options.values["displayMode"] { parser.chart.isCompact = mode == "compact" }
+        parser.chart.options = GanttOptions(options)
+        // A `weekday` statement replaces the config's.
+        if let weekday = parser.chart.options.weekday { parser.chart.weekStart = GanttWeekday(name: weekday) ?? .sunday }
         try parser.readStatements()
         return parser.chart
     }
@@ -59,8 +73,7 @@ struct GanttChartParser {
         } else if let description = try GanttStatementSyntax.readAccessibilityBlock(&cursor, keyword: Self.accessibilityDescription) {
             chart.accessibilityDescription = description
         } else if GanttStatementSyntax.isAtClick(cursor) {
-            cursor.skipToEndOfLine()
-            noteNotDrawn(.click)
+            apply(try GanttClick.read(&cursor))
         } else {
             return false
         }
@@ -88,23 +101,30 @@ struct GanttChartParser {
         }
     }
 
+    /// Marks the tasks a `click` names, as Pele does: each task written before it with one of its identifiers (the last, when
+    /// several share it) becomes clickable and takes the link.
+    private mutating func apply(_ click: GanttClick) {
+        for identifier in click.identifiers {
+            guard let index = chart.tasks.lastIndex(where: { task in task.identifier == identifier }) else { continue }
+            chart.tasks[index].isClickable = true
+            if let link = click.link { chart.tasks[index].link = link }
+        }
+    }
+
     private mutating func addTask(name: String, data: String, line: Int) throws(MermaidDiagramReadError) {
         guard chart.tasks.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         let fields = try GanttTaskFields(name: name, data: data, line: line)
-        if fields.isVerticalMarker { noteNotDrawn(.verticalMarker) }
         let identifier = fields.identifier ?? nextUnnamedIdentifier()
-        chart.tasks.append(GanttTask(name: name, section: currentSection, identifier: identifier, isDone: fields.isDone, isActive: fields.isActive,
-                                     isCritical: fields.isCritical, isMilestone: fields.isMilestone, startText: fields.startText,
-                                     endText: fields.endText, previousTaskIdentifier: chart.tasks.last?.identifier))
+        var task = GanttTask(name: name, section: currentSection, identifier: identifier, isDone: fields.isDone, isActive: fields.isActive,
+                             isCritical: fields.isCritical, isMilestone: fields.isMilestone, startText: fields.startText,
+                             endText: fields.endText, previousTaskIdentifier: chart.tasks.last?.identifier)
+        task.isVertical = fields.isVerticalMarker
+        chart.tasks.append(task)
     }
 
     private mutating func nextUnnamedIdentifier() -> String {
         unnamedTaskCount += 1
         return "task\(unnamedTaskCount)"
-    }
-
-    private mutating func noteNotDrawn(_ statement: GanttStatementNotDrawn) {
-        if !chart.statementsNotDrawn.contains(statement) { chart.statementsNotDrawn.append(statement) }
     }
 
     private static let accessibilityTitle = Array("acctitle".utf8)

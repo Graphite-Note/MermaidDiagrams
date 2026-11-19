@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphLayoutEngineTests.swift
+ * -------------------------------------
+ * Layer: Tests
+ * Description: Git graphs laid out with Pele's measurements, with text of fixed widths.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -233,12 +244,12 @@ final class GitGraphLayoutEngineTests: XCTestCase {
         }
     }
 
-    func testAGraphThatSetsOptionsNotAppliedIsNotLaidOut() throws {
-        let diagram = try GitGraphReading.gitGraph("%%{init: {'gitGraph': {'nodeLabel': 'x'}}}%%\ngitGraph\n commit")
-        XCTAssertThrowsError(try GitGraphLayoutEngine.layout(diagram, smallText: smallText, branchText: branchText, titleText: titleText,
-                                                             font: UniformWidthLayout.font)) { error in
-            XCTAssertEqual(error as? GitGraphLayoutError, .optionsNotApplied)
-        }
+    func testAGraphThatSetsAnOptionPeleDoesNotReadIsLaidOutWithoutIt() throws {
+        let plain = try laidOut("gitGraph\n commit")
+        let diagram = try GitGraphReading.gitGraph("%%{init: {'gitGraph': {'nodeLabel': 'x', 'useMaxWidth': false, 'showBranches': 'maybe'}}}%%\ngitGraph\n commit")
+        XCTAssertEqual(diagram.options, GitGraphOptions(), "Unknown names and a value of the wrong kind leave the defaults, as in Pele")
+        XCTAssertEqual(try GitGraphLayoutEngine.layout(diagram, smallText: smallText, branchText: branchText, titleText: titleText,
+                                                       font: UniformWidthLayout.font), plain)
     }
 }
 

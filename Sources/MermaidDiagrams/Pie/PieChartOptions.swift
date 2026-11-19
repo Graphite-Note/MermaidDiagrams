@@ -5,8 +5,8 @@
  * Description: The options of a pie chart its front matter (`config:`, `pie:`) and its directives set.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
@@ -14,7 +14,8 @@ import CoreGraphics
 /// The options of pie charts a diagram's front matter (`config:`, then `pie:`) and its `%%{init: …}%%` directives set,
 /// a directive's over the front matter's: how far out the percentages stand,
 /// the hole that makes the pie a donut, and where the legend goes. A value out of its range, or of the wrong kind, is
-/// left at its default, as Mermaid's schema leaves it.
+/// left at its default, as Mermaid's schema leaves it. `highlightSlice`, which Mermaid's documentation shows, is read and
+/// draws nothing: Pele's pie renderer does not read it, so nothing in a pie chart is left unapplied.
 public struct PieChartOptions: Equatable, Sendable {
     /// `textPosition`: how far out a percentage inside its slice stands, as a share of the radius from 0 to 1; nil for
     /// the default, three quarters, or the middle of the ring of a donut.

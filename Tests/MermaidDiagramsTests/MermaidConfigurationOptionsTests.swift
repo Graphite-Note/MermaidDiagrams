@@ -1,3 +1,15 @@
+/**
+ * File: MermaidConfigurationOptionsTests.swift
+ * --------------------------------------------
+ * Layer: Tests
+ * Description: A type's options under the front matter's `config:` and those of `%%{init: …}%%` directives over them, as
+ *              Pele reads them.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -33,10 +45,11 @@ final class MermaidConfigurationOptionsTests: XCTestCase {
         XCTAssertTrue(options("---\nconfig:\n  sankey:\n    width: 900\n").isEmpty, "Front matter without its closing line is not read")
     }
 
-    func testOnlyTheJSONSchemasWordsAndNumbersAreBooleansAndNumbers() {
+    func testWordsAndNumbersAreBooleansAndNumbersAsPelesYAMLReaderReadsThem() {
+        // Pele's reader takes js-yaml's spellings: `True` is a Boolean and `0x1F` a number (MermaidConfigurationScalarTests).
         let read = options("---\nconfig:\n  sankey:\n    a: True\n    b: 0x1F\n    c: .5\n    d: \"12\"\n    e: [1, 2]\n---\n")
-        XCTAssertEqual(read["a"], .text("True"))
-        XCTAssertEqual(read["b"], .text("0x1F"))
+        XCTAssertEqual(read["a"], .boolean(true))
+        XCTAssertEqual(read["b"], .number(31))
         XCTAssertEqual(read["c"], .number(0.5))
         XCTAssertEqual(read["d"], .text("12"))
         XCTAssertEqual(read["e"], .collection)

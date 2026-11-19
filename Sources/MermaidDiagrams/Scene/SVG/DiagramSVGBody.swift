@@ -90,16 +90,26 @@ struct DiagramSVGBody {
     private mutating func add(_ text: DiagramSceneText) {
         let paint = colors.text(of: text.paint)
         let number = DiagramSVGSyntax.number
-        var attributes = " class=\"pele-\(text.part.rawValue)\" font-size=\"\(number(text.block.fontSize))\" fill=\"\(paint.color)\""
-            + " xml:space=\"preserve\""
-        attributes += DiagramSVGWriter.opacity(paint.opacity, "fill-opacity")
-        if text.isBold { attributes += " font-weight=\"bold\"" }
-        if text.isItalic { attributes += " font-style=\"italic\"" }
+        let head = " class=\"pele-\(text.part.rawValue)\" font-size=\"\(number(text.block.fontSize))\""
+        var tail = ""
+        if text.isBold { tail += " font-weight=\"bold\"" }
+        if text.isItalic { tail += " font-style=\"italic\"" }
         if let rotation = text.rotation {
             let center = text.block.center
-            attributes += " transform=\"rotate(\(number(rotation * 180 / .pi)) \(number(center.x)) \(number(center.y)))\""
+            tail += " transform=\"rotate(\(number(rotation * 180 / .pi)) \(number(center.x)) \(number(center.y)))\""
         }
         let lines = text.lines
+        if let outline = text.outline {
+            // The outline is a text of its own under the text, as Pele writes it: no fill, the stroke in the outline's paint.
+            let stroke = Self.strokeAttributes(colors.text(of: outline.paint), DiagramStroke(lineWidth: outline.lineWidth, lineJoin: .round))
+            addLines(lines, attributes: head + " fill=\"none\" xml:space=\"preserve\"" + stroke + tail)
+        }
+        addLines(lines, attributes: head + " fill=\"\(paint.color)\" xml:space=\"preserve\"" + DiagramSVGWriter.opacity(paint.opacity, "fill-opacity") + tail)
+    }
+
+    /// The `text` of `lines` with `attributes`: one `text` for one line, `tspan`s for several.
+    private mutating func addLines(_ lines: [DiagramSceneTextLine], attributes: String) {
+        let number = DiagramSVGSyntax.number
         if lines.count == 1, let line = lines.first {
             content += "<text\(attributes) x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\" text-anchor=\"middle\">"
                 + DiagramSVGSyntax.escaped(line.text) + "</text>"

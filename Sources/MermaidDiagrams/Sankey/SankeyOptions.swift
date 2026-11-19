@@ -1,10 +1,22 @@
+/**
+ * File: SankeyOptions.swift
+ * -------------------------
+ * Layer: Core
+ * Description: A Sankey diagram's options from its front matter and directives, as Pele applies them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// A Sankey diagram's options from its front matter (`config:` then `sankey:`) and its `%%{init: …}%%` directives, a
 /// directive's over the front matter's, as Pele applies them: the chart's
 /// size, the nodes' width and the padding between them, whether values are shown with their prefix and suffix, and
 /// how nodes are put in columns. A number below its least is left at Pele's default, and one above its most is cut
 /// to it. Labels outlined in the page's color (`labelStyle: outlined`), a band color other than the gradient
-/// (`linkColor`) and nodes' own colors (`nodeColors`) are not drawn yet: a diagram that sets them keeps its block as
-/// code.
+/// (`linkColor`: `source`, `target` or a color) and nodes' own colors (`nodeColors`, by node name) are drawn as Pele
+/// draws them; a color written in a form `DiagramColor` does not read (a CSS variable, a color name it does not know) sets
+/// nothing, as in a style Pele refuses.
 public struct SankeyOptions: Equatable, Sendable {
     public internal(set) var chartWidth: Double = 600
     public internal(set) var chartHeight: Double = 400
@@ -16,8 +28,13 @@ public struct SankeyOptions: Equatable, Sendable {
     public internal(set) var valuePrefix = ""
     public internal(set) var valueSuffix = ""
     public internal(set) var alignment = SankeyNodeAlignment.justify
-    /// Whether an option that is not drawn yet is set.
-    public internal(set) var setsOptionsNotDrawn = false
+    /// `labelStyle: outlined`: labels outlined in the page's color, and on the side of their bar that faces away from the
+    /// chart's fullest column.
+    public internal(set) var isOutlined = false
+    /// `linkColor`: how the bands are colored.
+    public internal(set) var linkColor = SankeyLinkColor.gradient
+    /// `nodeColors`: the colors the nodes take instead of their series colors, by the node's name.
+    public internal(set) var nodeColors: [String: DiagramColor] = [:]
 
     /// The most a chart's side, a node's width and the padding may be: Pele's.
     static let largestChartSide = 10_000.0
@@ -35,9 +52,25 @@ public struct SankeyOptions: Equatable, Sendable {
         valuePrefix = Self.text(options.values["prefix"])
         valueSuffix = Self.text(options.values["suffix"])
         if case .text(let written) = options.values["nodeAlignment"], let alignment = SankeyNodeAlignment(rawValue: written) { self.alignment = alignment }
-        let isOutlined = options.values["labelStyle"] == .text("outlined")
-        let colorsLinks = options.values["linkColor"].map { value in value != .text("gradient") } ?? false
-        setsOptionsNotDrawn = isOutlined || colorsLinks || options.values["nodeColors"] != nil
+        isOutlined = options.values["labelStyle"] == .text("outlined")
+        if case .text(let written) = options.values["linkColor"] { linkColor = SankeyLinkColor(written) }
+        nodeColors = Self.nodeColors(options.nestedValues)
+    }
+
+    /// The colors under `nodeColors`, by the name written there: a text that reads as a color; not an entry that is itself a
+    /// mapping or has one above it.
+    private static func nodeColors(_ nestedValues: [String: MermaidConfigurationOptions.Value]) -> [String: DiagramColor] {
+        let prefix = "nodeColors."
+        var colors: [String: DiagramColor] = [:]
+        for (path, value) in nestedValues where path.hasPrefix(prefix) {
+            guard case .text(let written) = value, let color = DiagramColor(cssText: written) else { continue }
+            let name = String(path.dropFirst(prefix.count))
+            let isInsideMapping = name.indices.contains { index in
+                name[index] == "." && nestedValues[prefix + String(name[..<index])] == .collection
+            }
+            if !isInsideMapping { colors[name] = color }
+        }
+        return colors
     }
 
     private static func number(_ value: MermaidConfigurationOptions.Value?, least: Double, most: Double) -> Double? {
@@ -51,6 +84,29 @@ public struct SankeyOptions: Equatable, Sendable {
         case .text(let written): written
         case .number(let number) where number.isFinite: JavaScriptNumberText.text(number)
         case .number, .boolean, .collection, nil: ""
+        }
+    }
+}
+
+/// How a Sankey diagram's bands are colored (`linkColor`).
+public enum SankeyLinkColor: Equatable, Sendable {
+    /// From the source's color to the target's, across: Pele's default.
+    case gradient
+    /// The source's color.
+    case source
+    /// The target's color.
+    case target
+    /// One color for every band.
+    case fixed(DiagramColor)
+
+    /// What `linkColor: written` stands for: a color in a form that reads, else the source's color, as Pele colors a band
+    /// whose `linkColor` is neither of the three words nor a style it accepts.
+    init(_ written: String) {
+        switch written {
+        case "gradient": self = .gradient
+        case "source": self = .source
+        case "target": self = .target
+        default: self = DiagramColor(cssText: written).map(SankeyLinkColor.fixed) ?? .source
         }
     }
 }

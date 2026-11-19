@@ -1,3 +1,14 @@
+/**
+ * File: GanttScheduleTests.swift
+ * ------------------------------
+ * Layer: Tests
+ * Description: Gantt tasks scheduled as Mermaid's Gantt database schedules them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -164,7 +175,18 @@ final class GanttScheduleTests: XCTestCase {
 
     func testDatesThatAreNoneOfTheFormsReadAreRefusedByTheirText() {
         XCTAssertEqual(GanttScheduling.scheduleError("gantt\ndateFormat YYYYMMDD\ntest1 : id1,202304,1d"), .unreadableDate("202304"))
-        XCTAssertEqual(GanttScheduling.scheduleError("gantt\ndateFormat ss\nRTT : rtt, 0, 20"), .unreadableDate("0"))
+        XCTAssertEqual(GanttScheduling.scheduleError("gantt\ndateFormat YYYY-MM-DD\nA : a, March 32 2014, 1d"), .unreadableDate("March 32 2014"))
+        XCTAssertEqual(GanttScheduling.scheduleError("gantt\ndateFormat YYYY-MM-DD\nA : a, 2014 foo, 1d"), .unreadableDate("2014 foo"), "A word after a number")
+    }
+
+    func testStartDatesInJavaScriptsOtherFormsAreReadWhenTheDateFormatDoesNotFit() throws {
+        // `new Date("0")` is the first of January 2000 in V8, so Mermaid draws a start that `ss` does not read.
+        XCTAssertNil(GanttScheduling.scheduleError("gantt\ndateFormat ss\nRTT : rtt, 0, 20"))
+        // A comma would start another field of the task, so these forms have none.
+        let schedule = try entries("dateFormat YYYY-MM-DD\nA : a, March 7 2014, 3d\nB : b, 8 Mar 2014 10:30, 1d")
+        XCTAssertEqual(schedule[0].start, try time(2014, 3, 7))
+        XCTAssertEqual(schedule[0].end, try time(2014, 3, 10))
+        XCTAssertEqual(schedule[1].start, try time(2014, 3, 8, 10, 30))
     }
 
     func testAYearWrittenShortIsReadAsJavaScriptReadsIt() throws {

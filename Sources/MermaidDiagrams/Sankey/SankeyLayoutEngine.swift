@@ -1,8 +1,19 @@
+/**
+ * File: SankeyLayoutEngine.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Lays a Sankey diagram out as Pele does, with its options and for a narrow column.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
 /// Lays a Sankey diagram out as Pele does, with the options of its front matter (`SankeyOptions`): a chart of 600 by
-/// 400 points, nodes 10 points wide in columns (`SankeyPlacement`) with 27 points between nodes (12, and 15 for the
+/// 400 points (narrower in a narrow column), nodes 10 points wide in columns (`SankeyPlacement`) with 27 points between nodes (12, and 15 for the
 /// value under each label), each node's label beside its bar (`SankeyLabelPlacement`), its name and its value rounded
 /// to two decimals, at seven eighths of the text size, smaller when a column holds so many nodes that each would have
 /// less than 1.8 lines (down to five eighths), the bold title above, and the page around the chart and its labels.
@@ -22,51 +33,83 @@ public enum SankeyLayoutEngine {
     static let labelHeightRatio = 1.15
     /// Beyond this, a value is written as it is, not rounded to two decimals.
     static let largestRoundedValue = 1e15
-    /// The widest the title is before it wraps: wide enough that it does not.
-    static let unwrappedTitleWidth: CGFloat = 4_000
+    /// The narrowest a narrow column makes the chart, labels left out.
+    static let narrowestChartWidth: CGFloat = 160
 
-    public static func layout(_ diagram: SankeyDiagram, typography: DiagramTypography) throws(SankeyLayoutError) -> SankeyLayout {
+    /// `availableWidth`, the width of the column the diagram is shown in, narrows the chart as Pele narrows it
+    /// (`DiagramWidthFitting.fitWidth`: the chart gives up what its labels overflow, down to 160 points, drawn again up to
+    /// three times) and the labels shrink with it; nil keeps the chart's own width.
+    public static func layout(_ diagram: SankeyDiagram, typography: DiagramTypography, availableWidth: CGFloat? = nil) throws(SankeyLayoutError) -> SankeyLayout {
         let labelSize = typography.edgeText.fontSize
-        return try layout(diagram, titleText: typography.boldNodeText, font: typography.font) { size in
+        return try layout(diagram, titleText: typography.boldNodeText, font: typography.font, availableWidth: availableWidth) { size in
             size == labelSize ? typography.edgeText : CoreTextDiagramTextMeasurer(font: typography.font.resized(to: size))
         }
     }
 
-    /// `labelText` gives the measurer of the labels at a size: seven eighths of the font's, or less when crowded.
+    /// `labelText` gives the measurer of the labels at a size: seven eighths of the font's, or less when crowded or narrowed.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: SankeyDiagram, titleText: some DiagramTextMeasuring, font: DiagramFont,
+                                                       availableWidth: CGFloat? = nil,
                                                        labelText: (CGFloat) -> Measurer) throws(SankeyLayoutError) -> SankeyLayout {
+        let natural = diagram.options.chartWidth
+        return try DiagramWidthFitting.fitWidth(availableWidth: availableWidth, natural: CGFloat(natural), least: narrowestChartWidth,
+                                                width: { (layout: SankeyLayout) in layout.size.width }) { (plot: CGFloat, _: Bool) throws(SankeyLayoutError) in
+            try layout(diagram, titleText: titleText, font: font, chartWidth: Double(plot), availableWidth: availableWidth, labelText: labelText)
+        }
+    }
+
+    /// The diagram on a chart `chartWidth` wide, whose own width is `options.chartWidth`.
+    private static func layout<Measurer: DiagramTextMeasuring>(_ diagram: SankeyDiagram, titleText: some DiagramTextMeasuring, font: DiagramFont,
+                                                               chartWidth: Double, availableWidth: CGFloat?,
+                                                               labelText: (CGFloat) -> Measurer) throws(SankeyLayoutError) -> SankeyLayout {
         let options = diagram.options
-        guard !options.setsOptionsNotDrawn else { throw .optionsNotDrawn }
-        var labelSize = (font.size * labelScale).rounded()
-        var placement = try place(diagram, labelSize: labelSize)
+        let nodeWidth = min(options.nodeWidth, chartWidth)
+        let smallest = (font.size * smallestLabelScale).rounded()
+        // Labels shrink with a chart narrowed to fit, as they would if the whole picture were scaled down.
+        var labelSize = max(smallest, (font.size * labelScale * CGFloat(min(1, chartWidth / options.chartWidth))).rounded())
+        var placement = try place(diagram, labelSize: labelSize, chartWidth: chartWidth, nodeWidth: nodeWidth)
         let fullestColumn = max(1, placement.columns.map(\.count).max() ?? 1)
         let roomPerNode = CGFloat(options.chartHeight) / CGFloat(fullestColumn) / CGFloat(linesPerNode)
-        let crowdedSize = max((font.size * smallestLabelScale).rounded(), roomPerNode.rounded())
+        let crowdedSize = max(smallest, roomPerNode.rounded())
         if crowdedSize < labelSize {
             labelSize = crowdedSize
-            placement = try place(diagram, labelSize: labelSize)
+            placement = try place(diagram, labelSize: labelSize, chartWidth: chartWidth, nodeWidth: nodeWidth)
         }
         let measurer = labelText(labelSize)
         let texts = diagram.nodes.indices.map { index in labelTexts(name: diagram.nodes[index].name, value: placement.nodes[index].value, options: options) }
         let widths = texts.map { text in Double(measurer.width(of: text.value.map { value in text.name + " " + value } ?? text.name)) }
         let labels = SankeyLabelPlacement(nodes: placement.nodes, widths: widths, fontSize: Double(labelSize),
-                                          chartSize: (options.chartWidth, options.chartHeight), nodeWidth: options.nodeWidth)
+                                          chartSize: (chartWidth, options.chartHeight), nodeWidth: nodeWidth,
+                                          centralLayer: options.isOutlined ? centralLayer(of: placement.nodes) : nil)
         let title = diagram.title.map { title in
-            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: titleText, maximumWidth: unwrappedTitleWidth)
+            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: titleText,
+                             maximumWidth: DiagramWidthFitting.titleRoom(availableWidth: availableWidth))
         }.flatMap { block in block.lines.isEmpty ? nil : block }
-        let page = SankeyPage(labels: labels, title: title, nodeWidth: options.nodeWidth)
+        let page = SankeyPage(labels: labels, title: title, nodeWidth: nodeWidth)
         return SankeyLayout(size: page.size, font: font, title: page.placedTitle,
-                            nodes: placement.nodes.enumerated().map { index, node in page.node(node, seriesIndex: index) },
+                            nodes: placement.nodes.enumerated().map { index, node in
+                                page.node(node, seriesIndex: index, color: options.nodeColors[diagram.nodes[index].name])
+                            },
                             links: placement.links.map { link in page.link(link, nodes: placement.nodes) },
                             labels: zip(texts, labels.labels).map { text, label in
                                 page.label(name: text.name, value: text.value, label: label, measurer: measurer)
-                            })
+                            }, linkColor: options.linkColor, hasOutlinedLabels: options.isOutlined)
     }
 
-    private static func place(_ diagram: SankeyDiagram, labelSize: CGFloat) throws(SankeyLayoutError) -> SankeyPlacement {
+    /// The column of the first node with the most flow through it: outlined labels stand after the bars from there on.
+    private static func centralLayer(of nodes: [SankeyPlacement.Node]) -> Int {
+        var central = 0
+        var most = 0.0
+        for node in nodes where node.value > most {
+            most = node.value
+            central = node.layer
+        }
+        return central
+    }
+
+    private static func place(_ diagram: SankeyDiagram, labelSize: CGFloat, chartWidth: Double, nodeWidth: Double) throws(SankeyLayoutError) -> SankeyPlacement {
         let options = diagram.options
         return try SankeyPlacement(diagram: diagram, options: SankeyPlacement.Options(
-            width: options.chartWidth, height: options.chartHeight, nodeWidth: options.nodeWidth,
+            width: chartWidth, height: options.chartHeight, nodeWidth: nodeWidth,
             nodePadding: options.nodePadding + (options.showsValues ? valuePadding : 0), labelHeight: Double(labelSize) * labelHeightRatio,
             alignment: options.alignment))
     }

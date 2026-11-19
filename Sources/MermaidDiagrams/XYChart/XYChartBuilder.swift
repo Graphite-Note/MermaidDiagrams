@@ -1,3 +1,14 @@
+/**
+ * File: XYChartBuilder.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Collects an XY chart as its statements are read, as Mermaid's chart database does.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import Foundation
 
 /// Builds an XY chart statement by statement as Mermaid's chart database does: the last `x-axis` and `y-axis` win,
@@ -19,6 +30,7 @@ struct XYChartBuilder {
     /// `horizontal` in lower case turns the chart; any other orientation word leaves it vertical, as in Mermaid.
     mutating func setOrientation(_ written: String) {
         chart.orientation = written == "horizontal" ? .horizontal : .vertical
+        chart.isOrientationWritten = true
     }
 
     mutating func setTitle(_ written: String) {

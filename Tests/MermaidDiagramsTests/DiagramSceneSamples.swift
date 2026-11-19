@@ -49,6 +49,7 @@ enum DiagramSceneSamples {
         samples += try generated().map { name, source in DiagramSceneSample(name: name, source: source) }
         samples += styled.map { name, source in DiagramSceneSample(name: name, source: source) }
         samples += DiagramSceneClusterSamples.all.map { name, source in DiagramSceneSample(name: name, source: source) }
+        samples += DiagramSceneOptionSamples.all.map { name, source in DiagramSceneSample(name: name, source: source) }
         return samples
     }
 

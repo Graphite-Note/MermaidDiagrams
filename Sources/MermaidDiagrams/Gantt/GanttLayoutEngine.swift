@@ -1,3 +1,14 @@
+/**
+ * File: GanttLayoutEngine.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Lays a Gantt chart out in Pele's style, with its options and for a narrow column.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -9,8 +20,11 @@ public enum GanttLayoutEngine {
     static let padding: CGFloat = 8
     /// Between the title and what is below it.
     static let titleGap: CGFloat = 16
-    /// The width the chart is drawn to.
+    /// The width the chart is drawn to (`useWidth` sets it), and the narrowest a narrow column makes it.
     static let pageWidth: CGFloat = 800
+    static let narrowestPageWidth: CGFloat = 280
+    /// Between the axis' dates and the first row of the vertical markers' texts.
+    static let verticalMarkerGap: CGFloat = 4
     static let minimumPlotWidth: CGFloat = 240
     /// The widest a section's name is before it wraps.
     static let sectionWrappingWidth: CGFloat = 180
@@ -39,8 +53,10 @@ public enum GanttLayoutEngine {
 
     /// Lays `chart` out on `now`, the moment it is drawn, read on the wall clock of `timeZone`: today's line and the
     /// dates that default to today depend on it, so a chart is laid out the same for the same moment and time zone.
+    /// `availableWidth`, the width of the column the chart is shown in, narrows it as Pele narrows it (`capWidth`, not under 280
+    /// points); nil keeps the chart's own width.
     public static func layout(_ chart: GanttChart, typography: DiagramTypography, now: Date, timeZone: TimeZone,
-                              limits: MermaidDiagramLimits) throws(GanttLayoutError) -> GanttLayout {
+                              limits: MermaidDiagramLimits, availableWidth: CGFloat? = nil) throws(GanttLayoutError) -> GanttLayout {
         if let notDrawn = chart.statementsNotDrawn.first { throw .statementNotDrawn(notDrawn) }
         let zone = GanttTimeZone(timeZone: timeZone)
         let unixMilliseconds = (now.timeIntervalSince1970 * Double(GanttTime.millisecondsPerSecond)).rounded(.down)
@@ -48,12 +64,14 @@ public enum GanttLayoutEngine {
         // A moment within a date's range always has a wall clock time; the epoch stands in for one past it.
         let wallClockNow = zone.wallClockTime(unixMilliseconds: boundedMilliseconds) ?? GanttTime(milliseconds: 0)
         let schedule = try GanttSchedule(chart: chart, now: wallClockNow, zone: zone, limits: limits)
-        let measurers = GanttMeasurers(title: typography.nodeText, row: typography.rowText, axis: typography.axisText)
-        return layout(chart, schedule: schedule.entries, now: wallClockNow, zone: zone, measurers: measurers, font: typography.font)
+        let rowText = chart.options.fontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? typography.rowText
+        let sectionText = chart.options.sectionFontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? rowText
+        let measurers = GanttMeasurers(title: typography.nodeText, row: rowText, axis: typography.axisText, section: sectionText)
+        return layout(chart, schedule: schedule.entries, now: wallClockNow, zone: zone, measurers: measurers, font: typography.font, availableWidth: availableWidth)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ chart: GanttChart, schedule: [GanttSchedule.Entry], now: GanttTime, zone: GanttTimeZone,
-                                                       measurers: GanttMeasurers<Measurer>, font: DiagramFont) -> GanttLayout {
+                                                       measurers: GanttMeasurers<Measurer>, font: DiagramFont, availableWidth: CGFloat? = nil) -> GanttLayout {
         let title = chart.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: measurers.title, maximumWidth: wrappingWidth)
         }.flatMap { block in block.lines.isEmpty ? nil : block }
@@ -63,11 +81,15 @@ public enum GanttLayoutEngine {
                               height: (max(title?.size.height ?? 0, 1) + 2 * padding).rounded(.up))
             return GanttLayout(size: size, font: font, title: title.map { title in centered(title, pageWidth: size.width) }, plot: nil)
         }
-        var plot = GanttPlotBuilder(chart: chart, schedule: schedule, span: span, zone: zone, measurers: measurers, top: padding + titleHeight)
+        var plot = GanttPlotBuilder(chart: chart, schedule: schedule, span: span, zone: zone, measurers: measurers, top: padding + titleHeight,
+                                    availableWidth: availableWidth)
         plot.placeTasks()
         plot.placeAxis()
+        plot.placeVerticalMarkers()
         let width = (max(plot.extent, padding + (title?.size.width ?? 0)) + padding).rounded(.up)
-        let height = (plot.bottom + plot.metrics.tickHeight + padding).rounded(.up)
+        let markerRows = CGFloat(plot.verticalMarkerRowCount)
+        let markerRoom = markerRows > 0 ? verticalMarkerGap + markerRows * plot.metrics.verticalMarkerLineHeight : 0
+        let height = (plot.bottom + plot.metrics.tickHeight + markerRoom + padding).rounded(.up)
         return GanttLayout(size: CGSize(width: width, height: height), font: font, title: title.map { title in centered(title, pageWidth: width) },
                            plot: plot.finished(pageWidth: width, now: now))
     }
@@ -85,6 +107,15 @@ struct GanttMeasurers<Measurer: DiagramTextMeasuring> {
     let title: Measurer
     let row: Measurer
     let axis: Measurer
+    /// The sections' names, in the rows' measurer unless the options give them a size of their own.
+    let section: Measurer
+
+    init(title: Measurer, row: Measurer, axis: Measurer, section: Measurer? = nil) {
+        self.title = title
+        self.row = row
+        self.axis = axis
+        self.section = section ?? row
+    }
 }
 
 /// The time a Gantt chart's plot spans: from the earliest start to the latest end of the tasks that have both.

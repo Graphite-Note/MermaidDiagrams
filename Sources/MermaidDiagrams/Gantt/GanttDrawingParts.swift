@@ -1,3 +1,14 @@
+/**
+ * File: GanttDrawingParts.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: A laid-out Gantt chart's geometry grouped by how it is painted.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out Gantt chart's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -12,10 +23,16 @@ public struct GanttDrawingParts {
     public let gridLines: CGPath
     /// The axis' line under the rows, and above them with `topAxis`, stroked one point wide in the border color.
     public let axisLines: CGPath
-    /// Today's line, stroked two points wide in the accent color; empty when it is not drawn.
+    /// Today's line, stroked two points wide in the accent color (or as `todayLineStyle` says); empty when it is not drawn.
     public let todayLine: CGPath
-    /// The small triangle on top of today's line, filled in the accent color.
+    /// How `todayMarker` restyles today's line, or nil for the standard line.
+    public let todayLineStyle: GanttTodayLineStyle?
+    /// The small triangle on top of today's line, filled in the accent color; empty for a restyled line.
     public let todayMark: CGPath
+    /// The vertical markers' lines, stroked 1.5 points wide in dashes of 4 and gaps of 3, in the line color.
+    public let verticalMarkerLines: CGPath
+    /// The vertical markers' texts under the axis, in the text color.
+    public let verticalMarkerTexts: [DiagramTextBlock]
     /// The tasks' bars and milestones, by fill; a faint fill is its color at a quarter of its opacity.
     public let taskFills: [GanttTaskFill: CGPath]
     /// The tasks' bars and milestones, by outline color, stroked one point wide with round joins.
@@ -31,6 +48,8 @@ public struct GanttDrawingParts {
 
     public static let lineWidth: CGFloat = 1
     public static let todayLineWidth: CGFloat = 2
+    public static let verticalMarkerLineWidth: CGFloat = 1.5
+    public static let verticalMarkerDashLengths: [CGFloat] = [4, 3]
     public static let gridDashLengths: [CGFloat] = [1, 3]
     /// The opacity of an active task's fill.
     public static let faintFillOpacity: CGFloat = 0.25
@@ -46,18 +65,22 @@ public struct GanttDrawingParts {
         let todayOffsets = layout.plot?.todayOffset.map { offset in [offset] } ?? []
         sectionBands = Self.rectangles(layout.plot?.sectionBands ?? [])
         excludedDays = Self.rectangles(layout.plot?.excludedDays ?? [])
-        gridLines = Self.verticalLines(at: layout.plot?.gridLineOffsets ?? [], from: frame.minY, to: frame.maxY)
+        let gridTop = layout.plot?.gridTop ?? frame.minY
+        gridLines = Self.verticalLines(at: layout.plot?.gridLineOffsets ?? [], from: gridTop, to: frame.maxY)
         let axes = CGMutablePath()
-        let axisHeights = layout.plot.map { plot in [frame.maxY] + (plot.showsTopAxis ? [frame.minY] : []) } ?? []
+        let axisHeights = layout.plot.map { plot in [frame.maxY] + (plot.showsTopAxis ? [gridTop] : []) } ?? []
         for height in axisHeights {
             axes.move(to: CGPoint(x: frame.minX, y: height))
             axes.addLine(to: CGPoint(x: frame.maxX, y: height))
         }
         axisLines = axes
-        todayLine = Self.verticalLines(at: todayOffsets, from: frame.minY, to: frame.maxY)
+        todayLine = Self.verticalLines(at: todayOffsets, from: gridTop, to: frame.maxY)
+        todayLineStyle = layout.plot?.todayStyle
         let mark = CGMutablePath()
-        for offset in todayOffsets { mark.addPath(Self.todayMark(at: offset, top: frame.minY)) }
+        if layout.plot?.todayStyle == nil { for offset in todayOffsets { mark.addPath(Self.todayMark(at: offset, top: gridTop)) } }
         todayMark = mark
+        verticalMarkerLines = Self.verticalLines(at: layout.plot?.verticalMarkers.map(\.offset) ?? [], from: gridTop, to: frame.maxY)
+        verticalMarkerTexts = layout.plot?.verticalMarkers.map(\.label) ?? []
         let tasks = layout.plot?.tasks ?? []
         (taskFills, taskOutlines) = Self.taskShapes(tasks)
         taskTexts = Dictionary(grouping: tasks, by: \.labelColor).mapValues { grouped in grouped.map(\.label) }

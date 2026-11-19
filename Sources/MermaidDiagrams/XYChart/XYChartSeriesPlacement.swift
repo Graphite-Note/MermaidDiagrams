@@ -1,3 +1,14 @@
+/**
+ * File: XYChartSeriesPlacement.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Where an XY chart's series go in its plot: bars, lines, point labels and bar values.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Where an XY chart's series go in its plot, as Pele places them: a slot's bars side by side in seven tenths of it,
@@ -8,6 +19,8 @@ struct XYChartSeriesPlacement {
     private(set) var bars: [XYChartBar] = []
     private(set) var lines: [XYChartLine] = []
     private(set) var pointLabels: [DiagramTextBlock] = []
+    /// The values written past the bars' ends, when the options show them and they fit.
+    private(set) var barValues: [DiagramTextBlock] = []
     /// The line bars stand on when the value range runs both sides of zero; empty otherwise.
     private(set) var baseline: [XYChartSegment] = []
 
@@ -42,7 +55,7 @@ struct XYChartSeriesPlacement {
             let count = frame.categoryScale.isCategorical ? min(series.values.count, frame.categoryScale.placeCount) : series.values.count
             switch series.kind {
             case .bar:
-                placeBars(series, seriesIndex: seriesIndex, count: count, barIndex: barIndex, barCount: barCount)
+                placeBars(series, seriesIndex: seriesIndex, count: count, barIndex: barIndex, barCount: barCount, text: text)
                 barIndex += 1
             case .line:
                 placeLine(series, seriesIndex: seriesIndex, count: count, text: text)
@@ -50,7 +63,8 @@ struct XYChartSeriesPlacement {
         }
     }
 
-    private mutating func placeBars(_ series: XYChartSeries, seriesIndex: Int, count: Int, barIndex: Int, barCount: Int) {
+    private mutating func placeBars(_ series: XYChartSeries, seriesIndex: Int, count: Int, barIndex: Int, barCount: Int,
+                                    text: XYChartText<some DiagramTextMeasuring>) {
         let thickness = Double(span) * Self.barGroupShare / Double(max(barCount, 1))
         let gap = barCount > 1 ? min(Self.largestBarGap, thickness * Self.barGapShare) : 0
         let offset = (Double(barIndex) - Double(barCount - 1) / 2) * thickness - (thickness - gap) / 2
@@ -69,7 +83,28 @@ struct XYChartSeriesPlacement {
                                    width: CGFloat(thickness - gap), height: CGFloat(upper - lower) * frame.plot.height)
             }
             bars.append(XYChartBar(seriesIndex: seriesIndex, frame: rectangle))
+            if frame.options.showsDataLabels {
+                placeBarValue(value, in: rectangle, goesUp: valueFraction >= baseFraction, barCount: barCount, text: text)
+            }
         }
+    }
+
+    /// A bar's value past its end (above or right of it when it runs up or right from the baseline, else the other way),
+    /// as Pele writes it: not at all when a horizontal bar is thinner than the text is high, or a vertical bar's place
+    /// is not wider than the value and 2 points.
+    private mutating func placeBarValue(_ value: Double, in bar: CGRect, goesUp: Bool, barCount: Int, text: XYChartText<some DiagramTextMeasuring>) {
+        var block = XYChartScaleMarks.numberLabel(value, text: text.tinyText)
+        let direction: CGFloat = goesUp ? 1 : -1
+        if frame.isHorizontal {
+            guard bar.height >= text.tinyText.fontSize else { return }
+            let anchor = (goesUp ? bar.maxX : bar.minX) + direction * XYChartLayoutEngine.barValueOffset
+            block.center = CGPoint(x: anchor + direction * block.size.width / 2, y: bar.midY)
+        } else {
+            guard block.size.width + 2 <= span / CGFloat(max(barCount, 1)) else { return }
+            let edge = goesUp ? bar.minY : bar.maxY
+            block.center = CGPoint(x: bar.midX, y: edge - direction * (text.tinyText.lineHeight / 2 + XYChartLayoutEngine.barValueRaise))
+        }
+        barValues.append(block)
     }
 
     /// The line from value to value, cut where it leaves the value range as Pele cuts it: a run ends where the line
