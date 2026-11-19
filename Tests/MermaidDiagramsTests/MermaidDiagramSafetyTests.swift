@@ -49,6 +49,9 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .quadrantChart(let chart): QuadrantChartLayoutEngine.layout(chart, typography: typography).size
         case .xyChart(let chart): try XYChartLayoutEngine.layout(chart, typography: typography).size
         case .sankey(let sankey): try SankeyLayoutEngine.layout(sankey, typography: typography).size
+        case .kanban(let board): KanbanLayoutEngine.layout(board, typography: typography).size
+        case .treeView(let tree): TreeViewLayoutEngine.layout(tree, typography: typography).size
+        case .ishikawa(let diagram): IshikawaLayoutEngine.layout(diagram, typography: typography).size
         }
     }
 
@@ -57,7 +60,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              SequenceCorpus.documentationExamples(), EntityRelationshipCorpus.documentationExamples(), MindmapCorpus.documentationExamples(),
              TimelineCorpus.documentationExamples(), PieChartCorpus.documentationExamples(), GanttChartCorpus.documentationExamples(),
              GitGraphCorpus.documentationExamples(), UserJourneyCorpus.documentationExamples(), QuadrantChartCorpus.documentationExamples(),
-             XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples()].flatMap { examples in examples }
+             XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples(),
+             KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples()].flatMap { examples in examples }
     }
 
     /// Runs `work` on a thread with the 512 KiB stack of the threads the reading view's builder runs on, so that a
@@ -78,7 +82,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        XCTAssertEqual(examples.count, 332)
+        XCTAssertEqual(examples.count, 349)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)

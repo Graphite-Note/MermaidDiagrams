@@ -74,6 +74,9 @@ struct MermaidDiagramPreparationContext {
         case .quadrantChart(let chart): prepared(chart)
         case .xyChart(let chart): try prepared(chart)
         case .sankey(let sankey): try prepared(sankey)
+        case .kanban(let board): prepared(board)
+        case .treeView(let tree): prepared(tree)
+        case .ishikawa(let ishikawa): prepared(ishikawa)
         }
     }
 

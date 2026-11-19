@@ -34,6 +34,8 @@ enum DiagramSceneBenchmark {
             (.userJourney, try UserJourneyCorpus.documentationExamples()), (.quadrantChart, try QuadrantChartCorpus.documentationExamples()),
             (.xyChart, try XYChartCorpus.documentationExamples()),
             (.sankey, try SankeyCorpus.documentationExamples() + ["sankey-beta\n\n " + SankeyCorpus.energyRows()]),
+            (.kanban, try KanbanCorpus.documentationExamples()), (.treeView, try TreeViewCorpus.documentationExamples()),
+            (.ishikawa, try IshikawaCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -99,7 +101,7 @@ enum DiagramSceneBenchmark {
         case .gitGraph(let gitGraph):
             let layOut = { try GitGraphLayoutEngine.layout(gitGraph, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
-        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey:
+        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey, .kanban, .treeView, .ishikawa:
             return laidOutChart(diagram, typography: typography)
         }
     }
@@ -131,6 +133,15 @@ enum DiagramSceneBenchmark {
         case .sankey(let sankey):
             let layOut = { try SankeyLayoutEngine.layout(sankey, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .kanban(let board):
+            let layout = KanbanLayoutEngine.layout(board, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .treeView(let tree):
+            let layout = TreeViewLayoutEngine.layout(tree, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .ishikawa(let diagram):
+            let layout = IshikawaLayoutEngine.layout(diagram, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
         }

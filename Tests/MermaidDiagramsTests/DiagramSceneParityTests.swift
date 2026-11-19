@@ -45,7 +45,7 @@ final class DiagramSceneParityTests: XCTestCase {
             italicTextCount += laidOut.scene.texts.filter(\.isItalic).count
         }
         for (name, _) in DiagramSceneSamples.styled { XCTAssertTrue(comparedNames.contains(name), name) }
-        XCTAssertEqual(comparedTypes.count, 14, "\(comparedTypes.sorted())")
+        XCTAssertEqual(comparedTypes.count, 17, "\(comparedTypes.sorted())")
         XCTAssertGreaterThan(italicTextCount, 0, "Abstract class members, in italics, are compared (static ones underlined beside them)")
         // The samples' texts the layouts refuse (a collapsed group, options not drawn) are left out: 321 are drawn.
         XCTAssertGreaterThanOrEqual(comparedCount, 321)
@@ -164,7 +164,27 @@ final class DiagramSceneParityTests: XCTestCase {
             return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
                 ReferenceSankeyRenderer.draw(layout, in: context, palette: palette)
             }
+        case .kanban, .treeView, .ishikawa:
+            return try laidOutFromItsSceneAlone(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
+            throw NotAChart()
+        }
+    }
+
+    /// A type drawn from its scene from the start has no renderer from before the scene: its renderer, which paints its
+    /// scene, is compared with the scene painted directly.
+    private static func laidOutFromItsSceneAlone(_ diagram: MermaidDiagram, typography: DiagramTypography) throws -> LaidOutDiagram {
+        switch diagram {
+        case .kanban(let board):
+            let layout = KanbanLayoutEngine.layout(board, typography: typography)
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in KanbanRenderer.draw(layout, in: context, palette: palette) }
+        case .treeView(let tree):
+            let layout = TreeViewLayoutEngine.layout(tree, typography: typography)
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in TreeViewRenderer.draw(layout, in: context, palette: palette) }
+        case .ishikawa(let ishikawa):
+            let layout = IshikawaLayoutEngine.layout(ishikawa, typography: typography)
+            return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in IshikawaRenderer.draw(layout, in: context, palette: palette) }
+        default:
             throw NotAChart()
         }
     }
