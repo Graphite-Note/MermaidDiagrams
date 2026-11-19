@@ -5,15 +5,15 @@
  * Description: A color a diagram's own statements give.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 01/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
 
 /// A color a diagram's own statements give (`fill:#f9f`, `stroke:rgb(51, 51, 51)`, `color:red`), as sRGB channels and opacity,
 /// each from 0 to 1.
-public struct DiagramColor: Equatable, Sendable {
+public struct DiagramColor: Hashable, Sendable {
     public let red: Double
     public let green: Double
     public let blue: Double

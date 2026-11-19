@@ -1,0 +1,49 @@
+/**
+ * File: TimelineScene.swift
+ * -------------------------
+ * Layer: Core
+ * Description: A laid-out timeline's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
+
+extension DiagramScene {
+    /// The timeline's painting: the axis and its arrow in the line color, the lines to the events in the border color,
+    /// per color the section and period boxes, the event boxes and the dots, the text on the boxes in the background
+    /// color, the events' text and the title.
+    public init(layout: TimelineLayout) {
+        var builder = DiagramSceneBuilder()
+        TimelineDrawingParts(layout: layout).addScene(to: &builder)
+        self = builder.scene(size: layout.size, font: layout.font)
+    }
+}
+
+extension TimelineDrawingParts {
+    func addScene(to builder: inout DiagramSceneBuilder) {
+        let line = DiagramStroke(lineWidth: Self.lineWidth)
+        builder.stroke(axis, .line, line, part: .axis)
+        builder.fill(axisArrow, .line, part: .axis)
+        builder.stroke(connectors, .border, line, part: .edge)
+        for group in colorGroups {
+            let paint = Self.paint(group.color)
+            builder.fill(group.boxes, paint, part: .node)
+            builder.fill(group.eventBoxes, paint.atOpacity(Self.eventFillOpacity), part: .node)
+            builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: Self.dotOutlineWidth), part: .marker)
+        }
+        builder.texts(sectionTexts, .background, isBold: true, part: .clusterLabel)
+        builder.texts(periodTexts, .background, part: .label)
+        builder.texts(eventTexts, .foreground, part: .label)
+        builder.title(title)
+    }
+
+    static func paint(_ color: TimelineColor) -> DiagramPaint {
+        switch color {
+        case .series(let index): .series(index)
+        case .muted: .muted
+        }
+    }
+}

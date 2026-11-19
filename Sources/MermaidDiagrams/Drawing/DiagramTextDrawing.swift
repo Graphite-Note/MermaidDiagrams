@@ -1,3 +1,14 @@
+/**
+ * File: DiagramTextDrawing.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Draws a diagram's text blocks with Core Text, regular, bold or italic, into a context whose y runs down.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import CoreText
 import Foundation
@@ -7,17 +18,24 @@ struct DiagramTextDrawing {
     /// Where a line's baseline sits below the middle of its line, as a fraction of the font size: Pele's.
     static let baselineShiftRatio: CGFloat = 0.35
 
+    /// A font of one drawing: its size, and whether it is the bold or the italic of the diagram's font.
+    private struct FontKey: Hashable {
+        let size: CGFloat
+        let isBold: Bool
+        let isItalic: Bool
+    }
+
     private let font: DiagramFont
-    private var fontsBySize: [CGFloat: CTFont] = [:]
+    private var fontsByKey: [FontKey: CTFont] = [:]
 
     init(font: DiagramFont) {
         self.font = font
     }
 
     /// Draws each line centered on the block's center, one line height below the last.
-    mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, in context: CGContext) {
+    mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, isItalic: Bool = false, in context: CGContext) {
         guard !block.lines.isEmpty else { return }
-        let coreTextFont = coreTextFont(size: block.fontSize, isBold: isBold)
+        let coreTextFont = coreTextFont(FontKey(size: block.fontSize, isBold: isBold, isItalic: isItalic))
         let attributes: [NSAttributedString.Key: Any] = [
             kCTFontAttributeName as NSAttributedString.Key: coreTextFont,
             kCTForegroundColorAttributeName as NSAttributedString.Key: color,
@@ -35,10 +53,18 @@ struct DiagramTextDrawing {
         context.restoreGState()
     }
 
-    private mutating func coreTextFont(size: CGFloat, isBold: Bool) -> CTFont {
-        let regular = fontsBySize[size] ?? font.resized(to: size).makeCoreTextFont()
-        fontsBySize[size] = regular
-        guard isBold else { return regular }
-        return CTFontCreateCopyWithSymbolicTraits(regular, size, nil, .traitBold, .traitBold) ?? regular
+    /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.
+    private mutating func coreTextFont(_ key: FontKey) -> CTFont {
+        if let made = fontsByKey[key] { return made }
+        let regularKey = FontKey(size: key.size, isBold: false, isItalic: false)
+        let regular = fontsByKey[regularKey] ?? font.resized(to: key.size).makeCoreTextFont()
+        fontsByKey[regularKey] = regular
+        var traits: CTFontSymbolicTraits = []
+        if key.isBold { traits.insert(.traitBold) }
+        if key.isItalic { traits.insert(.traitItalic) }
+        guard !traits.isEmpty else { return regular }
+        let made = CTFontCreateCopyWithSymbolicTraits(regular, key.size, nil, traits, traits) ?? regular
+        fontsByKey[key] = made
+        return made
     }
 }
