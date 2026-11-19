@@ -5,7 +5,7 @@
  * Description: A Mermaid class diagram as its text describes it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -63,12 +63,16 @@ public struct ClassDiagramNote: Equatable, Sendable {
 }
 
 /// A `namespace Name { … }` group: its identifier (a nested one's joined to its parents' by dots), its title, and
-/// the classes declared inside it.
+/// the classes and notes declared inside it.
 public struct ClassDiagramNamespace: Equatable, Sendable {
     public let identifier: String
     public let title: DiagramLabel
     /// Indexes into `ClassDiagram.classes`, in the order the classes appear in the group.
     public internal(set) var classIndices: [Int]
+    /// Indexes into `ClassDiagram.notes` of the notes written inside the group.
+    public internal(set) var noteIndices: [Int] = []
+    /// Index into `ClassDiagram.namespaces` of the namespace this one is written inside, or nil at the top level.
+    var enclosingNamespaceIndex: Int?
 
     init(identifier: String, title: DiagramLabel, classIndices: [Int] = []) {
         self.identifier = identifier

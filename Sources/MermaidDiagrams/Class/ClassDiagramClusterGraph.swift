@@ -5,7 +5,7 @@
  * Description: A class diagram with namespaces as a graph of nested boxes to lay out, as Pele's class renderer makes it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -15,8 +15,8 @@ import CoreGraphics
 /// renderer gives them to its compound layout (`class/render.ts`): each namespace that holds something a box with 20
 /// points of room on its sides and below and its title in a band along its top, at least as wide as its title, and wider
 /// by the title and 24 points (at most 240) where a relation crosses into it, so that the title can sit beside the line;
-/// an empty namespace a box at least 80 points wide around its title; each class in its namespace's box, an interface
-/// in its class's and a note at the top level; each relation between two different nodes.
+/// an empty namespace a box at least 80 points wide around its title; each class in its namespace's box, a note in the
+/// one it is written in and an interface in its class's; each relation between two different nodes.
 struct ClassDiagramClusterGraph {
     /// Pele's `GROUP_PAD`.
     static let padding: CGFloat = 20
@@ -68,11 +68,14 @@ struct ClassDiagramClusterGraph {
         graph = LayeredClusterGraph(nodeSizes: layoutSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges, direction: direction.layeredDirection)
     }
 
-    /// The box each node sits in: a class's namespace, an interface its class's, a note none.
+    /// The box each node sits in: a class's namespace, a note's the one it is written in, an interface its class's.
     private static func nodeClusters(tree: ClassDiagramNamespaceTree, measured: ClassDiagramMeasurement) -> [Int?] {
         var clusters = measured.nodes.map { kind -> Int? in
-            guard case .classBox(let boxIndex) = kind, boxIndex < tree.classNamespaces.count else { return nil }
-            return tree.classNamespaces[boxIndex]
+            switch kind {
+            case .classBox(let boxIndex): boxIndex < tree.classNamespaces.count ? tree.classNamespaces[boxIndex] : nil
+            case .note(let noteIndex): noteIndex < tree.noteNamespaces.count ? tree.noteNamespaces[noteIndex] : nil
+            case .interface: nil
+            }
         }
         // An interface stays beside the class at the relation's other end.
         for edge in measured.edges {

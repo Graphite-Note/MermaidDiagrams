@@ -260,7 +260,7 @@ struct ClassDiagramParser {
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.openingBrace else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         cursor.advance()
-        builder.openNamespace(named: name.identifier, title: title)
+        try builder.openNamespace(named: name.identifier, title: title)
     }
 
     /// `direction TB`, `BT`, `LR` or `RL`. Mermaid reads any other word after `direction` as part of a class's name

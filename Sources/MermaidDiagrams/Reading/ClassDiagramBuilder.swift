@@ -1,6 +1,17 @@
+/**
+ * File: ClassDiagramBuilder.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Collects a class diagram as its statements are read, within the limits.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Collects a class diagram as its statements are read: classes by identifier, relations and notes within the limits,
-/// and the namespaces open at each point, which take the classes declared inside them. Classes, notes and the
-/// interfaces of lollipop ends are the diagram's nodes, which `maximumNodeCount` bounds together.
+/// and the namespaces open at each point, which take the classes and notes declared inside them. Classes, notes, the
+/// interfaces of lollipop ends and the namespaces' boxes are the diagram's nodes, which `maximumNodeCount` bounds together.
 struct ClassDiagramBuilder {
     private var diagram = ClassDiagram()
     private let limits: MermaidDiagramLimits
@@ -8,6 +19,8 @@ struct ClassDiagramBuilder {
     /// The identifier each note's `note for` names, by note index, found among the classes once all are declared.
     private var noteClassIdentifiers: [String?] = []
     private var interfaceCount = 0
+    /// The namespace boxes the names written so far make at most: each part of a dotted name may be a box of its own.
+    private var namespaceBoxCount = 0
     /// Indexes into `diagram.namespaces` of the namespaces open now, outermost first.
     private var openNamespaceIndices: [Int] = []
 
@@ -24,7 +37,7 @@ struct ClassDiagramBuilder {
         return finished
     }
 
-    private var nodeCount: Int { diagram.classes.count + diagram.notes.count + interfaceCount }
+    private var nodeCount: Int { diagram.classes.count + diagram.notes.count + interfaceCount + namespaceBoxCount }
 
     /// The index of the class `name` names, added the first time it is named, with its name as its label and the
     /// generic type written then.
@@ -88,14 +101,21 @@ struct ClassDiagramBuilder {
     /// `note "text"`, or `note for Name "text"` with the identifier of the class it names.
     mutating func addNote(_ text: DiagramLabel, forClassIdentifiedBy identifier: String?) throws(MermaidDiagramReadError) {
         guard nodeCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        if let namespaceIndex = openNamespaceIndices.last { diagram.namespaces[namespaceIndex].noteIndices.append(diagram.notes.count) }
         diagram.notes.append(ClassDiagramNote(text: text))
         noteClassIdentifiers.append(identifier)
     }
 
-    /// Opens a namespace inside the innermost one open, its identifier joined to that one's by a dot.
-    mutating func openNamespace(named name: String, title: DiagramLabel?) {
+    /// Opens a namespace inside the innermost one open, its identifier joined to that one's by a dot. Each part of a
+    /// dotted name may be a box of its own (`ClassDiagramNamespaceTree`), so each counts as a node before it is made.
+    mutating func openNamespace(named name: String, title: DiagramLabel?) throws(MermaidDiagramReadError) {
+        let partCount = name.utf8.reduce(1) { count, byte in byte == MermaidByte.period ? count + 1 : count }
+        guard partCount <= limits.maximumNodeCount - nodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        namespaceBoxCount += partCount
         let identifier = innermostOpenNamespaceIdentifier.map { parent in parent + "." + name } ?? name
-        diagram.namespaces.append(ClassDiagramNamespace(identifier: identifier, title: title ?? DiagramLabel(name)))
+        var namespace = ClassDiagramNamespace(identifier: identifier, title: title ?? DiagramLabel(name))
+        namespace.enclosingNamespaceIndex = openNamespaceIndices.last
+        diagram.namespaces.append(namespace)
         openNamespaceIndices.append(diagram.namespaces.count - 1)
     }
 

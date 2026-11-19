@@ -2,10 +2,11 @@
  * File: ClassDiagramNamespaceTests.swift
  * --------------------------------------
  * Layer: Tests
- * Description: Class diagram namespaces as Pele nests and draws them: dotted names, titles, the flat option, the boxes.
+ * Description: Class diagram namespaces as Pele nests and draws them: dotted names, titles, the flat option, the boxes,
+ *              notes inside them, deep nesting and the node limit.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -118,5 +119,46 @@ final class ClassDiagramNamespaceTests: XCTestCase {
         })
         XCTAssertLessThan(firstCluster, firstEdge)
         XCTAssertEqual(scene.texts.filter { text in text.part == .clusterLabel }.count, 4)
+    }
+
+    func testADottedNameInsideANamespaceIsWalkedFromItAsPeleWalksIt() throws {
+        let nested = try tree("classDiagram\nnamespace A {\nnamespace B.C {\nclass X\n}\n}\nnamespace A.B {\n}")
+        XCTAssertEqual(nested.namespaces.map(\.identifier), ["A", "A.B", "A.B.C"])
+        XCTAssertEqual(nested.namespaces.map(\.parent), [nil, 0, 1])
+        XCTAssertEqual(nested.namespaces.map(\.isDeclared), [true, true, true])
+        XCTAssertEqual(nested.classNamespaces, [2])
+    }
+
+    /// Each namespace's parts are walked from the namespace it is written in, as Pele's `addNamespace` walks them: 3,000
+    /// namespaces each inside the one before took 6.3 s when every name was walked from its first part.
+    func testDeeplyNestedNamespacesAreMadeInLinearTime() throws {
+        let source = "classDiagram\n" + String(repeating: "namespace a {\n", count: 3_000) + "class X\n" + String(repeating: "}\n", count: 3_000)
+        let diagram = try ClassDiagramReading.classDiagram(source)
+        let start = Date()
+        let nested = ClassDiagramNamespaceTree(diagram: diagram)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1)
+        XCTAssertEqual(nested.namespaces.count, 3_000)
+        XCTAssertEqual(nested.namespaces.last?.parent, 2_998)
+        XCTAssertEqual(nested.classNamespaces, [2_999])
+    }
+
+    func testANoteWrittenInANamespaceIsDrawnInItsBox() throws {
+        let source = "classDiagram\nnamespace Shapes {\nclass Square\nnote for Square \"four sides\"\n}\nnote \"outside\""
+        let namespaces = try tree(source)
+        XCTAssertEqual(namespaces.noteNamespaces, [0, nil])
+        let laidOut = try layout(source)
+        let box = try XCTUnwrap(laidOut.namespaces.first).frame
+        XCTAssertTrue(box.contains(laidOut.notes[0].frame))
+        XCTAssertFalse(box.intersects(laidOut.notes[1].frame))
+    }
+
+    /// Each part of a dotted namespace name may be a box of its own, so it counts as a node before the namespaces are made.
+    func testTheNamespacesBoxesCountAgainstTheNodeLimit() {
+        var limits = MermaidDiagramLimits.standard
+        limits.maximumNodeCount = 10
+        XCTAssertThrowsError(try MermaidDiagramReader.read("classDiagram\nnamespace a.b.c.d.e.f {\nclass A\nclass B\nclass C\nclass D\nclass E\n}", limits: limits)) { error in
+            XCTAssertEqual(error as? MermaidDiagramReadError, .tooManyNodes(limit: 10))
+        }
+        XCTAssertNoThrow(try MermaidDiagramReader.read("classDiagram\nnamespace a.b.c.d.e {\nclass A\nclass B\nclass C\nclass D\nclass E\n}", limits: limits))
     }
 }
