@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartCorpusTests.swift
+ * --------------------------------
+ * Layer: Tests
+ * Description: Mermaid's flowchart documentation examples and Pele's generated flowcharts, all read and laid out.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
@@ -23,8 +34,8 @@ final class FlowchartCorpusTests: XCTestCase {
                 refusals["\(error)", default: 0] += 1
             }
         }
-        // The example with a collapsed subgraph is not laid out yet; the counts only rise.
-        XCTAssertGreaterThanOrEqual(drawnCount, 113, "Refused: \(refusals)")
+        // Every example is drawn, the collapsed subgraph's included.
+        XCTAssertEqual(drawnCount, 114, "Refused: \(refusals)")
         print("FLOWCHART-CORPUS drawn \(drawnCount) of \(examples.count); refused \(refusals)")
     }
 

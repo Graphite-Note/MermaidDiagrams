@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartClusterGraph.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A flowchart with subgraphs as a graph of nested boxes to lay out (`LayeredClusterLayout`), as Pele lays it out:
@@ -27,11 +38,10 @@ struct FlowchartClusterGraph {
     /// The side each node's loops go out of, by the direction of the box it is in.
     let loopSides: [DiagramSide]
 
-    /// Fails with `FlowchartLayoutError.subgraphsNotLaidOut` for what is not laid out: a collapsed group, or an edge
-    /// from a group to itself.
+    /// Fails with `FlowchartLayoutError.subgraphsNotLaidOut` for what is not laid out: an edge from a group to itself.
+    /// Collapsed groups are folded into nodes before (`FlowchartCollapsedGroups`).
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, measured: FlowchartMeasurement, titleText: Measurer,
                                          edgeTextRoom: CGSize) throws(FlowchartLayoutError) {
-        guard !diagram.subgraphs.contains(where: \.isCollapsed) else { throw .subgraphsNotLaidOut }
         let nesting = FlowchartClusterNesting(diagram: diagram)
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)

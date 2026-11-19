@@ -7,7 +7,7 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -47,8 +47,8 @@ final class DiagramSceneParityTests: XCTestCase {
         for (name, _) in DiagramSceneSamples.styled { XCTAssertTrue(comparedNames.contains(name), name) }
         XCTAssertEqual(comparedTypes.count, 14, "\(comparedTypes.sorted())")
         XCTAssertGreaterThan(italicTextCount, 0, "Abstract class members, in italics, are compared (static ones underlined beside them)")
-        // The samples' texts the layouts refuse (a collapsed group, options not drawn) are left out: 321 are drawn.
-        XCTAssertGreaterThanOrEqual(comparedCount, 321)
+        // The samples' texts the layouts refuse (options not drawn) are left out: 322 are drawn.
+        XCTAssertGreaterThanOrEqual(comparedCount, 322)
     }
 
     /// A theme change paints the same scene again: nothing in it holds a color.

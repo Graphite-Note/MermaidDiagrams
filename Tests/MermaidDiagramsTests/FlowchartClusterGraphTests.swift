@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartClusterGraphTests.swift
+ * --------------------------------------
+ * Layer: Tests
+ * Description: Flowcharts with groups laid out as nested boxes, and what is not laid out.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -85,7 +96,6 @@ final class FlowchartClusterGraphTests: XCTestCase {
 
     func testWhatIsNotLaidOutKeepsTheBlockAsCode() {
         let sources = [
-            "flowchart TD\nsubgraph one\nA --> B\nend\none@{ view: collapsed }",
             "flowchart TD\nsubgraph one\nA\nend\none --> one",
             "flowchart TD\nsubgraph one\nA\nend\nA --> one",
             "flowchart TB\nX --> A\nX --> B\nsubgraph S\ndirection LR\nA --> C\nB --> C\nend",

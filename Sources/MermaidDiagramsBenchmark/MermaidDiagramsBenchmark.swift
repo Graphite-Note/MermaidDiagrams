@@ -6,7 +6,7 @@
  *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -34,7 +34,7 @@ struct MermaidDiagramsBenchmark {
         let typography = DiagramTypography(font: font)
         print("typography for one font: \(measure(perDiagramOf: 1) { _ = DiagramTypography(font: font) })")
         let documentationExamples = try FlowchartCorpus.documentationExamples()
-        let drawable = documentationExamples.filter { source in (try? layout(source, typography)) != nil } // A collapsed group is not laid out yet.
+        let drawable = documentationExamples.filter { source in (try? layout(source, typography)) != nil } // An example the layout refuses is left out.
         print("documentation examples drawn: \(drawable.count) of \(documentationExamples.count)")
         let cases: [(name: String, sources: [String])] = [
             ("documentation examples without subgraphs", drawable.filter { source in !source.contains("subgraph") }),
