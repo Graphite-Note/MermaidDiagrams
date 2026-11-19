@@ -2,7 +2,7 @@
 
 Reads [Mermaid](https://mermaid.js.org) diagram text, lays the diagram out and draws it with Core Graphics and Core Text, in the visual style of [Pele](https://github.com/obsidianmd/pele), Obsidian's Mermaid renderer. It knows no app: fonts, colors and limits are parameters, and it reads and writes no file.
 
-It was written for [Graphite](https://github.com/Graphite-Note/Graphite), whose plan for it, [Docs/Native-diagrams-todo.md](https://github.com/Graphite-Note/Graphite/blob/main/Docs/Native-diagrams-todo.md), records the decisions that shaped it. It needs iOS 27 or macOS 27, and depends on nothing but Foundation, CoreGraphics and CoreText.
+It was written for [Graphite](https://github.com/Graphite-Note/Graphite), whose plan for it, [Docs/Native-diagrams-todo.md](https://github.com/Graphite-Note/Graphite/blob/main/Docs/Native-diagrams-todo.md), records the decisions that shaped it. It needs iOS 26 or macOS 26, and depends on nothing but Foundation, CoreGraphics and CoreText.
 
 ## Using it
 
