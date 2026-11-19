@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -46,6 +46,7 @@ enum DiagramSceneSamples {
         }
         samples += try generated().map { name, source in DiagramSceneSample(name: name, source: source) }
         samples += styled.map { name, source in DiagramSceneSample(name: name, source: source) }
+        samples += DiagramSceneClusterSamples.all.map { name, source in DiagramSceneSample(name: name, source: source) }
         return samples
     }
 

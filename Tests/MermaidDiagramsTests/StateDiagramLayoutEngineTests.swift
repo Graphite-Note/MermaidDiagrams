@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramLayoutEngineTests.swift
+ * -----------------------------------------
+ * Layer: Tests
+ * Description: State diagrams laid out in Pele's measurements.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -110,14 +121,7 @@ final class StateDiagramLayoutEngineTests: XCTestCase {
         XCTAssertEqual(laidOut.size, CGSize(width: 16, height: 16))
     }
 
-    func testWhatCompositeStatesCannotBeLaidOutWithAndTheLayoutLimitAreRefused() throws {
-        for source in ["stateDiagram-v2\nstate Moving {\n  slow --> fast\n}\nMoving --> Moving",
-                       "stateDiagram-v2\nstate Moving {\n  slow --> fast\n}\nnote right of Moving : busy",
-                       "stateDiagram-v2\nstate Moving {\n  slow --> fast\n}\nMoving --> slow"] {
-            XCTAssertThrowsError(try layout(source), source) { error in
-                XCTAssertEqual(error as? StateDiagramLayoutError, .compositeStatesNotLaidOut, source)
-            }
-        }
+    func testTheLayoutLimitIsRefused() throws {
         var limits = MermaidDiagramLimits.standard
         limits.maximumLayoutPointCount = 3
         XCTAssertThrowsError(try layout("stateDiagram-v2\nA --> B\nB --> C\nA --> C\nC --> D", limits: limits)) { error in

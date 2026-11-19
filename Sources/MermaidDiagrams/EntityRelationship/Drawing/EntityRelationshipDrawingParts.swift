@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipDrawingParts.swift
+ * ------------------------------------------
+ * Layer: Core
+ * Description: A laid-out entity relationship diagram's geometry grouped by how it is painted.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out entity relationship diagram's geometry grouped by how it is painted, so that drawing it in any colors is
@@ -43,7 +54,11 @@ public struct EntityRelationshipDrawingParts {
     /// How much wider than its text the patch behind a label is.
     static let labelPatchExtraWidth: CGFloat = 8
 
+    /// The groups' boxes and their titles, painted behind everything; empty parts for a diagram without groups.
+    public let subgraphs: FlowchartClusterDrawingParts
+
     public init(layout: EntityRelationshipLayout) {
+        subgraphs = FlowchartClusterDrawingParts(clusters: layout.subgraphs)
         let identifyingLines = CGMutablePath()
         let nonIdentifyingLines = CGMutablePath()
         let markFills = CGMutablePath()

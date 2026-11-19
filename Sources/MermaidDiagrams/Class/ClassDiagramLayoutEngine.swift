@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramLayoutEngine.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Lays a class diagram out in Pele's style, its namespaces as nested boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a class diagram out in Pele's style: each class a box of compartments sized around its text, notes and
@@ -18,17 +29,20 @@ public enum ClassDiagramLayoutEngine {
 
     public static func layout(_ diagram: ClassDiagram, typography: DiagramTypography,
                               limits: MermaidDiagramLimits) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
-        try layout(diagram, measurers: ClassDiagramTextMeasurers(names: typography.boldNodeText, members: typography.edgeText, marks: typography.smallText),
+        try layout(diagram, measurers: ClassDiagramTextMeasurers(names: typography.boldNodeText, members: typography.edgeText, marks: typography.smallText,
+                                                                 namespaceTitles: typography.nodeText),
                    font: typography.font, limits: limits)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: ClassDiagram, measurers: ClassDiagramTextMeasurers<Measurer>, font: DiagramFont,
                                                        limits: MermaidDiagramLimits) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
-        guard diagram.namespaces.isEmpty else { throw .namespacesNotLaidOut }
         var measured = ClassDiagramMeasurement(diagram: diagram, measurers: measurers)
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         if flowAxes.flowIsVertical { measured.widenCrowdedClasses() }
         let selfLoops = measured.selfLoopEdgeIndices
+        guard diagram.namespaces.isEmpty else {
+            return try layoutInBoxes(diagram, measured: measured, selfLoops: selfLoops, measurers: measurers, font: font, limits: limits)
+        }
         let layeredEdgeIndices = measured.edges.indices.filter { edgeIndex in !measured.edges[edgeIndex].isSelfLoop }
         let graph = LayeredGraph(nodeSizes: measured.layoutSizes(selfLoops: selfLoops).map(flowAxes.flowSize(of:)),
                                  edges: layeredEdgeIndices.map { edgeIndex in
@@ -47,6 +61,36 @@ public enum ClassDiagramLayoutEngine {
         page.placeNodes(flowCenters: placement.nodeCenters)
         page.placeEdges(layeredEdgeIndices: layeredEdgeIndices, placement: placement)
         page.placeSelfLoops(selfLoops)
+        let title = diagram.title.map { title in
+            DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
+        }
+        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+    }
+
+    /// A diagram with namespaces: each a box laid out on its own and placed in the box around it, as Pele's class
+    /// renderer does (`ClassDiagramNamespaceTree`, `ClassDiagramClusterGraph`, `LayeredClusterLayout`).
+    private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: ClassDiagram, measured: ClassDiagramMeasurement, selfLoops: [[Int]],
+                                                                      measurers: ClassDiagramTextMeasurers<Measurer>, font: DiagramFont,
+                                                                      limits: MermaidDiagramLimits) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
+        let clustered = ClassDiagramClusterGraph(tree: ClassDiagramNamespaceTree(diagram: diagram), measured: measured,
+                                                 layoutSizes: measured.layoutSizes(selfLoops: selfLoops), direction: diagram.direction,
+                                                 titleText: measurers.namespaceTitles, edgeTextRoom: edgeTextRoom)
+        var clusterSpacing = spacing(for: measured)
+        clusterSpacing.borderSeparation = ClassDiagramClusterGraph.padding
+        let placement: LayeredClusterPlacement
+        do {
+            placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
+        } catch .tooManyPoints {
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        } catch {
+            throw .namespacesNotLaidOut
+        }
+        var page = ClassDiagramPageAssembly(measured: measured, markRowHeight: measurers.markRowHeight,
+                                            axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
+        page.placeNodes(pageCenters: placement.nodeCenters)
+        page.placeEdges(clustered: clustered, placement: placement)
+        page.placeSelfLoops(selfLoops)
+        page.placeNamespaces(clustered: clustered, placement: placement)
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
         }

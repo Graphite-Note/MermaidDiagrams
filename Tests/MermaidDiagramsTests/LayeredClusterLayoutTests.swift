@@ -1,3 +1,14 @@
+/**
+ * File: LayeredClusterLayoutTests.swift
+ * -------------------------------------
+ * Layer: Tests
+ * Description: Graphs in nested boxes laid out as Pele's compound layout does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -110,18 +121,33 @@ final class LayeredClusterLayoutTests: XCTestCase {
         XCTAssertEqual(route.segmentsRunVertically.last, true)
     }
 
-    func testTwoEdgesLeavingOneRankAcrossTheFlowAreRefused() {
-        XCTAssertThrowsError(try place(nodeClusters: [nil, 0, 0, 0], clusters: [cluster(direction: .leftToRight)],
-                                       edges: [edge(.node(1), .node(3)), edge(.node(2), .node(3)), edge(.node(0), .node(1)), edge(.node(0), .node(2))])) { error in
-            XCTAssertEqual(error as? LayeredClusterLayoutError, .crossFlowExitsShareARank)
+    func testTwoEdgesEnteringOneRankAcrossTheFlowEachRunStraightToTheBorderAsPelesDo() throws {
+        // Nodes 1 and 2 share the left-to-right box's first rank and both take an edge from above, across the box's
+        // flow: Pele pins both first in the rank and runs each straight up to the border, the farther one past the nearer.
+        let placement = try place(nodeClusters: [nil, 0, 0, 0], clusters: [cluster(direction: .leftToRight)],
+                                  edges: [edge(.node(1), .node(3)), edge(.node(2), .node(3)), edge(.node(0), .node(1)), edge(.node(0), .node(2))])
+        let box = placement.clusterFrames[0]
+        for (edgeIndex, node) in [(2, 1), (3, 2)] {
+            let border = try XCTUnwrap(placement.edgeRoutes[edgeIndex].points.first { point in abs(point.y - box.minY) < accuracy })
+            XCTAssertEqual(border.x, placement.nodeCenters[node].x, accuracy: accuracy)
         }
+        XCTAssertTrue(placement.strayEdgeIndices.isEmpty)
     }
 
-    func testAnEdgeBetweenABoxAndWhatItHoldsIsRefused() {
-        for edges in [[edge(.node(0), .cluster(0))], [edge(.cluster(0), .cluster(1))], [edge(.cluster(1), .cluster(1))]] {
-            XCTAssertThrowsError(try place(nodeClusters: [0, 1], clusters: [cluster(), cluster(in: 0)], edges: edges)) { error in
-                XCTAssertEqual(error as? LayeredClusterLayoutError, .edgeIntoItsOwnCluster)
+    func testAnEdgeBetweenABoxAndWhatItHoldsRunsFromCenterToCenter() throws {
+        for edges in [[edge(.node(0), .cluster(0))], [edge(.cluster(0), .cluster(1))], [edge(.cluster(1), .node(1))]] {
+            let placement = try place(nodeClusters: [0, 1], clusters: [cluster(), cluster(in: 0)], edges: edges)
+            XCTAssertEqual(placement.strayEdgeIndices, [0])
+            func center(of end: LayeredClusterEnd) -> CGPoint {
+                switch end {
+                case .node(let node): placement.nodeCenters[node]
+                case .cluster(let box): CGPoint(x: placement.clusterFrames[box].midX, y: placement.clusterFrames[box].midY)
+                }
             }
+            XCTAssertEqual(placement.edgeRoutes[0].points, [center(of: edges[0].source), center(of: edges[0].target)])
+            XCTAssertEqual(placement.edgeRoutes[0].segmentsRunVertically, [true])
+            let label = try XCTUnwrap(placement.edgeLabelCenters[0])
+            XCTAssertEqual(label.x, (center(of: edges[0].source).x + center(of: edges[0].target).x) / 2, accuracy: accuracy)
         }
     }
 

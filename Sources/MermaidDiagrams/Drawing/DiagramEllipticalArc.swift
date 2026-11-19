@@ -1,15 +1,26 @@
+/**
+ * File: DiagramEllipticalArc.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: An elliptical arc as SVG draws one from its end points, added to a Core Graphics path as cubic curves.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
-/// An elliptical arc as SVG draws one from its end points (the small arc, swept with increasing angle, unrotated),
-/// added to a Core Graphics path as cubic curves.
+/// An elliptical arc as SVG draws one from its end points (the small arc, unrotated, swept with increasing angle, SVG's
+/// sweep flag 1, or with decreasing angle, its flag 0), added to a Core Graphics path as cubic curves.
 enum DiagramEllipticalArc {
     /// The most a single cubic curve sweeps: a quarter turn, which it follows closely.
     private static let largestCurveSweep = CGFloat.pi / 2
 
-    /// Adds the arc from `start`, the path's current point, to `end`. Radii too small to reach are scaled up until
-    /// they do, as SVG does.
-    static func addArc(to path: CGMutablePath, from start: CGPoint, to end: CGPoint, radii: CGSize) {
+    /// Adds the arc from `start`, the path's current point, to `end`, clockwise on a page whose y runs down unless
+    /// `sweepsWithIncreasingAngle` is false. Radii too small to reach are scaled up until they do, as SVG does.
+    static func addArc(to path: CGMutablePath, from start: CGPoint, to end: CGPoint, radii: CGSize, sweepsWithIncreasingAngle: Bool = true) {
         var radiusAcross = abs(radii.width)
         var radiusDown = abs(radii.height)
         guard radiusAcross > 0, radiusDown > 0, start != end else {
@@ -27,19 +38,20 @@ enum DiagramEllipticalArc {
         let downSquared = radiusDown * radiusDown
         let numerator = acrossSquared * downSquared - acrossSquared * halfChordDown * halfChordDown - downSquared * halfChordAcross * halfChordAcross
         let denominator = acrossSquared * halfChordDown * halfChordDown + downSquared * halfChordAcross * halfChordAcross
-        // The small arc swept with increasing angle has its center on this side of the chord.
-        let centerScale = (max(0, numerator) / denominator).squareRoot()
+        // The small arc swept with increasing angle has its center on this side of the chord, swept the other way on the other.
+        let centerScale = (max(0, numerator) / denominator).squareRoot() * (sweepsWithIncreasingAngle ? 1 : -1)
         let centerOffset = CGPoint(x: centerScale * radiusAcross * halfChordDown / radiusDown, y: -centerScale * radiusDown * halfChordAcross / radiusAcross)
         let center = CGPoint(x: centerOffset.x + (start.x + end.x) / 2, y: centerOffset.y + (start.y + end.y) / 2)
         let startAngle = atan2((halfChordDown - centerOffset.y) / radiusDown, (halfChordAcross - centerOffset.x) / radiusAcross)
         var sweep = atan2((-halfChordDown - centerOffset.y) / radiusDown, (-halfChordAcross - centerOffset.x) / radiusAcross) - startAngle
-        if sweep < 0 { sweep += 2 * CGFloat.pi }
+        if sweepsWithIncreasingAngle, sweep < 0 { sweep += 2 * CGFloat.pi }
+        if !sweepsWithIncreasingAngle, sweep > 0 { sweep -= 2 * CGFloat.pi }
         addCurves(to: path, center: center, radii: CGSize(width: radiusAcross, height: radiusDown), startAngle: startAngle, sweep: sweep)
     }
 
-    /// The arc as cubic curves of at most a quarter turn each.
+    /// The arc as cubic curves of at most a quarter turn each; a negative sweep turns with decreasing angle.
     private static func addCurves(to path: CGMutablePath, center: CGPoint, radii: CGSize, startAngle: CGFloat, sweep: CGFloat) {
-        let curveCount = max(1, Int((sweep / largestCurveSweep).rounded(.up)))
+        let curveCount = max(1, Int((abs(sweep) / largestCurveSweep).rounded(.up)))
         let curveSweep = sweep / CGFloat(curveCount)
         // The distance along the tangent at which a cubic's control points make it follow a circle of radius 1.
         let controlDistance = 4 / 3 * tan(curveSweep / 4)

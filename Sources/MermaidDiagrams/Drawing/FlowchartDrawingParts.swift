@@ -4,9 +4,9 @@
  * Layer: Core
  * Description: A laid-out flowchart's geometry grouped by how it is painted.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
@@ -35,6 +35,9 @@ public struct FlowchartDrawingParts {
     public let nodeFills: CGPath
     /// The node shapes' outlines and inner lines, stroked one point wide in the border color.
     public let nodeOutlines: CGPath
+    /// The shapes painted piece by piece (a person, stacked documents, a fork's bar), each piece in turn, after the
+    /// node shapes above.
+    public let layeredNodeShapes: [FlowchartShapeLayer]
     public let nodeTexts: [DiagramTextBlock]
     /// The edges the diagram gave colors or a stroke of their own (`linkStyle`), apart from the edges above.
     public let styledEdges: [FlowchartStyledEdgeParts]
@@ -65,6 +68,7 @@ public struct FlowchartDrawingParts {
         edgeTexts = layout.edges.compactMap(\.text)
         nodeFills = nodes.fills
         nodeOutlines = nodes.outlines
+        layeredNodeShapes = nodes.layered
         nodeTexts = nodes.texts
         styledEdges = edges.styled
         styledNodes = nodes.styled
@@ -111,6 +115,7 @@ public struct FlowchartDrawingParts {
     private struct NodePaths {
         let fills = CGMutablePath()
         let outlines = CGMutablePath()
+        var layered: [FlowchartShapeLayer] = []
         var texts: [DiagramTextBlock] = []
         var styled: [FlowchartStyledNodeParts] = []
 
@@ -120,12 +125,16 @@ public struct FlowchartDrawingParts {
                     styled.append(FlowchartStyledNodeParts(node: node, style: style))
                     continue
                 }
+                texts.append(node.text)
+                if let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) {
+                    layered.append(contentsOf: layers)
+                    continue
+                }
                 if let outline = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame) {
                     fills.addPath(outline)
                     outlines.addPath(outline)
                 }
                 if let innerLines = FlowchartShapeDrawing.innerLines(of: node.shape, in: node.frame) { outlines.addPath(innerLines) }
-                texts.append(node.text)
             }
         }
     }

@@ -6,14 +6,15 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
 import CoreGraphics
 
 extension DiagramScene {
-    /// The class diagram's painting: the lines and their marks, the patches behind relation text and that text, the
+    /// The class diagram's painting: the namespaces' boxes, the lines and their marks, the namespaces' titles lines cross,
+    /// the patches behind relation text and that text, the
     /// cardinalities, the boxes and notes, their text (abstract members in italics, static ones underlined), the title.
     /// Annotations and cardinalities are in the muted role and notes on the alternate surface, the colors
     /// `ClassDiagramPalette` names `muted` and `noteSurface`.
@@ -28,11 +29,13 @@ extension ClassDiagramDrawingParts {
     /// Every line is drawn with round caps and joins.
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
+        namespaces.addBoxes(to: &builder)
         builder.stroke(solidLines, .line, line, part: .edge)
         builder.stroke(dashedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedDashLengths), part: .edge)
         builder.stroke(dottedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
         builder.fill(filledMarks, .line, part: .marker)
         builder.stroke(strokedMarks, .line, line, part: .marker)
+        namespaces.addCrossedTitles(to: &builder)
         builder.fill(edgeTextPatches, .background, part: .labelBackground)
         builder.texts(edgeTexts, .foreground, part: .edgeLabel)
         builder.texts(cardinalities, .muted, part: .edgeLabel)

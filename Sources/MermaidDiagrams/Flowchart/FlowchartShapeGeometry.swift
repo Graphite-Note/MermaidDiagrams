@@ -1,8 +1,20 @@
+/**
+ * File: FlowchartShapeGeometry.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: The size, the outline's inset and the edges' span of Mermaid's classic flowchart node shapes, Pele's.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
 /// The geometry of each node shape, Pele's: the size around a text, how far the outline lies inside the bounding
-/// box along each side (where an edge meets it), and how much of a side edges may spread along.
+/// box along each side (where an edge meets it), and how much of a side edges may spread along. The classic shapes
+/// are measured here, the others by `FlowchartExtendedShapeGeometry`.
 enum FlowchartShapeGeometry {
     static let horizontalPadding: CGFloat = 18
     static let verticalPadding: CGFloat = 12
@@ -38,6 +50,8 @@ enum FlowchartShapeGeometry {
             return (CGSize(width: textWidth + 2 * horizontalPadding + paddedHeight / 2, height: paddedHeight), 0)
         case .text:
             return (CGSize(width: textWidth + 8, height: textSize.height + 8), 0)
+        default:
+            return FlowchartExtendedShapeGeometry.size(of: shape, textSize: textSize)
         }
     }
 
@@ -62,6 +76,7 @@ enum FlowchartShapeGeometry {
         case .hexagon: return side.isHorizontal ? 0 : abs(offset) / 2
         case .asymmetric: return side == .left ? height / 4 : 0
         case .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid: return side.isHorizontal ? 0 : height / 8
+        default: return FlowchartExtendedShapeGeometry.inset(of: shape, size: size, side: side, offset: offset)
         }
     }
 
@@ -78,13 +93,14 @@ enum FlowchartShapeGeometry {
         case .asymmetric: span = side.isHorizontal ? size.width - 2 * cornerClearance : 0
         case .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid:
             span = side.isHorizontal ? size.width - size.height / 2 - 2 * cornerClearance : 0
+        default: span = FlowchartExtendedShapeGeometry.span(of: shape, size: size, side: side)
         }
         return max(0, span)
     }
 
     /// How far an ellipse's outline has fallen away from its bounding box, `offset` from the middle of a side
     /// `halfLength` long, for an ellipse `depth` deep at the side's ends.
-    private static func bulge(offset: CGFloat, halfLength: CGFloat, depth: CGFloat) -> CGFloat {
+    static func bulge(offset: CGFloat, halfLength: CGFloat, depth: CGFloat) -> CGFloat {
         guard halfLength > 0 else { return 0 }
         let fraction = min(1, abs(offset) / halfLength)
         return depth * (1 - (1 - fraction * fraction).squareRoot())

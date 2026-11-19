@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartClusterGraph.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A flowchart with subgraphs as a graph of nested boxes to lay out (`LayeredClusterLayout`), as Pele lays it out:
@@ -27,11 +38,9 @@ struct FlowchartClusterGraph {
     /// The side each node's loops go out of, by the direction of the box it is in.
     let loopSides: [DiagramSide]
 
-    /// Fails with `FlowchartLayoutError.subgraphsNotLaidOut` for what is not laid out: a collapsed group, or an edge
-    /// from a group to itself.
+    /// Collapsed groups are folded into nodes before (`FlowchartCollapsedGroups`).
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, measured: FlowchartMeasurement, titleText: Measurer,
-                                         edgeTextRoom: CGSize) throws(FlowchartLayoutError) {
-        guard !diagram.subgraphs.contains(where: \.isCollapsed) else { throw .subgraphsNotLaidOut }
+                                         edgeTextRoom: CGSize) {
         let nesting = FlowchartClusterNesting(diagram: diagram)
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
@@ -58,7 +67,7 @@ struct FlowchartClusterGraph {
         let clusters = diagram.subgraphs.indices.map { subgraph in
             Self.cluster(parent: nesting.subgraphParents[subgraph], direction: diagram.subgraphs[subgraph].direction, title: measuredTitles[subgraph])
         }
-        let edges = try Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,
+        let edges = Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,
                                    representedSubgraphs: nesting.representedSubgraphs)
         layoutEdgeIndices = edges.diagramIndices
         graph = LayeredClusterGraph(nodeSizes: nodeSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges.layout,
@@ -74,9 +83,10 @@ struct FlowchartClusterGraph {
                               minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance)
     }
 
-    /// The edges between two different ends, with their texts' room; an edge from a group to itself fails.
+    /// The edges between two different ends, with their texts' room; an edge from a node or a group to itself loops
+    /// beside it and is not laid out.
     private static func edges(of diagram: FlowchartDiagram, measured: FlowchartMeasurement, edgeTextRoom: CGSize, layoutNodeIndices: [Int?],
-                              representedSubgraphs: [Int?]) throws(FlowchartLayoutError) -> (layout: [LayeredClusterEdge], diagramIndices: [Int]) {
+                              representedSubgraphs: [Int?]) -> (layout: [LayeredClusterEdge], diagramIndices: [Int]) {
         func end(of node: Int) -> LayeredClusterEnd {
             if let subgraph = representedSubgraphs[node] { return .cluster(subgraph) }
             return .node(layoutNodeIndices[node] ?? 0)
@@ -86,10 +96,7 @@ struct FlowchartClusterGraph {
         for (edgeIndex, edge) in diagram.edges.enumerated() {
             let source = end(of: edge.sourceIndex)
             let target = end(of: edge.targetIndex)
-            if source == target {
-                if case .cluster = source { throw .subgraphsNotLaidOut }
-                continue
-            }
+            guard source != target else { continue }
             let labelSize = measured.edgeTexts[edgeIndex].map { text in
                 CGSize(width: text.size.width + edgeTextRoom.width, height: text.size.height + edgeTextRoom.height)
             }

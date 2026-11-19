@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramLayoutEngine.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Lays a state diagram out in Pele's style, its composite states as nested boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a state diagram out in Pele's style: boxes sized around their names, wrapped at 200 points, and the small

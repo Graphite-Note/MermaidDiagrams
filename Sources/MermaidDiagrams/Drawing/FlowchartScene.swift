@@ -5,7 +5,7 @@
  * Description: A laid-out flowchart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -14,7 +14,7 @@ import CoreGraphics
 extension DiagramScene {
     /// The flowchart's painting: the groups' boxes and the titles no edge crosses, the edges and their marks, the
     /// styled edges, the titles edges cross on their patches, the patches behind edge text and that text, the node
-    /// shapes, the styled ones, the nodes' text, the title.
+    /// shapes, those painted piece by piece, the styled ones, the nodes' text, the title.
     public init(layout: FlowchartLayout) {
         var builder = DiagramSceneBuilder()
         FlowchartDrawingParts(layout: layout).addScene(to: &builder)
@@ -43,7 +43,13 @@ extension FlowchartDrawingParts {
         builder.texts(edgeTexts, .foreground, part: .edgeLabel)
         builder.fill(nodeFills, .surface, part: .node)
         builder.stroke(nodeOutlines, .border, line, part: .node)
+        for layer in layeredNodeShapes { layer.add(to: &builder, style: nil, stroke: line) }
         for node in styledNodes {
+            if !node.layers.isEmpty {
+                let stroke = DiagramStroke.rounded(lineWidth: node.lineWidth, dashLengths: node.style.strokeDashLengths ?? [])
+                for layer in node.layers { layer.add(to: &builder, style: node.style, stroke: stroke) }
+                continue
+            }
             if let shape = node.fill { builder.fill(shape, node.style.fill.map(DiagramPaint.color) ?? .surface, part: .node) }
             builder.stroke(node.outline, node.style.stroke.map(DiagramPaint.color) ?? .border,
                            .rounded(lineWidth: node.lineWidth, dashLengths: node.style.strokeDashLengths ?? []), part: .node)
@@ -51,6 +57,24 @@ extension FlowchartDrawingParts {
         builder.texts(nodeTexts, .foreground, part: .label)
         for node in styledNodes { builder.text(node.text, node.style.textColor.map(DiagramPaint.color) ?? .foreground, part: .label) }
         builder.title(title)
+    }
+}
+
+extension FlowchartShapeLayer {
+    /// The piece in the usual colors, or in those a node's style sets: Pele's style overrides the fill and the stroke of
+    /// every piece but a fork's or a junction's line-colored fill, and strokes a data store's box only when it sets a stroke.
+    func add(to builder: inout DiagramSceneBuilder, style: DiagramElementStyle?, stroke: DiagramStroke) {
+        builder.keepNextShapeApart()
+        let fillPaint = style?.fill.map(DiagramPaint.color) ?? .surface
+        let strokePaint = style?.stroke.map(DiagramPaint.color) ?? .border
+        switch painting {
+        case .filledAndOutlined: builder.fillAndStroke(path, fill: fillPaint, stroke: strokePaint, stroke, part: .node)
+        case .outlined: builder.stroke(path, strokePaint, stroke, part: .node)
+        case .filledInLineColorAndOutlined: builder.fillAndStroke(path, fill: .line, stroke: strokePaint, stroke, part: .node)
+        case .filledOnly:
+            builder.fill(path, fillPaint, part: .node)
+            if let color = style?.stroke { builder.stroke(path, .color(color), stroke, part: .node) }
+        }
     }
 }
 

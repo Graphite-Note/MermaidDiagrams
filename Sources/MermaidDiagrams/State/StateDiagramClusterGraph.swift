@@ -5,8 +5,8 @@
  * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
@@ -35,14 +35,20 @@ struct StateDiagramClusterGraph {
     let depths: [Int]
     /// For each composite whose states sit in several regions, its regions' boxes in `graph.clusters`, in region order.
     let regionClusterIndices: [[Int]]
+    /// The transitions between a composite and a state inside it, by transition index, with the node in `graph` of the
+    /// point inside the composite they run from or to.
+    let anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)]
+    /// The direction each composite's box runs in.
+    let compositeDirections: [FlowchartDirection]
+    /// The notes beside composites and the unseen boxes around composites with notes or loops.
+    let compositeSurroundings: StateDiagramCompositeSurroundings
 
-    /// Fails with `StateDiagramLayoutError.compositeStatesNotLaidOut` for what is not laid out: a transition from a
-    /// composite state to itself, a note beside a composite state, a composite inside itself through its states.
+    /// Fails with `StateDiagramLayoutError.compositeStatesNotLaidOut` for a composite inside itself through its states.
+    /// A composite with notes or loops sits in an unseen box with its notes (`StateDiagramCompositeSurroundings`).
     init<Measurer: DiagramTextMeasuring>(diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings,
                                          flowIsVertical: Bool, titleText: Measurer) throws(StateDiagramLayoutError) {
         var compositeOfState = [Int?](repeating: nil, count: diagram.states.count)
         for (compositeIndex, composite) in diagram.composites.enumerated() { compositeOfState[composite.stateIndex] = compositeIndex }
-        guard !diagram.notes.contains(where: { note in compositeOfState[note.stateIndex] != nil }) else { throw .compositeStatesNotLaidOut }
         self.compositeOfState = compositeOfState
         let measuredTitles = diagram.composites.map { composite in
             let title = DiagramTextBlock(label: diagram.states[composite.stateIndex].name, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
@@ -54,39 +60,81 @@ struct StateDiagramClusterGraph {
         }
         let regions = Self.regionClusters(of: diagram, startingAt: clusters.count)
         regionClusterIndices = regions.indicesByComposite
-        for (compositeIndex, regionIndices) in regions.indicesByComposite.enumerated() {
-            for _ in regionIndices {
-                clusters.append(LayeredCluster(parent: compositeIndex, direction: nil,
-                                               padding: LayeredClusterPadding(side: Self.regionPadding, top: Self.regionPadding, bottom: Self.regionPadding),
-                                               minimumWidth: 0))
+        clusters += regions.indicesByComposite.enumerated().flatMap { compositeIndex, regionIndices in
+            regionIndices.map { _ in
+                LayeredCluster(parent: compositeIndex, direction: nil,
+                               padding: LayeredClusterPadding(side: Self.regionPadding, top: Self.regionPadding, bottom: Self.regionPadding), minimumWidth: 0)
             }
         }
-        for (compositeIndex, composite) in diagram.composites.enumerated() {
-            clusters[compositeIndex].parent = regions.container(of: composite.stateIndex, in: diagram)
-        }
+        let containers = diagram.composites.map { composite in regions.container(of: composite.stateIndex, in: diagram) }
+        for compositeIndex in diagram.composites.indices { clusters[compositeIndex].parent = containers[compositeIndex] }
         depths = try Self.depths(of: diagram)
-        let nodes = Self.nodes(of: diagram, compositeOfState: compositeOfState, surroundings: surroundings, flowIsVertical: flowIsVertical, regions: regions)
+        compositeDirections = StateDiagramCompositeAnchors.compositeDirections(of: diagram)
+        let anchors = StateDiagramCompositeAnchors.anchors(of: diagram, compositeOfState: compositeOfState)
+        let nodes = Self.nodes(of: diagram, compositeOfState: compositeOfState, surroundings: surroundings, flowIsVertical: flowIsVertical, regions: regions,
+                               anchors: anchors)
         layoutNodeIndices = nodes.layoutNodeIndices
-        let edges = try Self.edges(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, compositeOfState: compositeOfState)
+        self.anchors = nodes.anchors
+        let edges = try Self.edges(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, compositeOfState: compositeOfState,
+                                   anchors: nodes.anchors)
+        let surroundings = Self.wrapComposites(of: diagram, measured: measured, compositeOfState: compositeOfState, containers: containers,
+                                               directions: compositeDirections, clusters: &clusters, firstNode: nodes.sizes.count)
+        compositeSurroundings = surroundings
         layoutTransitionIndices = edges.transitionIndices
-        graph = LayeredClusterGraph(nodeSizes: nodes.sizes, nodeClusters: nodes.clusters, clusters: clusters, edges: edges.layout,
+        graph = LayeredClusterGraph(nodeSizes: nodes.sizes + surroundings.nodeSizes, nodeClusters: nodes.clusters + surroundings.nodeClusters,
+                                    clusters: clusters, edges: edges.layout + surroundings.edges,
                                     direction: diagram.direction.layeredDirection)
     }
 
+    /// Puts each composite with notes or loops in an unseen box of its own, which runs across while the composite keeps
+    /// running as the box it was in did, and appends those boxes to `clusters`.
+    private static func wrapComposites(of diagram: StateDiagram, measured: StateDiagramMeasurement, compositeOfState: [Int?], containers: [Int?],
+                                       directions: [FlowchartDirection], clusters: inout [LayeredCluster],
+                                       firstNode: Int) -> StateDiagramCompositeSurroundings {
+        let surroundings = StateDiagramCompositeSurroundings(
+            diagram: diagram, measured: measured, compositeOfState: compositeOfState, containers: containers,
+            containerRunsVertically: diagram.composites.map { composite in
+                !(diagram.states[composite.stateIndex].compositeIndex.map { directions[$0] } ?? diagram.direction).runsAcross
+            }, firstCluster: clusters.count, firstNode: firstNode)
+        for (compositeIndex, wrapper) in surroundings.wrapperClusters {
+            clusters[compositeIndex].parent = wrapper
+            clusters[compositeIndex].direction = directions[compositeIndex].layeredDirection
+        }
+        clusters += surroundings.clusters
+        return surroundings
+    }
+
     /// The states that are not composites as nodes, in the layout's order: each one's place with its notes and loops on
-    /// the page, and the box it sits directly in.
+    /// the page, and the box it sits directly in; with the points of no size the anchored transitions run from or to,
+    /// those leaving a composite after the starts and before the other states, those arriving after them all.
     private static func nodes(of diagram: StateDiagram, compositeOfState: [Int?], surroundings: StateDiagramSurroundings, flowIsVertical: Bool,
-                              regions: RegionClusters) -> (layoutNodeIndices: [Int?], sizes: [CGSize], clusters: [Int?]) {
+                              regions: RegionClusters, anchors: [StateDiagramCompositeAnchor])
+        -> (layoutNodeIndices: [Int?], sizes: [CGSize], clusters: [Int?], anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)]) {
         var layoutNodeIndices = [Int?](repeating: nil, count: diagram.states.count)
         var sizes: [CGSize] = []
         var clusters: [Int?] = []
+        var placedAnchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)] = [:]
+        func place(_ anchors: [StateDiagramCompositeAnchor]) {
+            for anchor in anchors {
+                placedAnchors[anchor.transitionIndex] = (anchor, sizes.count)
+                sizes.append(.zero)
+                clusters.append(anchor.compositeIndex)
+            }
+        }
+        var inwardPlaced = false
         for state in StateDiagramLayoutEngine.flowOrder(of: diagram) where compositeOfState[state] == nil {
+            if !inwardPlaced, !diagram.states[state].kind.isStart {
+                place(anchors.filter(\.isInward))
+                inwardPlaced = true
+            }
             layoutNodeIndices[state] = sizes.count
             let place = surroundings.placeSizes[state]
             sizes.append(flowIsVertical ? CGSize(width: place.across, height: place.along) : CGSize(width: place.along, height: place.across))
             clusters.append(regions.container(of: state, in: diagram))
         }
-        return (layoutNodeIndices, sizes, clusters)
+        if !inwardPlaced { place(anchors.filter(\.isInward)) }
+        place(anchors.filter { anchor in !anchor.isInward })
+        return (layoutNodeIndices, sizes, clusters, placedAnchors)
     }
 
     /// A composite's box: a flowchart group's padding, its name's band along the top, at least as wide as its name.
@@ -153,8 +201,9 @@ struct StateDiagramClusterGraph {
 
     /// The transitions between two different ends, with their texts' room; a transition from a composite state to
     /// itself fails, and one from another state to itself loops beside it.
-    private static func edges(of diagram: StateDiagram, measured: StateDiagramMeasurement, layoutNodeIndices: [Int?],
-                              compositeOfState: [Int?]) throws(StateDiagramLayoutError) -> (layout: [LayeredClusterEdge], transitionIndices: [Int]) {
+    private static func edges(of diagram: StateDiagram, measured: StateDiagramMeasurement, layoutNodeIndices: [Int?], compositeOfState: [Int?],
+                              anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)])
+        throws(StateDiagramLayoutError) -> (layout: [LayeredClusterEdge], transitionIndices: [Int]) {
         func end(of state: Int) -> LayeredClusterEnd {
             if let compositeIndex = compositeOfState[state] { return .cluster(compositeIndex) }
             return .node(layoutNodeIndices[state] ?? 0)
@@ -163,12 +212,13 @@ struct StateDiagramClusterGraph {
         var layout: [LayeredClusterEdge] = []
         var transitionIndices: [Int] = []
         for (transitionIndex, transition) in diagram.transitions.enumerated() {
-            let source = end(of: transition.sourceIndex)
-            let target = end(of: transition.targetIndex)
-            if source == target {
-                if case .cluster = source { throw .compositeStatesNotLaidOut }
-                continue
+            var source = end(of: transition.sourceIndex)
+            var target = end(of: transition.targetIndex)
+            if let anchored = anchors[transitionIndex] {
+                if anchored.anchor.isInward { source = .node(anchored.layoutNodeIndex) } else { target = .node(anchored.layoutNodeIndex) }
             }
+            // A loop on a state or a composite hangs beside it and is not laid out.
+            guard source != target else { continue }
             let labelSize = measured.transitionTexts[transitionIndex].map { text in
                 CGSize(width: text.size.width + room.width, height: text.size.height + room.height)
             }

@@ -1,11 +1,22 @@
+/**
+ * File: FlowchartShapeGeometryTests.swift
+ * ---------------------------------------
+ * Layer: Tests
+ * Description: The sizes, insets and spans of the flowchart node shapes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
 final class FlowchartShapeGeometryTests: XCTestCase {
     private let textSize = CGSize(width: 40, height: 24)
 
-    func testEveryShapeIsLargerThanItsTextExceptBareText() {
-        for shape in FlowchartNodeShape.allCases {
+    func testEveryShapeThatHoldsTextIsLargerThanIt() {
+        for shape in FlowchartNodeShape.allCases where shape.holdsText {
             let size = FlowchartShapeGeometry.size(of: shape, textSize: textSize).size
             XCTAssertGreaterThan(size.width, textSize.width, "\(shape)")
             XCTAssertGreaterThan(size.height, textSize.height, "\(shape)")
@@ -16,8 +27,8 @@ final class FlowchartShapeGeometryTests: XCTestCase {
         XCTAssertEqual(FlowchartShapeGeometry.size(of: .rectangle, textSize: CGSize(width: 2, height: 24)).size.width, 48)
     }
 
-    func testOnlyACylinderMovesItsTextDown() {
-        for shape in FlowchartNodeShape.allCases {
+    func testOnlyACylinderOfTheClassicShapesMovesItsTextDown() {
+        for shape in FlowchartShapeCatalogue.classicShapes {
             let offset = FlowchartShapeGeometry.size(of: shape, textSize: textSize).textOffset
             XCTAssertEqual(offset > 0, shape == .cylinder, "\(shape)")
         }

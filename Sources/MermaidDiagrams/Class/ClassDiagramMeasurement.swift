@@ -1,12 +1,32 @@
+/**
+ * File: ClassDiagramMeasurement.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// The fonts a class diagram's text is measured in, as Pele sizes them: class names and the title in bold at the
 /// note's size; members, notes, interfaces and relation text at seven eighths of it; annotations and cardinalities at
-/// four fifths.
+/// four fifths; namespaces' titles in the regular weight at the note's size.
 struct ClassDiagramTextMeasurers<Measurer: DiagramTextMeasuring> {
     let names: Measurer
     let members: Measurer
     let marks: Measurer
+    let namespaceTitles: Measurer
+
+    /// Namespaces' titles in `namespaceTitles`, or in the names' measurer when none is given.
+    init(names: Measurer, members: Measurer, marks: Measurer, namespaceTitles: Measurer? = nil) {
+        self.names = names
+        self.members = members
+        self.marks = marks
+        self.namespaceTitles = namespaceTitles ?? names
+    }
 
     /// The height of a row of annotations or cardinalities: 1.4 times their size, rounded, as in Pele.
     var markRowHeight: CGFloat { (marks.fontSize * ClassDiagramBox.markRowHeightRatio).rounded() }

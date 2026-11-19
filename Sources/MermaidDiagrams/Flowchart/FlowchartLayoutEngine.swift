@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartLayoutEngine.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: Lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single nodes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a flowchart out in Pele's style: each node's shape sized around its text, wrapped at 200 points; the nodes in
@@ -24,9 +35,11 @@ public enum FlowchartLayoutEngine {
         try layout(diagram, nodeText: typography.nodeText, edgeText: typography.edgeText, font: typography.font, limits: limits, spacing: diagramSpacing)
     }
 
-    static func layout<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, font: DiagramFont,
+    static func layout<Measurer: DiagramTextMeasuring>(_ written: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, font: DiagramFont,
                                                        limits: MermaidDiagramLimits,
                                                        spacing diagramSpacing: DiagramSpacing = .standard) throws(FlowchartLayoutError) -> FlowchartLayout {
+        // A collapsed group is drawn as one node, what it holds left out (`FlowchartCollapsedGroups`).
+        let diagram = FlowchartCollapsedGroups.collapsing(written)
         let spacing = diagramSpacing == .compact ? Self.compactSpacing : Self.spacing
         let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText,
                                             wrappingWidth: diagramSpacing == .compact ? compactWrappingWidth : wrappingWidth)
@@ -58,11 +71,11 @@ public enum FlowchartLayoutEngine {
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
-    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`). What is not laid out fails with `subgraphsNotLaidOut`.
+    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`). Only groups inside each other fail, with `subgraphsNotLaidOut`.
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
                                                                       font: DiagramFont, limits: MermaidDiagramLimits,
                                                                       spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
-        let clustered = try FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom)
+        let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom)
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)

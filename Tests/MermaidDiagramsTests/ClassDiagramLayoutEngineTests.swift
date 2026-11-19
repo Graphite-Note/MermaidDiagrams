@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramLayoutEngineTests.swift
+ * -----------------------------------------
+ * Layer: Tests
+ * Description: Class diagrams laid out in Pele's measurements.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -214,10 +225,7 @@ final class ClassDiagramLayoutEngineTests: XCTestCase {
         XCTAssertEqual(laidOut.noteLinks.count, 1)
     }
 
-    func testNamespacesAndTheLayoutLimitAreRefused() {
-        XCTAssertThrowsError(try layout("classDiagram\nnamespace Shapes {\n  class Triangle\n}")) { error in
-            XCTAssertEqual(error as? ClassDiagramLayoutError, .namespacesNotLaidOut)
-        }
+    func testTheLayoutLimitIsRefused() {
         var limits = MermaidDiagramLimits.standard
         limits.maximumLayoutPointCount = 2
         XCTAssertThrowsError(try layout("classDiagram\nA --> B\nB --> C", limits: limits)) { error in

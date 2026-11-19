@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipParser.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Reads an entity relationship diagram's statements after its keyword.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.3
+ * Date: 19/11/2026
+ */
+
 /// Reads an entity relationship diagram's statements after its `erDiagram` keyword, as Mermaid's grammar does:
 /// entities, with an alias (`p[Person]`), classes (`:::name`) and attributes (`{ … }`); relationships
 /// (`A ||--o{ B : label`); groups (`subgraph … end`); `direction`; accessibility text; and the statements that only
@@ -15,7 +26,7 @@ struct EntityRelationshipParser {
                                               currentStart: cursor)
         try parser.advance()
         try parser.readStatements()
-        return parser.builder.diagram
+        return parser.builder.finished()
     }
 
     private mutating func advance() throws(MermaidDiagramReadError) {
@@ -78,6 +89,7 @@ struct EntityRelationshipParser {
         let attributes = try readAttributeBlock(of: name)
         let index = try builder.entityIndex(for: name)
         builder.addAttributes(attributes, toEntityAt: index)
+        builder.noteNamesInOpenSubgraph([name.text])
     }
 
     /// `name[alias]`, then classes and attributes. As in Mermaid, no relationship follows an alias in one statement.
@@ -93,6 +105,7 @@ struct EntityRelationshipParser {
         let index = try builder.entityIndex(for: name)
         builder.setAlias(EntityRelationshipName(text: aliasText, form: aliasForm).label, ofEntityAt: index)
         builder.addAttributes(attributes, toEntityAt: index)
+        builder.noteNamesInOpenSubgraph([name.text])
     }
 
     /// The rest of `first ||--o{ second : label`, from its first cardinality.
@@ -113,6 +126,7 @@ struct EntityRelationshipParser {
         let secondIndex = try builder.entityIndex(for: second)
         try builder.addRelationship(EntityRelationship(firstEntityIndex: firstIndex, secondEntityIndex: secondIndex, firstEntityCardinality: firstCardinality,
                                                        secondEntityCardinality: secondCardinality, identification: identification, label: label))
+        builder.noteNamesInOpenSubgraph([first.text, second.text])
     }
 
     /// A word, a quoted name or other quoted text; a number is no label in Mermaid's grammar.
@@ -142,16 +156,22 @@ struct EntityRelationshipParser {
         try advance()
         guard case .name(let identifier, _) = current else { throw problem(.expectedNode) }
         try advance()
+        // Pele's database keeps a group's title as Markdown, whether it is the identifier or the words in brackets.
+        var title = DiagramLabelDecoder.label(from: identifier, form: .markdown)
         if current == .openingBracket {
             let openingLine = currentStart.line
             try advance()
-            guard case .name = current else { throw unclosedAlias(openingLine: openingLine) }
-            while case .name = current { try advance() }
-            guard current == .closingBracket else { throw unclosedAlias(openingLine: openingLine) }
+            var words: [String] = []
+            while case .name(let word, _) = current {
+                words.append(word)
+                try advance()
+            }
+            guard !words.isEmpty, current == .closingBracket else { throw unclosedAlias(openingLine: openingLine) }
+            title = DiagramLabelDecoder.label(from: words.joined(separator: " "), form: .markdown)
             try advance()
         }
         guard current == .lineBreak || current == .endOfText else { throw unexpectedToken() }
-        builder.openSubgraph(identifier: identifier)
+        builder.openSubgraph(identifier: identifier, title: title)
     }
 
     /// `:::first,second` after an entity's name: classes, counted and not applied.

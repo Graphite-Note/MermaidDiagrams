@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipLayout.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: An entity relationship diagram laid out on a page, with its groups' boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// An entity relationship diagram laid out on a page whose origin is the top left corner and whose y runs down, in
@@ -12,6 +23,8 @@ public struct EntityRelationshipLayout: Equatable, Sendable {
     public let relationships: [EntityRelationshipLayoutRelationship]
     /// The diagram's title above it, or nil.
     public let title: DiagramTextBlock?
+    /// The `subgraph` groups' boxes, painted as a flowchart's groups are; empty for a diagram without groups.
+    public internal(set) var subgraphs: [FlowchartLayoutCluster] = []
 }
 
 /// An entity's box: its name in a header, and a row under it for each attribute.

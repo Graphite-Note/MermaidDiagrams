@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipLayoutEngine.swift
+ * ------------------------------------------
+ * Layer: Core
+ * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.3
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays an entity relationship diagram out in Pele's style: each entity a box sized around its name and attribute
@@ -24,10 +35,12 @@ public enum EntityRelationshipLayoutEngine {
     ///   - rowText: Measures the attribute rows and the labels; keys are measured from it at their own size.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer, font: DiagramFont,
                                                        limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
-        guard diagram.subgraphCount == 0 else { throw .subgraphsNotLaidOut }
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
+        guard diagram.subgraphs.isEmpty else {
+            return try layoutInBoxes(diagram, nameText: nameText, rowText: rowText, font: font, limits: limits)
+        }
         let measured = EntityRelationshipMeasurement(diagram: diagram, measurers: EntityRelationshipTextMeasurers(name: nameText, row: rowText),
-                                                     loopsLeaveBelow: !flowAxes.flowIsVertical)
+                                                     loopsLeaveBelow: Array(repeating: !flowAxes.flowIsVertical, count: diagram.entities.count))
         let layeredIndices = diagram.relationships.indices.filter { index in
             diagram.relationships[index].firstEntityIndex != diagram.relationships[index].secondEntityIndex
         }
@@ -46,6 +59,39 @@ public enum EntityRelationshipLayoutEngine {
         page.placeBoxes(flowCenters: placement.nodeCenters)
         page.placeRelationships(layeredIndices: layeredIndices, placement: placement)
         page.placeSelfRelationships()
+        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
+        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+    }
+
+    /// A diagram with groups: each a box laid out on its own and placed in the box around it, as Pele's renderer does
+    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`). Groups inside each other fail with `subgraphsNotLaidOut`.
+    private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer,
+                                                                      font: DiagramFont,
+                                                                      limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
+        let clustered = EntityRelationshipClusterGraph(diagram: diagram, titleText: nameText)
+        let measured = EntityRelationshipMeasurement(diagram: diagram, measurers: EntityRelationshipTextMeasurers(name: nameText, row: rowText),
+                                                     loopsLeaveBelow: clustered.entityRunsAcross)
+        let sizes = measured.layoutSizes()
+        let nodeSizes = diagram.entities.indices.compactMap { entity in clustered.layoutNodeIndices[entity].map { _ in sizes[entity] } }
+        let labelSizes = measured.labels.map { label in
+            label.map { label in CGSize(width: label.size.width + labelRoom.width, height: label.size.height + labelRoom.height) }
+        }
+        var clusterSpacing = spacing
+        clusterSpacing.borderSeparation = EntityRelationshipClusterGraph.padding
+        let placement: LayeredClusterPlacement
+        do {
+            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: clusterSpacing,
+                                                       maximumPointCount: limits.maximumLayoutPointCount)
+        } catch .tooManyPoints {
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        } catch {
+            throw .subgraphsNotLaidOut
+        }
+        var page = EntityRelationshipPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
+        page.placeBoxes(clustered: clustered, placement: placement)
+        page.placeRelationships(clustered: clustered, placement: placement)
+        page.placeSelfRelationships()
+        page.placeSubgraphs(clustered: clustered, placement: placement)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
     }

@@ -6,7 +6,7 @@
  *              before it when both are painted alike, opaque and apart, and a fill and the stroke of its path into one.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -56,6 +56,12 @@ struct DiagramSceneBuilder {
 
     mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, part: DiagramScenePart) {
         for block in blocks { text(block, paint, isBold: isBold, part: part) }
+    }
+
+    /// Keeps the next shape apart from the shapes before it, which it would otherwise be merged into: for pieces drawn one
+    /// over another, which are painted one by one.
+    mutating func keepNextShapeApart() {
+        finishRun()
     }
 
     /// The diagram's title, bold in the foreground color.

@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagram.swift
+ * ------------------------
+ * Layer: Core
+ * Description: A Mermaid class diagram as its text describes it.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.3
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid class diagram (`classDiagram` or `classDiagram-v2`) as its text describes it: the classes in the order
 /// they first appear, the relations between them and the notes in the order they are written, and the groups and
 /// statements read but not drawn.
@@ -7,9 +18,12 @@ public struct ClassDiagram: Equatable, Sendable {
     public internal(set) var classes: [ClassDiagramClass]
     public internal(set) var relations: [ClassDiagramRelation]
     public internal(set) var notes: [ClassDiagramNote]
-    /// The `namespace … { … }` groups, in the order they open. They are read so that a diagram with groups is
-    /// recognised; laying them out is not supported yet.
+    /// The `namespace … { … }` groups, in the order they open, each statement once; drawn as boxes around their classes
+    /// (`ClassDiagramNamespaceTree`).
     public internal(set) var namespaces: [ClassDiagramNamespace]
+    /// The front matter's `class: hierarchicalNamespaces`: true unless it is false, when only the namespaces the text
+    /// declares are drawn, side by side, each titled with its full name.
+    public internal(set) var hierarchicalNamespaces = true
     /// The diagram's title, from `title:` in the front matter, or nil.
     public internal(set) var title: String?
     /// `accTitle: …`, the short name a screen reader gives the diagram, or nil.
@@ -49,12 +63,16 @@ public struct ClassDiagramNote: Equatable, Sendable {
 }
 
 /// A `namespace Name { … }` group: its identifier (a nested one's joined to its parents' by dots), its title, and
-/// the classes declared inside it.
+/// the classes and notes declared inside it.
 public struct ClassDiagramNamespace: Equatable, Sendable {
     public let identifier: String
     public let title: DiagramLabel
     /// Indexes into `ClassDiagram.classes`, in the order the classes appear in the group.
     public internal(set) var classIndices: [Int]
+    /// Indexes into `ClassDiagram.notes` of the notes written inside the group.
+    public internal(set) var noteIndices: [Int] = []
+    /// Index into `ClassDiagram.namespaces` of the namespace this one is written inside, or nil at the top level.
+    var enclosingNamespaceIndex: Int?
 
     init(identifier: String, title: DiagramLabel, classIndices: [Int] = []) {
         self.identifier = identifier

@@ -4,9 +4,9 @@
  * Layer: Core
  * Description: Puts a placed flowchart on the page.
  *
- * Authors: Félix Chevalier
- * Version: 0.5
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.6
+ * Date: 19/11/2026
  */
 
 import CoreGraphics
@@ -80,12 +80,14 @@ struct FlowchartPageAssembly {
                                    text: centered(measured.edgeTexts[edgeIndex], at: textCenter), style: edge.style)
     }
 
-    /// The loops of every node that has edges to itself.
+    /// The loops of every node that has edges to itself; a group's from the middle of its box, as Pele loops a group
+    /// whose drawn node has no size.
     mutating func placeSelfLoops() {
-        for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() where clustered?.representedSubgraphs[node] == nil {
+        for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() {
+            let isGroup = clustered?.representedSubgraphs[node] != nil
             for (loopIndex, edgeIndex) in loopEdgeIndices.enumerated() {
                 let edge = diagram.edges[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shape: diagram.nodes[node].shape, size: measured.shapeSizes[node],
+                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shape: diagram.nodes[node].shape, size: isGroup ? .zero : measured.shapeSizes[node],
                                                    loopSide: clustered?.loopSides[node] ?? axes.loopSide, loopIndex: loopIndex,
                                                    textSize: measured.edgeTexts[edgeIndex]?.size)
                 let arriving = unitVector(from: loop.control2, to: loop.back)
@@ -122,7 +124,7 @@ struct FlowchartPageAssembly {
     mutating func placeEdges(clustered: FlowchartClusterGraph, placement: LayeredClusterPlacement) {
         var ends: [FlowchartEdgePorts.End] = []
         func endItem(of node: Int) -> Int { clustered.representedSubgraphs[node].map { subgraph in diagram.nodes.count + subgraph } ?? node }
-        for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
+        for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() where !placement.strayEdgeIndices.contains(layoutIndex) {
             let route = placement.edgeRoutes[layoutIndex]
             let edge = diagram.edges[edgeIndex]
             ends.append(Self.routeEnd(of: route, edgeIndex: edgeIndex, isSourceEnd: true, item: endItem(of: edge.sourceIndex)))
@@ -135,6 +137,12 @@ struct FlowchartPageAssembly {
                                        keptClear: Self.borderCrossings(of: placement, firstBoxNode: diagram.nodes.count))
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
+            if placement.strayEdgeIndices.contains(layoutIndex) {
+                // Between a group and something inside it: from one center to the other, its mark under the node, as Pele draws it.
+                edges[edgeIndex] = edgeAlong(route.points, edgeIndex: edgeIndex, textCenter: placement.edgeLabelCenters[layoutIndex] ?? route.points[0],
+                                             segmentsRunVertically: route.segmentsRunVertically)
+                continue
+            }
             guard let sourcePoint = ports.sourcePoints[edgeIndex], let targetPoint = ports.targetPoints[edgeIndex] else { continue }
             let points = [sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint]
             edgePoints.append(points)

@@ -1,11 +1,22 @@
+/**
+ * File: FlowchartShapeDrawingTests.swift
+ * --------------------------------------
+ * Layer: Tests
+ * Description: The outlines and inner lines of the classic flowchart node shapes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
 final class FlowchartShapeDrawingTests: XCTestCase {
     private let frame = CGRect(x: 10, y: 20, width: 120, height: 60)
 
-    func testEveryOutlineFillsItsFrameAndBareTextHasNone() throws {
-        for shape in FlowchartNodeShape.allCases {
+    func testEveryClassicOutlineFillsItsFrameAndBareTextHasNone() throws {
+        for shape in FlowchartShapeCatalogue.classicShapes {
             guard let outline = FlowchartShapeDrawing.outline(of: shape, in: frame) else {
                 XCTAssertEqual(shape, .text)
                 continue
@@ -25,8 +36,8 @@ final class FlowchartShapeDrawingTests: XCTestCase {
         XCTAssertTrue(outline.contains(CGPoint(x: frame.minX + 4, y: frame.midY)))
     }
 
-    func testOnlyASubroutineACylinderAndADoubleCircleHaveInnerLines() {
-        let withInnerLines = FlowchartNodeShape.allCases.filter { shape in FlowchartShapeDrawing.innerLines(of: shape, in: frame) != nil }
+    func testOnlyASubroutineACylinderAndADoubleCircleOfTheClassicShapesHaveInnerLines() {
+        let withInnerLines = FlowchartShapeCatalogue.classicShapes.filter { shape in FlowchartShapeDrawing.innerLines(of: shape, in: frame) != nil }
         XCTAssertEqual(Set(withInnerLines), [.subroutine, .cylinder, .doubleCircle])
     }
 }

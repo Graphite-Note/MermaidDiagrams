@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramLayout.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: A class diagram laid out on a page, with its namespaces' boxes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A class diagram laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing
@@ -18,6 +29,9 @@ public struct ClassDiagramLayout: Equatable, Sendable {
     public let noteLinks: [ClassDiagramLayoutEdge]
     /// The diagram's title above it, drawn bold, or nil.
     public let title: DiagramTextBlock?
+    /// The namespaces' boxes, outer ones before the boxes inside them, drawn as a flowchart's groups are; empty for a
+    /// diagram without namespaces.
+    public internal(set) var namespaces: [FlowchartLayoutCluster] = []
 }
 
 /// A class's box: its outline, the lines between its compartments, and its text.

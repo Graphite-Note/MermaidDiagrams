@@ -1,3 +1,14 @@
+/**
+ * File: MermaidDiagramReadError.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: Why a diagram's text was not read, and what a reader found where the syntax broke.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Why a diagram's text was not read. Each case carries facts; the words are the caller's.
 public enum MermaidDiagramReadError: Error, Equatable, Sendable {
     /// The text declares no diagram: it is empty, or holds only comments and front matter.
@@ -31,6 +42,10 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case unclosedEdgeLabel
     /// `@{ … }` has no closing brace.
     case unclosedAttributes
+    /// A flowchart node's `shape:` names no shape Mermaid knows (`A@{ shape: this-shape-does-not-exist }`).
+    case unknownShape(String)
+    /// A flowchart node's `shape:` is written with a capital or an underscore (`rect_left_inv_arrow`), which Mermaid refuses.
+    case shapeNameNotLowercase(String)
     /// `accDescr { … }` has no closing brace.
     case unclosedAccessibilityDescription
     /// The front matter's opening `---` has no closing `---`.
