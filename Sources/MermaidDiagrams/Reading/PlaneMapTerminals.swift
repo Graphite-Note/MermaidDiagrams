@@ -7,7 +7,7 @@
  *              directives and comments, and the values of each.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -78,8 +78,7 @@ struct PlaneMapTerminals {
         var index = start + 8
         while let next = byte(index), PlaneMapByte.isBlank(next) { index += 1 }
         if byte(index) == PlaneMapByte.colon { return endBeforeComment(from: index + 1) }
-        index = start + 8
-        while let next = byte(index), PlaneMapByte.isSpace(next) { index += 1 }
+        index = JavaScriptWhitespace.endOfRun(in: bytes, from: start + 8)
         guard byte(index) == PlaneMapByte.openingBrace, !hasNoDescriptionEnd else { return nil }
         guard let closing = bytes[(index + 1)...].firstIndex(of: PlaneMapByte.closingBrace) else {
             hasNoDescriptionEnd = true
@@ -138,11 +137,11 @@ struct PlaneMapTerminals {
         return nil
     }
 
-    /// After a closing fence: a line break, taken, or white space or the end of the text, not taken; nil otherwise.
+    /// After a closing fence: a line break, taken, or JavaScript's white space or the end of the text, not taken; nil otherwise.
     private func endAfterClosing(_ index: Int) -> Int? {
         if let lineBreak = endOfLineBreak(at: index) { return lineBreak }
-        guard let next = byte(index) else { return index }
-        return PlaneMapByte.isSpace(next) ? index : nil
+        guard index < bytes.count else { return index }
+        return JavaScriptWhitespace.length(in: bytes, at: index) > 0 ? index : nil
     }
 
     /// `%%` and the rest of the line.

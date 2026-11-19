@@ -6,7 +6,7 @@
  *              ports them in tests/compat/cynefin), the seeds of Pele's differential test, and the errors.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -49,6 +49,8 @@ final class CynefinParserTests: XCTestCase {
         XCTAssertEqual(try cynefin("cynefin-beta\n  accDescr: A diagram showing the five Cynefin domains\n  complex\n    \"Emergent\"\n").accessibilityDescription,
                        "A diagram showing the five Cynefin domains")
         XCTAssertEqual(try cynefin("cynefin-beta\n  title My Cynefin Map\n  complex\n    \"Emergent\"\n").title, "My Cynefin Map")
+        XCTAssertEqual(try cynefin("cynefin-beta\n  accDescr\u{00A0}{ Braced after a no-break space }\n  complex\n").accessibilityDescription,
+                       "Braced after a no-break space", "Langium's \\s before the brace is JavaScript's white space")
     }
 
     func testAFullDiagram() throws {

@@ -6,7 +6,7 @@
  *              parser.ts and db.ts): titles, sets, unions, texts and styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -61,7 +61,7 @@ struct VennParser {
             case .newline: _ = take()
             case .title:
                 _ = take()
-                diagram.title = Self.unquoted(String(statement.text.dropFirst(Self.titleKeywordLength)))
+                diagram.title = Self.unquoted(statement.text)
             case .set:
                 _ = take()
                 try readSubset(identifiers: [try readIdentifier()], isUnion: false, statement: statement)
@@ -207,7 +207,4 @@ struct VennParser {
     private static func sortedIdentifiers(_ identifiers: [String]) -> [String] {
         identifiers.map(unquoted).sorted(by: PlaneMapText.isOrderedBeforeByCodeUnits)
     }
-
-    /// `title` and the character after it.
-    private static let titleKeywordLength = 6
 }

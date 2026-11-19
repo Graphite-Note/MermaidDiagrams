@@ -6,7 +6,7 @@
  *              splits them between a shape and its text, and the text color Pele's ink picks over a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -45,7 +45,7 @@ public struct VennAppearance: Equatable, Sendable {
         for declaration in declarations {
             let property = declaration.property.lowercased()
             let value = Self.valueWithoutImportance(declaration.value)
-            guard !value.isEmpty else { continue }
+            guard !value.isEmpty, !Self.isUnsafe(value) else { continue }
             if Self.shapeProperties.contains(property) { hasShapeDeclaration = true }
             if property == "fill-opacity" { writesFillOpacity = true }
             if property == "color" { writesTextColor = true }
@@ -77,10 +77,12 @@ public struct VennAppearance: Equatable, Sendable {
         }
     }
 
-    /// Whether the declaration is drawn: its property is one read here and its value is of its form.
+    /// Whether the declaration is drawn as Pele draws it: its property is one read here and its value is of its form, or
+    /// its value is one Pele leaves out too.
     static func applies(_ declaration: VennStyleDeclaration) -> Bool {
         let property = declaration.property.lowercased()
         let value = valueWithoutImportance(declaration.value)
+        if isUnsafe(value) { return true }
         switch property {
         case "fill-opacity", "stroke-opacity", "opacity": return amount(value) != nil
         case "fill", "stroke", "stroke-width", "stroke-dasharray", "color":
@@ -89,9 +91,22 @@ public struct VennAppearance: Equatable, Sendable {
         }
     }
 
+    /// Whether Pele leaves the value out of a style as if it were not written (its `RE_UNSAFE` and `RE_INVALID_XML`): a
+    /// `url(`, `expression(`, `javascript:`, `@import` or `image-set`, a comment, one of `<>{};\`, or a control character
+    /// that XML does not allow.
+    static func isUnsafe(_ value: String) -> Bool {
+        if value.range(of: unsafePattern, options: [.regularExpression, .caseInsensitive]) != nil { return true }
+        return value.unicodeScalars.contains { scalar in
+            let code = scalar.value
+            return code <= 0x08 || code == 0x0B || code == 0x0C || (0x0E...0x1F).contains(code) || code == 0x7F || code == 0xFFFE || code == 0xFFFF
+        }
+    }
+
+    private static let unsafePattern = #"url\s*\(|expression\s*\(|javascript:|[<>{};\\]|@import|image-set|/\*"#
+
     /// `!important` taken out, as Pele takes it out, and the spaces at the ends.
     private static func valueWithoutImportance(_ value: String) -> String {
-        value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
+        PlaneMapText.trimmed(value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive))
     }
 
     /// A plain number from 0 to 1, or a percentage, clamped to 0 to 1; nil for anything else (`calc(…)`).

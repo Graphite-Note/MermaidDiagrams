@@ -7,7 +7,7 @@
  *              a set.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -20,6 +20,7 @@ enum VennTokenKind: Equatable {
     case newline
     /// A second `venn-beta`, which no statement takes.
     case venn
+    /// `title`, white space and the rest of the line: its text is the title's.
     case title
     case set
     case union
@@ -129,7 +130,7 @@ struct VennLexer {
     private mutating func skipsBareTitle(at start: Int) -> Bool {
         guard matchesWord("title", at: start), followsLineFeed(start) else { return false }
         let end = lineEnd(from: start + 5)
-        guard text(from: start + 5, to: end).allSatisfy(\.isWhitespace) else { return false }
+        guard JavaScriptWhitespace.isBlank(bytes[(start + 5)..<end]) else { return false }
         var next = end
         while let following = byte(next), PlaneMapByte.isLineBreak(following) { next += 1 }
         position = next
@@ -159,10 +160,16 @@ struct VennLexer {
 
     /// A title, a keyword, an `rgb(…)` or `rgba(…)` color, or an identifier of word characters and hyphens.
     private mutating func readWord(at start: Int) -> VennToken {
-        if matchesWord("title", at: start), let separator = byte(start + 5), PlaneMapByte.isSpace(separator), !PlaneMapByte.isLineBreak(separator) {
-            var end = start + 6
-            while let next = byte(end), next != PlaneMapByte.hash, !PlaneMapByte.isLineBreak(next), next != PlaneMapByte.semicolon { end += 1 }
-            if end > start + 6 { return token(.title, from: start, to: end) }
+        let separatorLength = JavaScriptWhitespace.length(in: bytes, at: start + 5)
+        if matchesWord("title", at: start), separatorLength > 0, let separator = byte(start + 5), !PlaneMapByte.isLineBreak(separator) {
+            // As Pele's lexer, the title runs to `#`, `;` or a line feed: a carriage return alone is part of it.
+            let textStart = start + 5 + separatorLength
+            var end = textStart
+            while let next = byte(end), next != PlaneMapByte.hash, next != PlaneMapByte.lineFeed, next != PlaneMapByte.semicolon { end += 1 }
+            if end > textStart {
+                position = end
+                return VennToken(kind: .title, text: text(from: textStart, to: end), start: start)
+            }
         }
         for (word, kind) in Self.keywords where isKeyword(word, at: start) && byte(start + word.utf8.count) != PlaneMapByte.hyphen {
             return token(kind, from: start, to: start + word.utf8.count)
@@ -191,7 +198,7 @@ struct VennLexer {
         while let next = byte(end), next != PlaneMapByte.closingBracket, next != PlaneMapByte.quotationMark { end += 1 }
         guard end > start + 1, byte(end) == PlaneMapByte.closingBracket else { return error(at: start) }
         position = end + 1
-        return VennToken(kind: .bracketLabel, text: text(from: start + 1, to: end).trimmingCharacters(in: .whitespacesAndNewlines), start: start)
+        return VennToken(kind: .bracketLabel, text: PlaneMapText.trimmed(text(from: start + 1, to: end)), start: start)
     }
 
     /// A sign, then digits with a fraction (`1.5`), digits, or a fraction alone (`.5`).
@@ -213,11 +220,11 @@ struct VennLexer {
     private func colorEnd(opening: Int, partCount: Int) -> Int? {
         var index = opening + 1
         for part in 0..<partCount {
-            while let next = byte(index), PlaneMapByte.isSpace(next) { index += 1 }
+            index = JavaScriptWhitespace.endOfRun(in: bytes, from: index)
             let partStart = index
             while let next = byte(index), PlaneMapByte.isDigit(next) || next == PlaneMapByte.period { index += 1 }
             guard index > partStart else { return nil }
-            while let next = byte(index), PlaneMapByte.isSpace(next) { index += 1 }
+            index = JavaScriptWhitespace.endOfRun(in: bytes, from: index)
             guard byte(index) == (part == partCount - 1 ? PlaneMapByte.closingParenthesis : PlaneMapByte.comma) else { return nil }
             index += 1
         }

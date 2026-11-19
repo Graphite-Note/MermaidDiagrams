@@ -6,7 +6,7 @@
  *              and distances, the circles' sizes and places, each region's text, styles and the colors picked for text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -128,6 +128,16 @@ final class VennLayoutEngineTests: XCTestCase {
         XCTAssertEqual(lines[2].color, VennAppearance.textOnDark)
         let translucent = try VennReading.uniformLayout("venn-beta\n  set A\n  style A fill:#000, fill-opacity: 0.4")
         XCTAssertNil(translucent.regions[0].lines[0].color, "Under half opaque, the page shows through: the usual color")
+    }
+
+    /// Pele leaves out a value with `;`, braces, `url(` and the like (`RE_UNSAFE`): the overlap is not outlined, the set
+    /// keeps its usual look, and nothing differs from Pele's drawing to count.
+    func testAValuePeleLeavesOutGivesNoLook() throws {
+        let source = "venn-beta\n  set A\n  set B\n  union A,B\n  style A,B fill:\"red;stroke:blue\"\n  style A stroke:\"url(#x)\", fill-opacity:\"0.9}\""
+        let layout = try VennReading.uniformLayout(source)
+        XCTAssertTrue(layout.overlaps.isEmpty)
+        XCTAssertEqual(layout.sets[0].appearance, VennAppearance())
+        XCTAssertEqual(try VennReading.venn(source).unappliedDeclarationCount, 0)
     }
 
     func testStylesMergeByTargetAndUnreadDeclarationsAreCounted() throws {

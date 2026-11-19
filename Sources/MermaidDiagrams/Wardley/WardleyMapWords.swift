@@ -6,7 +6,7 @@
  *              match them: sourcing words, keywords, names with spaces, numbers, identifiers and link arrows.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -72,7 +72,7 @@ enum WardleyMapWords {
     private static func endOfName(in terminals: PlaneMapTerminals, at start: Int) -> Int? {
         guard let first = terminals.byte(start), PlaneMapByte.isLetter(first) else { return nil }
         if terminals.hasPrefix("accTitle", at: start) || terminals.hasPrefix("accDescr", at: start) { return nil }
-        if terminals.hasPrefix("title", at: start), let next = terminals.byte(start + 5), PlaneMapByte.isSpace(next) { return nil }
+        if terminals.hasPrefix("title", at: start), JavaScriptWhitespace.length(in: terminals.bytes, at: start + 5) > 0 { return nil }
         var end = endOfNameWord(in: terminals, from: start + 1)
         while true {
             let afterBlanks = endOfBlanks(in: terminals, from: end)
