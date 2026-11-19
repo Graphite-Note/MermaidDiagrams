@@ -108,7 +108,8 @@ enum FirstMatchStatementValues {
         let written = afterKeyword.drop { character in character == " " || character == "\t" }
         if written.first == ":" { return single(String(written.dropFirst())) }
         let inside = afterKeyword.drop { character in character != "{" }.dropFirst().prefix { character in character != "}" }
-        let lines = inside.split(omittingEmptySubsequences: false) { character in character == "\n" || character == "\r" }
+        // `\r\n` is one Character in Swift: it breaks a line as `\n` and `\r` do, as Pele makes every line break `\n` first.
+        let lines = inside.split(omittingEmptySubsequences: false) { character in character == "\n" || character == "\r" || character == "\r\n" }
             .map { line in trimmed(String(line)) }
             .filter { line in !line.isEmpty }
         return lines.map(collapsingBlanks).joined(separator: "\n")

@@ -23,7 +23,7 @@ struct EventModelColumnLayout {
     let font: DiagramFont
     let room: CGFloat
     let measurers: (title: CoreTextDiagramTextMeasurer, bold: CoreTextDiagramTextMeasurer, regular: CoreTextDiagramTextMeasurer,
-                    data: CoreTextDiagramTextMeasurer)
+                    data: CoreTextDiagramTextMeasurer, number: CoreTextDiagramTextMeasurer)
 
     static let railGap: CGFloat = 8
     static let smallestCardWidth: CGFloat = 120
@@ -42,8 +42,9 @@ struct EventModelColumnLayout {
         font = typography.font
         room = max(Self.smallestRoom, columnWidth - 2 * Engine.padding)
         let small = (typography.font.size * 0.875).rounded()
+        let dataSize = (typography.font.size * 0.75).rounded()
         measurers = (typography.boldNodeText, typography.measurer(size: small, isBold: true), typography.measurer(size: small),
-                     typography.measurer(size: (typography.font.size * 0.75).rounded(), isMonospaced: true))
+                     typography.measurer(size: dataSize, isMonospaced: true), typography.measurer(size: dataSize))
     }
 
     /// A frame's card once placed: its box, and the width of its lane's name.
@@ -89,7 +90,7 @@ struct EventModelColumnLayout {
     }
 
     /// A frame's card at `top`: its name at the top left, its number at the top right in the muted color, its data
-    /// below in lines that keep every character.
+    /// below in lines that keep every character, in the monospaced font.
     private func laidOutFrame(_ frame: EventModelFrame, top: CGFloat, cardWidth: CGFloat, textRoom: CGFloat, laneNameWidth: CGFloat) -> EventModelLayoutFrame {
         let padding = Engine.boxHorizontalPadding
         let name = EventModelText.label(frame.name, measurer: measurers.bold, maximumWidth: textRoom - Self.numberRoom)
@@ -102,7 +103,8 @@ struct EventModelColumnLayout {
         let height = 2 * Engine.boxVerticalPadding + name.size.height + (data.map { data in data.size.height + Engine.dataGap } ?? 0)
         let box = CGRect(x: Engine.padding, y: top, width: width, height: height)
         let textTop = top + Engine.boxVerticalPadding
-        let number = EventModelText.block([frame.identifier], measurer: measurers.data)
+        // Pele writes the number at the data's size in the text's font, not the data's monospaced one.
+        let number = EventModelText.block([frame.identifier], measurer: measurers.number)
         let numberBaseline = textTop + measurers.bold.fontSize
         let dataLines = data.map { data in
             EventModelText.rows(data.lines, measurer: measurers.data, left: box.minX + padding,

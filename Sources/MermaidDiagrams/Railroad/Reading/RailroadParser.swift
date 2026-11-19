@@ -18,18 +18,28 @@ enum RailroadParser {
 
     /// Reads the railroad diagram whose keyword, `keyword` as written, ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, keyword: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RailroadDiagram {
-        let bytes = cursor.bytes
         guard let notation = RailroadNotation(typeKeyword: keyword), keyword == notation.keyword,
-              FirstMatchTokenPatterns.isAtEndOfWord(bytes, cursor.position) else {
+              FirstMatchTokenPatterns.isAtEndOfWord(cursor.bytes, cursor.position) else {
             throw .invalidSyntax(line: cursor.line, problem: .railroad(.expectedKeyword(keyword)))
         }
+        let text = RailroadSourceText(bytes: cursor.bytes, keywordEnd: cursor.position)
+        do {
+            return try parse(text.bytes, from: text.start, notation: notation, limits: limits)
+        } catch {
+            throw text.inSource(error)
+        }
+    }
+
+    /// Reads the rules of `bytes`, Pele's text of the diagram, from the end of its keyword at `start`.
+    private static func parse(_ bytes: [UInt8], from start: Int, notation: RailroadNotation,
+                              limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RailroadDiagram {
         let tokens: [FirstMatchToken<RailroadTokenKind>]
         do {
-            tokens = try RailroadLexers.tokenizer(of: notation).tokens(of: bytes, from: cursor.position)
+            tokens = try RailroadLexers.tokenizer(of: notation).tokens(of: bytes, from: start)
         } catch {
             throw .invalidSyntax(line: Reader.line(of: error.position, in: bytes), problem: .unexpectedText(Reader.excerpt(at: error.position, in: bytes)))
         }
-        var reader = Reader(bytes: bytes, tokens: tokens, start: cursor.position)
+        var reader = Reader(bytes: bytes, tokens: tokens, start: start)
         var diagram = RailroadDiagram(notation: notation, options: RailroadOptions(MermaidConfigurationOptions(section: "railroad", in: bytes)))
         readStatements(&reader, into: &diagram)
         var budget = RailroadExpressionBudget(limits: limits)

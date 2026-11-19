@@ -113,6 +113,36 @@ final class EventModelLayoutEngineTests: XCTestCase {
         XCTAssertTrue(laidOut.frames.allSatisfy(\.isOutlinedInBorder))
     }
 
+    /// Pele writes a card's number (`pele-em-frame`) at the data's size in the text's font, not the data's monospaced
+    /// one, and draws the relations before the lanes' names, which belong to the cards' groups.
+    func testDownAColumnTheNumbersAreInTheTextsFontAndTheRelationsUnderTheLaneNames() throws {
+        let diagram = try EventModelReading.diagram("eventmodeling\ntf 01 ui A\ntf 02 cmd B\ntf 03 evt C ->> 01")
+        let laidOut = EventModelLayoutEngine.layout(diagram, typography: typography, columnWidth: 280)
+        let regular = typography.measurer(size: 12)
+        for frame in laidOut.frames {
+            let number = try XCTUnwrap(frame.number)
+            XCTAssertEqual(number.size.width, regular.width(of: number.lines[0]), accuracy: 0.001)
+            XCTAssertEqual(number.center.x + number.size.width / 2, frame.frame.maxX - 12, accuracy: 0.001)
+        }
+        let scene = DiagramScene(layout: laidOut)
+        let numbers = scene.texts.filter { text in text.paint == .muted && text.part == .label }
+        XCTAssertEqual(numbers.count, 3)
+        XCTAssertFalse(numbers.contains(where: \.isMonospaced))
+        func firstIndex(of part: DiagramScenePart) -> Int? {
+            scene.items.firstIndex { item in
+                switch item {
+                case .shape(let shape): shape.part == part
+                case .text(let text): text.part == part
+                }
+            }
+        }
+        XCTAssertLessThan(try XCTUnwrap(firstIndex(of: .edge)), try XCTUnwrap(firstIndex(of: .clusterLabel)))
+        let across = DiagramScene(layout: EventModelLayoutEngine.layout(diagram, typography: typography))
+        XCTAssertLessThan(across.items.firstIndex { item in if case .text(let text) = item { text.part == .clusterLabel } else { false } } ?? .max,
+                          across.items.firstIndex { item in if case .shape(let shape) = item { shape.part == .edge } else { false } } ?? -1,
+                          "Across, the lanes and their names come before the relations")
+    }
+
     func testTheRailsOfRelationsIntoOneCardAreShared() {
         let relations = [(0, 3), (1, 3), (2, 5), (4, 6), (0, 1)].map { pair in EventModelRelation(sourceFrameIndex: pair.0, targetFrameIndex: pair.1) }
         let rails = EventModelRelationRails(relations: relations)

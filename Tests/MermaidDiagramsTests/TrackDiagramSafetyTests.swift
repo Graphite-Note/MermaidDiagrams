@@ -123,6 +123,9 @@ final class TrackDiagramSafetyTests: XCTestCase {
             ("ABNF alternation of 4,000", augmented + "r = " + String(repeating: "a / ", count: 4_000) + "b ;"),
             ("PEG run of operators", expressions + "R <- " + String(repeating: "!&", count: size / 2 - 20) + "a ;"),
             ("PEG sequence of predicates", expressions + "R <- " + String(repeating: "!a &\"b\" ", count: 2_000) + ";"),
+            ("blank lines before no comment", constructors + String(repeating: "\n", count: size - 40) + "%%"),
+            ("comment lines in a string", constructors + "r = terminal(\"" + String(repeating: "%% c\n", count: size / 5 - 10) + "\") ;"),
+            ("Windows line breaks", extended + String(repeating: "r = a ;\r\n", count: size / 9 - 5)),
         ], seconds: 3)
     }
 

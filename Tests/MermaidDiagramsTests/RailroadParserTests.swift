@@ -147,6 +147,55 @@ final class RailroadParserTests: XCTestCase {
         XCTAssertEqual(commented.rules.map(\.name), ["rule", "next"])
     }
 
+    /// Pele reads the text with its line breaks made `\n` first, so a description in braces written with Windows' line
+    /// breaks is the same as one written with `\n`.
+    func testADescriptionInBracesReadsWindowsLineBreaksAsLineBreaks() throws {
+        for lineBreak in ["\n", "\r\n", "\r"] {
+            let source = ["railroad-beta", "accDescr {", "  line  one", "", "  line two", "}", "r = terminal(\"a\") ;"].joined(separator: lineBreak)
+            XCTAssertEqual(try RailroadReading.diagram(source).accessibilityDescription, "line one\nline two", lineBreak.debugDescription)
+        }
+    }
+
+    /// Mermaid removes its comment lines (`%%` and text, with the blank lines before them) from the text before its
+    /// railroad parsers read it, so one inside a string or a description in braces is not part of it; an error is still
+    /// on the line it is written on.
+    func testCommentLinesAreRemovedEvenInsideStringsAndDescriptions() throws {
+        let diagram = try RailroadReading.diagram("""
+        railroad-beta
+        accDescr {
+          first
+          %% not described
+          second
+        }
+        r = terminal("a
+
+          %% not matched
+        b") ;
+        s = terminal("%%{kept}") ;
+        t = terminal("c
+        %%
+        d") ;
+        """)
+        XCTAssertEqual(diagram.accessibilityDescription, "first\nsecond")
+        XCTAssertEqual(diagram.rules.map(\.definition), [t("a\nb"), t("%%{kept}"), t("c\n%%\nd")])
+        XCTAssertEqual(RailroadReading.readError("railroad-beta\n%% one\n\n  %% two\nr = terminal(\"a\") ;\n%% three\ns = x ;"),
+                       .invalidSyntax(line: 7, problem: .railroad(.expectedExpression)))
+        XCTAssertEqual(RailroadReading.readError("railroad-beta\r\nr = terminal(\"a\r\n%% c\r\nb\") ;\r\ns = x ;"),
+                       .invalidSyntax(line: 5, problem: .railroad(.expectedExpression)))
+    }
+
+    /// A string, or a special sequence, written over two lines holds the `\n` Pele reads there, whether the text was
+    /// written with `\n` or Windows' `\r\n`; an escaped `\r` stays a carriage return.
+    func testALineBreakInsideAStringIsReadAsALineFeed() throws {
+        for lineBreak in ["\n", "\r\n"] {
+            let lines = ["%% a comment", "railroad-ebnf-beta", "r = \"a", "b\" \"c\\r\" ? x", "y ? ;", "s = ) ;"]
+            let source = lines.joined(separator: lineBreak)
+            let diagram = try RailroadReading.diagram(lines.dropLast().joined(separator: lineBreak))
+            XCTAssertEqual(diagram.rules.first?.definition, .sequence([t("a\nb"), t("c\r"), s("x\ny")]), lineBreak.debugDescription)
+            XCTAssertEqual(RailroadReading.readError(source), .invalidSyntax(line: 6, problem: .railroad(.expectedExpression)), lineBreak.debugDescription)
+        }
+    }
+
     // MARK: ebnfDiagram.spec.ts, abnfDiagram.spec.ts, pegDiagram.spec.ts
 
     func testTheNotationSpecsAreRead() throws {
