@@ -1,3 +1,14 @@
+/**
+ * File: GanttChartParserTests.swift
+ * ---------------------------------
+ * Layer: Tests
+ * Description: Gantt statements read as Mermaid's grammar reads them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -93,12 +104,14 @@ final class GanttChartParserTests: XCTestCase {
         }
     }
 
-    func testClickIsReadAndNotDrawn() throws {
+    func testClickIsReadAndMarksItsTasksAsPeleDoes() throws {
         let chart = try ganttChart("gantt\ndateFormat  YYYY-MM-DD\nsection Clickable\nVisit mermaidjs           :active, cl1, 2014-01-07, 3d\n"
                                    + "Calling a callback        :cl2, after cl1, 3d\n\nclick cl1 href \"https://mermaidjs.github.io/\"\n"
                                    + "click cl2 call ganttTestClick(\"test0\", test1, test2)\n")
-        XCTAssertEqual(chart.statementsNotDrawn, [.click])
+        XCTAssertTrue(chart.statementsNotDrawn.isEmpty, "A click is accepted: Pele only marks the task")
         XCTAssertEqual(chart.tasks.count, 2)
+        XCTAssertEqual(chart.tasks.map(\.isClickable), [true, true])
+        XCTAssertEqual(chart.tasks.map(\.link), ["https://mermaidjs.github.io/", nil])
         for identifier in ["__proto__", "constructor"] {
             let linked = try ganttChart("gantt\n    dateFormat YYYY-MM-DD\n    section Section\n    A task :\(identifier), 2024-10-01, 3d\n"
                                         + "    click \(identifier) href \"https://mermaid.js.org/\"\n    ")
@@ -163,7 +176,8 @@ final class GanttChartParserTests: XCTestCase {
         let times = try ganttChart("gantt\n    dateFormat HH:mm\n    axisFormat %H:%M\n    Initial milestone : milestone, m1, 17:49, 2m\n    Task A : 10m")
         XCTAssertEqual(times.tasks.map(\.endText), ["2m", "10m"])
         let marked = try ganttChart("gantt\n    dateFormat HH:mm\n    Initial vert : vert, v1, 17:30, 2m\n    Task A : 3m")
-        XCTAssertEqual(marked.statementsNotDrawn, [.verticalMarker])
+        XCTAssertTrue(marked.statementsNotDrawn.isEmpty)
+        XCTAssertEqual(marked.tasks.map(\.isVertical), [true, false])
         let ticked = try ganttChart("gantt\n  tickInterval 1week\n  weekday monday")
         XCTAssertEqual(ticked.tickInterval, "1week")
         XCTAssertEqual(ticked.weekStart, .monday)

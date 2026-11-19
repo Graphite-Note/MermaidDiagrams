@@ -1,3 +1,14 @@
+/**
+ * File: GanttChartCorpusTests.swift
+ * ---------------------------------
+ * Layer: Tests
+ * Description: Every documentation example of Mermaid's Gantt charts is read and laid out.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
@@ -12,7 +23,7 @@ final class GanttChartCorpusTests: XCTestCase {
                                      timeZone: GanttChartCorpus.timeZone, limits: .standard)
     }
 
-    func testEveryDocumentationExampleIsDrawnOrRefusedForAReason() throws {
+    func testEveryDocumentationExampleIsDrawn() throws {
         let examples = try GanttChartCorpus.documentationExamples()
         XCTAssertEqual(examples.count, 11)
         var drawnCount = 0
@@ -26,8 +37,8 @@ final class GanttChartCorpusTests: XCTestCase {
                 refusals.append(error)
             }
         }
-        XCTAssertEqual(drawnCount, 9)
-        XCTAssertEqual(refusals, [.statementNotDrawn(.verticalMarker), .statementNotDrawn(.verticalMarker)])
+        XCTAssertEqual(drawnCount, 11, "The examples with vertical markers and clicks are drawn too")
+        XCTAssertEqual(refusals, [])
     }
 
     func testTheGeneratedChartsScheduleEveryTask() throws {

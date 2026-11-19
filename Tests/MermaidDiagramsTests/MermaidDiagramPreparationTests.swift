@@ -60,7 +60,8 @@ final class MermaidDiagramPreparationTests: XCTestCase {
         XCTAssertEqual(failure("sankey\na,b,1\nb,a,1"), .sankeyLayout(.circularLinks))
         XCTAssertEqual(failure("sankey\na,b,1\nb,a,1")?.category, .refusedContent)
         XCTAssertEqual(failure("xychart\n  x-axis [a, b]"), .xyChartLayout(.noSeries))
-        XCTAssertEqual(failure("gantt\n  task : a1, 2014-01-01, 3d\n  click a1 href \"https://example.com\"")?.category, .notDrawnYet)
+        XCTAssertNil(failure("gantt\n  task : a1, 2014-01-01, 3d\n  click a1 href \"https://example.com\""), "A click is accepted")
+        XCTAssertEqual(failure("gantt\n  dateFormat YYYY-MM-DD\n  task : a1, 2014 foo, 3d")?.category, .refusedContent, "A date neither the format nor JavaScript reads")
     }
 
     func testAScreenReaderHearsWhatTheReadingViewSays() throws {

@@ -1,3 +1,14 @@
+/**
+ * File: GanttLayout.swift
+ * -----------------------
+ * Layer: Core
+ * Description: A Gantt chart laid out on a page: rows, axis, vertical markers and title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A Gantt chart laid out on a page whose origin is the top left corner and whose y runs down, in points: the title
@@ -17,6 +28,12 @@ public struct GanttPlot: Equatable, Sendable {
     public let frame: CGRect
     /// Whether the axis' dates and line are drawn above the rows too.
     public let showsTopAxis: Bool
+    /// Where the grid lines, the vertical markers, today's line and the top axis' line start: the frame's top, or above it
+    /// by what `gridLineStartPadding` leaves under `topPadding`.
+    public let gridTop: CGFloat
+    /// The vertical markers (tasks tagged `vert`), by their start, and the rows of text under the axis that hold their
+    /// texts.
+    public let verticalMarkers: [GanttVerticalMarker]
     /// The bands behind the rows of every other section, filled in the surface color, as wide as the page.
     public let sectionBands: [CGRect]
     /// The sections' names, each centered down its rows, at the left.
@@ -31,6 +48,16 @@ public struct GanttPlot: Equatable, Sendable {
     public let tasks: [GanttLayoutTask]
     /// Where today's line runs down the rows, or nil when it is off or today is outside the chart.
     public let todayOffset: CGFloat?
+    /// How `todayMarker` restyles today's line, or nil for the standard line with its triangle.
+    public let todayStyle: GanttTodayLineStyle?
+}
+
+/// A task tagged `vert`: a dashed line across the rows at its start and its text under the axis.
+public struct GanttVerticalMarker: Equatable, Sendable {
+    /// Where the line runs down, across.
+    public let offset: CGFloat
+    /// The task's text on one line, in the foreground color, centered on its line or as far left as the page's padding lets it.
+    public let label: DiagramTextBlock
 }
 
 public struct GanttLayoutTask: Equatable, Sendable {

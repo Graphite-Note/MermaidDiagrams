@@ -1,3 +1,14 @@
+/**
+ * File: GanttSectionRows.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: A Gantt chart's sections down its rows: names, runs of rows and shaded bands.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A Gantt chart's sections down its rows: each section's name measured, wrapped at 180 points, and the runs of rows
@@ -12,11 +23,13 @@ struct GanttSectionRows {
     /// The width of the widest name.
     let widestName: CGFloat
 
-    /// Pele's number of section styles, of which the even ones are shaded.
-    static let sectionStyleCount = 4
+    /// Pele's number of section styles, of which the even ones are shaded; `numberSectionStyles` sets it.
+    static let standardSectionStyleCount = 4
+    private let styleCount: Int
 
-    init(rowSections: [String], measurer: some DiagramTextMeasuring) {
+    init(rowSections: [String], measurer: some DiagramTextMeasuring, styleCount: Int = standardSectionStyleCount) {
         self.rowSections = rowSections
+        self.styleCount = max(styleCount, 1)
         var order: [String: Int] = [:]
         var names: [String: DiagramTextBlock] = [:]
         for section in rowSections where order[section] == nil {
@@ -39,7 +52,7 @@ struct GanttSectionRows {
             var end = row + 1
             while end < rowSections.count, rowSections[end] == section { end += 1 }
             let band = CGRect(x: 0, y: top + CGFloat(row) * rowHeight, width: pageWidth, height: CGFloat(end - row) * rowHeight)
-            let style = (sectionOrder[section] ?? 0) % Self.sectionStyleCount
+            let style = (sectionOrder[section] ?? 0) % styleCount
             if (sectionOrder.count > 1 || !section.isEmpty), style % 2 == 0 { bands.append(band) }
             if var name = names[section], !name.lines.isEmpty {
                 name.center = CGPoint(x: GanttLayoutEngine.padding + GanttLayoutEngine.sectionInset + name.size.width / 2, y: band.midY)

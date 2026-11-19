@@ -37,7 +37,7 @@ extension MermaidDiagramPreparationContext {
                                       accessibility: MermaidDiagramAccessibility(pieChart: chart, layout: layout))
     }
 
-    /// A Gantt chart scheduled on `now` in `timeZone`.
+    /// A Gantt chart scheduled on `now` in `timeZone`, and for a narrow column the chart on a page as wide as the column.
     func prepared(_ chart: GanttChart) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: GanttLayout
         do {
@@ -45,7 +45,11 @@ extension MermaidDiagramPreparationContext {
         } catch {
             throw .ganttLayout(error)
         }
-        return PreparedMermaidDiagram(kind: .ganttChart, scene: DiagramScene(layout: layout), accessibility: MermaidDiagramAccessibility(ganttChart: chart))
+        let narrow = narrowScene(of: chart, regularSize: layout.size, laidOut: { chart in
+            try GanttLayoutEngine.layout(chart, typography: typography, now: now, timeZone: timeZone, limits: limits, availableWidth: narrowestColumnWidth)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .ganttChart, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(ganttChart: chart))
     }
 
     /// A user journey, and for a narrow column the journey as a column of cards (Pele's `turnToFit`).

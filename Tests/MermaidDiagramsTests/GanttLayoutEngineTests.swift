@@ -1,3 +1,14 @@
+/**
+ * File: GanttLayoutEngineTests.swift
+ * ----------------------------------
+ * Layer: Tests
+ * Description: Gantt charts laid out with Pele's measurements, with text of uniform width.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -135,12 +146,11 @@ final class GanttLayoutEngineTests: XCTestCase {
         XCTAssertEqual(plot.gridLineOffsets, [plot.frame.midX])
     }
 
-    func testAStatementNotDrawnYetRefusesTheChart() {
+    func testAChartWithAClickOrAVerticalMarkerIsLaidOut() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
-        XCTAssertThrowsError(try GanttLayoutEngine.layout(try GanttChartReading.ganttChart("gantt\nA : a, 2014-01-01, 1d\nclick a href \"x\""),
-                                                          typography: typography, now: Date(timeIntervalSince1970: 0), timeZone: .gmt,
-                                                          limits: .standard)) { error in
-            XCTAssertEqual(error as? GanttLayoutError, .statementNotDrawn(.click))
-        }
+        let layout = try GanttLayoutEngine.layout(try GanttChartReading.ganttChart("gantt\nA : a, 2014-01-01, 1d\nB : vert, b, 2014-01-01, 0d\nclick a href \"x\""),
+                                                  typography: typography, now: Date(timeIntervalSince1970: 0), timeZone: .gmt, limits: .standard)
+        XCTAssertEqual(layout.plot?.tasks.count, 1, "A vertical marker takes no row")
+        XCTAssertEqual(layout.plot?.verticalMarkers.count, 1)
     }
 }

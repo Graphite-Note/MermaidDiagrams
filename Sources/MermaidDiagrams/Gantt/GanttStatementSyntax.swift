@@ -1,3 +1,14 @@
+/**
+ * File: GanttStatementSyntax.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Reads the statements of a Gantt chart: keyword settings, tasks, accessibility lines and clicks.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import Foundation
 
 /// A statement of a Gantt chart that starts with a keyword.
@@ -52,7 +63,7 @@ enum GanttStatementSyntax {
     }
 
     /// Whitespace as a regular expression's `\s` reads it among ASCII: a space or a line break.
-    private static func isWhitespace(_ byte: UInt8) -> Bool {
+    static func isWhitespace(_ byte: UInt8) -> Bool {
         isSpace(byte) || byte == MermaidByte.newline
     }
 
