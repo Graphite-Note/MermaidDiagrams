@@ -69,6 +69,8 @@ struct MermaidDiagramsBenchmark {
         try OutlineDiagramBenchmarks.run(typography: typography)
         try SimpleChartBenchmark.run(typography: typography)
         try PlaneMapBenchmarks.run(typography: typography)
+        try EventModelBenchmark.run(typography: typography)
+        try RailroadBenchmark.run(typography: typography)
         try DiagramSceneBenchmark.run(typography: typography)
         try NarrowColumnBenchmark.run(typography: typography)
     }

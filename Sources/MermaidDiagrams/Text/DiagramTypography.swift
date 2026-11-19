@@ -2,7 +2,8 @@
  * File: DiagramTypography.swift
  * -----------------------------
  * Layer: Core
- * Description: The measurers of a font's text in every size and weight the diagrams use, made once per font.
+ * Description: The measurers of a diagram's font at the sizes and in the styles its types draw text in, made once per
+ *              font.
  *
  * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.2
@@ -28,6 +29,15 @@ public struct DiagramTypography {
     let axisText: CoreTextDiagramTextMeasurer
     /// The bold and italic sizes of the diagrams drawn on a fixed plane: Cynefin frameworks and Wardley maps.
     let planeMapText: PlaneMapTypography
+    /// The edges' size in bold: an event model's frame names and its narrow column's lane and card headings.
+    let boldEdgeText: CoreTextDiagramTextMeasurer
+    /// The rows' size in bold: an event model's lane names and card headings.
+    let boldRowText: CoreTextDiagramTextMeasurer
+    /// The system's monospaced font at the edges' size (a railroad diagram's terminals) and at the axes' (an event
+    /// model's data), and the edges' size in italic (a railroad diagram's special sequences).
+    let monospacedEdgeText: CoreTextDiagramTextMeasurer
+    let monospacedAxisText: CoreTextDiagramTextMeasurer
+    let italicEdgeText: CoreTextDiagramTextMeasurer
 
     /// Edge text is seven eighths of the nodes' size, rounded, as in Pele.
     static let edgeTextScale: CGFloat = 0.875
@@ -46,5 +56,12 @@ public struct DiagramTypography {
         rowText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.rowTextScale).rounded()))
         axisText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.axisTextScale).rounded()))
         planeMapText = PlaneMapTypography(font: font)
+        let edgeFont = font.resized(to: (font.size * Self.edgeTextScale).rounded())
+        boldEdgeText = CoreTextDiagramTextMeasurer(font: edgeFont, isBold: true)
+        boldRowText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.rowTextScale).rounded()), isBold: true)
+        monospacedEdgeText = CoreTextDiagramTextMeasurer(font: edgeFont, isBold: false, isMonospaced: true)
+        monospacedAxisText = CoreTextDiagramTextMeasurer(font: font.resized(to: (font.size * Self.axisTextScale).rounded()), isBold: false,
+                                                         isMonospaced: true)
+        italicEdgeText = CoreTextDiagramTextMeasurer(font: edgeFont, isBold: false, isItalic: true)
     }
 }

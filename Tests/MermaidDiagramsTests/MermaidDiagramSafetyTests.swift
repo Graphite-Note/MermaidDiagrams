@@ -6,7 +6,7 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 19/11/2026
  */
 
@@ -59,6 +59,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .venn(let venn): try VennLayoutEngine.layout(venn, typography: typography).size
         case .cynefin(let cynefin): CynefinLayoutEngine.layout(cynefin, typography: typography).size
         case .wardleyMap(let map): WardleyMapLayoutEngine.layout(map, typography: typography).size
+        case .eventModel(let eventModel): EventModelLayoutEngine.layout(eventModel, typography: typography).size
+        case .railroad(let railroad): RailroadLayoutEngine.layout(railroad, typography: typography).size
         }
     }
 
@@ -71,7 +73,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples(),
              InfoDiagramCorpus.documentationExamples(), PacketDiagramCorpus.documentationExamples(), RadarChartCorpus.documentationExamples(),
              TreemapCorpus.documentationExamples(), VennCorpus.documentationExamples(), CynefinCorpus.documentationExamples(),
-             WardleyMapCorpus.documentationExamples()].flatMap { examples in examples }
+             WardleyMapCorpus.documentationExamples(), EventModelCorpus.documentationExamples(), RailroadCorpus.documentationExamples()].flatMap { examples in examples }
             + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
@@ -93,8 +95,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        // The 396 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
-        XCTAssertEqual(examples.count, 403)
+        // The 422 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 429)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)

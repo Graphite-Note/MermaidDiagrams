@@ -41,6 +41,8 @@ enum DiagramSceneBenchmark {
             (.venn, try VennCorpus.documentationExamples()),
             (.cynefin, try CynefinCorpus.documentationExamples()),
             (.wardleyMap, try WardleyMapCorpus.documentationExamples()),
+            (.eventModel, try EventModelCorpus.documentationExamples()),
+            (.railroad, try RailroadCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -107,7 +109,7 @@ enum DiagramSceneBenchmark {
             let layOut = { try GitGraphLayoutEngine.layout(gitGraph, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey, .kanban, .treeView, .ishikawa,
-             .info, .packet, .radar, .treemap:
+             .info, .packet, .radar, .treemap, .eventModel, .railroad:
             return laidOutChart(diagram, typography: typography)
         case .venn, .cynefin, .wardleyMap:
             return laidOutPlaneMap(diagram, typography: typography)
@@ -152,6 +154,12 @@ enum DiagramSceneBenchmark {
             return LaidOut { DiagramScene(layout: layout) }
         case .info, .packet, .radar, .treemap:
             return laidOutSimpleChart(diagram, typography: typography)
+        case .eventModel(let eventModel):
+            let layout = EventModelLayoutEngine.layout(eventModel, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .railroad(let railroad):
+            let layout = RailroadLayoutEngine.layout(railroad, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
         case .venn, .cynefin, .wardleyMap:

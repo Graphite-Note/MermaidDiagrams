@@ -2,7 +2,8 @@
  * File: CoreTextDiagramTextMeasurer.swift
  * ---------------------------------------
  * Layer: Core
- * Description: Measures a diagram's text with Core Text, as it is drawn, in a font's regular, bold or italic, from a table of the font's advances.
+ * Description: Measures a line of text with Core Text in a diagram's font, regular, bold, italic or monospaced, as it is
+ *              drawn, printable ASCII from a table of the font's advances.
  *
  * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.3
@@ -20,10 +21,12 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     private let font: CTFont
-    /// The font it was made from, and whether it measures its bold and its italic, so that it can be made again at another size.
+    /// The font it was made from, and whether it measures its bold, its italic or the system's monospaced font, so that it
+    /// can be made again at another size.
     let diagramFont: DiagramFont
     let isBold: Bool
     let isItalic: Bool
+    let isMonospaced: Bool
     /// Advances of the characters from space (32) to tilde (126).
     private let printableASCIIAdvances: [CGFloat]
 
@@ -36,9 +39,10 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         self.init(font: diagramFont, isBold: false)
     }
 
-    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, and in its italic when `isItalic`.
-    init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false) {
-        let regular = diagramFont.makeCoreTextFont()
+    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, in its italic when `isItalic`,
+    /// and in the system's monospaced font at its size when `isMonospaced` (a railroad diagram's terminals).
+    init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false, isMonospaced: Bool = false) {
+        let regular = isMonospaced ? diagramFont.makeMonospacedCoreTextFont() : diagramFont.makeCoreTextFont()
         var traits: CTFontSymbolicTraits = []
         if isBold { traits.insert(.traitBold) }
         if isItalic { traits.insert(.traitItalic) }
@@ -46,6 +50,7 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         self.diagramFont = diagramFont
         self.isBold = isBold
         self.isItalic = isItalic
+        self.isMonospaced = isMonospaced
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
         let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }

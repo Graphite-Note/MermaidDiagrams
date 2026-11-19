@@ -2,7 +2,7 @@
  * File: MermaidDiagramReadError.swift
  * -----------------------------------
  * Layer: Core
- * Description: Why a diagram's text was not read, and what a reader found where the syntax broke.
+ * Description: Why a diagram's text was not read, and what each type's reader found where the syntax broke.
  *
  * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.2
@@ -27,6 +27,8 @@ public enum MermaidDiagramReadError: Error, Equatable, Sendable {
     case tooManySequenceStatements(limit: Int)
     /// An XY chart holds more categories and values, over all its series, than `MermaidDiagramLimits.maximumNodeCount`.
     case tooManyChartValues(limit: Int)
+    /// A railroad diagram's expression nests deeper than `RailroadExpression.maximumNestingDepth`.
+    case nestingTooDeep(limit: Int)
 }
 
 /// What a reader found where the syntax broke.
@@ -159,4 +161,8 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case cynefin(CynefinSyntaxProblem)
     /// A problem of a Wardley map's own syntax, or a statement its builder cannot take.
     case wardleyMap(WardleyMapSyntaxProblem)
+    /// A problem of an event model's own syntax, or two frames of one number.
+    case eventModeling(EventModelSyntaxProblem)
+    /// A problem of a railroad diagram's syntax, in any of its four notations.
+    case railroad(RailroadSyntaxProblem)
 }

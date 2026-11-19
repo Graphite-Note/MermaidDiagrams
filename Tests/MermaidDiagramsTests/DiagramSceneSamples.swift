@@ -47,6 +47,8 @@ enum DiagramSceneSamples {
             ("venn", try VennCorpus.documentationExamples()),
             ("cynefin", try CynefinCorpus.documentationExamples()),
             ("wardley", try WardleyMapCorpus.documentationExamples()),
+            ("eventmodeling", try EventModelCorpus.documentationExamples()),
+            ("railroad", try RailroadCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -82,6 +84,8 @@ enum DiagramSceneSamples {
             ("venn of 8 sets", VennCorpus.generated(setCount: 8)),
             ("cynefin of 40 items", CynefinCorpus.generated(itemCount: 40)),
             ("wardley of 30 components", WardleyMapCorpus.generated(componentCount: 30)),
+            ("event model of 30 frames", EventModelCorpus.generated(frameCount: 30)),
+            ("railroad grammar of 12 rules", RailroadCorpus.generated(ruleCount: 12)),
         ]
     }
 

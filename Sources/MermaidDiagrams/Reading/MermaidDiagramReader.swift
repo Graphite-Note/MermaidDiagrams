@@ -37,6 +37,8 @@ public enum MermaidDiagram: Equatable, Sendable {
     case venn(VennDiagram)
     case cynefin(CynefinDiagram)
     case wardleyMap(WardleyMap)
+    case eventModel(EventModelDiagram)
+    case railroad(RailroadDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -82,6 +84,9 @@ public enum MermaidDiagramReader {
         case "venn-beta": return .venn(titled(try VennParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "cynefin-beta": return .cynefin(titled(try CynefinParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case _ where keyword.hasPrefix("eventmodeling"): return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        case _ where RailroadNotation(typeKeyword: keyword) != nil:
+            return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

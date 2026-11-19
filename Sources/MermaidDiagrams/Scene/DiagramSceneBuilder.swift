@@ -47,17 +47,17 @@ struct DiagramSceneBuilder {
         add(path, painting: .gradientFill(gradient), part: part)
     }
 
-    mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, rotation: CGFloat? = nil,
-                       outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
+    mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
+                       rotation: CGFloat? = nil, outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         guard let block, !block.lines.isEmpty else { return }
         finishRun()
-        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, rotation: rotation, outline: outline,
-                                                    part: part)))
+        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced,
+                                                    rotation: rotation, outline: outline, part: part)))
     }
 
-    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, outline: DiagramTextOutline? = nil,
-                        part: DiagramScenePart) {
-        for block in blocks { text(block, paint, isBold: isBold, outline: outline, part: part) }
+    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
+                        outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
+        for block in blocks { text(block, paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced, outline: outline, part: part) }
     }
 
     /// Keeps the next shape apart from the shapes before it, which it would otherwise be merged into: for pieces drawn one

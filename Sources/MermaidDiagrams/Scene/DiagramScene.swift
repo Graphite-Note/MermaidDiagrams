@@ -147,6 +147,8 @@ public struct DiagramSceneText: Sendable {
     public let paint: DiagramPaint
     public let isBold: Bool
     public let isItalic: Bool
+    /// Whether it is drawn in the system's monospaced font at the block's size, as Pele draws terminals and data.
+    public let isMonospaced: Bool
     /// The turn about the block's center, in radians, positive turning clockwise on the page (whose y runs down); nil
     /// for text drawn as it lies.
     public let rotation: CGFloat?
@@ -154,12 +156,13 @@ public struct DiagramSceneText: Sendable {
     public let outline: DiagramTextOutline?
     public let part: DiagramScenePart
 
-    public init(block: DiagramTextBlock, paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, rotation: CGFloat? = nil,
-                outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
+    public init(block: DiagramTextBlock, paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
+                rotation: CGFloat? = nil, outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         self.block = block
         self.paint = paint
         self.isBold = isBold
         self.isItalic = isItalic
+        self.isMonospaced = isMonospaced
         self.rotation = rotation
         self.outline = outline
         self.part = part

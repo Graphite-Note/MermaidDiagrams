@@ -6,7 +6,7 @@
  *              painter of every diagram type.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -80,14 +80,15 @@ public enum DiagramSceneRenderer {
         let color = colors.color(of: placed.paint)
         let outline = placed.outline.map { outline in (color: colors.color(of: outline.paint), lineWidth: outline.lineWidth) }
         guard let rotation = placed.rotation else {
-            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, outline: outline, in: context)
+            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, isMonospaced: placed.isMonospaced,
+                             outline: outline, in: context)
         }
         context.saveGState()
         context.translateBy(x: placed.block.center.x, y: placed.block.center.y)
         context.rotate(by: rotation)
         var centered = placed.block
         centered.center = .zero
-        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, outline: outline, in: context)
+        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, isMonospaced: placed.isMonospaced, outline: outline, in: context)
         context.restoreGState()
     }
 }

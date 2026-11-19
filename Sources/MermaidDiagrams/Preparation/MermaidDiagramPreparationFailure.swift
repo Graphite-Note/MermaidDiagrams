@@ -65,6 +65,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
         case .noDiagram, .invalidSyntax: .unreadable
         case .unsupportedDiagramType: .typeNotDrawn
         case .sourceTooLarge, .tooManyNodes, .tooManyEdges, .tooManyParticipants, .tooManySequenceStatements, .tooManyChartValues: .beyondLimits
+        case .nestingTooDeep: .beyondLimits
         }
     }
 }

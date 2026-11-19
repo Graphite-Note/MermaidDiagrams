@@ -16,13 +16,14 @@ import CoreGraphics
 /// (the system font tracks it out: 9.5 % wider at 8 points than 16 points' widths scaled down), so text fitted to a box is
 /// measured at the size it is drawn at.
 protocol DiagramTextResizableMeasuring: DiagramTextMeasuring {
-    /// This measurer's font, of the same face, weight and slant, at `fontSize`.
+    /// This measurer's font, of the same face, weight and slant (or the same monospaced font), at `fontSize`.
     func resized(to fontSize: CGFloat) -> Self
 }
 
 extension CoreTextDiagramTextMeasurer: DiagramTextResizableMeasuring {
     func resized(to fontSize: CGFloat) -> CoreTextDiagramTextMeasurer {
-        CoreTextDiagramTextMeasurer(font: diagramFont.resized(to: fontSize), isBold: isBold, isItalic: isItalic)
+        CoreTextDiagramTextMeasurer(font: diagramFont.resized(to: fontSize), isBold: isBold, isItalic: isItalic,
+                                    isMonospaced: isMonospaced)
     }
 }
 

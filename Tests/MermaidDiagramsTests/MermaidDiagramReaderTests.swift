@@ -99,7 +99,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 24)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 26)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
