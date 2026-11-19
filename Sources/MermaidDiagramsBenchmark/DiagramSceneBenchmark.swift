@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -44,6 +44,8 @@ enum DiagramSceneBenchmark {
             (.eventModel, try EventModelCorpus.documentationExamples()),
             (.railroad, try RailroadCorpus.documentationExamples()),
             (.c4, try C4Corpus.documentationExamples()),
+            (.block, try BlockCorpus.documentationExamples()),
+            (.architecture, try ArchitectureCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -117,6 +119,8 @@ enum DiagramSceneBenchmark {
         case .c4(let c4):
             let layOut = { try C4LayoutEngine.layout(c4, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .block, .architecture:
+            return laidOutGridDiagram(diagram, typography: typography)
         }
     }
 
@@ -155,6 +159,8 @@ enum DiagramSceneBenchmark {
             return nil
         case .venn, .cynefin, .wardleyMap, .c4:
             return nil
+        case .block, .architecture:
+            return nil
         }
     }
 
@@ -192,6 +198,20 @@ enum DiagramSceneBenchmark {
             return LaidOut { DiagramScene(layout: layout) }
         case .wardleyMap(let map):
             let layout = WardleyMapLayoutEngine.layout(map, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        default:
+            return nil
+        }
+    }
+
+    /// A diagram laid out on a grid: a block diagram or an architecture diagram.
+    private static func laidOutGridDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .block(let block):
+            let layOut = { try BlockLayoutEngine.layout(block, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .architecture(let architecture):
+            let layout = ArchitectureLayoutEngine.layout(architecture, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
         default:
             return nil

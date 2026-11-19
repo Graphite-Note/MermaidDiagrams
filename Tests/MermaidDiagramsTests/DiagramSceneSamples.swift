@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -50,6 +50,8 @@ enum DiagramSceneSamples {
             ("eventmodeling", try EventModelCorpus.documentationExamples()),
             ("railroad", try RailroadCorpus.documentationExamples()),
             ("c4", try C4Corpus.documentationExamples()),
+            ("block", try BlockCorpus.documentationExamples()),
+            ("architecture", try ArchitectureCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -88,6 +90,8 @@ enum DiagramSceneSamples {
             ("event model of 30 frames", EventModelCorpus.generated(frameCount: 30)),
             ("railroad grammar of 12 rules", RailroadCorpus.generated(ruleCount: 12)),
             ("c4 of 20 systems in 3 boundaries", C4Corpus.generated(shapeCount: 20, boundaryCount: 3, relationCount: 30)),
+            ("block grid of 40 blocks", BlockCorpus.grid(blockCount: 40)),
+            ("architecture of 20 services", ArchitectureCorpus.generated(serviceCount: 20)),
         ]
     }
 

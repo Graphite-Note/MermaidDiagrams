@@ -5,7 +5,7 @@
  * Description: The diagrams whose title is their own `title` statement's, else the front matter's.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -36,3 +36,5 @@ extension VennDiagram: TitledMermaidDiagram {}
 extension CynefinDiagram: TitledMermaidDiagram {}
 extension WardleyMap: TitledMermaidDiagram {}
 extension C4Diagram: TitledMermaidDiagram {}
+extension BlockDiagram: TitledMermaidDiagram {}
+extension ArchitectureDiagram: TitledMermaidDiagram {}

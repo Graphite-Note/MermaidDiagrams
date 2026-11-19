@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -279,4 +279,6 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case c4Description = "c4-descr"
     /// The wider lines of the page's color under lines that cross the border of a filled box.
     case casing = "casings"
+    /// The text an architecture diagram's service shows in place of an icon.
+    case iconText = "icon-text"
 }

@@ -2,11 +2,11 @@
  * File: SequenceTextInk.swift
  * ---------------------------
  * Layer: Core
- * Description: The text color Pele picks for text on a colored sequence box: its dark text on light colors, white on
- *              dark ones, by which contrasts more.
+ * Description: The text color Pele picks for text on a colored sequence box or a filled block: its dark text on light
+ *              colors, white on dark ones, by which contrasts more.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -23,6 +23,11 @@ enum SequenceTextInk {
     static func ink(on fill: SequenceHighlightColor?) -> DiagramColor? {
         guard let fill, fill.alpha >= 0.5 else { return nil }
         return luminance(red: fill.red, green: fill.green, blue: fill.blue) > evenContrastLuminance ? onLight : onDark
+    }
+
+    /// The text color on a fill of `color`, a block diagram's `fill`, or nil when Pele picks none.
+    static func ink(onColor color: DiagramColor) -> DiagramColor? {
+        ink(on: SequenceHighlightColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha))
     }
 
     /// The luminance at which #1f1f1f and white contrast equally with a color.
