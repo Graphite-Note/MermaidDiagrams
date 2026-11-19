@@ -5,7 +5,7 @@
  * Description: An entity relationship diagram with groups as a graph of nested boxes to lay out, as Pele's renderer makes it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -36,15 +36,17 @@ struct EntityRelationshipClusterGraph {
     let titles: [DiagramTextBlock?]
     /// How many group boxes each group's box is inside.
     let depths: [Int]
-    /// For each entity, whether the box it sits in runs across, where its loops leave its box's bottom.
+    /// For each entity, whether the box it sits in runs across, where its loops leave its box's bottom; a group's loops
+    /// leave its right side whichever way it runs, as Pele hangs them.
     let entityRunsAcross: [Bool]
 
-    /// Fails for a relationship from a group to itself, whose loop outside the box is not drawn yet.
-    init<Measurer: DiagramTextMeasuring>(diagram: EntityRelationshipDiagram, titleText: Measurer) throws(EntityRelationshipLayoutError) {
+    init<Measurer: DiagramTextMeasuring>(diagram: EntityRelationshipDiagram, titleText: Measurer) {
         let nesting = EntityRelationshipNesting(diagram: diagram)
         representedSubgraphs = nesting.representedSubgraphs
         depths = nesting.depths
-        entityRunsAcross = nesting.entityDirections.map(\.runsAcross)
+        entityRunsAcross = zip(nesting.entityDirections, nesting.representedSubgraphs).map { direction, subgraph in
+            subgraph == nil && direction.runsAcross
+        }
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
             return title.lines.isEmpty ? nil : title
@@ -64,16 +66,16 @@ struct EntityRelationshipClusterGraph {
         let clusters = diagram.subgraphs.indices.map { index in
             Self.cluster(parent: nesting.subgraphParents[index], direction: diagram.subgraphs[index].direction, title: measuredTitles[index])
         }
-        let edges = try Self.edges(of: diagram, representedSubgraphs: nesting.representedSubgraphs, layoutNodeIndices: layoutNodeIndices)
+        let edges = Self.edges(of: diagram, representedSubgraphs: nesting.representedSubgraphs, layoutNodeIndices: layoutNodeIndices)
         layoutRelationshipIndices = edges.relationshipIndices
         graph = LayeredClusterGraph(nodeSizes: [], nodeClusters: nodeClusters, clusters: clusters, edges: edges.layout,
                                     direction: diagram.direction.layeredDirection)
     }
 
-    /// The relationships between two different ends; one from a group to itself fails, one from an entity to itself loops
-    /// beside it and is not laid out.
+    /// The relationships between two different ends; one from an entity or a group to itself loops beside its box and is
+    /// not laid out.
     private static func edges(of diagram: EntityRelationshipDiagram, representedSubgraphs: [Int?],
-                              layoutNodeIndices: [Int?]) throws(EntityRelationshipLayoutError) -> (layout: [LayeredClusterEdge], relationshipIndices: [Int]) {
+                              layoutNodeIndices: [Int?]) -> (layout: [LayeredClusterEdge], relationshipIndices: [Int]) {
         func end(of entity: Int) -> LayeredClusterEnd {
             if let subgraph = representedSubgraphs[entity] { return .cluster(subgraph) }
             return .node(layoutNodeIndices[entity] ?? 0)
@@ -83,10 +85,7 @@ struct EntityRelationshipClusterGraph {
         for (index, relationship) in diagram.relationships.enumerated() {
             let source = end(of: relationship.firstEntityIndex)
             let target = end(of: relationship.secondEntityIndex)
-            guard source != target else {
-                if case .cluster = source { throw .subgraphsNotLaidOut }
-                continue
-            }
+            guard source != target else { continue }
             edges.append(LayeredClusterEdge(source: source, target: target, minimumRankSpan: 1, labelSize: nil))
             relationshipIndices.append(index)
         }

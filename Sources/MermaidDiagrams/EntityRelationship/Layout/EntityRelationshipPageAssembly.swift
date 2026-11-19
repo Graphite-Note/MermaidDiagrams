@@ -5,7 +5,7 @@
  * Description: Puts a placed entity relationship diagram on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -27,6 +27,12 @@ struct EntityRelationshipPageAssembly {
     var relationshipPoints: [[CGPoint]] = []
     /// The groups' boxes.
     var subgraphBoxes: [FlowchartLayoutCluster] = []
+    /// For each entity that stands for a group, the size of the group's box, which its loops hang off.
+    var representedBoxSizes: [Int: CGSize] = [:]
+    /// How far beyond its box each group's loops reach, which the drawing makes room for as Pele widens it.
+    private var loopReaches: [CGRect] = []
+    /// The relationships that loop off a group's box, whose labels take no room beyond their reach.
+    private var groupLoopIndices: Set<Int> = []
 
     /// A route whose two ends are this close, and not in line, curves from box to box without straight runs.
     static let shortestRouteWithStraightRuns = 3 * EntityRelationshipCardinalityMark.length
@@ -108,12 +114,19 @@ struct EntityRelationshipPageAssembly {
             label: centered(measured.labels[index], at: labelCenter))
     }
 
-    /// The loops of every entity that has relationships with itself.
+    /// The loops of every entity that has relationships with itself; a group's off the right side of its box, the
+    /// drawing widened by their reach, as Pele hangs them (`er/render.ts`).
     mutating func placeSelfRelationships() {
         for (entity, indices) in measured.selfRelationshipIndices.enumerated() where !indices.isEmpty {
-            let loops = EntityRelationshipSelfLoops.loops(center: boxCenters[entity], boxSize: measured.boxes[entity].size, bands: measured.loopBands[entity],
-                                                          labelSizes: indices.map { index in measured.labels[index]?.size },
-                                                          leavesBelow: measured.loopsLeaveBelow[entity])
+            let labelSizes = indices.map { index in measured.labels[index]?.size }
+            let boxSize = representedBoxSizes[entity] ?? measured.boxes[entity].size
+            if representedBoxSizes[entity] != nil {
+                let reach = EntityRelationshipSelfLoops.room(labelSizes: labelSizes, leavesBelow: false)
+                loopReaches.append(CGRect(x: boxCenters[entity].x + boxSize.width / 2, y: boxCenters[entity].y, width: reach, height: 0))
+                groupLoopIndices.formUnion(indices)
+            }
+            let loops = EntityRelationshipSelfLoops.loops(center: boxCenters[entity], boxSize: boxSize, bands: measured.loopBands[entity],
+                                                          labelSizes: labelSizes, leavesBelow: measured.loopsLeaveBelow[entity])
             for (loop, index) in zip(loops, indices) {
                 let relationship = diagram.relationships[index]
                 relationships[index] = EntityRelationshipLayoutRelationship(
@@ -165,8 +178,19 @@ struct EntityRelationshipPageAssembly {
             return EntityRelationshipLayoutEntity(frame: CGRect(origin: .zero, size: box.size), name: box.name, rows: box.rows).translated(by: origin)
         }
         let placedRelationships = relationships.compactMap { relationship in relationship }
-        var bounds = EntityRelationshipLayoutBounds.union(entities: entities, relationships: placedRelationships)
+        // A group's loops widen the drawing by their reach, Pele's, which holds their labels without the room others take.
+        let groupLoops = groupLoopIndices.compactMap { index in relationships[index] }
+        let otherRelationships = relationships.indices.compactMap { index in groupLoopIndices.contains(index) ? nil : relationships[index] }
+        var bounds = EntityRelationshipLayoutBounds.union(entities: entities, relationships: otherRelationships)
+        if !groupLoops.isEmpty {
+            bounds = bounds.union(EntityRelationshipLayoutBounds.union(entities: [], relationships: groupLoops.map { loop in
+                EntityRelationshipLayoutRelationship(identification: loop.identification, path: loop.path, firstEntityMark: loop.firstEntityMark,
+                                                     secondEntityMark: loop.secondEntityMark, label: nil)
+            }))
+        }
+        for loop in groupLoops { if let label = loop.label { bounds = bounds.union(label.frame) } }
         for box in subgraphBoxes { bounds = bounds.union(box.frame) }
+        for reach in loopReaches { bounds = bounds.union(reach) }
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
         let titleHeight = title == nil ? 0 : titleSize.height + titleGap

@@ -5,7 +5,7 @@
  * Description: Reads an entity relationship diagram's statements after its keyword.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -154,9 +154,10 @@ struct EntityRelationshipParser {
     /// `subgraph name` or `subgraph name [title words]`, alone on its line.
     private mutating func readSubgraphOpening() throws(MermaidDiagramReadError) {
         try advance()
-        guard case .name(let identifier, let form) = current else { throw problem(.expectedNode) }
+        guard case .name(let identifier, _) = current else { throw problem(.expectedNode) }
         try advance()
-        var title = EntityRelationshipName(text: identifier, form: form).label
+        // Pele's database keeps a group's title as Markdown, whether it is the identifier or the words in brackets.
+        var title = DiagramLabelDecoder.label(from: identifier, form: .markdown)
         if current == .openingBracket {
             let openingLine = currentStart.line
             try advance()

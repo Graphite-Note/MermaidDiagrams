@@ -5,7 +5,7 @@
  * Description: Puts an entity relationship diagram laid out in its groups' boxes on the page: boxes, relationships, groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -15,6 +15,9 @@ extension EntityRelationshipPageAssembly {
     /// The entities at their centers on the page; an entity that stands for a group at the center of the group's box.
     mutating func placeBoxes(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
         representedSubgraphs = clustered.representedSubgraphs
+        for (entity, subgraph) in clustered.representedSubgraphs.enumerated() {
+            if let subgraph { representedBoxSizes[entity] = placement.clusterFrames[subgraph].size }
+        }
         boxCenters = diagram.entities.indices.map { entity in
             if let subgraph = clustered.representedSubgraphs[entity] {
                 let frame = placement.clusterFrames[subgraph]
@@ -45,7 +48,7 @@ extension EntityRelationshipPageAssembly {
             let route = placement.edgeRoutes[layoutIndex]
             let labelCenter = placement.edgeLabelCenters[layoutIndex]
             guard !placement.strayEdgeIndices.contains(layoutIndex) else {
-                setRelationship(at: index, along: route.points, segmentsRunVertically: route.segmentsRunVertically, labelCenter: labelCenter ?? route.points[0])
+                placeStrayRelationship(at: index, along: route.points, labelCenter: labelCenter ?? route.points[0])
                 continue
             }
             guard let start = ports.firstEntityPoints[index], let end = ports.secondEntityPoints[index],
@@ -61,6 +64,25 @@ extension EntityRelationshipPageAssembly {
             setRelationship(at: index, along: points, segmentsRunVertically: axes,
                             labelCenter: labelCenter ?? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2))
         }
+    }
+
+    /// A relationship between a group and an entity inside it, from one center to the other as Pele's compound layout
+    /// routes it, an S down the page: unless the ends are in line or close, it runs straight down or up for a mark's
+    /// length at each end before it curves, as Pele's renderer stubs every relationship, so that each mark sits on a straight run.
+    private mutating func placeStrayRelationship(at index: Int, along points: [CGPoint], labelCenter: CGPoint) {
+        guard let start = points.first, let end = points.last, points.count == 2 else {
+            setRelationship(at: index, along: points, segmentsRunVertically: Array(repeating: true, count: max(points.count - 1, 1)), labelCenter: labelCenter)
+            return
+        }
+        let isDirect = abs(start.x - end.x) < 0.01 || abs(start.y - end.y) < 0.01 || hypot(end.x - start.x, end.y - start.y) <= Self.shortestRouteWithStraightRuns
+        guard !isDirect else {
+            setRelationship(at: index, along: points, segmentsRunVertically: [true], labelCenter: labelCenter)
+            return
+        }
+        let down: CGFloat = end.y >= start.y ? 1 : -1
+        let straight = EntityRelationshipCardinalityMark.length
+        setRelationship(at: index, along: [start, CGPoint(x: start.x, y: start.y + down * straight), CGPoint(x: end.x, y: end.y - down * straight), end],
+                        segmentsRunVertically: [true, true, true], labelCenter: labelCenter)
     }
 
     /// An end of a route through boxes: the side of its box its first or last segment leaves or arrives by, along that

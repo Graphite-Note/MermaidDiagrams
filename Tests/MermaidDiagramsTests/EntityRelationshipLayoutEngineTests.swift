@@ -5,7 +5,7 @@
  * Description: Entity relationship diagrams laid out in Pele's measurements.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -175,10 +175,7 @@ final class EntityRelationshipLayoutEngineTests: XCTestCase {
         XCTAssertEqual(laidOut.entities[1].frame.minY - laidOut.entities[0].frame.maxY, 64, accuracy: accuracy)
     }
 
-    func testAGroupRelatedToItselfAndTheLayoutLimitAreRefused() throws {
-        XCTAssertThrowsError(try layout("erDiagram\nsubgraph group\nA\nend\ngroup ||--|| group : itself")) { error in
-            XCTAssertEqual(error as? EntityRelationshipLayoutError, .subgraphsNotLaidOut)
-        }
+    func testTheLayoutLimitIsRefused() throws {
         var limits = MermaidDiagramLimits.standard
         limits.maximumLayoutPointCount = 2
         XCTAssertThrowsError(try layout("erDiagram\nA ||--|| B : x", limits: limits)) { error in

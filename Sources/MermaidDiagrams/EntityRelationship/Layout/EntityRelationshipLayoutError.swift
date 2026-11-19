@@ -5,14 +5,14 @@
  * Description: Why an entity relationship diagram was not laid out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
 /// Why an entity relationship diagram was not laid out.
 public enum EntityRelationshipLayoutError: Error, Equatable, Sendable {
-    /// A group could not be laid out: one related to itself (Pele hangs that loop outside its box, which is not drawn
-    /// yet), or groups that hold each other. Every other group is drawn as a box.
+    /// Groups could not be laid out: kept for callers that match it, though every group is now drawn as a box, and
+    /// thrown only for groups that hold each other.
     case subgraphsNotLaidOut
     /// The entities and the points relationships pass through would be more than the limit.
     case tooManyLayoutPoints(limit: Int)

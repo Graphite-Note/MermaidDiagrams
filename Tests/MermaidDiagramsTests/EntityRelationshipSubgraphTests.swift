@@ -5,7 +5,7 @@
  * Description: Entity relationship groups read as Mermaid's database keeps them and drawn as Pele's nested boxes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -95,5 +95,43 @@ final class EntityRelationshipSubgraphTests: XCTestCase {
         guard case .shape(let first) = try XCTUnwrap(scene.items.first) else { return XCTFail("A shape first") }
         XCTAssertEqual(first.part, .cluster)
         XCTAssertEqual(scene.texts.filter { text in text.part == .clusterLabel }.count, 3)
+    }
+
+    /// Pele's database keeps a group's title as Markdown even when it is the identifier.
+    func testATitleWithoutBracketsIsReadAsMarkdown() throws {
+        let diagram = try EntityRelationshipReading.diagram("erDiagram\nsubgraph __core__\nA\nend")
+        XCTAssertEqual(diagram.subgraphs[0].title, DiagramLabelDecoder.label(from: "__core__", form: .markdown))
+        XCTAssertNotEqual(diagram.subgraphs[0].title, DiagramLabelDecoder.label(from: "__core__", form: .plain))
+    }
+
+    /// A relationship from a group to itself loops off the right of the group's box, centered on its side, and the
+    /// drawing is widened by the loop's reach as Pele's renderer widens it: a mark, three quarters of the turn, 10 points
+    /// and the widest label.
+    func testAGroupRelatedToItselfLoopsOffItsBoxsRightSide() throws {
+        let laidOut = try layout("erDiagram\nsubgraph group\nA\nend\ngroup ||--|| group : itself")
+        let box = try XCTUnwrap(laidOut.subgraphs.first).frame
+        let loop = try XCTUnwrap(laidOut.relationships.first)
+        XCTAssertEqual(loop.firstEntityMark.tip.x, box.maxX, accuracy: accuracy)
+        XCTAssertEqual(loop.secondEntityMark.tip.x, box.maxX, accuracy: accuracy)
+        XCTAssertEqual((loop.firstEntityMark.tip.y + loop.secondEntityMark.tip.y) / 2, box.midY, accuracy: accuracy)
+        let label = try XCTUnwrap(loop.label)
+        let reach = EntityRelationshipCardinalityMark.length + EntityRelationshipSelfLoops.turnReach * 0.75 + 10 + label.size.width
+        XCTAssertEqual(laidOut.size.width, (box.maxX + reach + EntityRelationshipLayoutEngine.padding).rounded(.up), accuracy: accuracy)
+    }
+
+    /// A relationship between a group and an entity inside it runs from one center to the other, straight down or up
+    /// for a mark's length at each end before it curves, as Pele stubs it.
+    func testARelationshipFromInsideAGroupToItRunsStraightAtItsEnds() throws {
+        let laidOut = try layout("erDiagram\nsubgraph outer\nA ||--o{ B : has\nC\nend\nC ||--|| outer : inside")
+        let box = try XCTUnwrap(laidOut.subgraphs.first).frame
+        let relationship = laidOut.relationships[1]
+        XCTAssertEqual(relationship.secondEntityMark.tip.x, box.midX, accuracy: accuracy)
+        XCTAssertEqual(relationship.secondEntityMark.tip.y, box.midY, accuracy: accuracy)
+        let start = relationship.path.start
+        guard case .line(let afterStart) = try XCTUnwrap(relationship.path.segments.first) else { return XCTFail("A straight run first") }
+        XCTAssertEqual(afterStart.x, start.x, accuracy: accuracy)
+        XCTAssertEqual(abs(afterStart.y - start.y), EntityRelationshipCardinalityMark.length, accuracy: accuracy)
+        guard case .line(let end) = try XCTUnwrap(relationship.path.segments.last) else { return XCTFail("A straight run last") }
+        XCTAssertEqual(end, relationship.secondEntityMark.tip)
     }
 }

@@ -5,7 +5,7 @@
  * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -64,12 +64,11 @@ public enum EntityRelationshipLayoutEngine {
     }
 
     /// A diagram with groups: each a box laid out on its own and placed in the box around it, as Pele's renderer does
-    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`). A relationship from a group to itself, and groups
-    /// inside each other, fail with `subgraphsNotLaidOut`.
+    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`). Groups inside each other fail with `subgraphsNotLaidOut`.
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer,
                                                                       font: DiagramFont,
                                                                       limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
-        let clustered = try EntityRelationshipClusterGraph(diagram: diagram, titleText: nameText)
+        let clustered = EntityRelationshipClusterGraph(diagram: diagram, titleText: nameText)
         let measured = EntityRelationshipMeasurement(diagram: diagram, measurers: EntityRelationshipTextMeasurers(name: nameText, row: rowText),
                                                      loopsLeaveBelow: clustered.entityRunsAcross)
         let sizes = measured.layoutSizes()
