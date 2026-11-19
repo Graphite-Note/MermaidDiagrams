@@ -7,8 +7,8 @@
  *              fewest routes without a lane of their own.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -33,13 +33,18 @@ public enum C4LayoutEngine {
     /// at 36 points, then 60, 84 and 108 while routes are left without a lane of their own, keeping the drawing that
     /// leaves the fewest.
     static func tightLayout(_ diagram: C4Diagram, typography: DiagramTypography, columnWidth: CGFloat?) throws(C4LayoutError) -> C4Layout {
-        let measurers = C4Measurers(typography: typography)
+        try tightLayout(diagram, measurers: C4Measurers(typography: typography), font: typography.font, columnWidth: columnWidth)
+    }
+
+    /// The tight drawing with the text measured by `measurers`.
+    static func tightLayout<Measurer: DiagramTextMeasuring>(_ diagram: C4Diagram, measurers: C4Measurers<Measurer>, font: DiagramFont,
+                                                            columnWidth: CGFloat?) throws(C4LayoutError) -> C4Layout {
         let available = DiagramWidthFitting.limit(columnWidth) ?? C4Metrics.defaultColumnWidth
         let room = max(C4Metrics.leastRoom, available - 2 * C4Metrics.padding)
-        var best = try drawing(diagram, measurers: measurers, font: typography.font, room: room, gap: C4Metrics.narrowGap)
+        var best = try drawing(diagram, measurers: measurers, font: font, room: room, gap: C4Metrics.narrowGap)
         var gap = C4Metrics.narrowGap + C4Metrics.narrowGapWidening
         while best.squeezedCount > 0, gap <= C4Metrics.narrowGap + 3 * C4Metrics.narrowGapWidening {
-            let wider = try drawing(diagram, measurers: measurers, font: typography.font, room: room, gap: gap)
+            let wider = try drawing(diagram, measurers: measurers, font: font, room: room, gap: gap)
             if wider.squeezedCount < best.squeezedCount { best = wider }
             gap += C4Metrics.narrowGapWidening
         }
