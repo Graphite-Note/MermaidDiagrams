@@ -5,7 +5,7 @@
  * Description: Times reading, laying out and drawing radar charts, and the memory a layout holds.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -20,7 +20,9 @@ enum RadarChartBenchmark {
             ("radar chart documentation examples", try RadarChartCorpus.documentationExamples()),
             ("radar chart, 8 axes and 4 curves", [RadarChartCorpus.generated(axisCount: 8, curveCount: 4)]),
             ("radar chart, 60 axes and 20 curves", [RadarChartCorpus.generated(axisCount: 60, curveCount: 20)]),
-            ("radar chart, 300 axes and 50 curves", [RadarChartCorpus.generated(axisCount: 300, curveCount: 50)]),
+            // 4,000 values, within the standard limits' 5,000 chart values (300 axes and 50 curves, 15,000 values in 66,000
+            // bytes, were refused).
+            ("radar chart, 200 axes and 20 curves", [RadarChartCorpus.generated(axisCount: 200, curveCount: 20)]),
         ]
         for (name, sources) in cases { try report(name, sources: sources, typography: typography) }
         let generated = try read(RadarChartCorpus.generated(axisCount: 8, curveCount: 4))
