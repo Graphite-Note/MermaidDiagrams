@@ -6,7 +6,7 @@
  *              its text in bold, italic or at its own size, and the text color Pele picks on a fill it sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -14,7 +14,7 @@ import CoreGraphics
 
 /// A block's look, from its classes (or the `default` class, for a block that has none) and then its own `style`, each
 /// declaration as Pele's `resolveStyle` takes it: the property before the first colon, the value after it without
-/// `!important`, a later one over an earlier.
+/// `!important`, a later one over an earlier (and a later one whose value is not read leaving the property unset).
 public struct BlockAppearance: Equatable, Sendable {
     /// Its fill, outline, line width and dashes, and its text's color.
     public internal(set) var style = DiagramElementStyle()
@@ -57,7 +57,21 @@ public struct BlockAppearance: Equatable, Sendable {
         case "font-weight": isBold = value == "bold" || value == "bolder" || (Double(value).map { weight in weight >= 600 } ?? false)
         case "font-style": isItalic = value == "italic"
         case "font-size": fontSize = Self.fontSize(value)
-        default: style = style.overridden(by: DiagramElementStyle.reading(property + ":" + value).style)
+        default: setShapeProperty(property, to: DiagramElementStyle.reading(property + ":" + value).style)
+        }
+    }
+
+    /// Sets `property` to what `read` holds of it, nil when its value was not read: Pele writes only the last declaration
+    /// of a property, and a browser drops one whose value is not CSS, so the block keeps its usual look rather than an
+    /// earlier declaration's.
+    private mutating func setShapeProperty(_ property: String, to read: DiagramElementStyle) {
+        switch property {
+        case "fill": style.fill = read.fill
+        case "stroke": style.stroke = read.stroke
+        case "color": style.textColor = read.textColor
+        case "stroke-width": style.strokeWidth = read.strokeWidth
+        case "stroke-dasharray": style.strokeDashLengths = read.strokeDashLengths
+        default: break
         }
     }
 

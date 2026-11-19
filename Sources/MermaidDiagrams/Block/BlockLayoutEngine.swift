@@ -6,7 +6,7 @@
  *              grids, the edges routed and their texts settled, gaps widened where texts do not fit, and the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -30,12 +30,16 @@ public enum BlockLayoutEngine {
     /// titles wrapped and its widening kept within `availableWidth`.
     public static func layout(_ diagram: BlockDiagram, typography: DiagramTypography, availableWidth: CGFloat? = nil,
                               isTight: Bool = false) throws(BlockLayoutError) -> BlockLayout {
+        try layout(diagram, measurers: measurers(of: typography), font: typography.font, availableWidth: availableWidth, isTight: isTight)
+    }
+
+    /// The measurers of `typography`'s text, and of a block's text restyled in Core Text.
+    private static func measurers(of typography: DiagramTypography) -> BlockMeasurers<CoreTextDiagramTextMeasurer> {
         let font = typography.font
-        let measurers = BlockMeasurers(nodeText: typography.nodeText, edgeText: typography.edgeText, titleText: typography.boldNodeText,
-                                       restyled: { fontSize, isBold, isItalic in
-                                           CoreTextDiagramTextMeasurer(font: font.resized(to: fontSize), isBold: isBold, isItalic: isItalic)
-                                       })
-        return try layout(diagram, measurers: measurers, font: font, availableWidth: availableWidth, isTight: isTight)
+        return BlockMeasurers(nodeText: typography.nodeText, edgeText: typography.edgeText, titleText: typography.boldNodeText,
+                              restyled: { fontSize, isBold, isItalic in
+                                  CoreTextDiagramTextMeasurer(font: font.resized(to: fontSize), isBold: isBold, isItalic: isItalic)
+                              })
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: BlockDiagram, measurers: BlockMeasurers<Measurer>, font: DiagramFont,
@@ -50,6 +54,20 @@ public enum BlockLayoutEngine {
         let title = PlaneMapLabel.block(diagram.title, measurer: measurers.titleText, maximumWidth: titleWidth)
         var assembly = BlockLayoutAssembly(diagram: diagram, placement: placement, edges: edges, measurers: measurers)
         return assembly.layout(title: title, font: font)
+    }
+
+    /// Pele's `tighten` for a host `width` wide: the diagram laid out within that width (its widened gaps given back
+    /// where they would pass it), or tight when that is narrower still.
+    static func narrowLayout(_ diagram: BlockDiagram, typography: DiagramTypography, width: CGFloat) throws(BlockLayoutError) -> BlockLayout {
+        try narrowLayout(diagram, measurers: measurers(of: typography), font: typography.font, width: width)
+    }
+
+    static func narrowLayout<Measurer: DiagramTextMeasuring>(_ diagram: BlockDiagram, measurers: BlockMeasurers<Measurer>, font: DiagramFont,
+                                                             width: CGFloat) throws(BlockLayoutError) -> BlockLayout {
+        let fitted = try layout(diagram, measurers: measurers, font: font, availableWidth: width)
+        guard fitted.size.width > width else { return fitted }
+        let tight = try layout(diagram, measurers: measurers, font: font, availableWidth: width, isTight: true)
+        return tight.size.width < fitted.size.width ? tight : fitted
     }
 
     /// The edges whose both ends are drawn, with their texts measured.

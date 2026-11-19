@@ -6,7 +6,7 @@
  *              block.test.ts) and numbers worked out by hand from layout.ts and render.ts with text half its size wide.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -41,7 +41,19 @@ final class BlockLayoutEngineTests: XCTestCase {
         let grid = try frames("block\n  columns 2\n  a[\"A much longer label\"] b\n  c[\"two<br>lines\"] d")
         for name in ["b", "c", "d"] { XCTAssertEqual(grid[name]?.size, grid["a"]?.size, name) }
         XCTAssertEqual(grid["a"]?.width, 19 * 8 + 36)
-        XCTAssertEqual(grid["a"]?.height, 2 * 24 + 24)
+        // Two lines broken by `<br>` are set 1.3 times the size apart (21 points), as Pele sets every text of several
+        // lines: the rows are 66 points high in Pele's drawing of this diagram, not 72.
+        XCTAssertEqual(grid["a"]?.height, 2 * 21 + 24)
+    }
+
+    /// An edge's text of two lines is 2 times 18 points high (1.3 times its 14 points), so the edges between `a` and `b`,
+    /// spread apart by their texts, stand where Pele draws them: 26 and 49 points down a page 75 points high.
+    func testEdgeTextsOfSeveralLinesAreSetCloser() throws {
+        let layout = try BlockReading.uniformLayout("block\n  a[\"Left layer\"] space:3 b[\"Right layer\"]\n"
+            + "  a -- \"12 production<br>conforming\" --> b\n  b -- \"12 production<br>deviation\" --> a")
+        XCTAssertEqual(layout.size, CGSize(width: 684, height: 75))
+        XCTAssertEqual(layout.edges.map { edge in edge.path.start.y }, [26, 49])
+        XCTAssertEqual(layout.edges.compactMap { edge in edge.text?.frame.height }, [36, 36])
     }
 
     func testSpansTakeTheGapsBetweenTheirColumnsAndStopAtTheLastColumn() throws {
@@ -209,5 +221,38 @@ final class BlockLayoutEngineTests: XCTestCase {
         var seen: [DiagramScenePart] = []
         for part in parts where seen.last != part { seen.append(part) }
         XCTAssertEqual(seen, [.title, .cluster, .clusterLabel, .edge, .marker, .node, .label, .node, .label, .labelBackground, .edgeLabel])
+    }
+
+    /// Pele writes only the last declaration of a property and the browser drops it when its value is not CSS, so a
+    /// later `fill:bad` leaves the block in the surface color, not in the earlier red; a later `style` replaces an
+    /// earlier one, as Pele draws them.
+    func testALaterValueThatIsNotReadLeavesThePropertyUnset() throws {
+        func appearance(_ source: String) throws -> BlockAppearance? {
+            try BlockReading.uniformLayout(source).nodes.first?.appearance
+        }
+        let dropped = try appearance("block\n  a\n  style a fill:#f00,stroke:#00f,fill:bad")
+        XCTAssertNil(dropped?.style.fill)
+        XCTAssertEqual(dropped?.style.stroke, DiagramColor(red: 0, green: 0, blue: 1))
+        XCTAssertNil(try appearance("block\n  classDef hot fill:#f00\n  a\n  class a hot\n  style a fill:notacolor")?.style.fill)
+        XCTAssertNil(try appearance("block\n  a\n  style a stroke-width:4px;stroke-width:wide")?.style.strokeWidth)
+        let replaced = try appearance("block\n  a\n  style a fill:#f00\n  style a stroke:#00f")
+        XCTAssertNil(replaced?.style.fill)
+        XCTAssertEqual(replaced?.style.stroke, DiagramColor(red: 0, green: 0, blue: 1))
+    }
+
+    /// Pele's `tighten` for a column of 1 point: laid out within it, the widened gap between the arrow and `n2` is given
+    /// back, and the drawing (178 points, as wide as its widest text) is no wider than the tight one, so Pele keeps it:
+    /// the blocks stand 80 points apart, not the tight drawing's 74.
+    func testANarrowColumnKeepsTheFittedLayoutWhenTightIsNoNarrower() throws {
+        let source = "block-beta\n  columns 5\n  ar1<[\"go\"]>(x, right)\n  n2\n"
+            + "  ar1 -- \"sit amet consectetur adipiscing elit sed do eiusmod\" --> n2\n  ar1 ==> n2\n  ar1 -- \"A\" ==> n2\n  ar1 --o n2"
+        XCTAssertEqual(try BlockReading.uniformLayout(source).size.width, 349)
+        let narrow = try BlockLayoutEngine.narrowLayout(try BlockReading.block(source), measurers: BlockReading.measurers,
+                                                        font: DiagramFont(postScriptName: nil, size: 16), width: 1)
+        let frames = BlockReading.frames(narrow)
+        XCTAssertEqual(narrow.size, CGSize(width: 178, height: 84))
+        XCTAssertEqual(frames["n2"]!.midX - frames["ar1"]!.midX, 80)
+        let tight = try BlockReading.uniformLayout(source, availableWidth: 1, isTight: true)
+        XCTAssertEqual(BlockReading.frames(tight)["n2"]!.midX - BlockReading.frames(tight)["ar1"]!.midX, 74)
     }
 }

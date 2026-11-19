@@ -6,15 +6,16 @@
  *              their tight scenes for a narrow column, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
 import CoreGraphics
 
 extension MermaidDiagramPreparationContext {
-    /// A block diagram, and for a narrow column the diagram drawn tight, as Pele's `tighten` draws it for a host too
-    /// narrow: smaller gaps, text wrapped sooner, titles wrapped to the column.
+    /// A block diagram, and for a narrow column the diagram as Pele's `tighten` draws it for a host too narrow: laid out
+    /// within the column, or tight (smaller gaps, text wrapped sooner, titles wrapped to the column) when that is
+    /// narrower still.
     func prepared(_ diagram: BlockDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: BlockLayout
         do {
@@ -23,7 +24,7 @@ extension MermaidDiagramPreparationContext {
             throw .blockLayout(error)
         }
         let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-            try BlockLayoutEngine.layout(diagram, typography: typography, availableWidth: width, isTight: true)
+            try BlockLayoutEngine.narrowLayout(diagram, typography: typography, width: width)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .block, scene: DiagramScene(layout: layout), narrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(block: diagram))
