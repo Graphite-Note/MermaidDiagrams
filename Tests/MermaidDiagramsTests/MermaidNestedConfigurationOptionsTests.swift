@@ -6,7 +6,7 @@
  *              matter, read as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -54,7 +54,7 @@ final class MermaidNestedConfigurationOptionsTests: XCTestCase {
         XCTAssertEqual(options.values["f"], .text("tab\there"))
         XCTAssertEqual(options.values["g"], .collection)
         XCTAssertEqual(options.values["h"], .collection)
-        XCTAssertEqual(options.values["i"], .text("0x1F"))
+        XCTAssertEqual(options.values["i"], .number(31), "A hexadecimal number, as Pele's reader reads it.")
     }
 
     func testAFlowCollectionThatIsNotValidSetsNothing() {

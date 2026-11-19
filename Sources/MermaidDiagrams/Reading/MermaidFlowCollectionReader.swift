@@ -5,7 +5,7 @@
  * Description: Reads the YAML flow collections (`{a: 1, b: [x, y]}`) of a diagram's front matter, as Pele's YAML reader does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -13,8 +13,8 @@ import Foundation
 
 /// Reads one YAML flow value (a collection in braces or brackets, a quoted text or a plain scalar) from a text, as
 /// Pele's `util/yaml.ts` reads the front matter's: entries separated by exactly one comma, keys plain or quoted, a key
-/// without a value null, comments from ` #` to the end of the line, plain scalars as the JSON schema reads them
-/// (`true`, `false`, `null`, numbers; anything else is text, as in `MermaidConfigurationOptions`). A collection nested deeper than 64 levels, one that is
+/// without a value null, comments from ` #` to the end of the line, plain scalars as Pele reads them (`scalar`, also used
+/// by `MermaidConfigurationOptions` for the block form). A collection nested deeper than 64 levels, one that is
 /// not closed, one with a missing or an extra comma, and a text that does not read are not read (nil). The reading
 /// looks at each byte once, so a hostile text costs no more than its length.
 struct MermaidFlowCollectionReader {
@@ -152,7 +152,8 @@ struct MermaidFlowCollectionReader {
         let simple: [UInt8: String] = [UInt8(ascii: "0"): "\0", UInt8(ascii: "a"): "\u{07}", UInt8(ascii: "b"): "\u{08}", UInt8(ascii: "t"): "\t",
                                        UInt8(ascii: "n"): "\n", UInt8(ascii: "v"): "\u{0B}", UInt8(ascii: "f"): "\u{0C}", UInt8(ascii: "r"): "\r",
                                        UInt8(ascii: "e"): "\u{1B}", MermaidByte.space: " ", MermaidByte.quotationMark: "\"", UInt8(ascii: "/"): "/",
-                                       UInt8(ascii: "\\"): "\\", UInt8(ascii: "N"): "\u{85}", UInt8(ascii: "_"): "\u{A0}"]
+                                       UInt8(ascii: "\\"): "\\", UInt8(ascii: "N"): "\u{85}", UInt8(ascii: "_"): "\u{A0}",
+                                       UInt8(ascii: "L"): "\u{2028}", UInt8(ascii: "P"): "\u{2029}"]
         if let text = simple[code] {
             position += 2
             return Array(text.utf8)
@@ -212,15 +213,49 @@ struct MermaidFlowCollectionReader {
             || byte == MermaidByte.openingBrace || byte == MermaidByte.closingBrace
     }
 
-    /// A plain scalar as the JSON schema reads it.
-    static func scalar(_ text: String) -> DirectiveValue {
+    /// A plain scalar as Pele's YAML reader reads it (its `scalar`, the JSON schema as js-yaml widens it): `null`, `~` and
+    /// nothing in its three spellings are null, `true` and `false` in theirs Booleans, a decimal, hexadecimal (`0x`), octal
+    /// (`0o`) or binary (`0b`) number a number, `.inf` and `.nan` the infinities and not-a-number; anything else is text.
+    static func scalar(_ written: String) -> DirectiveValue {
+        let text = written.trimmingCharacters(in: .whitespacesAndNewlines)
         switch text {
-        case "", "~", "null": return .null
-        case "true": return .boolean(true)
-        case "false": return .boolean(false)
+        case "", "~", "null", "Null", "NULL": return .null
+        case "true", "True", "TRUE": return .boolean(true)
+        case "false", "False", "FALSE": return .boolean(false)
+        case ".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF": return .number(.infinity)
+        case "-.inf", "-.Inf", "-.INF": return .number(-.infinity)
+        case ".nan", ".NaN", ".NAN": return .number(.nan)
         default: break
         }
         if MermaidConfigurationOptions.isNumber(text), let number = Double(text) { return .number(number) }
-        return .text(text)
+        return radixNumber(text).map(DirectiveValue.number) ?? .text(text)
+    }
+
+    /// `0x1F`, `-0o17` or `+0b101`: the number its digits write in base 16, 8 or 2, after an optional sign; nil otherwise.
+    private static func radixNumber(_ text: String) -> Double? {
+        var bytes = Substring(text).utf8[...]
+        let isNegative = bytes.first == UInt8(ascii: "-")
+        if isNegative || bytes.first == UInt8(ascii: "+") { bytes = bytes.dropFirst() }
+        guard bytes.count > 2, bytes.first == UInt8(ascii: "0") else { return nil }
+        let radix: Double
+        switch bytes.dropFirst().first {
+        case UInt8(ascii: "x"): radix = 16
+        case UInt8(ascii: "o"): radix = 8
+        case UInt8(ascii: "b"): radix = 2
+        default: return nil
+        }
+        var value = 0.0
+        for byte in bytes.dropFirst(2) {
+            let digit: Double
+            switch byte {
+            case UInt8(ascii: "0")...UInt8(ascii: "9"): digit = Double(byte - UInt8(ascii: "0"))
+            case UInt8(ascii: "a")...UInt8(ascii: "f") where radix == 16: digit = Double(byte - UInt8(ascii: "a") + 10)
+            case UInt8(ascii: "A")...UInt8(ascii: "F") where radix == 16: digit = Double(byte - UInt8(ascii: "A") + 10)
+            default: return nil
+            }
+            guard digit < radix else { return nil }
+            value = value * radix + digit
+        }
+        return isNegative ? -value : value
     }
 }

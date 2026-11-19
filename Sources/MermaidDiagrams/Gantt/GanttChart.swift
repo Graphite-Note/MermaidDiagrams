@@ -6,7 +6,7 @@
  *              marked with.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -32,7 +32,7 @@ public struct GanttChart: Equatable, Sendable {
     /// `tickInterval`, where the axis' dates fall (`1week`, `2day`); empty when the chart sets none, and the axis then
     /// chooses them.
     public internal(set) var tickInterval: String
-    /// `weekday …`: the day a week of `tickInterval` starts on.
+    /// `weekday …`, else the config's `weekday`: the day a week of `tickInterval` starts on.
     public internal(set) var weekStart: GanttWeekday
     /// `excludes …`: lowercased words, in the order first written: `weekends`, day names and dates.
     public internal(set) var excludedDays: [String]
@@ -46,8 +46,8 @@ public struct GanttChart: Equatable, Sendable {
     public internal(set) var tasks: [GanttTask]
     /// Statements read that the chart is not drawn with: always empty (`GanttStatementNotDrawn`).
     public internal(set) var statementsNotDrawn: [GanttStatementNotDrawn]
-    /// `displayMode: compact` under the front matter's `config:` and `gantt:`: tasks of a section that follow each other
-    /// share a row.
+    /// `displayMode: compact` under the front matter's `config:` and `gantt:`, or as the front matter's own key: the tasks of
+    /// a section that follow each other share a row (`GanttRowAssignment`).
     public internal(set) var isCompact = false
     /// The options the front matter and the directives set.
     public internal(set) var options = GanttOptions()

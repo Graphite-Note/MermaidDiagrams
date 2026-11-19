@@ -5,14 +5,15 @@
  * Description: Reads a Gantt chart's `click` statements as Pele's lexer and parser read them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
 /// `click ids href "link"`, `click ids call function(args)`, and the two together in either order, as Pele's Gantt grammar
 /// reads them: the identifiers are the run of characters before the first space, `call` takes a name up to its opening
-/// parenthesis and arguments up to the closing one (`()` has none), and `href` a link between quotation marks. A
-/// statement with neither is a syntax error, as in Pele. Nothing runs: Pele marks the tasks it names as clickable and sets
+/// parenthesis and arguments up to the closing one (`()` has none), both past the end of the line when the parenthesis is
+/// not on it, and `href` a link between quotation marks; what follows is the next statement. A statement with neither is a
+/// syntax error, as in Pele. Nothing runs: Pele marks the tasks it names as clickable and sets
 /// their links, and so does the reader.
 struct GanttClick {
     /// The identifiers written, split at commas.
@@ -42,8 +43,10 @@ struct GanttClick {
                 hasCall = true
                 cursor.advance(by: call.count)
                 cursor.skipWhitespace()
-                while let byte = cursor.peek(), byte != MermaidByte.newline, byte != parenthesis { cursor.advance() }
-                if cursor.peek() == parenthesis { while let byte = cursor.peek(), byte != MermaidByte.newline, byte != closingParenthesis { cursor.advance() } }
+                // As in Pele's lexer, the name runs to its opening parenthesis and the arguments to the closing one, past the
+                // line's end and to the text's end when there is none.
+                while let byte = cursor.peek(), byte != parenthesis { cursor.advance() }
+                if cursor.peek() == parenthesis { while let byte = cursor.peek(), byte != closingParenthesis { cursor.advance() } }
                 if cursor.peek() == closingParenthesis { cursor.advance() }
             } else {
                 break
@@ -51,7 +54,7 @@ struct GanttClick {
             cursor.skipSpaces()
         }
         guard link != nil || hasCall else { throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt())) }
-        cursor.skipToEndOfLine()
+        // What follows on the line is read as the next statement, as Pele's parser reads the next token.
         return GanttClick(identifiers: identifiers, link: link)
     }
 

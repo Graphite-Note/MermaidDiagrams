@@ -5,7 +5,7 @@
  * Description: The options of Gantt charts a diagram's front matter and directives set, as Pele's Gantt renderer reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -39,6 +39,9 @@ public struct GanttOptions: Equatable, Sendable {
     /// `axisFormat` and `tickInterval`, which the chart's own statements of the same name replace.
     public internal(set) var axisFormat: String?
     public internal(set) var tickInterval: String?
+    /// `weekday`, as written: the day a week of `tickInterval` starts on when the chart writes no `weekday` statement, a
+    /// day's name in lowercase (any other text starts the week on Sunday, as in Pele).
+    public internal(set) var weekday: String?
 
     /// The least and most of each number.
     static let textSizeRange = 4.0...72.0
@@ -66,6 +69,7 @@ public struct GanttOptions: Equatable, Sendable {
         showsTopAxis = values["topAxis"] == .boolean(true)
         if case .text(let format) = values["axisFormat"] { axisFormat = format }
         if case .text(let interval) = values["tickInterval"] { tickInterval = interval }
+        if case .text(let day) = values["weekday"] { weekday = day }
     }
 
     /// A finite number cut to `range`; nil for any other value.

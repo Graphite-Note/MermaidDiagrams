@@ -5,7 +5,7 @@
  * Description: The options a diagram's front matter and its `%%{init: …}%%` directives give its type.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -38,13 +38,9 @@ struct MermaidConfigurationOptions {
         var keys: [(indent: Int, key: String)] = []
         let lines = frontMatter.lines
         let frontMatterBytes = Array(frontMatter.lines.joined(separator: "\n").utf8)
-        var lineStarts: [Int] = []
-        var lineStart = 0
-        for line in lines {
-            lineStarts.append(lineStart)
-            lineStart += line.utf8.count + 1
-        }
+        let lineStarts = Self.lineStarts(of: lines)
         var flowBudget = Self.flowReadingBudget(bytes: frontMatterBytes.count)
+        var topLevelDisplayMode: DirectiveValue?
         var index = 0
         while index < lines.count {
             let line = lines[index]
@@ -61,8 +57,7 @@ struct MermaidConfigurationOptions {
             } else if let flowStart = written.first, flowStart == "{" || flowStart == "[", Self.isRelevant(path, section: section) {
                 // The collection may go on over later lines: it ends where it closes.
                 let valueStart = lineStarts[index - 1] + line.prefix { character in character == " " || character == "\t" }.utf8.count + valueOffset
-                flowBudget -= frontMatterBytes.count - valueStart
-                guard flowBudget >= 0, let (value, end) = MermaidFlowCollectionReader.read(frontMatterBytes, from: valueStart) else {
+                guard let (value, end) = Self.flowValue(in: frontMatterBytes, from: valueStart, budget: &flowBudget) else {
                     if isOption { record(.collection, named: path.dropFirst(2).joined(separator: ".")) }
                     continue
                 }
@@ -70,13 +65,37 @@ struct MermaidConfigurationOptions {
                 while index < lines.count, lineStarts[index] < end { index += 1 }
             } else if isOption {
                 record(Self.value(written), named: path.dropFirst(2).joined(separator: "."))
+            } else if path == ["displayMode"], section == Self.ganttSection {
+                topLevelDisplayMode = Self.value(written)
             }
         }
+        // The front matter's own `displayMode`, when it is set, is the Gantt chart's over its `config:`, as Pele moves it there.
+        if let topLevelDisplayMode, let mode = Self.javaScriptText(topLevelDisplayMode) { record(.text(mode), named: "displayMode") }
         MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: frontMatter.end, to: &self)
     }
 
+    /// Where each line starts in the lines joined by line breaks, in bytes.
+    private static func lineStarts(of lines: [Substring]) -> [Int] {
+        var starts: [Int] = []
+        var start = 0
+        for line in lines {
+            starts.append(start)
+            start += line.utf8.count + 1
+        }
+        return starts
+    }
+
+    /// The flow value at `start`, read while `budget` lasts: a collection read costs its own length, one that does not read
+    /// as much as the rest of the text, which it may have run through.
+    private static func flowValue(in bytes: [UInt8], from start: Int, budget: inout Int) -> (value: DirectiveValue, end: Int)? {
+        let read = budget > 0 ? MermaidFlowCollectionReader.read(bytes, from: start) : nil
+        budget -= (read?.end ?? bytes.count) - start
+        return budget >= 0 ? read : nil
+    }
+
     /// How many bytes of flow collections the front matter's lines may have read in all, so that a text of many
-    /// collections that never close costs no more than a few readings of its length.
+    /// collections that never close costs no more than a few readings of its length. A collection that reads costs its own
+    /// length, so the collections of a front matter that all read never exhaust it.
     private static func flowReadingBudget(bytes: Int) -> Int {
         4 * bytes + 1_024
     }
@@ -190,14 +209,42 @@ struct MermaidConfigurationOptions {
         return written[..<comment.lowerBound].trimmingCharacters(in: .whitespaces)
     }
 
-    private static func value(_ written: String) -> Value {
-        if let first = written.first, first == "{" || first == "[" { return .collection }
+    /// A value written after its key on the same line: a collection, a quoted text, or a plain scalar as Pele reads it
+    /// (`MermaidFlowCollectionReader.scalar`), which is null for `null`, `~` and their spellings.
+    private static func value(_ written: String) -> DirectiveValue {
+        if let first = written.first, first == "{" || first == "[" { return .object([:]) }
         if let first = written.first, first == "\"" || first == "'", written.count >= 2, written.last == first {
             return .text(String(written.dropFirst().dropLast()))
         }
-        if written == "true" || written == "false" { return .boolean(written == "true") }
-        if isNumber(written), let number = Double(written) { return .number(number) }
-        return .text(written)
+        return MermaidFlowCollectionReader.scalar(written)
+    }
+
+    /// The section whose options take the front matter's own `displayMode`.
+    private static let ganttSection = "gantt"
+
+    /// `String(value)` as JavaScript writes a value that is truthy, as Pele tests the front matter's `displayMode`; nil for
+    /// a falsy one (`false`, zero, not-a-number, empty text, null).
+    private static func javaScriptText(_ value: DirectiveValue) -> String? {
+        switch value {
+        case .text(let text): text.isEmpty ? nil : text
+        case .boolean(let boolean): boolean ? "true" : nil
+        case .number(let number): number == 0 || number.isNaN ? nil : JavaScriptNumberText.text(number)
+        case .object: "[object Object]"
+        case .array: elementText(value)
+        case .null: nil
+        }
+    }
+
+    /// `String(value)` for a value inside an array: an array's items joined by commas, null as nothing.
+    private static func elementText(_ value: DirectiveValue) -> String {
+        switch value {
+        case .text(let text): text
+        case .boolean(let boolean): boolean ? "true" : "false"
+        case .number(let number): JavaScriptNumberText.text(number)
+        case .object: "[object Object]"
+        case .array(let items): items.map(elementText).joined(separator: ",")
+        case .null: ""
+        }
     }
 
     /// Whether the text is a number of YAML's JSON schema: a sign, digits with a fraction and an exponent.
