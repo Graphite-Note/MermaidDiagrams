@@ -6,7 +6,7 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -112,7 +112,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         XCTAssertGreaterThan(refusedCount, 1_000)
     }
 
-    /// Groups, composite states and mindmap branches nested as deep as the text limit allows are laid out on a secondary
+    /// Groups, composite states, mindmap branches, class namespaces and entity relationship groups nested as deep as the text limit allows are laid out on a secondary
     /// thread's stack without overflowing it, and their drawings are past the drawing limit, which a reader refuses.
     func testDeepNestingIsLaidOutOnASecondaryThreadStackAndIsPastTheDrawingLimit() {
         onSecondaryThreadStack {
@@ -123,7 +123,11 @@ final class MermaidDiagramSafetyTests: XCTestCase {
             let states = "stateDiagram-v2\n" + (0..<depth).map { level in "state s\(level) {\n" }.joined() + "a --> b\n"
                 + String(repeating: "}\n", count: depth)
             let mindmap = "mindmap\n" + (0..<280).map { level in String(repeating: " ", count: level + 1) + "n\(level)\n" }.joined()
-            for source in [flowchart, states, mindmap] {
+            let namespaces = "classDiagram\n" + (0..<depth).map { level in "namespace s\(level) {\n" }.joined() + "class X\n"
+                + String(repeating: "}\n", count: depth)
+            let entityGroups = "erDiagram\n" + (0..<depth).map { level in "subgraph s\(level)\n" }.joined() + "A ||--o{ B : has\n"
+                + String(repeating: "end\n", count: depth)
+            for source in [flowchart, states, mindmap, namespaces, entityGroups] {
                 XCTAssertLessThanOrEqual(source.utf8.count, MermaidDiagramLimits.standard.maximumSourceBytes)
                 guard case .laidOut(let size) = Self.outcome(of: source, typography: typography) else {
                     XCTFail("Laid out: \(source.prefix(40))")

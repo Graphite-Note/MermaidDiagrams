@@ -6,7 +6,7 @@
  *              exits, composite surroundings, nested namespaces and groups, every flowchart shape.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -46,6 +46,7 @@ enum DiagramSceneClusterSamples {
               class Two
               namespace C {
                 class Three
+                note for Three "inside C"
               }
             }
             namespace Empty {
@@ -67,6 +68,7 @@ enum DiagramSceneClusterSamples {
             inner ||--|| D : links
             outer }o--|| E : holds
             C ||--|| outer : inside
+            outer ||--o{ outer : contains
             """),
     ]
 }
