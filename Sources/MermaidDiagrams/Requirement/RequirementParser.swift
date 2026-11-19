@@ -7,7 +7,7 @@
  *              and accessibility statements.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -20,6 +20,7 @@ struct RequirementParser {
     private var index = 0
     private var builder: RequirementDiagramBuilder
     private let limits: MermaidDiagramLimits
+    private let prepared: RequirementPreparedSource
 
     /// A field's value as written: text, or one of the words of `risk` and `verifymethod`.
     private enum FieldValue {
@@ -27,11 +28,12 @@ struct RequirementParser {
     }
 
     /// Reads the requirement diagram whose keyword, `keyword` as written, ends at the cursor. Any keyword that starts with
-    /// `requirement` names a requirement diagram, as Pele detects one, and its lexer then reads the keyword itself.
+    /// `requirement` names a requirement diagram, as Pele detects one, and its lexer then reads the keyword itself, in the
+    /// text as Pele hands it to its parser (`RequirementSourcePreparation`).
     static func parse(_ cursor: MermaidTextCursor, keyword: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RequirementDiagram {
-        let start = cursor.position - keyword.utf8.count
-        var parser = RequirementParser(bytes: cursor.bytes, tokens: RequirementLexer.tokens(of: cursor.bytes, from: start),
-                                       builder: RequirementDiagramBuilder(limits: limits), limits: limits)
+        let prepared = RequirementSourcePreparation.prepared(cursor.bytes, from: cursor.position - keyword.utf8.count)
+        var parser = RequirementParser(bytes: prepared.bytes, tokens: RequirementLexer.tokens(of: prepared.bytes, from: prepared.start),
+                                       builder: RequirementDiagramBuilder(limits: limits), limits: limits, prepared: prepared)
         guard parser.kind == .diagramKeyword else { throw parser.failure(.expectedKeyword) }
         parser.index += 1
         try parser.expect(.lineBreak, else: .expectedLineBreak)
@@ -39,8 +41,10 @@ struct RequirementParser {
         return parser.builder.diagram
     }
 
-    private init(bytes: [UInt8], tokens: [RequirementToken], builder: RequirementDiagramBuilder, limits: MermaidDiagramLimits) {
+    private init(bytes: [UInt8], tokens: [RequirementToken], builder: RequirementDiagramBuilder, limits: MermaidDiagramLimits,
+                 prepared: RequirementPreparedSource) {
         self.bytes = bytes
+        self.prepared = prepared
         self.tokens = tokens
         self.builder = builder
         self.limits = limits
@@ -252,7 +256,8 @@ extension RequirementParser {
     /// The 1-based line of a token, counted only for an error.
     private func line(ofToken tokenIndex: Int) -> Int {
         let position = tokens[min(tokenIndex, tokens.count - 1)].start
-        return 1 + bytes[..<min(position, bytes.count)].reduce(0) { count, byte in byte == MermaidByte.newline ? count + 1 : count }
+        return 1 + prepared.removedLineBreakCount(before: position)
+            + bytes[..<min(position, bytes.count)].reduce(0) { count, byte in byte == MermaidByte.newline ? count + 1 : count }
     }
 
     /// The error at the current token: the text no rule reads where the lexer stopped, else `problem`.

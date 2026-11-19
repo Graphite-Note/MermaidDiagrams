@@ -6,7 +6,7 @@
  *              lexer produces it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -107,6 +107,8 @@ struct RequirementLexer {
             position = spaceEnd
             return true
         }
+        // Pele hides an entity code behind characters no rule reads where a token starts (`encodeEntities`).
+        if byte == UInt8(ascii: "#"), isEntityCode(at: position) { return false }
         if byte == UInt8(ascii: "#") || byte == MermaidByte.percent {
             position = Self.lineBreak(in: bytes, from: position)
             return true
@@ -126,7 +128,14 @@ struct RequirementLexer {
         guard spaceLength > 0 else { return false }
         let textStart = position + 5 + spaceLength
         var end = textStart
-        while end < bytes.count, bytes[end] != UInt8(ascii: "#"), bytes[end] != MermaidByte.newline, bytes[end] != MermaidByte.semicolon { end += 1 }
+        while end < bytes.count, bytes[end] != MermaidByte.newline {
+            if let entityEnd = entityCodeEnd(at: end) {
+                end = entityEnd
+                continue
+            }
+            if bytes[end] == UInt8(ascii: "#") || bytes[end] == MermaidByte.semicolon { break }
+            end += 1
+        }
         guard end > textStart else { return false }
         emit(.title, from: position, to: end)
         return true
@@ -200,9 +209,24 @@ struct RequirementLexer {
         return true
     }
 
+    /// Where the entity code `#name;` (a word of ASCII letters, digits and `_`) that starts at `start` ends, or nil: Pele
+    /// hides each behind placeholder characters before its lexer reads the text, so that its `#` and `;` are read as
+    /// neither a comment, a color nor the end of a title (`encodeEntities`).
+    private func entityCodeEnd(at start: Int) -> Int? {
+        guard bytes[start] == UInt8(ascii: "#") else { return nil }
+        var end = start + 1
+        while end < bytes.count, Self.isWordByte(bytes[end]) { end += 1 }
+        return end > start + 1 && end < bytes.count && bytes[end] == MermaidByte.semicolon ? end + 1 : nil
+    }
+
+    private func isEntityCode(at start: Int) -> Bool {
+        entityCodeEnd(at: start) != nil
+    }
+
     /// The rules of a style statement, which ends at its line break.
     private mutating func readStyle() -> Bool {
         let byte = bytes[position]
+        if byte == UInt8(ascii: "#"), isEntityCode(at: position) { return false }
         if Self.isWordByte(byte) {
             var end = position + 1
             while end < bytes.count, Self.isWordByte(bytes[end]) { end += 1 }

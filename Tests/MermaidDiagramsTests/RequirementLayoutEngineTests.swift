@@ -6,7 +6,7 @@
  *              text of uniform widths: boxes, ranks, relations and their marks, ends spread along a side, loops.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -102,6 +102,32 @@ final class RequirementLayoutEngineTests: XCTestCase {
         XCTAssertEqual(layout.relations.count, 1)
         guard case .arrow(let tip, _) = layout.relations[0].mark else { return XCTFail("an arrow") }
         XCTAssertEqual(tip.y, layout.boxes[0].frame.minY, accuracy: 0.001)
+    }
+
+    /// Pele's `inkFill`: on a fill a style sets, every text of the box takes the ink that contrasts more with it, white on a
+    /// dark fill and #1f1f1f on a light one, unless the style sets a text color.
+    func testTextOnAStyledFillTakesTheInkThatContrastsMore() throws {
+        let layout = try Self.layout("""
+            requirementDiagram
+            requirement dark {
+            id: 1
+            }
+            element light {
+            type: t
+            }
+            element colored {
+            }
+            style dark fill:#000
+            style light fill:#ffeeaa
+            style colored fill:#000,color:#f00
+            """)
+        let scene = DiagramScene(layout: layout)
+        func paints(ofBoxAt frame: CGRect) -> Set<DiagramPaint> {
+            Set(scene.texts.filter { text in frame.contains(text.block.center) && [.label, .stereotype, .field, .value].contains(text.part) }.map(\.paint))
+        }
+        XCTAssertEqual(paints(ofBoxAt: layout.boxes[0].frame), [.color(DiagramColor(red: 1, green: 1, blue: 1))])
+        XCTAssertEqual(paints(ofBoxAt: layout.boxes[1].frame), [.color(DiagramColor(red: 31.0 / 255, green: 31.0 / 255, blue: 31.0 / 255))])
+        XCTAssertEqual(paints(ofBoxAt: layout.boxes[2].frame), [.color(DiagramColor(red: 1, green: 0, blue: 0))])
     }
 
     func testADiagramThatRunsAcrossTurnsToRunDownFromTheTop() throws {

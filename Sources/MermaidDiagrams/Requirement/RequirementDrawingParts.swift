@@ -6,7 +6,7 @@
  *              roles, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -135,7 +135,8 @@ extension RequirementDrawingParts {
         for box in styledBoxes { addStyledBox(box, to: &builder) }
     }
 
-    /// A box in the colors and stroke its style sets, and the usual ones for the rest; its text in its style's color.
+    /// A box in the colors and stroke its style sets, and the usual ones for the rest; all its text in its style's color, or
+    /// else, on a fill it sets, in the ink that contrasts more with that fill (Pele's `inkFill`), or else in the usual roles.
     private func addStyledBox(_ box: RequirementLayoutBox, to builder: inout DiagramSceneBuilder) {
         let style = box.style ?? DiagramElementStyle()
         let fill = CGMutablePath()
@@ -145,7 +146,7 @@ extension RequirementDrawingParts {
         builder.fill(fill, style.fill.map(DiagramPaint.color) ?? .surface, part: .node)
         builder.stroke(outline, style.stroke.map(DiagramPaint.color) ?? .border,
                        DiagramStroke(lineWidth: style.strokeWidth ?? Self.lineWidth, dashLengths: style.strokeDashLengths ?? []), part: .node)
-        let text = style.textColor.map(DiagramPaint.color)
+        let text = style.textColor.map(DiagramPaint.color) ?? TreemapInk.paint(onFill: style.fill)
         builder.text(box.stereotype, text ?? .muted, part: .stereotype)
         builder.text(box.name, text ?? .foreground, isBold: true, part: .label)
         builder.texts(box.fieldNames, text ?? .muted, part: .field)

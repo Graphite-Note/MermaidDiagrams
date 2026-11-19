@@ -6,7 +6,7 @@
  *              read by the requirement diagram reader, with what Mermaid's database holds for them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -180,6 +180,15 @@ final class RequirementParserTests: XCTestCase {
         XCTAssertEqual(diagram.elements.first?.classNames, ["default", "class1", "class2"])
         // A class defined after it is given copies its declarations onto the nodes that have it.
         XCTAssertEqual(diagram.elements.first?.styleDeclarations, ["fill:#f9f", "stroke:#333", "stroke-width:4px", "color:blue"])
+    }
+
+    /// Mermaid's spec: `__proto__` and `constructor` are names like any other.
+    func testThePrototypesNamesAreNamesOfRequirementsAndElements() throws {
+        for name in ["__proto__", "constructor"] {
+            let requirement = try Self.read("requirementDiagram\n      requirement \(name) {\n        id: 1\n        text: the test text.\n        risk: high\n        verifymethod: test\n      }")
+            XCTAssertEqual(requirement.requirements.map(\.name), [name])
+            XCTAssertEqual(try Self.read("requirementDiagram\n      element \(name) {\n        type: simulation\n      }").elements.map(\.name), [name])
+        }
     }
 
     func testEveryDirection() throws {

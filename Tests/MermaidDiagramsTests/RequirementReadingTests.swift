@@ -6,7 +6,7 @@
  *              with their lines, and its limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -38,14 +38,54 @@ final class RequirementReadingTests: XCTestCase {
         assertProblem("requirementDiagram\na > b\n", line: 2, .unexpectedText("> b"))
     }
 
-    /// Mermaid's lexer reads whitespace before a line break as whitespace, line break included, and ends a style statement
-    /// at its line break without a token: a style statement at the very end, or spaces after the keyword, break the grammar.
-    func testWhitespaceAndStyleStatementsAsMermaidsLexerReadsThem() {
+    /// Mermaid's lexer reads whitespace before a line break as whitespace, line break included: spaces after the keyword
+    /// break the grammar. A style statement ends at its line break without a token, and Pele ends every text with a line
+    /// break, so one on the last line is read as one on any other.
+    func testWhitespaceAndStyleStatementsAsMermaidsLexerReadsThem() throws {
         assertProblem("requirementDiagram \nrequirement a {\n}", line: 2, .requirement(.expectedLineBreak))
-        assertProblem("requirementDiagram\nrequirement a {\n}\nstyle a fill:red", line: 4, .requirement(.expectedStatement))
+        XCTAssertEqual(try RequirementParserTests.read("requirementDiagram\nrequirement a {\n}\nstyle a fill:red").requirements.first?.styleDeclarations,
+                       ["fill:red"])
         XCTAssertNoThrow(try RequirementParserTests.read("requirementDiagram\nrequirement a {\n}\nstyle a fill:red\n"))
         XCTAssertEqual(try RequirementParserTests.read("requirementDiagram\nrequirement a {\n}\nstyle a color: red\n").requirements.first?.styleDeclarations,
                        ["color:red"])
+    }
+
+    /// Pele makes every `\r\n` and lone `\r` a line break before it reads a diagram: a lone `\r` ends a line, and the lines
+    /// of an error count it.
+    func testCarriageReturnsBreakLinesAsPeleMakesThem() throws {
+        let diagram = try RequirementParserTests.read("requirementDiagram\r\nrequirement a {\rid: 1\r\n}\relement b {\r}\r")
+        XCTAssertEqual(diagram.requirements.first?.identifier, "1")
+        XCTAssertEqual(diagram.elements.map(\.name), ["b"])
+        assertProblem("requirementDiagram\rrequirement a \r{\r}", line: 2, .requirement(.expectedOpeningBrace))
+        assertProblem("requirementDiagram\rrequirement a {\rid:\r1\r}", line: 3, .requirement(.expectedName))
+    }
+
+    /// Mermaid drops the last semicolon of a `style` or `classDef` line that holds a color (`text.replace(/style.*:\S*#.*;/g)`),
+    /// and Pele hides an entity code (`#name;`) from its lexer, where no rule reads it at a token's start: it is no color
+    /// in a style statement, and no comment.
+    func testColorSemicolonsAndEntityCodesAsPeleReadsThem() throws {
+        let diagram = try RequirementParserTests.read("""
+            requirementDiagram
+            element e {
+            }
+            style e fill:#f9f;
+            classDef c fill:#000,color:#fff;
+            style e stroke:#3;33
+            """)
+        XCTAssertEqual(diagram.elements.first?.styleDeclarations, ["fill:#f9f", "stroke:#333"])
+        XCTAssertEqual(diagram.styleClasses.first?.styleDeclarations, ["fill:#000", "color:#fff"])
+        assertProblem("requirementDiagram\nclassDef c fill:#000;color:#fff;\n", line: 2, .unexpectedText("#000;color:#fff"))
+        assertProblem("requirementDiagram\nelement e {\n}\nstyle e fill:#f9f,stroke:#333;str:#333;stroke-width:4px\n", line: 4, .unexpectedText("#333;str:#333stroke-widt"))
+        assertProblem("requirementDiagram\n#amp; element e {\n}\n", line: 2, .unexpectedText("#amp; element e {"))
+        XCTAssertEqual(try RequirementParserTests.read("requirementDiagram\nelement e {\ntype: a #amp; b\n}\n").elements.first?.type, "a #amp; b")
+    }
+
+    /// Pele takes out a line that holds only a comment, with the blank lines before it, before its lexer looks for a
+    /// direction anywhere on a line; an error after it still names its line as written.
+    func testACommentLineIsTakenOutBeforeDirectionsAreFound() throws {
+        XCTAssertEqual(try RequirementParserTests.read("requirementDiagram\n%% direction LR\nelement e {\n}\n").direction, .topToBottom)
+        XCTAssertEqual(try RequirementParserTests.read("requirementDiagram\n%%{init: {}}%% direction LR\n").direction, .leftToRight)
+        assertProblem("requirementDiagram\n\n  %% a comment\n%% another\nrequirement a\n}", line: 5, .requirement(.expectedOpeningBrace))
     }
 
     /// A line that holds `direction` and a direction anywhere is one direction token, as Mermaid's rule `.*direction\s+LR[^\n]*` reads it.
