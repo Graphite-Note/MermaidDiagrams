@@ -22,9 +22,10 @@ final class MermaidDiagramNarrowSafetyTests: XCTestCase {
         "",
         "---\nconfig:\n  quadrantChart: {chartWidth: 120, titleFontSize: 40, quadrantPadding: 90, xAxisPosition: bottom, yAxisPosition: right, pointRadius: 30}\n"
             + "  xyChart:\n    width: 150\n    height: 4000\n    showDataLabel: true\n    chartOrientation: horizontal\n    xAxis: {showLabel: false}\n    yAxis:\n      showTick: false\n"
-            + "  sankey:\n    labelStyle: outlined\n    linkColor: target\n    width: 50\n    nodeColors: {a: red, Coal: \"#123\"}\n---\n",
+            + "  sankey:\n    labelStyle: outlined\n    linkColor: target\n    width: 50\n    nodeColors: {a: red, Coal: \"#123\"}\n"
+            + "  gantt: {barHeight: 9000, barGap: -3, fontSize: 1, sectionFontSize: 80, numberSectionStyles: 0, leftPadding: 2000, useWidth: 5, topPadding: 500, gridLineStartPadding: 9}\n---\n",
         "---\nconfig: {\"quadrantChart\": {\"chartWidth\": -4, \"titleFontSize\": \"big\"}, \"xyChart\": {\"width\": 1e300, \"showTitle\": 0, \"xAxis\": [1]}, \"sankey\": {\"linkColor\": 5, \"nodeColors\": [1]}}\n---\n",
-        "%%{init: {'xyChart': {'width': 100000, 'showLegend': false, 'yAxis': {'showLabel': false}}, 'sankey': {'width': 300, 'linkColor': 'source'}, 'quadrantChart': {'chartHeight': 100}}}%%\n",
+        "%%{init: {'gantt': {'topAxis': true, 'axisFormat': 5, 'tickInterval': '1day', 'barHeight': 1}, 'xyChart': {'width': 100000, 'showLegend': false, 'yAxis': {'showLabel': false}}, 'sankey': {'width': 300, 'linkColor': 'source'}, 'quadrantChart': {'chartHeight': 100}}}%%\n",
     ]
 
     private func layOutForNarrowColumns(_ source: String) -> Bool {
@@ -39,6 +40,9 @@ final class MermaidDiagramNarrowSafetyTests: XCTestCase {
             case .quadrantChart(let chart): size = QuadrantChartLayoutEngine.layout(chart, typography: typography, availableWidth: width).size
             case .xyChart(let chart): size = try? XYChartLayoutEngine.layout(chart, typography: typography, availableWidth: width).size
             case .sankey(let sankey): size = try? SankeyLayoutEngine.layout(sankey, typography: typography, availableWidth: width).size
+            case .ganttChart(let chart):
+                size = try? GanttLayoutEngine.layout(chart, typography: typography, now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone, limits: .standard,
+                                                     availableWidth: width).size
             default: size = nil
             }
             if let size { XCTAssertTrue(size.width.isFinite && size.height.isFinite && size.width >= 0 && size.height >= 0, source) }
@@ -49,7 +53,7 @@ final class MermaidDiagramNarrowSafetyTests: XCTestCase {
 
     func testTheChartsThatNarrowAreLaidOutForNarrowColumnsWhateverIsCutOrMutated() throws {
         let examples = try [MindmapCorpus.documentationExamples(), UserJourneyCorpus.documentationExamples(), QuadrantChartCorpus.documentationExamples(),
-                            XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples()].flatMap { examples in examples }
+                            XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples(), GanttChartCorpus.documentationExamples()].flatMap { examples in examples }
         var generator = NarrowSafetyGenerator(seed: 0x70DE)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\,".utf8)
         var laidOutCount = 0
