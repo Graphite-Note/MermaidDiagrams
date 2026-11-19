@@ -42,6 +42,7 @@ enum DiagramSceneSamples {
             ("xychart", try XYChartCorpus.documentationExamples()), ("sankey", try SankeyCorpus.documentationExamples()),
             ("venn", try VennCorpus.documentationExamples()),
             ("cynefin", try CynefinCorpus.documentationExamples()),
+            ("wardley", try WardleyMapCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -68,6 +69,7 @@ enum DiagramSceneSamples {
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
             ("venn of 8 sets", VennCorpus.generated(setCount: 8)),
             ("cynefin of 40 items", CynefinCorpus.generated(itemCount: 40)),
+            ("wardley of 30 components", WardleyMapCorpus.generated(componentCount: 30)),
         ]
     }
 

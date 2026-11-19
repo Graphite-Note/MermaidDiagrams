@@ -166,7 +166,7 @@ final class DiagramSceneParityTests: XCTestCase {
             }
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
             throw NotAChart()
-        case .venn, .cynefin:
+        case .venn, .cynefin, .wardleyMap:
             throw NoReferenceRenderer()
         }
     }

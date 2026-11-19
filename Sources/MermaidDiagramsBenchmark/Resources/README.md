@@ -17,6 +17,7 @@
 `journey-docs.json`: the user journey example of Mermaid's documentation, as Pele collects it (`tests/corpus/journey-docs.json`, same licenses), used unchanged.
 `quadrant-docs.json`: the 3 quadrant chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/quadrant-docs.json`, same licenses), used unchanged.
 `xychart-docs.json`: the 8 XY chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/xychart-docs.json`, same licenses), used unchanged.
+`wardley-docs.json`: the 19 Wardley map examples of Mermaid's documentation, as Pele collects them (`tests/corpus/wardley-docs.json`, same licenses), used unchanged.
 `cynefin-docs.json`: the 3 Cynefin framework examples of Mermaid's documentation, as Pele collects them (`tests/corpus/cynefin-docs.json`, same licenses), used unchanged.
 `venn-docs.json`: the 8 Venn diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/venn-docs.json`, same licenses), used unchanged.
 

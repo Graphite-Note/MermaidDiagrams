@@ -134,4 +134,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case venn(VennSyntaxProblem)
     /// A problem of a Cynefin framework's own syntax.
     case cynefin(CynefinSyntaxProblem)
+    /// A problem of a Wardley map's own syntax, or a statement its builder cannot take.
+    case wardleyMap(WardleyMapSyntaxProblem)
 }

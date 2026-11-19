@@ -29,6 +29,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     case sankey(SankeyDiagram)
     case venn(VennDiagram)
     case cynefin(CynefinDiagram)
+    case wardleyMap(WardleyMap)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -64,6 +65,7 @@ public enum MermaidDiagramReader {
         case "sankey", "sankey-beta": return .sankey(titled(try SankeyParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "venn-beta": return .venn(titled(try VennParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "cynefin-beta": return .cynefin(titled(try CynefinParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

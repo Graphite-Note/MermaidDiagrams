@@ -66,8 +66,7 @@ struct MermaidDiagramsBenchmark {
         try QuadrantChartBenchmark.run(typography: typography)
         try XYChartBenchmark.run(typography: typography)
         try SankeyBenchmark.run(typography: typography)
-        try VennBenchmark.run(typography: typography)
-        try CynefinBenchmark.run(typography: typography)
+        try PlaneMapBenchmarks.run(typography: typography)
         try DiagramSceneBenchmark.run(typography: typography)
     }
 

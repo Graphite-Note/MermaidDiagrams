@@ -51,6 +51,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .sankey(let sankey): try SankeyLayoutEngine.layout(sankey, typography: typography).size
         case .venn(let venn): try VennLayoutEngine.layout(venn, typography: typography).size
         case .cynefin(let cynefin): CynefinLayoutEngine.layout(cynefin, typography: typography).size
+        case .wardleyMap(let map): WardleyMapLayoutEngine.layout(map, typography: typography).size
         }
     }
 
@@ -60,7 +61,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              TimelineCorpus.documentationExamples(), PieChartCorpus.documentationExamples(), GanttChartCorpus.documentationExamples(),
              GitGraphCorpus.documentationExamples(), UserJourneyCorpus.documentationExamples(), QuadrantChartCorpus.documentationExamples(),
              XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples(),
-             VennCorpus.documentationExamples(), CynefinCorpus.documentationExamples()].flatMap { examples in examples }
+             VennCorpus.documentationExamples(), CynefinCorpus.documentationExamples(), WardleyMapCorpus.documentationExamples()].flatMap { examples in examples }
     }
 
     /// Runs `work` on a thread with the 512 KiB stack of the threads the reading view's builder runs on, so that a
@@ -81,7 +82,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        XCTAssertEqual(examples.count, 343)
+        XCTAssertEqual(examples.count, 362)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)

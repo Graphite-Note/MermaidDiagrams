@@ -131,5 +131,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertEqual(readError("venn\n  set A"), .unsupportedDiagramType(keyword: "venn"))
         XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta\n  complex\n    \"Probe\"").items[.complex], ["Probe"])
         XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta:clear\n\"a\"").items[.clear], ["a"])
+        XCTAssertEqual(try WardleyMapReading.map("wardley-beta\ncomponent Tea [0.6, 0.8]").nodes.map(\.label), ["Tea"])
+        XCTAssertEqual(readError("WARDLEY-BETA\ncomponent Tea [0.6, 0.8]"), .unsupportedDiagramType(keyword: "WARDLEY-BETA"))
     }
 }

@@ -2,8 +2,8 @@
  * File: MermaidDiagramPlaneMapPreparation.swift
  * ---------------------------------------------
  * Layer: Core
- * Description: Prepares the diagrams drawn on a fixed plane, Venn diagrams and Cynefin frameworks, and says what a screen
- *              reader hears of them.
+ * Description: Prepares the diagrams drawn on a fixed plane, Venn diagrams, Cynefin frameworks and Wardley maps, and says
+ *              what a screen reader hears of them.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -25,9 +25,24 @@ extension MermaidDiagramPreparationContext {
         PreparedMermaidDiagram(kind: .cynefin, scene: DiagramScene(layout: CynefinLayoutEngine.layout(cynefin, typography: typography)),
                                accessibility: MermaidDiagramAccessibility(cynefin: cynefin))
     }
+
+    func prepared(_ map: WardleyMap) -> PreparedMermaidDiagram {
+        PreparedMermaidDiagram(kind: .wardleyMap, scene: DiagramScene(layout: WardleyMapLayoutEngine.layout(map, typography: typography)),
+                               accessibility: MermaidDiagramAccessibility(wardleyMap: map))
+    }
 }
 
 extension MermaidDiagramAccessibility {
+    /// Each anchor and component in the order added, then each link between them: “Business; Cup of Tea; Business to Cup
+    /// of Tea”.
+    init(wardleyMap map: WardleyMap) {
+        var labelByIdentifier: [String: String] = [:]
+        for node in map.nodes { labelByIdentifier[node.identifier] = node.label }
+        let links = map.links.map { link in (labelByIdentifier[link.source] ?? link.source) + " to " + (labelByIdentifier[link.target] ?? link.target) }
+        self.init(kind: .wardleyMap, title: map.accessibilityTitle ?? map.title, description: map.accessibilityDescription,
+                  summary: map.nodes.map(\.label) + links, summarySeparator: "; ")
+    }
+
     /// Each domain that has items, in the order drawn, with its items, then each transition with its label: “Complex:
     /// Investigate root cause, Run chaos experiment; Complex to Complicated: Pattern identified”.
     init(cynefin diagram: CynefinDiagram) {

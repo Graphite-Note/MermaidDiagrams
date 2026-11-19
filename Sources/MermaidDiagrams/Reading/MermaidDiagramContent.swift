@@ -29,6 +29,7 @@ extension MermaidDiagram {
         case .sankey(let diagram): diagram.links.isEmpty
         case .venn(let diagram): diagram.subsets.isEmpty
         case .cynefin: false
+        case .wardleyMap: false
         case .gitGraph, .quadrantChart, .xyChart: false
         }
     }

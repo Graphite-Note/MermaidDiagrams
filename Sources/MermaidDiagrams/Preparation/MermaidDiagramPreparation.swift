@@ -76,6 +76,7 @@ struct MermaidDiagramPreparationContext {
         case .sankey(let sankey): try prepared(sankey)
         case .venn(let venn): try prepared(venn)
         case .cynefin(let cynefin): prepared(cynefin)
+        case .wardleyMap(let map): prepared(map)
         }
     }
 
