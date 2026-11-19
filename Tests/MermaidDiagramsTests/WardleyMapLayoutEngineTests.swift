@@ -6,7 +6,7 @@
  *              stopped at their nodes, a label's corner away from links, pipelines, evolutions, annotations and forces.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -85,6 +85,43 @@ final class WardleyMapLayoutEngineTests: XCTestCase {
         XCTAssertEqual(layout.notes.first?.first?.lines, ["A note"])
         XCTAssertEqual(layout.forces.map(\.isAccelerator), [true, false])
         XCTAssertEqual(layout.forces[0].outline.start.x, layout.forces[1].outline.start.x - 60, accuracy: 1e-9, "Their tails at opposite ends")
+    }
+
+    /// The numbers worked out by hand from render.ts on the 804 by 504 plot: an evolution's arrow 8 points short of its
+    /// circle and its line from the market's ring; the list under the stages' names and `Evolution` (568 down), 20 points
+    /// wider and 14 taller than its lines, each row's baseline 7 points in, half a line and 0.35 of the size down; a note
+    /// written from its point.
+    func testEvolutionsAnnotationListAndNotesInPelesNumbers() throws {
+        let layout = try WardleyMapReading.uniformLayout("""
+            wardley-beta
+            component A [0.5, 0.2] (market)
+            evolve A 0.8
+            annotation 2,[0.5, 0.5] "Second"
+            annotation 1,[0.3, 0.3] "First"
+            note "A note" [0.1, 0.1]
+            """)
+        let origin = layout.plot.origin
+        let trend = try XCTUnwrap(layout.trends.first)
+        XCTAssertEqual(try XCTUnwrap(trend.arrow).tip.x - origin.x, 0.8 * 804 - 8, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(trend.line).start.x - origin.x, 0.2 * 804 + 12, accuracy: 1e-9, "From the market's ring, two radii out")
+        let list = try XCTUnwrap(layout.annotationList)
+        XCTAssertEqual(list.frame.offsetBy(dx: -origin.x, dy: -origin.y), CGRect(x: 0, y: 568, width: 9 * 6.5 + 20, height: 2 * 20 + 14))
+        XCTAssertEqual(list.rows[0].center.y + 13 * 0.35 - origin.y, 568 + 7 + 10 + 13 * 0.35, accuracy: 1e-9)
+        XCTAssertEqual(list.rows[0].frame.minX - origin.x, 10, accuracy: 1e-9)
+        let note = try XCTUnwrap(layout.notes.first?.first)
+        XCTAssertEqual(note.frame.minX - origin.x, 0.1 * 804, accuracy: 1e-9)
+        XCTAssertEqual(note.center.y + 13 * 0.35 - origin.y, 504 - 0.1 * 504, accuracy: 1e-9, "Its baseline at its point")
+    }
+
+    /// A link's label 5 points beside its middle on its upper side, past half its height for a level link; a line from
+    /// an anchor stops on the ellipse around its name, 0.8 of the size tall.
+    func testALinksLabelAndAnAnchorsReachInPelesNumbers() throws {
+        let layout = try WardleyMapReading.uniformLayout("wardley-beta\nanchor X [0.5, 0.5]\ncomponent A [0.2, 0.2]\ncomponent B [0.2, 0.6]\nA -> B; go\nX -> Y\ncomponent Y [0.1, 0.5]")
+        let origin = layout.plot.origin
+        let label = try XCTUnwrap(layout.links[0].label)
+        XCTAssertEqual(label.center.x - origin.x, (0.2 + 0.6) / 2 * 804, accuracy: 1e-9)
+        XCTAssertEqual(label.center.y - origin.y, 504 - 0.2 * 504 - 5 - 9, accuracy: 1e-9)
+        XCTAssertEqual(layout.links[1].line.start.y - origin.y, 504 - 0.5 * 504 + 13 * 0.8, accuracy: 1e-9)
     }
 
     func testTheSceneHasPelesPartsInPelesOrder() throws {

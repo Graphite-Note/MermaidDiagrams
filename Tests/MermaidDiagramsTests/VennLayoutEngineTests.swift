@@ -84,6 +84,48 @@ final class VennLayoutEngineTests: XCTestCase {
         XCTAssertEqual(onlyA.margin, 0.5, accuracy: 1e-3, "Halfway between B's outline and A's far side")
     }
 
+    /// A spot the grid misses: the overlap of a circle of radius 1 and one of 0.6 whose centers are 1.2 apart is roomiest
+    /// at (0.8, 0), 0.2 from both outlines; the grid on the smaller circle comes within 0.02 of it and the walk the rest.
+    func testTheWalkUphillFindsTheSpotTheGridMisses() {
+        let circles = [VennCircle(identifier: "A", x: 0, y: 0, radius: 1), VennCircle(identifier: "B", x: 1.2, y: 0, radius: 0.6)]
+        let spot = VennRegionSpot.find(in: circles, inside: [0, 1], outside: [])
+        XCTAssertEqual(spot.x, 0.8, accuracy: 1e-5)
+        XCTAssertEqual(spot.y, 0, accuracy: 1e-4)
+        XCTAssertEqual(spot.margin, 0.2, accuracy: 1e-5)
+    }
+
+    /// Two sets of the default size with no overlap keep a gap of 0.15 of the widest radius: 15 points at 100.
+    func testSetsWithoutAnOverlapKeepTheirGap() throws {
+        let layout = try VennReading.uniformLayout("venn-beta\n  set A\n  set B")
+        XCTAssertEqual(layout.sets[1].center.x - layout.sets[0].center.x, 215, accuracy: 1e-9)
+        XCTAssertEqual(layout.sets[1].center.y, layout.sets[0].center.y)
+    }
+
+    /// The triangle shrinks by 0.94 at a time: its first side is the distance its overlap asks times a whole power of 0.94.
+    func testTheTriangleShrinksByPelesFactor() throws {
+        let subsets = [subset(["A"], 10), subset(["B"], 10), subset(["C"], 10), subset(["A", "B"], 0.1), subset(["A", "C"], 0.1),
+                       subset(["B", "C"], 0.1), subset(["A", "B", "C"], 0.05)]
+        let circles = try VennCirclePlacement(subsets: subsets, limits: .standard).circles
+        let asked = VennCircleGeometry.distanceForOverlap(circles[0].radius, circles[1].radius, area: 0.1)
+        let shrinks = log(circles[1].x / asked) / log(0.94)
+        XCTAssertGreaterThanOrEqual(shrinks, 1 - 1e-9, "Overlaps this small leave no shared region at first")
+        XCTAssertEqual(shrinks, shrinks.rounded(), accuracy: 1e-9)
+    }
+
+    /// A set's region less than a fifth of its radius deep is written across the circles over it, at its own circle's
+    /// middle; one a quarter deep is not. Two sets of one size whose centers are half a radius apart leave each a crescent
+    /// a quarter of a radius deep, where Pele's search stops about 0.24 of a radius from the outlines, 70 points from
+    /// the circle's middle, away from the other.
+    func testARegionIsWrittenAcrossOnlyBelowAFifthOfItsRadius() throws {
+        let radius = (10 / Double.pi).squareRoot()
+        let area = VennCircleGeometry.lensArea(radius, radius, distance: radius / 2)
+        let layout = try VennReading.uniformLayout("venn-beta\n  set A\n  set B\n  union A,B:\(area)")
+        XCTAssertEqual(layout.sets[1].center.x - layout.sets[0].center.x, 50, accuracy: 1e-6)
+        XCTAssertLessThan(layout.regions[0].lines[0].text.center.x, layout.sets[0].center.x - 60)
+        let covered = try VennReading.uniformLayout("venn-beta\n  set A\n  set B\n  union A,B:\(VennCircleGeometry.lensArea(radius, radius, distance: radius / 4))")
+        XCTAssertEqual(covered.regions[0].lines[0].text.center.x, covered.sets[0].center.x, accuracy: 0.01, "An eighth deep: across, at its middle")
+    }
+
     // MARK: Layout
 
     func testTheLargestCircleIsAHundredPointsGrownToHoldItsText() throws {

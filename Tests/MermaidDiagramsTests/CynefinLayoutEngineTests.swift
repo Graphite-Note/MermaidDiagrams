@@ -7,7 +7,7 @@
  *              board, the blocks, the ellipse and the transitions.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -124,6 +124,26 @@ final class CynefinLayoutEngineTests: XCTestCase {
         }
         XCTAssertLessThan(repeatedControl.y, firstControl.y, "The repeated transition bows 56 points farther")
         XCTAssertNil(layout.transitions[2].label)
+    }
+
+    /// The numbers worked out by hand from render.ts for an empty board (640 by 440 at 8 points in): the fold's seed is
+    /// the hash of `pele`, the west boundary's 100 more and the east one's 200 more, each point's 23 more along a horizon;
+    /// a transition between two blocks of one column bows by 0.15 of its length, its label 6 points beyond the curve.
+    func testBoundariesAndATransitionInPelesNumbers() throws {
+        let layout = try CynefinReading.uniformLayout("cynefin-beta\n  chaotic --> complex : \"Stabilized\"")
+        XCTAssertEqual(layout.boundaries[0].start.x, 328 + 0.5959696690551937 * 16 - 8, accuracy: 1e-9, "The fold, seeded by the hash of pele")
+        XCTAssertEqual(layout.boundaries[1].start, CGPoint(x: 8, y: 228 + 0.07119056489318609 * 16 - 8), "The west boundary, 100 more")
+        XCTAssertEqual(CynefinBoundaries.endPoint(of: layout.boundaries[2]).y, 228 + 0.6702273183036596 * 16 - 8, accuracy: 1e-9,
+                       "The east boundary's last point, 200 and four times 23 more")
+        // From chaotic's middle (168, 338) to complex's (168, 118): the control point 33 points left of (168, 228), the curve
+        // leaving chaotic's block (64 tall, 8 more around) at y 298 and entering complex's at y 158.
+        let transition = try XCTUnwrap(layout.transitions.first)
+        XCTAssertEqual(transition.path.start.y, 298, accuracy: 0.01)
+        XCTAssertEqual(transition.arrow.tip.y, 158, accuracy: 0.01)
+        XCTAssertEqual(transition.arrow.tip.x, 168 - 66 * (180.0 / 220) * (40.0 / 220), accuracy: 0.01)
+        let label = try XCTUnwrap(transition.label)
+        XCTAssertEqual(label.center.x, 168 - 16.5 - 65.0 / 2 - 6, accuracy: 0.01, "Half the bow at the middle, then half the label and 6 points")
+        XCTAssertEqual(label.center.y, 228, accuracy: 0.01)
     }
 
     func testTheSceneHasPelesPartsInPelesOrder() throws {
