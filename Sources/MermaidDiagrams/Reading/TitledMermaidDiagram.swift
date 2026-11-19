@@ -17,3 +17,7 @@ extension UserJourneyDiagram: TitledMermaidDiagram {}
 extension QuadrantChart: TitledMermaidDiagram {}
 extension XYChart: TitledMermaidDiagram {}
 extension SankeyDiagram: TitledMermaidDiagram {}
+extension InfoDiagram: TitledMermaidDiagram {}
+extension PacketDiagram: TitledMermaidDiagram {}
+extension RadarChart: TitledMermaidDiagram {}
+extension TreemapDiagram: TitledMermaidDiagram {}

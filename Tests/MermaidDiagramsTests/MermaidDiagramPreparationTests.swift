@@ -6,7 +6,7 @@
  *              where its type has one, what a screen reader says of it, or a typed failure of the right kind.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -43,6 +43,39 @@ final class MermaidDiagramPreparationTests: XCTestCase {
             preparedKinds.insert(prepared.kind)
         }
         XCTAssertEqual(preparedKinds, Set(MermaidDiagramKind.allCases))
+    }
+
+    func testTheSimpleChartsAreRefusedAsTheirTextsDeserve() {
+        XCTAssertEqual(failure("packet"), .nothingToDraw)
+        XCTAssertEqual(failure("radar-beta\ntitle Only a title"), .nothingToDraw)
+        XCTAssertEqual(failure("treemap\n\"a\": 0"), .nothingToDraw)
+        XCTAssertEqual(failure("treemap\n\"a\": 0")?.category, .notDrawnYet)
+        XCTAssertEqual(failure("packet\n0-1: \"a\"\n3: \"b\""), .reading(.invalidSyntax(line: 3, problem: .packet(.notContiguous(firstBit: 3, lastBit: 3, expectedFirstBit: 2)))))
+        XCTAssertEqual(failure("packet\n0-1: \"a\"\n3: \"b\"")?.category, .unreadable)
+        XCTAssertEqual(failure("radar-beta\naxis a\ncurve c{ b: 1 }")?.category, .unreadable)
+        XCTAssertEqual(failure("packet\n+1000000000: \"a\"")?.category, .beyondLimits)
+        XCTAssertEqual(failure("---\nconfig:\n  packet:\n    bitsPerRow: 4096\n    bitWidth: 400\n---\npacket\n+4096: \"a\""), .tooLargeToDraw(maximumSideLength: 20_000))
+        XCTAssertNil(failure("info"))
+    }
+
+    func testAnInfoDiagramWritesItsVersionAndItsSVGKeepsPelesNames() throws {
+        let prepared = try MermaidDiagramPreparation.prepare(source: "info\ntitle Hello\naccDescr: Described", typography: typography)
+        XCTAssertEqual(prepared.kind, .info)
+        XCTAssertEqual(prepared.accessibility.label, "Hello")
+        XCTAssertEqual(prepared.accessibility.value, "Described")
+        XCTAssertEqual(try MermaidDiagramPreparation.prepare(source: "info", typography: typography).accessibility.label, "Info diagram")
+        XCTAssertEqual(try MermaidDiagramPreparation.prepare(source: "info", typography: typography).accessibility.value, MermaidDiagramsVersion.text)
+        let svg = prepared.svgDocument()
+        XCTAssertTrue(svg.contains("class=\"pele pele-info\""))
+        XCTAssertTrue(svg.contains("class=\"pele-version\""))
+        for (source, kind) in [("packet\n+8: \"a\"", "packet"), ("radar-beta\naxis a\ncurve c{1}", "radar"), ("treemap\n\"a\": 1", "treemap")] {
+            XCTAssertTrue(try MermaidDiagramPreparation.prepare(source: source, typography: typography).svgDocument().contains("class=\"pele pele-\(kind)\""), kind)
+        }
+    }
+
+    func testAClassDefOfATreemapThatSetsWhatIsNotDrawnIsCounted() throws {
+        let prepared = try MermaidDiagramPreparation.prepare(source: "treemap\n\"a\": 1:::c1\nclassDef c1 opacity:0.5,fill:red", typography: typography)
+        XCTAssertEqual(prepared.unappliedStatementCount, 1)
     }
 
     func testFailuresSayWhyAndOfWhatKind() throws {

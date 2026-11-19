@@ -147,4 +147,10 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case treeViewIndentationWithoutBoxDrawing
     /// A tree view's entry has no name where one was expected: its first characters.
     case treeViewExpectedName(String)
+    /// A problem of a packet diagram's own syntax, or a field its bits cannot take.
+    case packet(PacketSyntaxProblem)
+    /// A problem of a radar chart's own syntax, or a curve its axes cannot take.
+    case radar(RadarSyntaxProblem)
+    /// A problem of a treemap's own syntax.
+    case treemap(TreemapSyntaxProblem)
 }

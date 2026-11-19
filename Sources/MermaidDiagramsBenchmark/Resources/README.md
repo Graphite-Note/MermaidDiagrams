@@ -21,3 +21,7 @@
 `kanban-docs.json`: the 3 kanban examples of Mermaid's documentation, as Pele collects them (`tests/corpus/kanban-docs.json`, same licenses), used unchanged.
 `treeview-docs.json`: the 13 tree view examples of Mermaid's documentation, as Pele collects them (`tests/corpus/treeview-docs.json`, same licenses), used unchanged.
 `ishikawa-docs.json`: the Ishikawa diagram example of Mermaid's documentation, as Pele collects it (`tests/corpus/ishikawa-docs.json`, same licenses), used unchanged.
+`info-docs.json`: the 2 info diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/info-docs.json`, same licenses), used unchanged.
+`packet-docs.json`: the 4 packet diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/packet-docs.json`, same licenses), used unchanged.
+`radar-docs.json`: the 3 radar chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/radar-docs.json`, same licenses), used unchanged.
+`treemap-docs.json`: the 8 treemap examples of Mermaid's documentation, as Pele collects them (`tests/corpus/treemap-docs.json`, same licenses), used unchanged.

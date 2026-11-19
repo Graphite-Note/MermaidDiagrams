@@ -166,7 +166,8 @@ final class DiagramSceneParityTests: XCTestCase {
             }
         case .kanban, .treeView, .ishikawa:
             return try laidOutFromItsSceneAlone(diagram, typography: typography)
-        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
+        // The info diagram, packet diagram, radar chart and treemap were never painted by another renderer than their scene's.
+        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline, .info, .packet, .radar, .treemap:
             throw NotAChart()
         }
     }

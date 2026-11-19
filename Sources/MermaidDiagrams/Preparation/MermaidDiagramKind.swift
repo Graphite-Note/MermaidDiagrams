@@ -5,7 +5,7 @@
  * Description: The diagram types drawn, with Pele's name of each and what a screen reader calls one without a title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -28,6 +28,10 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
     case kanban
     case treeView
     case ishikawa
+    case info
+    case packet
+    case radar
+    case treemap
 
     /// Pele's name of the type, which its SVG's root class (`pele-<name>`) and role description carry.
     public var peleName: String {
@@ -49,6 +53,10 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .kanban: "kanban"
         case .treeView: "treeView"
         case .ishikawa: "ishikawa"
+        case .info: "info"
+        case .packet: "packet"
+        case .radar: "radar"
+        case .treemap: "treemap"
         }
     }
 
@@ -72,6 +80,10 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .kanban: "Kanban board"
         case .treeView: "Tree view"
         case .ishikawa: "Ishikawa diagram"
+        case .info: "Info diagram"
+        case .packet: "Packet diagram"
+        case .radar: "Radar chart"
+        case .treemap: "Treemap"
         }
     }
 }
@@ -97,6 +109,10 @@ extension MermaidDiagram {
         case .kanban: .kanban
         case .treeView: .treeView
         case .ishikawa: .ishikawa
+        case .info: .info
+        case .packet: .packet
+        case .radar: .radar
+        case .treemap: .treemap
         }
     }
 }

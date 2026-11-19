@@ -6,7 +6,7 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -52,6 +52,10 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .kanban(let board): KanbanLayoutEngine.layout(board, typography: typography).size
         case .treeView(let tree): TreeViewLayoutEngine.layout(tree, typography: typography).size
         case .ishikawa(let diagram): IshikawaLayoutEngine.layout(diagram, typography: typography).size
+        case .info(let info): InfoDiagramLayoutEngine.layout(info, typography: typography).size
+        case .packet(let packet): PacketDiagramLayoutEngine.layout(packet, typography: typography).size
+        case .radar(let radar): RadarChartLayoutEngine.layout(radar, typography: typography).size
+        case .treemap(let treemap): TreemapLayoutEngine.layout(treemap, typography: typography).size
         }
     }
 
@@ -61,7 +65,9 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              TimelineCorpus.documentationExamples(), PieChartCorpus.documentationExamples(), GanttChartCorpus.documentationExamples(),
              GitGraphCorpus.documentationExamples(), UserJourneyCorpus.documentationExamples(), QuadrantChartCorpus.documentationExamples(),
              XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples(),
-             KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples()].flatMap { examples in examples }
+             KanbanCorpus.documentationExamples(), TreeViewCorpus.documentationExamples(), IshikawaCorpus.documentationExamples(),
+             InfoDiagramCorpus.documentationExamples(), PacketDiagramCorpus.documentationExamples(), RadarChartCorpus.documentationExamples(),
+             TreemapCorpus.documentationExamples()].flatMap { examples in examples }
             + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
@@ -83,8 +89,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        // The 349 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
-        XCTAssertEqual(examples.count, 356)
+        // The 366 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 373)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)

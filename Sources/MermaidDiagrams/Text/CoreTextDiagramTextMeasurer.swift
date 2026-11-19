@@ -1,3 +1,14 @@
+/**
+ * File: CoreTextDiagramTextMeasurer.swift
+ * ---------------------------------------
+ * Layer: Core
+ * Description: Measures a diagram's text with Core Text, as it is drawn, from a table of the font's advances.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import CoreText
 import Foundation
@@ -9,6 +20,9 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     private let font: CTFont
+    /// The font it was made from, and whether it measures its bold, so that it can be made again at another size.
+    let diagramFont: DiagramFont
+    let isBold: Bool
     /// Advances of the characters from space (32) to tilde (126).
     private let printableASCIIAdvances: [CGFloat]
 
@@ -25,6 +39,8 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     init(font diagramFont: DiagramFont, isBold: Bool) {
         let regular = diagramFont.makeCoreTextFont()
         font = isBold ? CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, .traitBold, .traitBold) ?? regular : regular
+        self.diagramFont = diagramFont
+        self.isBold = isBold
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
         let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }
