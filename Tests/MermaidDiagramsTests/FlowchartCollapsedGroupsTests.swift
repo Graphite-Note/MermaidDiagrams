@@ -5,7 +5,7 @@
  * Description: Collapsed flowchart groups drawn as single nodes, their content left out and their edges redirected.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -74,5 +74,14 @@ final class FlowchartCollapsedGroupsTests: XCTestCase {
     func testAFlowchartWithoutCollapsedGroupsIsUnchanged() throws {
         let diagram = try FlowchartReading.flowchart("flowchart TD\nsubgraph one\nA --> B\nend\nB --> C")
         XCTAssertEqual(FlowchartCollapsedGroups.collapsing(diagram), diagram)
+    }
+
+    /// Pele's graph lists its groups in the reverse of the order they end, so of two collapsed groups side by side, or in
+    /// boxes side by side, the one written last comes first.
+    func testCollapsedGroupsComeInPelesOrderTheLastWrittenFirst() throws {
+        let siblings = try collapsed("flowchart LR\nsubgraph A\na1\nend\nsubgraph B\nb1\nend\nx --> A\nA@{ view: collapsed }\nB@{ view: collapsed }")
+        XCTAssertEqual(siblings.nodes.map(\.identifier), ["B", "A", "x"])
+        let inBoxes = try collapsed("flowchart TD\nsubgraph P\nsubgraph A\na1\nend\nend\nsubgraph Q\nsubgraph B\nb1\nend\nend\nA@{ view: collapsed }\nB@{ view: collapsed }")
+        XCTAssertEqual(inBoxes.nodes.map(\.identifier), ["B", "A"])
     }
 }

@@ -5,7 +5,7 @@
  * Description: A flowchart with its collapsed groups drawn as single nodes, as Pele's flowchart graph builds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -13,7 +13,7 @@
 /// (`flowchart/graph.ts`): the outermost collapsed group around anything stands for it, a node in the shape of a
 /// collapsed group with the group's title and the style its identifier's node sets; the nodes and groups inside are
 /// not drawn, each edge to or from them meets that node instead, and an edge that then runs from the node to itself
-/// is left out. The collapsed nodes come first, as Pele lists its groups before its nodes.
+/// is left out. The collapsed nodes come first, as Pele lists its groups (last ended first) before its nodes.
 enum FlowchartCollapsedGroups {
     static func collapsing(_ diagram: FlowchartDiagram) -> FlowchartDiagram {
         guard diagram.subgraphs.contains(where: \.isCollapsed) else { return diagram }
@@ -62,8 +62,10 @@ enum FlowchartCollapsedGroups {
             placeSubgraphs()
         }
 
+        /// The collapsed groups' nodes first, in Pele's order: its groups in the reverse of the order they end, which for
+        /// groups not inside each other is the reverse of the order they are written in; then the nodes still drawn.
         private mutating func placeNodes() {
-            for (index, subgraph) in diagram.subgraphs.enumerated() where outermostCollapsed[index] == index {
+            for (index, subgraph) in diagram.subgraphs.enumerated().reversed() where outermostCollapsed[index] == index {
                 let style = subgraph.representingNodeIndex.flatMap { node in diagram.nodes[node].style }
                 collapsedNodeIndices[index] = nodes.count
                 nodes.append(FlowchartNode(identifier: subgraph.identifier, label: subgraph.title, shape: .collapsedGroup, style: style))
