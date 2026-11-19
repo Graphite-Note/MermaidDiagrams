@@ -5,8 +5,8 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier
- * Version: 0.16
- * Date: 01/11/2026
+ * Version: 0.17
+ * Date: 19/11/2026
  */
 
 import Foundation
@@ -27,6 +27,10 @@ public enum MermaidDiagram: Equatable, Sendable {
     case quadrantChart(QuadrantChart)
     case xyChart(XYChart)
     case sankey(SankeyDiagram)
+    case info(InfoDiagram)
+    case packet(PacketDiagram)
+    case radar(RadarChart)
+    case treemap(TreemapDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -60,6 +64,10 @@ public enum MermaidDiagramReader {
         case "quadrantChart": return .quadrantChart(titled(try QuadrantChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "xychart", "xychart-beta": return .xyChart(titled(try XYChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "sankey", "sankey-beta": return .sankey(titled(try SankeyParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "info": return .info(titled(try InfoDiagramParser.parse(cursor), frontMatterTitle: title))
+        case "packet", "packet-beta": return .packet(titled(try PacketDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "radar-beta": return .radar(titled(try RadarChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "treemap", "treemap-beta": return .treemap(titled(try TreemapDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

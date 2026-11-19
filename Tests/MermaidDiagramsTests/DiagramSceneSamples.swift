@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -20,7 +20,7 @@ struct DiagramSceneSample {
     let source: String
 }
 
-/// The texts the scene tests run over, of all fourteen types: each documentation example the benchmark collects, a
+/// The texts the scene tests run over, of every type: each documentation example the benchmark collects, a
 /// generated diagram per type that uses many series colors or is large, and texts that set colors of their own.
 enum DiagramSceneSamples {
     static var typography: DiagramTypography { DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16)) }
@@ -40,6 +40,8 @@ enum DiagramSceneSamples {
             ("gantt", try GanttChartCorpus.documentationExamples()), ("gitGraph", try GitGraphCorpus.documentationExamples()),
             ("journey", try UserJourneyCorpus.documentationExamples()), ("quadrantChart", try QuadrantChartCorpus.documentationExamples()),
             ("xychart", try XYChartCorpus.documentationExamples()), ("sankey", try SankeyCorpus.documentationExamples()),
+            ("info", try InfoDiagramCorpus.documentationExamples()), ("packet", try PacketDiagramCorpus.documentationExamples()),
+            ("radar", try RadarChartCorpus.documentationExamples()), ("treemap", try TreemapCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -64,6 +66,9 @@ enum DiagramSceneSamples {
             ("journey of 20 tasks", UserJourneyCorpus.generated(taskCount: 20)), ("quadrant of 30 points", QuadrantChartCorpus.generated(pointCount: 30)),
             ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try sankeyEnergy()),
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
+            ("info with titles", InfoDiagramCorpus.titled), ("packet of 25 fields", PacketDiagramCorpus.generated(fieldCount: 25)),
+            ("radar of 9 axes and 3 curves", RadarChartCorpus.generated(axisCount: 9, curveCount: 3)),
+            ("treemap of 200 leaves", TreemapCorpus.generated(leafCount: 200)),
         ]
     }
 

@@ -5,8 +5,8 @@
  * Description: Reading Mermaid text: front matter, comments, directives and the diagram type.
  *
  * Authors: Félix Chevalier
- * Version: 0.10
- * Date: 01/11/2026
+ * Version: 0.11
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -86,6 +86,27 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertEqual(try XYChartReading.chart("---\ntitle: Sales\n---\nxychart\n  bar [1, 2]").title, "Sales")
         XCTAssertEqual(try XYChartReading.chart("xychart-beta\n  title \"Own\"\n  bar [1, 2]").title, "Own")
         XCTAssertEqual(readError("xychart-1"), .unsupportedDiagramType(keyword: "xychart-1"))
+    }
+
+    func testTheKeywordsOfTheSimpleChartsReadTheirTypesWithTheFrontMatterTitle() throws {
+        XCTAssertEqual(try SimpleChartReading.info("---\ntitle: T\n---\ninfo showInfo").title, "T")
+        XCTAssertEqual(try SimpleChartReading.packet("%% c\npacket-beta\n+8: \"a\"").fields.count, 1)
+        XCTAssertEqual(try SimpleChartReading.packet("packet\n+8: \"a\"").fields.count, 1)
+        XCTAssertEqual(try SimpleChartReading.radar("radar-beta:\naxis a").axes.count, 1)
+        XCTAssertEqual(try SimpleChartReading.treemap("treemap\n\"a\": 1").nodes.count, 1)
+        XCTAssertEqual(try SimpleChartReading.treemap("treemap-beta\n\"a\": 1").nodes.count, 1)
+        XCTAssertEqual(try SimpleChartReading.treemap("---\ntitle: T\n---\ntreemap\n\"a\": 1").title, "T")
+        for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
+            XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
+        }
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 18)
+    }
+
+    func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
+        XCTAssertEqual(try SimpleChartReading.radar("radar-beta\n%%{\n  init: {}\n}%%\naxis a").axes.count, 1)
+        XCTAssertEqual(try SimpleChartReading.packet("packet\n%%{\n  init: {}\n}%%\n+1: \"a\"").fields.count, 1)
+        XCTAssertEqual(try SimpleChartReading.treemap("treemap\n%%{\n  init: {}\n}%%\n\"a\": 1").nodes.count, 1)
+        XCTAssertEqual(readError("info\n%%{\n  init: {}\n}%%\nx"), .invalidSyntax(line: 5, problem: .unexpectedText("x")))
     }
 
     func testBothSankeyKeywordsReadASankeyDiagram() throws {

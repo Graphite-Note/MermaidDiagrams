@@ -18,3 +18,7 @@
 `quadrant-docs.json`: the 3 quadrant chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/quadrant-docs.json`, same licenses), used unchanged.
 `xychart-docs.json`: the 8 XY chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/xychart-docs.json`, same licenses), used unchanged.
 `sankey-docs.json`: the 8 Sankey diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/sankey-docs.json`, same licenses), used unchanged. `sankey-energy.csv`: the energy flows Mermaid 12.1.0's `sankey.spec.ts` reads (`energy.csv` in Mermaid, MIT licensed, as Pele ports the spec in `tests/compat/sankey/upstream`), used unchanged.
+`info-docs.json`: the 2 info diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/info-docs.json`, same licenses), used unchanged.
+`packet-docs.json`: the 4 packet diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/packet-docs.json`, same licenses), used unchanged.
+`radar-docs.json`: the 3 radar chart examples of Mermaid's documentation, as Pele collects them (`tests/corpus/radar-docs.json`, same licenses), used unchanged.
+`treemap-docs.json`: the 8 treemap examples of Mermaid's documentation, as Pele collects them (`tests/corpus/treemap-docs.json`, same licenses), used unchanged.

@@ -6,7 +6,7 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -74,6 +74,10 @@ struct MermaidDiagramPreparationContext {
         case .quadrantChart(let chart): prepared(chart)
         case .xyChart(let chart): try prepared(chart)
         case .sankey(let sankey): try prepared(sankey)
+        case .info(let info): prepared(info)
+        case .packet(let packet): prepared(packet)
+        case .radar(let radar): prepared(radar)
+        case .treemap(let treemap): prepared(treemap)
         }
     }
 

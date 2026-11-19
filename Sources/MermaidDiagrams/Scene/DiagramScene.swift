@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -196,4 +196,18 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case axisLabel = "axis-label"
     /// Legends and their text.
     case legend
+    /// An info diagram's line of the package's version.
+    case version
+    /// The first and last bit written above a packet diagram's field.
+    case bitNumber = "packet-bits"
+    /// The rings of a radar chart.
+    case graticule
+    /// A radar chart's curve.
+    case curve
+    /// A treemap's section: a box that holds others.
+    case section
+    /// A treemap's leaf.
+    case leaf
+    /// The value a treemap writes in a box.
+    case value
 }

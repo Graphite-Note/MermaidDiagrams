@@ -119,4 +119,10 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     /// A Sankey diagram's row is not three fields separated by commas (`source,target,value`), or a line break does
     /// not follow the keyword.
     case expectedSankeyFields
+    /// A problem of a packet diagram's own syntax, or a field its bits cannot take.
+    case packet(PacketSyntaxProblem)
+    /// A problem of a radar chart's own syntax, or a curve its axes cannot take.
+    case radar(RadarSyntaxProblem)
+    /// A problem of a treemap's own syntax.
+    case treemap(TreemapSyntaxProblem)
 }

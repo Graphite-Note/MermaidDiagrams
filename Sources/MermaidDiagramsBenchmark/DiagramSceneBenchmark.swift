@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -34,6 +34,8 @@ enum DiagramSceneBenchmark {
             (.userJourney, try UserJourneyCorpus.documentationExamples()), (.quadrantChart, try QuadrantChartCorpus.documentationExamples()),
             (.xyChart, try XYChartCorpus.documentationExamples()),
             (.sankey, try SankeyCorpus.documentationExamples() + ["sankey-beta\n\n " + SankeyCorpus.energyRows()]),
+            (.info, try InfoDiagramCorpus.documentationExamples()), (.packet, try PacketDiagramCorpus.documentationExamples()),
+            (.radar, try RadarChartCorpus.documentationExamples()), (.treemap, try TreemapCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -99,7 +101,7 @@ enum DiagramSceneBenchmark {
         case .gitGraph(let gitGraph):
             let layOut = { try GitGraphLayoutEngine.layout(gitGraph, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
-        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey:
+        case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey, .info, .packet, .radar, .treemap:
             return laidOutChart(diagram, typography: typography)
         }
     }
@@ -131,7 +133,28 @@ enum DiagramSceneBenchmark {
         case .sankey(let sankey):
             let layOut = { try SankeyLayoutEngine.layout(sankey, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .info, .packet, .radar, .treemap:
+            return laidOutSimpleChart(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
+            return nil
+        }
+    }
+
+    private static func laidOutSimpleChart(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .info(let info):
+            let layout = InfoDiagramLayoutEngine.layout(info, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .packet(let packet):
+            let layout = PacketDiagramLayoutEngine.layout(packet, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .radar(let radar):
+            let layout = RadarChartLayoutEngine.layout(radar, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .treemap(let treemap):
+            let layout = TreemapLayoutEngine.layout(treemap, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        default:
             return nil
         }
     }

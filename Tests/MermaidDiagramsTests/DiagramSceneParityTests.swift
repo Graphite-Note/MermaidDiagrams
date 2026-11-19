@@ -7,7 +7,7 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -164,7 +164,8 @@ final class DiagramSceneParityTests: XCTestCase {
             return LaidOutDiagram(scene: DiagramScene(layout: layout)) { context, palette in
                 ReferenceSankeyRenderer.draw(layout, in: context, palette: palette)
             }
-        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline:
+        // The info diagram, packet diagram, radar chart and treemap were never painted by another renderer than their scene's.
+        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline, .info, .packet, .radar, .treemap:
             throw NotAChart()
         }
     }

@@ -5,8 +5,8 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 extension MermaidDiagram {
@@ -27,7 +27,10 @@ extension MermaidDiagram {
         case .ganttChart(let chart): chart.tasks.isEmpty
         case .userJourney(let diagram): diagram.tasks.isEmpty
         case .sankey(let diagram): diagram.links.isEmpty
-        case .gitGraph, .quadrantChart, .xyChart: false
+        case .packet(let diagram): diagram.fields.isEmpty
+        case .radar(let chart): chart.axes.isEmpty
+        case .treemap(let diagram): !diagram.nodes.contains { node in node.size > 0 }
+        case .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }
 }
