@@ -246,4 +246,28 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case leaf
     /// The value a treemap writes in a box.
     case value
+    /// A Venn diagram's circles, the overlaps a style outlines, and the texts written in its regions.
+    case vennSet = "venn-set"
+    case vennOverlap = "venn-overlap"
+    case vennText = "venn-text"
+    /// A Cynefin framework's domains, the dashed boundaries between them, the cliff, and the domains' subtitles.
+    case cynefinRegion = "cynefin-region"
+    case cynefinBoundary = "cynefin-boundaries"
+    case cynefinCliff = "cynefin-cliff"
+    case cynefinSubtitle = "cynefin-subtitle"
+    /// A Wardley map's frame: its stages, its grid, its axes and their texts.
+    case wardleyStage = "wardley-stage"
+    case wardleyGrid = "wardley-grid"
+    case wardleyAxis = "wardley-axis"
+    case wardleyStageLabel = "wardley-stage-label"
+    case wardleyAxisLabel = "wardley-axis-label"
+    /// A Wardley map's pipelines, evolutions, inertia bars, annotations and their list, notes, and forces.
+    case wardleyPipeline = "wardley-pipeline"
+    case wardleyTrend = "wardley-trend"
+    case wardleyInertia = "wardley-inertia"
+    case wardleyAnnotation = "wardley-annotation"
+    case wardleyAnnotations = "wardley-annotations"
+    case wardleyNote = "wardley-note"
+    case wardleyAccelerator = "wardley-accelerator"
+    case wardleyDeaccelerator = "wardley-deaccelerator"
 }

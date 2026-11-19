@@ -33,7 +33,8 @@ extension MermaidDiagram {
         case .packet(let diagram): diagram.fields.isEmpty
         case .radar(let chart): chart.axes.isEmpty
         case .treemap(let diagram): !diagram.nodes.contains { node in node.size > 0 }
-        case .gitGraph, .quadrantChart, .xyChart, .info: false
+        case .venn(let diagram): diagram.subsets.isEmpty
+        case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }
 }

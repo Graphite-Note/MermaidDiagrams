@@ -99,7 +99,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 21)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 24)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
@@ -144,5 +144,14 @@ final class MermaidDiagramReaderTests: XCTestCase {
         let diagram = try GitGraphReading.gitGraph("%%{\n init: {'gitGraph': {'mainBranchName': 'trunk'}}\n}%%\ngitGraph\n commit")
         XCTAssertEqual(diagram.branches.map(\.name), ["trunk"])
         XCTAssertEqual(diagram.commits.count, 1)
+    }
+
+    func testTheKeywordsOfTheDiagramsDrawnOnAPlaneReadTheirTypes() throws {
+        XCTAssertEqual(try VennReading.venn("%% sets\nvenn-beta\n  set A").subsets.count, 1)
+        XCTAssertEqual(readError("venn\n  set A"), .unsupportedDiagramType(keyword: "venn"))
+        XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta\n  complex\n    \"Probe\"").items[.complex], ["Probe"])
+        XCTAssertEqual(try CynefinReading.cynefin("cynefin-beta:clear\n\"a\"").items[.clear], ["a"])
+        XCTAssertEqual(try WardleyMapReading.map("wardley-beta\ncomponent Tea [0.6, 0.8]").nodes.map(\.label), ["Tea"])
+        XCTAssertEqual(readError("WARDLEY-BETA\ncomponent Tea [0.6, 0.8]"), .unsupportedDiagramType(keyword: "WARDLEY-BETA"))
     }
 }

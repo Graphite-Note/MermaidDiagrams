@@ -6,7 +6,7 @@
  *              or it is too large to draw, with the kind of refusal.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -29,6 +29,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
     case gitGraphLayout(GitGraphLayoutError)
     case xyChartLayout(XYChartLayoutError)
     case sankeyLayout(SankeyLayoutError)
+    case vennLayout(VennLayoutError)
 
     /// What kind of refusal it is.
     public enum Category: Equatable, Sendable {
@@ -54,6 +55,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
              .gitGraphLayout(.optionsNotApplied), .sankeyLayout(.optionsNotDrawn): .notDrawnYet
         case .flowchartLayout(.tooManyLayoutPoints), .stateDiagramLayout(.tooManyLayoutPoints), .classDiagramLayout(.tooManyLayoutPoints),
              .entityRelationshipLayout(.tooManyLayoutPoints), .ganttLayout(.tooManyScheduledDays): .beyondLimits
+        case .vennLayout(.tooManyOverlaps): .beyondLimits
         case .ganttLayout(.unreadableDate), .ganttLayout(.noDayLeftAfterExclusions), .xyChartLayout(.noSeries), .sankeyLayout(.circularLinks): .refusedContent
         }
     }

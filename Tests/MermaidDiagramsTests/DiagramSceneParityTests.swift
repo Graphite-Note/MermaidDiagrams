@@ -169,6 +169,8 @@ final class DiagramSceneParityTests: XCTestCase {
         // The info diagram, packet diagram, radar chart and treemap were never painted by another renderer than their scene's.
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .mindmap, .timeline, .info, .packet, .radar, .treemap:
             throw NotAChart()
+        case .venn, .cynefin, .wardleyMap:
+            throw NoReferenceRenderer()
         }
     }
 
@@ -191,4 +193,6 @@ final class DiagramSceneParityTests: XCTestCase {
     }
 
     private struct NotAChart: Error {}
+    /// A type drawn from its scene since it was added, with no renderer from before the scene to compare with.
+    private struct NoReferenceRenderer: Error {}
 }

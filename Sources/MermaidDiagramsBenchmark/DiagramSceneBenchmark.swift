@@ -38,6 +38,9 @@ enum DiagramSceneBenchmark {
             (.ishikawa, try IshikawaCorpus.documentationExamples()),
             (.info, try InfoDiagramCorpus.documentationExamples()), (.packet, try PacketDiagramCorpus.documentationExamples()),
             (.radar, try RadarChartCorpus.documentationExamples()), (.treemap, try TreemapCorpus.documentationExamples()),
+            (.venn, try VennCorpus.documentationExamples()),
+            (.cynefin, try CynefinCorpus.documentationExamples()),
+            (.wardleyMap, try WardleyMapCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -106,6 +109,8 @@ enum DiagramSceneBenchmark {
         case .mindmap, .timeline, .pieChart, .ganttChart, .userJourney, .quadrantChart, .xyChart, .sankey, .kanban, .treeView, .ishikawa,
              .info, .packet, .radar, .treemap:
             return laidOutChart(diagram, typography: typography)
+        case .venn, .cynefin, .wardleyMap:
+            return laidOutPlaneMap(diagram, typography: typography)
         }
     }
 
@@ -148,6 +153,25 @@ enum DiagramSceneBenchmark {
         case .info, .packet, .radar, .treemap:
             return laidOutSimpleChart(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
+            return nil
+        case .venn, .cynefin, .wardleyMap:
+            return nil
+        }
+    }
+
+    /// A diagram drawn on a fixed plane laid out once: a Venn diagram, a Cynefin framework or a Wardley map.
+    private static func laidOutPlaneMap(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
+        case .venn(let venn):
+            let layOut = { try VennLayoutEngine.layout(venn, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .cynefin(let cynefin):
+            let layout = CynefinLayoutEngine.layout(cynefin, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        case .wardleyMap(let map):
+            let layout = WardleyMapLayoutEngine.layout(map, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
+        default:
             return nil
         }
     }

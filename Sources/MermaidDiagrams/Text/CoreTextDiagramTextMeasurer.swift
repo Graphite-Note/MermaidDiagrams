@@ -2,10 +2,10 @@
  * File: CoreTextDiagramTextMeasurer.swift
  * ---------------------------------------
  * Layer: Core
- * Description: Measures a diagram's text with Core Text, as it is drawn, from a table of the font's advances.
+ * Description: Measures a diagram's text with Core Text, as it is drawn, in a font's regular, bold or italic, from a table of the font's advances.
  *
- * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -20,9 +20,10 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     private let font: CTFont
-    /// The font it was made from, and whether it measures its bold, so that it can be made again at another size.
+    /// The font it was made from, and whether it measures its bold and its italic, so that it can be made again at another size.
     let diagramFont: DiagramFont
     let isBold: Bool
+    let isItalic: Bool
     /// Advances of the characters from space (32) to tilde (126).
     private let printableASCIIAdvances: [CGFloat]
 
@@ -35,12 +36,16 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         self.init(font: diagramFont, isBold: false)
     }
 
-    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn.
-    init(font diagramFont: DiagramFont, isBold: Bool) {
+    /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, and in its italic when `isItalic`.
+    init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false) {
         let regular = diagramFont.makeCoreTextFont()
-        font = isBold ? CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, .traitBold, .traitBold) ?? regular : regular
+        var traits: CTFontSymbolicTraits = []
+        if isBold { traits.insert(.traitBold) }
+        if isItalic { traits.insert(.traitItalic) }
+        font = traits.isEmpty ? regular : CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, traits, traits) ?? regular
         self.diagramFont = diagramFont
         self.isBold = isBold
+        self.isItalic = isItalic
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
         let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }

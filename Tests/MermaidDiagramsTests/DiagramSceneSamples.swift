@@ -44,6 +44,9 @@ enum DiagramSceneSamples {
             ("ishikawa", try IshikawaCorpus.documentationExamples()),
             ("info", try InfoDiagramCorpus.documentationExamples()), ("packet", try PacketDiagramCorpus.documentationExamples()),
             ("radar", try RadarChartCorpus.documentationExamples()), ("treemap", try TreemapCorpus.documentationExamples()),
+            ("venn", try VennCorpus.documentationExamples()),
+            ("cynefin", try CynefinCorpus.documentationExamples()),
+            ("wardley", try WardleyMapCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -76,6 +79,9 @@ enum DiagramSceneSamples {
             ("info with titles", InfoDiagramCorpus.titled), ("packet of 25 fields", PacketDiagramCorpus.generated(fieldCount: 25)),
             ("radar of 9 axes and 3 curves", RadarChartCorpus.generated(axisCount: 9, curveCount: 3)),
             ("treemap of 200 leaves", TreemapCorpus.generated(leafCount: 200)),
+            ("venn of 8 sets", VennCorpus.generated(setCount: 8)),
+            ("cynefin of 40 items", CynefinCorpus.generated(itemCount: 40)),
+            ("wardley of 30 components", WardleyMapCorpus.generated(componentCount: 30)),
         ]
     }
 

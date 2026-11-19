@@ -4,7 +4,7 @@
  * Layer: Core
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
- * Authors: Félix Chevalier
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.17
  * Date: 19/11/2026
  */
@@ -34,6 +34,9 @@ public enum MermaidDiagram: Equatable, Sendable {
     case packet(PacketDiagram)
     case radar(RadarChart)
     case treemap(TreemapDiagram)
+    case venn(VennDiagram)
+    case cynefin(CynefinDiagram)
+    case wardleyMap(WardleyMap)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -76,6 +79,9 @@ public enum MermaidDiagramReader {
         case "packet", "packet-beta": return .packet(titled(try PacketDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "radar-beta": return .radar(titled(try RadarChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "treemap", "treemap-beta": return .treemap(titled(try TreemapDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "venn-beta": return .venn(titled(try VennParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "cynefin-beta": return .cynefin(titled(try CynefinParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

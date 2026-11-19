@@ -81,6 +81,9 @@ struct MermaidDiagramPreparationContext {
         case .packet(let packet): prepared(packet)
         case .radar(let radar): prepared(radar)
         case .treemap(let treemap): prepared(treemap)
+        case .venn(let venn): try prepared(venn)
+        case .cynefin(let cynefin): prepared(cynefin)
+        case .wardleyMap(let map): prepared(map)
         }
     }
 
