@@ -2,7 +2,21 @@
 
 Reads [Mermaid](https://mermaid.js.org) diagram text, lays the diagram out and draws it with Core Graphics and Core Text, in the visual style of [Pele](https://github.com/obsidianmd/pele), Obsidian's Mermaid renderer. It knows no app: fonts, colors and limits are parameters, and it reads and writes no file.
 
-Graphite's plan for it is `Docs/Native-diagrams-todo.md`; the decisions that shaped it are recorded there.
+It was written for [Graphite](https://github.com/Graphite-Note/Graphite), whose plan for it, [Docs/Native-diagrams-todo.md](https://github.com/Graphite-Note/Graphite/blob/main/Docs/Native-diagrams-todo.md), records the decisions that shaped it. It needs iOS 27 or macOS 27, and depends on nothing but Foundation, CoreGraphics and CoreText.
+
+## Using it
+
+Add the package to your `Package.swift`:
+
+```swift
+.package(url: "https://github.com/Graphite-Note/MermaidDiagrams.git", exact: "0.1.0")
+```
+
+and the product `MermaidDiagrams` to your target's dependencies.
+
+## License
+
+MIT (see `LICENSE`). The visual style, spacing and shape geometry follow Pele, Copyright (c) 2026 kepano, MIT licensed (`PELE-LICENSE`).
 
 ## Diagram types
 
@@ -80,4 +94,4 @@ The visual style, the spacing and the shapes' geometry follow [Pele](https://git
 
 `swift test --package-path Packages/MermaidDiagrams`. `FlowchartCorpusTests` reads and lays out Mermaid's 114 flowchart documentation examples and Pele's generated trees and meshes; `ClassDiagramCorpusTests` Mermaid's 38 class diagram documentation examples, Pele's four-class diagram and generated hierarchies; `SequenceCorpusTests` reads Mermaid's 38 sequence documentation examples and lays out the 24 without statements not laid out; `EntityRelationshipCorpusTests` Mermaid's 25 entity relationship examples and generated schemas; `MindmapCorpusTests` Mermaid's 13 mindmap examples and generated trees; `TimelineCorpusTests` Mermaid's 14 timeline examples and generated timelines; `GitGraphCorpusTests` Mermaid's 35 Git graph examples (the 26 without options drawn) and generated histories; `UserJourneyCorpusTests` Mermaid's user journey example and generated journeys; `QuadrantChartCorpusTests` Mermaid's 3 quadrant chart examples and generated charts; `XYChartCorpusTests` Mermaid's 8 XY chart examples and generated charts; `SankeyCorpusTests` Mermaid's 8 Sankey examples, the spec's energy flows and generated flows.
 
-`swift run -c release --package-path Packages/MermaidDiagrams MermaidDiagramsBenchmark` times reading, layout, the drawing parts and painting, with the median and 99th percentile per diagram, and the heap a layout holds, on the inputs of Pele's benchmark (`FlowchartCorpus`; the documentation examples are its resources), then mindmaps (`MindmapBenchmark` on `MindmapCorpus`), timelines (`TimelineBenchmark` on `TimelineCorpus`), Git graphs (`GitGraphBenchmark` on `GitGraphCorpus`), user journeys (`UserJourneyBenchmark` on `UserJourneyCorpus`), quadrant charts (`QuadrantChartBenchmark` on `QuadrantChartCorpus`), XY charts (`XYChartBenchmark` on `XYChartCorpus`) and Sankey diagrams (`SankeyBenchmark` on `SankeyCorpus`), among the other types. Graphite records the results in its `Docs/Coverage.md`.
+`swift run -c release MermaidDiagramsBenchmark` times reading, layout, the drawing parts and painting, with the median and 99th percentile per diagram, and the heap a layout holds, on the inputs of Pele's benchmark (`FlowchartCorpus`; the documentation examples are its resources), then mindmaps (`MindmapBenchmark` on `MindmapCorpus`), timelines (`TimelineBenchmark` on `TimelineCorpus`), Git graphs (`GitGraphBenchmark` on `GitGraphCorpus`), user journeys (`UserJourneyBenchmark` on `UserJourneyCorpus`), quadrant charts (`QuadrantChartBenchmark` on `QuadrantChartCorpus`), XY charts (`XYChartBenchmark` on `XYChartCorpus`) and Sankey diagrams (`SankeyBenchmark` on `SankeyCorpus`), among the other types. Graphite records the results in its `Docs/Coverage.md`.

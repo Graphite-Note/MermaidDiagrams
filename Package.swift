@@ -29,7 +29,7 @@ let package = Package(
     ]
 )
 
-// Graphite's own code builds with no warning (RULES.md, "No warnings"): a warning in any of this package's
+// The package builds with no warning: a warning in any of its
 // targets fails the build. Dependencies are other packages and keep their own settings.
 for target in package.targets {
     target.swiftSettings = (target.swiftSettings ?? []) + [.treatAllWarnings(as: .error)]
