@@ -2,8 +2,8 @@
  * File: MermaidDiagramGridPreparation.swift
  * -----------------------------------------
  * Layer: Core
- * Description: The preparation of the types laid out on grids, block diagrams: their scenes, their tight scenes for a
- *              narrow column, and what a screen reader says of them.
+ * Description: The preparation of the types laid out on grids, block diagrams and architecture diagrams: their scenes,
+ *              their tight scenes for a narrow column, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -30,7 +30,27 @@ extension MermaidDiagramPreparationContext {
     }
 }
 
+extension MermaidDiagramPreparationContext {
+    /// An architecture diagram, and for a narrow column the diagram drawn tight, as Pele's `tighten` draws it.
+    func prepared(_ diagram: ArchitectureDiagram) -> PreparedMermaidDiagram {
+        let layout = ArchitectureLayoutEngine.layout(diagram, typography: typography)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+            ArchitectureLayoutEngine.layout(diagram, typography: typography, availableWidth: width, isTight: true)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .architecture, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(architecture: diagram))
+    }
+}
+
 extension MermaidDiagramAccessibility {
+    /// Each service by its title (its identifier without one), each group by its title, in the order written.
+    init(architecture diagram: ArchitectureDiagram) {
+        let services = diagram.nodes.filter { node in node.kind == .service }.map { node in node.title ?? node.identifier }
+        let groups = diagram.groups.map { group in group.title ?? group.identifier }
+        self.init(kind: .architecture, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
+                  summary: groups + services)
+    }
+
     /// Each block drawn by its text, breadth first as it is laid out, a composite by its title when it has one.
     init(block diagram: BlockDiagram) {
         let summary = diagram.reachableBlockIndices.dropFirst().compactMap { index -> String? in

@@ -44,6 +44,7 @@ enum DiagramSceneBenchmark {
             (.eventModel, try EventModelCorpus.documentationExamples()),
             (.railroad, try RailroadCorpus.documentationExamples()),
             (.block, try BlockCorpus.documentationExamples()),
+            (.architecture, try ArchitectureCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -114,7 +115,7 @@ enum DiagramSceneBenchmark {
             return laidOutChart(diagram, typography: typography)
         case .venn, .cynefin, .wardleyMap:
             return laidOutPlaneMap(diagram, typography: typography)
-        case .block:
+        case .block, .architecture:
             return laidOutGridDiagram(diagram, typography: typography)
         }
     }
@@ -154,7 +155,7 @@ enum DiagramSceneBenchmark {
             return nil
         case .venn, .cynefin, .wardleyMap:
             return nil
-        case .block:
+        case .block, .architecture:
             return nil
         }
     }
@@ -199,12 +200,15 @@ enum DiagramSceneBenchmark {
         }
     }
 
-    /// A diagram laid out on a grid: a block diagram.
+    /// A diagram laid out on a grid: a block diagram or an architecture diagram.
     private static func laidOutGridDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
         switch diagram {
         case .block(let block):
             let layOut = { try BlockLayoutEngine.layout(block, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .architecture(let architecture):
+            let layout = ArchitectureLayoutEngine.layout(architecture, typography: typography)
+            return LaidOut { DiagramScene(layout: layout) }
         default:
             return nil
         }

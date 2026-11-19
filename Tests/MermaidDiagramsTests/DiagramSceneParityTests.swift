@@ -171,7 +171,7 @@ final class DiagramSceneParityTests: XCTestCase {
             throw NotAChart()
         case .venn, .cynefin, .wardleyMap, .eventModel, .railroad:
             throw NoReferenceRenderer()
-        case .block:
+        case .block, .architecture:
             throw NoReferenceRenderer()
         }
     }

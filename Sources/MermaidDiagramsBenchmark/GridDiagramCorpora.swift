@@ -36,3 +36,35 @@ enum BlockCorpus {
         return source
     }
 }
+
+/// Mermaid's 6 architecture examples, and generated architectures of groups of services joined by edges.
+enum ArchitectureCorpus {
+    static func documentationExamples() throws -> [String] {
+        try DocumentationCorpus.examples(named: "architecture")
+    }
+
+    /// `serviceCount` services in groups of five, each joined to the one before it across its right side, every fifth
+    /// down to the first of the group before, every seventh labelled and every third with an arrow, and a junction per
+    /// group.
+    static func generated(serviceCount: Int) -> String {
+        let icons = ["server", "database", "disk", "internet", "cloud"]
+        var source = "architecture-beta\n  title Generated services\n"
+        for group in 0..<((serviceCount + 4) / 5) { source += "  group g\(group)(cloud)[Group \(group)]\n  junction j\(group) in g\(group)\n" }
+        for service in 0..<serviceCount {
+            source += "  service s\(service)(\(icons[service % icons.count]))[Service \(service)] in g\(service / 5)\n"
+        }
+        for service in 1..<max(serviceCount, 1) {
+            let arrow = service % 3 == 0 ? "-->" : "--"
+            if service % 5 == 0 {
+                source += "  s\(service - 5){group}:B \(arrow) T:s\(service){group}\n"
+            } else if service % 7 == 0 {
+                source += "  s\(service - 1):R -[link \(service)]- L:s\(service)\n"
+            } else {
+                source += "  s\(service - 1):R \(arrow) L:s\(service)\n"
+            }
+        }
+        for group in 0..<((serviceCount + 4) / 5) { source += "  s\(group * 5):B -- T:j\(group)\n" }
+        return source
+    }
+}
+

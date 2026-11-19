@@ -37,6 +37,7 @@ extension MermaidDiagram {
         case .eventModel(let diagram): diagram.frames.isEmpty && diagram.notes.isEmpty && diagram.specifications.isEmpty
         case .railroad(let diagram): diagram.rules.isEmpty
         case .block(let diagram): diagram.drawsNoBlock
+        case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
         case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }

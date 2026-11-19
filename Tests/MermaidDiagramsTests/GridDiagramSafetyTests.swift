@@ -78,4 +78,57 @@ final class GridDiagramSafetyTests: XCTestCase {
             assertPreparedOrRefused(name, source)
         }
     }
+
+    func testArchitectureWorstCasesAreDrawnOrRefusedQuickly() {
+        let head = "architecture-beta\n"
+        func services(_ count: Int) -> String { Self.repeated(count) { index in "service n\(index)\n" } }
+        func diagonalGroup(_ group: Int, _ sides: String) -> String {
+            "group g\(group)\n" + Self.repeated(12) { index in "service m\(group)x\(index) in g\(group)\n" }
+                + Self.repeated(11) { index in "m\(group)x\(index):\(sides):m\(group)x\(index + 1)\n" }
+        }
+        let cases: [(String, String)] = [
+            ("unconnected services", head + services(3_500)),
+            ("a chain", head + services(1_500) + Self.repeated(1_499) { index in "n\(index):R -- L:n\(index + 1)\n" }),
+            ("a diagonal", head + services(1_500) + Self.repeated(1_499) { index in "n\(index):R -- T:n\(index + 1)\n" }),
+            ("a star all wanting one cell", head + services(1_500) + Self.repeated(1_499) { index in "n0:R -- L:n\(index + 1)\n" }),
+            ("a star of bends", head + services(1_500) + Self.repeated(1_499) { index in "n0:B -- L:n\(index + 1)\n" }),
+            ("a star of like sides", head + services(1_500) + Self.repeated(1_499) { index in "n0:R -- R:n\(index + 1)\n" }),
+            ("edges between two services", head + "service a\nservice b\n" + String(repeating: "a:R <-[x]-> L:b\n", count: 2_500)),
+            ("self edges", head + "service a\n" + String(repeating: "a:R --> L:a\n", count: 2_500)),
+            ("a complete graph of 40", head + services(40) + Self.repeated(40) { first in Self.repeated(40 - first - 1) { offset in "n\(first):R -- L:n\(first + offset + 1)\n" } }),
+            ("nested groups", head + "group g0\n" + Self.repeated(1_999) { index in "group g\(index + 1) in g\(index)\n" } + "service a in g1999\n"),
+            ("titled nested groups with edges out", head + "group g0[T]\n" + Self.repeated(799) { index in "group g\(index + 1)[T] in g\(index)\n" }
+                + "service a in g799\nservice b\n" + String(repeating: "a:R -- L:b\n", count: 500)),
+            ("sibling groups in a chain", head + Self.repeated(1_000) { index in "group g\(index)\nservice n\(index) in g\(index)\n" }
+                + Self.repeated(999) { index in "n\(index):R -- L:n\(index + 1)\n" }),
+            ("groups wanting the same place", head + "service hub\n" + Self.repeated(900) { index in "group g\(index)\nservice n\(index) in g\(index)\nhub:R -- L:n\(index)\n" }),
+            ("large groups wanting the same place", head + "service hub\n" + Self.repeated(40) { group in diagonalGroup(group, "R -- T") + "hub:R -- L:m\(group)x0\n" }),
+            ("align directives", head + services(1_500) + "align row " + Self.repeated(750) { index in "n\(index) " } + "\n"
+                + Self.repeated(750) { index in "align column n\(index) n\(index + 750)\n" }),
+            ("one long service title", head + "service a[" + String(repeating: "word ", count: 9_000) + "]"),
+            ("one long unbroken title", head + "service a[" + String(repeating: "w", count: 45_000) + "]"),
+            ("one long icon text", head + "service a \"" + String(repeating: "word ", count: 9_000) + "\""),
+            ("unbroken icon text", head + "service a \"" + String(repeating: "\u{1F600}", count: 11_000) + "\""),
+            ("titles of entities and line breaks", head + "service a[\"" + String(repeating: "#35;&amp;<br>", count: 3_500) + "\"]"),
+            ("quoted titles that never close", head + Self.repeated(2_000) { index in "service n\(index)[\"a]\n" }),
+            ("title keyword on every line", head + String(repeating: "title a %% b\n", count: 3_500)),
+            ("one line of spaces", head + String(repeating: " ", count: 45_000) + "service a"),
+            ("one long identifier", head + "service " + String(repeating: "a-", count: 22_000) + "a"),
+            ("keywords glued to identifiers", head + Self.repeated(2_000) { index in "service service\(index)\n" } + "service in-in-in\n"),
+            ("unclosed brackets", head + "service a" + String(repeating: "[", count: 45_000)),
+            ("unclosed parentheses", head + "service a(" + String(repeating: "a:-", count: 15_000)),
+            ("unclosed string", head + "service a \"" + String(repeating: "a\\\"", count: 15_000)),
+            ("runs of dashes", head + "service a\nservice b\na:R " + String(repeating: "-", count: 45_000) + " L:b"),
+            ("fence openers with no closer", head + "service a\nservice b\n" + String(repeating: "a:R ---\n", count: 5_000)),
+            ("unclosed directives", head + String(repeating: "%%{\n", count: 12_000)),
+            ("accDescr with a brace that never closes", head + String(repeating: "accDescr\n", count: 4_000) + "accDescr {" + String(repeating: " a\n", count: 1_000)),
+            ("side letters", head + String(repeating: "L", count: 45_000)),
+            ("arrows", head + "service a\nservice b\na:R " + String(repeating: "<>", count: 22_000)),
+            ("group modifiers", head + "service a\na" + String(repeating: "{group}", count: 6_000)),
+        ]
+        for (name, source) in cases {
+            XCTAssertLessThanOrEqual(source.utf8.count, MermaidDiagramLimits.standard.maximumSourceBytes, name)
+            assertPreparedOrRefused(name, source)
+        }
+    }
 }

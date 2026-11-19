@@ -40,6 +40,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     case eventModel(EventModelDiagram)
     case railroad(RailroadDiagram)
     case block(BlockDiagram)
+    case architecture(ArchitectureDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -106,6 +107,8 @@ public enum MermaidDiagramReader {
         case _ where RailroadNotation(typeKeyword: keyword) != nil:
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case "block", "block-beta": return .block(titled(try BlockParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        case "architecture", "architecture-beta":
+            return .architecture(titled(try ArchitectureParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

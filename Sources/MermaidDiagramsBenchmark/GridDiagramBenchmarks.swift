@@ -40,6 +40,32 @@ enum BlockBenchmark {
     }
 }
 
+/// Times architecture diagrams on `ArchitectureCorpus`, as the other types' benchmarks do.
+enum ArchitectureBenchmark {
+    static func run(typography: DiagramTypography) throws {
+        let cases: [(name: String, sources: [String])] = [
+            ("architecture documentation examples", try ArchitectureCorpus.documentationExamples()),
+            ("architecture, 40 services", [ArchitectureCorpus.generated(serviceCount: 40)]),
+            ("architecture, 400 services", [ArchitectureCorpus.generated(serviceCount: 400)]),
+        ]
+        for (name, sources) in cases {
+            let diagrams = try sources.map(read)
+            let layouts = diagrams.map { diagram in ArchitectureLayoutEngine.layout(diagram, typography: typography) }
+            GridDiagramTiming.report(name, count: sources.count, reading: { for source in sources { _ = try? read(source) } },
+                                     layingOut: { for diagram in diagrams { _ = ArchitectureLayoutEngine.layout(diagram, typography: typography) } },
+                                     scenes: layouts.map { layout in { DiagramScene(layout: layout) } }, sizes: layouts.map(\.size))
+        }
+        let generated = try read(ArchitectureCorpus.generated(serviceCount: 40))
+        let bytes = BenchmarkHeap.growth { ArchitectureLayoutEngine.layout(generated, typography: typography) }
+        print("memory of one laid-out architecture diagram, 40 services: \(bytes) bytes")
+    }
+
+    private static func read(_ source: String) throws -> ArchitectureDiagram {
+        guard case .architecture(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { throw GridDiagramTiming.OtherType() }
+        return diagram
+    }
+}
+
 /// The timings the grid types' benchmarks print.
 enum GridDiagramTiming {
     /// A text of a grid corpus that reads as another type.

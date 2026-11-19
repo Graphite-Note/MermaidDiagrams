@@ -167,4 +167,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case railroad(RailroadSyntaxProblem)
     /// A problem of a block diagram's syntax.
     case block(BlockSyntaxProblem)
+    /// A problem of an architecture diagram's syntax, or a statement its database refuses.
+    case architecture(ArchitectureSyntaxProblem)
 }

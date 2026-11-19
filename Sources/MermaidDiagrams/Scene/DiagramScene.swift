@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -273,4 +273,6 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case wardleyNote = "wardley-note"
     case wardleyAccelerator = "wardley-accelerator"
     case wardleyDeaccelerator = "wardley-deaccelerator"
+    /// The text an architecture diagram's service shows in place of an icon.
+    case iconText = "icon-text"
 }

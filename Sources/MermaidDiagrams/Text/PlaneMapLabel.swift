@@ -6,7 +6,7 @@
  *              text, wrapped at spaces past a width, and its wrapped lines set closer, 1.3 times the size apart.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -21,9 +21,11 @@ enum PlaneMapLabel {
     /// The width past which Pele wraps a text that has no room of its own: wide enough that it does not.
     static let unwrappedWidth: CGFloat = 4_000
 
-    static func block(_ text: String?, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat = unwrappedWidth) -> DiagramTextBlock? {
+    /// `form` is how the text is read: plain, or Markdown (an architecture diagram's titles), its emphasis markers left out.
+    static func block(_ text: String?, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat = unwrappedWidth,
+                      form: DiagramLabelDecoder.Form = .plain) -> DiagramTextBlock? {
         guard let text, !text.isEmpty else { return nil }
-        let label = DiagramLabelDecoder.label(from: text, form: .plain)
+        let label = DiagramLabelDecoder.label(from: text, form: form)
         guard !label.isEmpty else { return nil }
         let block = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
         guard label.lines.count == 1, block.lines.count > 1 else { return block }
