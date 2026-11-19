@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.17
+ * Version: 0.18
  * Date: 19/11/2026
  */
 
@@ -57,6 +57,13 @@ public enum MermaidDiagramReader {
         // A Git graph's lexer skips directives of several lines itself, and its options are found in them; the others are
         // given the text without them.
         if keyword != "gitGraph" { cursor = withoutMultiLineDirectives(cursor) }
+        return try diagram(named: keyword, at: cursor, limits: limits, frontMatterTitle: title)
+    }
+
+    /// The diagram of the type `keyword` names, read from `cursor`: one of the fourteen types this package read first, or
+    /// else one of those it reads since.
+    private static func diagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
+                                frontMatterTitle title: String?) throws(MermaidDiagramReadError) -> MermaidDiagram {
         switch keyword {
         case "flowchart", "graph", "flowchart-elk": return .flowchart(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "stateDiagram", "stateDiagram-v2": return .stateDiagram(titled(try StateDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
@@ -72,6 +79,15 @@ public enum MermaidDiagramReader {
         case "quadrantChart": return .quadrantChart(titled(try QuadrantChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "xychart", "xychart-beta": return .xyChart(titled(try XYChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "sankey", "sankey-beta": return .sankey(titled(try SankeyParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        default: return try newerDiagram(named: keyword, at: cursor, limits: limits, frontMatterTitle: title)
+        }
+    }
+
+    /// The diagram of one of the types this package reads since its first fourteen, from the kanban board on, most of them
+    /// written `-beta` in Mermaid.
+    private static func newerDiagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
+                                     frontMatterTitle title: String?) throws(MermaidDiagramReadError) -> MermaidDiagram {
+        switch keyword {
         case "kanban": return .kanban(titled(try KanbanParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "treeView-beta": return .treeView(titled(try TreeViewParser.parse(cursor, limits: limits), frontMatterTitle: title))
         // Pele reads `ishikawa` and `ishikawa-beta` in any case, and what follows them on their line as text.
@@ -84,7 +100,8 @@ public enum MermaidDiagramReader {
         case "venn-beta": return .venn(titled(try VennParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "cynefin-beta": return .cynefin(titled(try CynefinParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
-        case _ where keyword.hasPrefix("eventmodeling"): return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        case _ where keyword.hasPrefix("eventmodeling"):
+            return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case _ where RailroadNotation(typeKeyword: keyword) != nil:
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)

@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -143,6 +143,20 @@ enum DiagramSceneBenchmark {
         case .sankey(let sankey):
             let layOut = { try SankeyLayoutEngine.layout(sankey, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .info, .packet, .radar, .treemap:
+            return laidOutSimpleChart(diagram, typography: typography)
+        case .kanban, .treeView, .ishikawa, .eventModel, .railroad:
+            return laidOutOutlineOrTrackDiagram(diagram, typography: typography)
+        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
+            return nil
+        case .venn, .cynefin, .wardleyMap:
+            return nil
+        }
+    }
+
+    /// A kanban board, tree view or Ishikawa diagram (an indented outline), or an event model or railroad diagram (tracks).
+    private static func laidOutOutlineOrTrackDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+        switch diagram {
         case .kanban(let board):
             let layout = KanbanLayoutEngine.layout(board, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
@@ -152,17 +166,13 @@ enum DiagramSceneBenchmark {
         case .ishikawa(let diagram):
             let layout = IshikawaLayoutEngine.layout(diagram, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
-        case .info, .packet, .radar, .treemap:
-            return laidOutSimpleChart(diagram, typography: typography)
         case .eventModel(let eventModel):
             let layout = EventModelLayoutEngine.layout(eventModel, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
         case .railroad(let railroad):
             let layout = RailroadLayoutEngine.layout(railroad, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
-        case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
-            return nil
-        case .venn, .cynefin, .wardleyMap:
+        default:
             return nil
         }
     }

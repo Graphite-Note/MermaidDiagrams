@@ -6,7 +6,7 @@
  *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -53,6 +53,13 @@ struct MermaidDiagramsBenchmark {
                                ("groups, 4 pairs", FlowchartCorpus.groups(pairCount: 4, nodesPerGroup: 5))] {
             print("memory of one laid-out \(name): \(try heapGrowthPerLayout(of: source, typography: typography)) bytes")
         }
+        try runTheOtherTypes(typography: typography)
+        try DiagramSceneBenchmark.run(typography: typography)
+        try NarrowColumnBenchmark.run(typography: typography)
+    }
+
+    /// The benchmark of every type but the flowchart, each on its own inputs.
+    private static func runTheOtherTypes(typography: DiagramTypography) throws {
         try StateDiagramBenchmark.run(typography: typography)
         try reportClassDiagrams(typography: typography)
         try reportSequenceDiagrams(typography: typography)
@@ -71,8 +78,6 @@ struct MermaidDiagramsBenchmark {
         try PlaneMapBenchmarks.run(typography: typography)
         try EventModelBenchmark.run(typography: typography)
         try RailroadBenchmark.run(typography: typography)
-        try DiagramSceneBenchmark.run(typography: typography)
-        try NarrowColumnBenchmark.run(typography: typography)
     }
 
     private static func report(_ name: String, sources: [String], typography: DiagramTypography) throws {
