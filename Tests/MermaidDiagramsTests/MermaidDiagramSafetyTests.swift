@@ -6,8 +6,8 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -58,6 +58,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              TimelineCorpus.documentationExamples(), PieChartCorpus.documentationExamples(), GanttChartCorpus.documentationExamples(),
              GitGraphCorpus.documentationExamples(), UserJourneyCorpus.documentationExamples(), QuadrantChartCorpus.documentationExamples(),
              XYChartCorpus.documentationExamples(), SankeyCorpus.documentationExamples()].flatMap { examples in examples }
+            + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
     /// Runs `work` on a thread with the 512 KiB stack of the threads the reading view's builder runs on, so that a
@@ -73,12 +74,13 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         wait(for: [finished], timeout: 600)
     }
 
-    /// Every documentation example of every type, cut short at forty places and changed at twenty random places (a
+    /// Every documentation example of every type, and the samples of boxes and shapes, cut short at forty places and changed at twenty random places (a
     /// character removed, a bracket, quotation mark or arrow character added, or a run of text doubled), is either read
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        XCTAssertEqual(examples.count, 332)
+        // The 332 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 339)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)

@@ -64,6 +64,7 @@ extension FlowchartShapeLayer {
     /// The piece in the usual colors, or in those a node's style sets: Pele's style overrides the fill and the stroke of
     /// every piece but a fork's or a junction's line-colored fill, and strokes a data store's box only when it sets a stroke.
     func add(to builder: inout DiagramSceneBuilder, style: DiagramElementStyle?, stroke: DiagramStroke) {
+        builder.keepNextShapeApart()
         let fillPaint = style?.fill.map(DiagramPaint.color) ?? .surface
         let strokePaint = style?.stroke.map(DiagramPaint.color) ?? .border
         switch painting {
