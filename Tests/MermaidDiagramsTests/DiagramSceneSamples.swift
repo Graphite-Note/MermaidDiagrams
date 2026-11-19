@@ -20,7 +20,7 @@ struct DiagramSceneSample {
     let source: String
 }
 
-/// The texts the scene tests run over, of all fourteen types: each documentation example the benchmark collects, a
+/// The texts the scene tests run over, of every type: each documentation example the benchmark collects, a
 /// generated diagram per type that uses many series colors or is large, and texts that set colors of their own.
 enum DiagramSceneSamples {
     static var typography: DiagramTypography { DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16)) }
@@ -40,6 +40,8 @@ enum DiagramSceneSamples {
             ("gantt", try GanttChartCorpus.documentationExamples()), ("gitGraph", try GitGraphCorpus.documentationExamples()),
             ("journey", try UserJourneyCorpus.documentationExamples()), ("quadrantChart", try QuadrantChartCorpus.documentationExamples()),
             ("xychart", try XYChartCorpus.documentationExamples()), ("sankey", try SankeyCorpus.documentationExamples()),
+            ("kanban", try KanbanCorpus.documentationExamples()), ("treeView", try TreeViewCorpus.documentationExamples()),
+            ("ishikawa", try IshikawaCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -65,6 +67,9 @@ enum DiagramSceneSamples {
             ("journey of 20 tasks", UserJourneyCorpus.generated(taskCount: 20)), ("quadrant of 30 points", QuadrantChartCorpus.generated(pointCount: 30)),
             ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try sankeyEnergy()),
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
+            ("kanban board of every priority", KanbanCorpus.board(columnCount: 4, cardsPerColumn: 6)),
+            ("tree view of 40 entries", TreeViewCorpus.tree(entryCount: 40)),
+            ("ishikawa of 5 categories", IshikawaCorpus.fishbone(categoryCount: 5, causesPerCategory: 3)),
         ]
     }
 

@@ -1,6 +1,17 @@
+/**
+ * File: MindmapTreeBuilder.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Builds a mindmap's tree from its outline's nodes and their indentation, as Mermaid does.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 /// Builds a mindmap's tree from its nodes and their indentation, as Mermaid does: the first node is the root, and a
 /// node's parent is the last node written before it with a smaller indentation, wherever that node is in the tree.
-struct MindmapTreeBuilder {
+struct MindmapTreeBuilder: MermaidOutlineBuilding {
     private(set) var diagram = MindmapDiagram()
     private let limits: MermaidDiagramLimits
     /// The root's indentation, which every other indentation is measured from.
@@ -13,8 +24,9 @@ struct MindmapTreeBuilder {
         self.limits = limits
     }
 
-    /// Adds a node written `indentation` characters in, on `line`.
-    mutating func addNode(_ definition: MindmapNodeDefinition, indentation writtenIndentation: Int, line: Int) throws(MermaidDiagramReadError) {
+    /// Adds a node written `indentation` characters in, on `line`. A mindmap's grammar has no metadata.
+    mutating func addNode(_ definition: MindmapNodeDefinition, indentation writtenIndentation: Int, metadata: String?,
+                          line: Int) throws(MermaidDiagramReadError) {
         guard diagram.nodes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         let isRoot = diagram.nodes.isEmpty
         if isRoot { rootIndentation = writtenIndentation }
@@ -38,7 +50,7 @@ struct MindmapTreeBuilder {
     }
 
     /// `::icon(…)` or `:::class`: read and not drawn.
-    mutating func countUnappliedDecoration() {
+    mutating func decorate(_ decoration: MermaidOutlineDecoration) {
         diagram.unappliedDecorationCount += 1
     }
 

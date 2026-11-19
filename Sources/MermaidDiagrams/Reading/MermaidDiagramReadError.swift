@@ -134,4 +134,17 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     /// A Sankey diagram's row is not three fields separated by commas (`source,target,value`), or a line break does
     /// not follow the keyword.
     case expectedSankeyFields
+    /// A kanban node indented less than the board's first column is followed by another node, by its text: Mermaid's
+    /// "Items without section detected".
+    case kanbanCardWithoutColumn(text: String)
+    /// A kanban node's `@{ … }` is not YAML, by the node's identifier.
+    case kanbanMetadataNotYAML(identifier: String)
+    /// A kanban node's metadata names a shape with a capital or an underscore, by the name.
+    case kanbanShapeNameNotLowercase(String)
+    /// A tree view's line drawn with box-drawing characters has no name after them.
+    case treeViewEntryWithoutName
+    /// A tree view drawn with box-drawing characters has a line indented without them.
+    case treeViewIndentationWithoutBoxDrawing
+    /// A tree view's entry has no name where one was expected: its first characters.
+    case treeViewExpectedName(String)
 }

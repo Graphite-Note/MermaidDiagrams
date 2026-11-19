@@ -27,6 +27,9 @@ extension MermaidDiagram {
         case .ganttChart(let chart): chart.tasks.isEmpty
         case .userJourney(let diagram): diagram.tasks.isEmpty
         case .sankey(let diagram): diagram.links.isEmpty
+        case .kanban(let board): board.columns.isEmpty
+        case .treeView(let diagram): diagram.entries.isEmpty
+        case .ishikawa(let diagram): diagram.nodes.isEmpty
         case .gitGraph, .quadrantChart, .xyChart: false
         }
     }

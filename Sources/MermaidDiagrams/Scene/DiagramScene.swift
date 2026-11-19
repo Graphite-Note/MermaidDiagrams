@@ -196,4 +196,24 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case axisLabel = "axis-label"
     /// Legends and their text.
     case legend
+    /// A kanban column's count of cards.
+    case count
+    /// A kanban card's priority mark.
+    case priority
+    /// A kanban card's ticket.
+    case ticket
+    /// A kanban card's assignee.
+    case assigned
+    /// A tree view's lines from each folder to its entries.
+    case treeGuides = "tree-guides"
+    /// The band behind a highlighted tree view entry.
+    case treeHighlight = "tree-highlight"
+    /// A tree view entry's description.
+    case treeDescription = "tree-description"
+    /// An icon drawn from its glyph: a tree view's file and folder icons.
+    case icon
+    /// An Ishikawa diagram's spine, which runs to its head.
+    case ishikawaSpine = "ishikawa-spine"
+    /// An Ishikawa diagram's bones, from the spine to each category and cause.
+    case ishikawaBones = "ishikawa-bones"
 }
