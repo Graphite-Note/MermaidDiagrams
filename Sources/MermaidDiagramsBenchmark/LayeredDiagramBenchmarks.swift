@@ -6,7 +6,7 @@
  *              documentation examples and generated diagrams.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -21,7 +21,7 @@ enum LayeredDiagramBenchmarks {
         let requirementCases: [(String, [String])] = [
             ("requirement documentation examples", try RequirementCorpus.documentationExamples()),
             ("requirement diagram, 30 requirements", [RequirementCorpus.generated(requirementCount: 30)]),
-            ("requirement diagram, 300 requirements", [RequirementCorpus.generated(requirementCount: 300, direction: "LR")]),
+            ("requirement diagram, 200 requirements", [RequirementCorpus.generated(requirementCount: 200, direction: "LR")]),
         ]
         for (name, sources) in requirementCases { try reportRequirements(name, sources: sources, typography: typography) }
         let swimlaneCases: [(String, [String])] = [
@@ -61,7 +61,7 @@ enum LayeredDiagramBenchmarks {
         let layingOut = measure(count) { for diagram in diagrams { _ = SwimlaneLayoutEngine.layout(diagram, typography: typography) } }
         let narrow = measure(count) {
             for diagram in diagrams {
-                _ = SwimlaneLayoutEngine.layout(diagram.turnedToRunDown ?? diagram, typography: typography, spacing: .compact, columnWidth: 280)
+                _ = SwimlaneLayoutEngine.layout(diagram.swimlaneTurnedToRunDown ?? diagram, typography: typography, spacing: .compact, columnWidth: 280)
             }
         }
         let parts = measure(count) { for layout in layouts { _ = SwimlaneDrawingParts(layout: layout) } }
