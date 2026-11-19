@@ -1,0 +1,103 @@
+/**
+ * File: DiagramSVGColors.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: How a scene's paints are written in SVG: in a palette's colors, or as Pele's CSS variables with Pele's
+ *              colors as their fallbacks.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
+
+/// How an SVG names its colors.
+public enum DiagramSVGColors: Sendable {
+    /// Every color written out in a palette's colors, as plain SVG 1.1: the drawing looks the same wherever it is shown.
+    case palette(DiagramPalette)
+    /// Every role written as Pele's CSS variable with Pele's own color as its fallback (`var(--pele-bg,#fff)`), and a
+    /// mixture as CSS's `color-mix`, so that an Obsidian theme or a page's style colors the drawing as it colors Pele's.
+    case peleVariables
+}
+
+/// A paint as SVG writes it: its color and the opacity it is painted at.
+struct DiagramSVGPaintText {
+    let color: String
+    let opacity: CGFloat
+}
+
+extension DiagramSVGColors {
+    /// Pele's private aliases of its variables, set once on the root element so that each use is short.
+    static let peleRootStyle = "--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);"
+        + "--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);"
+        + "--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg)"
+
+    func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
+        switch self {
+        case .palette(let palette):
+            let color = paint.color(in: palette)
+            return DiagramSVGPaintText(color: Self.hexadecimal(color), opacity: Self.opacity(of: color))
+        case .peleVariables:
+            switch paint.source {
+            case .role(let role): return DiagramSVGPaintText(color: Self.variable(role), opacity: paint.opacity)
+            case .mixture(let from, let to, let share):
+                let percentage = DiagramSVGSyntax.number(share * 100)
+                return DiagramSVGPaintText(color: "color-mix(in srgb,\(Self.variable(from)),\(Self.variable(to)) \(percentage)%)", opacity: paint.opacity)
+            case .color(let written):
+                return DiagramSVGPaintText(color: Self.hexadecimal(written.cgColor), opacity: CGFloat(written.alpha) * paint.opacity)
+            }
+        }
+    }
+
+    /// The root's colors in this mode: Pele's aliases, or nothing when every color is written out.
+    var rootStyle: String {
+        switch self {
+        case .palette: ""
+        case .peleVariables: Self.peleRootStyle + ";"
+        }
+    }
+
+    /// A role as Pele's variable, through its alias where Pele sets one.
+    static func variable(_ role: DiagramPaletteRole) -> String {
+        switch role {
+        case .background: "var(--_bg)"
+        case .foreground: "var(--_fg)"
+        case .line: "var(--_l)"
+        case .surface: "var(--_s)"
+        case .border: "var(--_b)"
+        case .accent: "var(--_c)"
+        case .critical: "var(--pele-critical,#e45756)"
+        case .muted: "var(--_m)"
+        case .alternateSurface: "var(--_a)"
+        case .series(let index):
+            "var(--pele-series-\(seriesSlot(index) + 1),\(hexadecimal(DiagramPalette.peleSeries[seriesSlot(index)])))"
+        }
+    }
+
+    /// Which of Pele's eight series variables a series index takes, the colors taken in turn.
+    private static func seriesSlot(_ index: Int) -> Int {
+        ((index % DiagramPalette.peleSeries.count) + DiagramPalette.peleSeries.count) % DiagramPalette.peleSeries.count
+    }
+
+    /// `#rrggbb` in sRGB; black for a color with no sRGB form.
+    static func hexadecimal(_ color: CGColor) -> String {
+        let channels = sRGBComponents(of: color).prefix(3).map { component in Int((min(1, max(0, component)) * 255).rounded()) }
+        return "#" + channels.map { channel in
+            let digits = String(channel, radix: 16)
+            return digits.count == 1 ? "0" + digits : digits
+        }.joined()
+    }
+
+    private static func opacity(of color: CGColor) -> CGFloat {
+        sRGBComponents(of: color).last ?? 1
+    }
+
+    private static func sRGBComponents(of color: CGColor) -> [CGFloat] {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let components = color.converted(to: space, intent: .defaultIntent, options: nil)?.components, components.count == 4 else {
+            return [0, 0, 0, 1]
+        }
+        return components
+    }
+}

@@ -25,6 +25,12 @@ struct DiagramSceneSample {
 enum DiagramSceneSamples {
     static var typography: DiagramTypography { DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16)) }
 
+    /// The energy flows of Mermaid's specification, after `sankey-beta`, a blank line and a space, as the specification
+    /// writes them.
+    static func sankeyEnergy() throws -> String {
+        "sankey-beta\n\n " + (try SankeyCorpus.energyRows())
+    }
+
     static func all() throws -> [DiagramSceneSample] {
         let documentation: [(String, [String])] = [
             ("flowchart", try FlowchartCorpus.documentationExamples()), ("state", try StateDiagramCorpus.documentationExamples()),
@@ -46,7 +52,8 @@ enum DiagramSceneSamples {
     /// One large or series-heavy diagram per type.
     private static func generated() throws -> [(String, String)] {
         [
-            ("flowchart groups", FlowchartCorpus.groups(pairCount: 3, nodesPerGroup: 4)), ("flowchart mesh", FlowchartCorpus.mesh(nodeCount: 40, extraEdgeCount: 15)),
+            ("flowchart groups", FlowchartCorpus.groups(pairCount: 3, nodesPerGroup: 4)),
+            ("flowchart mesh", FlowchartCorpus.mesh(nodeCount: 40, extraEdgeCount: 15)),
             ("state machine", StateDiagramCorpus.machine(stateCount: 20, extraTransitionCount: 10)),
             ("class hierarchy", ClassDiagramCorpus.hierarchy(classCount: 15)),
             ("sequence conversation", SequenceCorpus.conversation(participantCount: 6, messageCount: 30)),
@@ -55,7 +62,7 @@ enum DiagramSceneSamples {
             ("timeline down", TimelineCorpus.generated(periodCount: 12, isDown: true)), ("pie of 20 slices", PieChartCorpus.pie(sliceCount: 20)),
             ("gantt of 30 tasks", GanttChartCorpus.chart(taskCount: 30)), ("git graph of 12 branches", GitGraphCorpus.generated(branchCount: 12)),
             ("journey of 20 tasks", UserJourneyCorpus.generated(taskCount: 20)), ("quadrant of 30 points", QuadrantChartCorpus.generated(pointCount: 30)),
-            ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try SankeyCorpus.energyRows()),
+            ("xy chart of 10 series", XYChartCorpus.generated(categoryCount: 8, seriesCount: 10)), ("sankey energy", try sankeyEnergy()),
             ("sankey layers", SankeyCorpus.generated(layerCount: 4, nodesPerLayer: 5)),
         ]
     }

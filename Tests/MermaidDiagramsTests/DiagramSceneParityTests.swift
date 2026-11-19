@@ -51,7 +51,9 @@ final class DiagramSceneParityTests: XCTestCase {
         let layout = PieChartLayoutEngine.layout(try PieChartReading.pieChart(PieChartCorpus.pie(sliceCount: 12)), typography: DiagramSceneSamples.typography)
         let scene = DiagramScene(layout: layout)
         for palette in [DiagramScenePaletteSamples.dark, DiagramScenePaletteSamples.light] {
-            let byScene = try XCTUnwrap(DiagramScenePixels(size: scene.size, scale: 1) { context in DiagramSceneRenderer.draw(scene, in: context, palette: palette) })
+            let byScene = try XCTUnwrap(DiagramScenePixels(size: scene.size, scale: 1) { context in
+                DiagramSceneRenderer.draw(scene, in: context, palette: palette)
+            })
             let byRenderer = try XCTUnwrap(DiagramScenePixels(size: scene.size, scale: 1) { context in
                 PieChartRenderer.draw(layout, in: context, palette: palette)
             })

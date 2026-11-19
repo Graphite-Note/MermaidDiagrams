@@ -1,0 +1,107 @@
+/**
+ * File: DiagramSVGBody.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Writes a scene's items as SVG elements: a path per shape, a text per placed text, and the gradients they
+ *              name.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
+
+/// The elements of an SVG document's body, written item by item, and the gradients they name.
+struct DiagramSVGBody {
+    let colors: DiagramSVGColors
+    let identifierPrefix: String
+    var content = ""
+    var definitions = ""
+    private var gradientCount = 0
+
+    init(colors: DiagramSVGColors, identifierPrefix: String) {
+        self.colors = colors
+        self.identifierPrefix = identifierPrefix
+    }
+
+    mutating func add(_ item: DiagramSceneItem) {
+        switch item {
+        case .shape(let shape): add(shape)
+        case .text(let text): add(text)
+        }
+    }
+
+    private mutating func add(_ shape: DiagramSceneShape) {
+        let data = DiagramSVGSyntax.pathData(shape.path)
+        let painting: String
+        switch shape.painting {
+        case .fill(let paint):
+            let fill = colors.text(of: paint)
+            painting = " fill=\"\(fill.color)\"" + DiagramSVGWriter.opacity(fill.opacity, "fill-opacity")
+        case .stroke(let paint, let stroke):
+            painting = " fill=\"none\"" + Self.strokeAttributes(colors.text(of: paint), stroke)
+        case .gradientFill(let gradient):
+            gradientCount += 1
+            let identifier = "\(identifierPrefix)-gradient-\(gradientCount)"
+            definitions += gradientDefinition(gradient, identifier: identifier)
+            painting = " fill=\"url(#\(identifier))\"" + DiagramSVGWriter.opacity(gradient.opacity, "fill-opacity")
+        }
+        content += "<path class=\"pele-\(shape.part.rawValue)\" d=\"\(data)\"\(painting)/>"
+    }
+
+    private static func strokeAttributes(_ paint: DiagramSVGPaintText, _ stroke: DiagramStroke) -> String {
+        var attributes = " stroke=\"\(paint.color)\"" + DiagramSVGWriter.opacity(paint.opacity, "stroke-opacity")
+        attributes += " stroke-width=\"\(DiagramSVGSyntax.number(stroke.lineWidth))\""
+        switch stroke.lineCap {
+        case .round: attributes += " stroke-linecap=\"round\""
+        case .square: attributes += " stroke-linecap=\"square\""
+        default: break
+        }
+        switch stroke.lineJoin {
+        case .round: attributes += " stroke-linejoin=\"round\""
+        case .bevel: attributes += " stroke-linejoin=\"bevel\""
+        default: break
+        }
+        if !stroke.dashLengths.isEmpty {
+            attributes += " stroke-dasharray=\"\(stroke.dashLengths.map(DiagramSVGSyntax.number).joined(separator: " "))\""
+        }
+        return attributes
+    }
+
+    /// A gradient across the page between its two points, the end colors carried on beyond them (SVG's `pad`).
+    private func gradientDefinition(_ gradient: DiagramLinearGradient, identifier: String) -> String {
+        let start = colors.text(of: gradient.startPaint)
+        let end = colors.text(of: gradient.endPaint)
+        let number = DiagramSVGSyntax.number
+        return "<linearGradient id=\"\(identifier)\" gradientUnits=\"userSpaceOnUse\" x1=\"\(number(gradient.startPoint.x))\" "
+            + "y1=\"\(number(gradient.startPoint.y))\" x2=\"\(number(gradient.endPoint.x))\" y2=\"\(number(gradient.endPoint.y))\">"
+            + "<stop offset=\"0\" stop-color=\"\(start.color)\"\(DiagramSVGWriter.opacity(start.opacity, "stop-opacity"))/>"
+            + "<stop offset=\"1\" stop-color=\"\(end.color)\"\(DiagramSVGWriter.opacity(end.opacity, "stop-opacity"))/></linearGradient>"
+    }
+
+    /// One `text` per placed text, centered on each line's middle; several lines in `tspan`s.
+    private mutating func add(_ text: DiagramSceneText) {
+        let paint = colors.text(of: text.paint)
+        let number = DiagramSVGSyntax.number
+        var attributes = " class=\"pele-\(text.part.rawValue)\" font-size=\"\(number(text.block.fontSize))\" fill=\"\(paint.color)\""
+        attributes += DiagramSVGWriter.opacity(paint.opacity, "fill-opacity")
+        if text.isBold { attributes += " font-weight=\"bold\"" }
+        if text.isItalic { attributes += " font-style=\"italic\"" }
+        if let rotation = text.rotation {
+            let center = text.block.center
+            attributes += " transform=\"rotate(\(number(rotation * 180 / .pi)) \(number(center.x)) \(number(center.y)))\""
+        }
+        let lines = text.lines
+        if lines.count == 1, let line = lines.first {
+            content += "<text\(attributes) x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\" text-anchor=\"middle\">"
+                + DiagramSVGSyntax.escaped(line.text) + "</text>"
+            return
+        }
+        content += "<text\(attributes) text-anchor=\"middle\" xml:space=\"preserve\">"
+        for line in lines {
+            content += "<tspan x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\">\(DiagramSVGSyntax.escaped(line.text))</tspan>"
+        }
+        content += "</text>"
+    }
+}
