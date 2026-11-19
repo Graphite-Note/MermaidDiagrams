@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphParser.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Reads a Git graph's statements as Mermaid's grammar does and plays them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// Reads a Git graph's statements after its `gitGraph` keyword as Mermaid's grammar does (Pele's port of it): an
 /// optional `LR:`, `TB:` or `BT:` (or a colon alone) on the keyword's line, then one statement per line: `commit`,
 /// `branch`, `checkout` or `switch`, `merge`, `cherry-pick`, `title`, `accTitle` and `accDescr`. Every statement is read
@@ -11,17 +22,10 @@ struct GitGraphParser {
 
     /// `cursor` is just past the `gitGraph` keyword, as `MermaidDiagramReader` leaves it.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> GitGraphDiagram {
-        let keywordStart = cursor.position - keyword.count
-        let mentionsOptionsBefore = GitGraphOptionsDetection.setsOptions(inTextBefore: keywordStart, of: cursor.bytes)
-        let mentionsOptionsInDirectiveBefore = GitGraphOptionsDetection.setsOptions(inTextBefore: keywordStart, of: cursor.bytes, skipsFrontMatter: true)
-        let configurationOptions = MermaidConfigurationOptions(section: "gitGraph", in: cursor.bytes)
-        var options = GitGraphOptions(configurationOptions)
-        // Options the front matter writes in another form (`config: {"gitGraph": …}`) are not read: not applied either.
-        if mentionsOptionsBefore, !mentionsOptionsInDirectiveBefore, configurationOptions.values.isEmpty { options.setsOptionsNotApplied = true }
+        let options = GitGraphOptions(MermaidConfigurationOptions(section: "gitGraph", in: cursor.bytes))
         var parser = try GitGraphParser(cursor: cursor)
         try parser.readStatements()
         parser.diagram.options = options
-        parser.diagram.setsGitGraphOptions = options.setsOptionsNotApplied
         try parser.play(limits: limits)
         return parser.diagram
     }
@@ -146,18 +150,11 @@ struct GitGraphParser {
         while current.token == .lineBreak { try advance() }
     }
 
-    /// Plays the statements read. When the graph sets options of Git graphs, which are not applied, a statement the
-    /// history cannot take ends the playing without an error: the options may name the main branch it refers to.
+    /// Plays the statements read.
     private mutating func play(limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) {
         var builder = try GitGraphDiagramBuilder(limits: limits, options: diagram.options)
         defer { (diagram.commits, diagram.branches) = builder.played() }
-        for (statement, line) in statements {
-            do {
-                try builder.play(statement, line: line)
-            } catch .invalidSyntax(_, .gitGraph) where diagram.setsGitGraphOptions {
-                return
-            }
-        }
+        for (statement, line) in statements { try builder.play(statement, line: line) }
     }
 
     private mutating func advance() throws(MermaidDiagramReadError) {
@@ -172,8 +169,6 @@ struct GitGraphParser {
     private func unexpected() -> MermaidDiagramReadError {
         problem(.unexpectedText(current.start.excerpt()))
     }
-
-    private static let keyword = Array("gitGraph".utf8)
 
     /// The values a statement writes after its keyword: later ones replace earlier ones, and tags add up.
     private struct StatementValues {

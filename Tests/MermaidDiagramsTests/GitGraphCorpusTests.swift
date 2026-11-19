@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphCorpusTests.swift
+ * -------------------------------
+ * Layer: Tests
+ * Description: Every documentation example of Mermaid's Git graphs is read and laid out.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
@@ -20,7 +31,6 @@ final class GitGraphCorpusTests: XCTestCase {
                 XCTAssertEqual(error as? MermaidDiagramReadError, GitGraphReading.problem(.duplicateCommitIdentifier("Boston"), line: 27))
                 continue
             }
-            XCTAssertFalse(diagram.setsGitGraphOptions, example)
             if diagram.options != GitGraphOptions() { withOptionsCount += 1 }
             let layout = try GitGraphLayoutEngine.layout(diagram, typography: typography)
             XCTAssertEqual(layout.commits.count, diagram.commits.count)

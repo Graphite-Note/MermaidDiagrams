@@ -4,9 +4,9 @@
  * Layer: Tests
  * Description: Reading Mermaid text: front matter, comments, directives and the diagram type.
  *
- * Authors: Félix Chevalier
- * Version: 0.10
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.11
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -121,7 +121,6 @@ final class MermaidDiagramReaderTests: XCTestCase {
 
     func testAGitGraphReadsTheOptionsOfItsMultiLineDirective() throws {
         let diagram = try GitGraphReading.gitGraph("%%{\n init: {'gitGraph': {'mainBranchName': 'trunk'}}\n}%%\ngitGraph\n commit")
-        XCTAssertFalse(diagram.setsGitGraphOptions)
         XCTAssertEqual(diagram.branches.map(\.name), ["trunk"])
         XCTAssertEqual(diagram.commits.count, 1)
     }

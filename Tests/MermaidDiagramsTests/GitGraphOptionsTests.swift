@@ -6,8 +6,8 @@
  *              ids, level ids and commits placed in parallel.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -20,7 +20,6 @@ final class GitGraphOptionsTests: XCTestCase {
 
     private func layout(options: String, _ statements: String) throws -> GitGraphLayout {
         let diagram = try GitGraphReading.gitGraph("---\nconfig:\n  gitGraph:\n\(options)\n---\ngitGraph\n\(statements)")
-        XCTAssertFalse(diagram.setsGitGraphOptions)
         return try GitGraphLayoutEngine.layout(diagram, smallText: smallText, branchText: branchText, titleText: titleText, font: UniformWidthLayout.font)
     }
 
@@ -37,7 +36,6 @@ final class GitGraphOptionsTests: XCTestCase {
         XCTAssertFalse(options.showsCommitLabels)
         XCTAssertFalse(options.rotatesCommitLabels)
         XCTAssertTrue(options.placesCommitsInParallel)
-        XCTAssertFalse(options.setsOptionsNotApplied)
     }
 
     func testTheMainBranchTakesItsNameAndOrder() throws {
@@ -79,5 +77,23 @@ final class GitGraphOptionsTests: XCTestCase {
         XCTAssertEqual(xs[1], xs[3], accuracy: 0.01, "The first commits of develop and of main after the branch stand side by side.")
         XCTAssertEqual(xs[2], xs[4], accuracy: 0.01)
         XCTAssertLessThan(parallel.size.width, sequential.size.width)
+    }
+
+    func testOptionsWrittenAsAFlowMappingInTheFrontMatterAreReadAsPeleReadsThem() throws {
+        let inline = try GitGraphReading.gitGraph("---\nconfig:\n  gitGraph: {showBranches: false, parallelCommits: true}\n---\ngitGraph\n commit").options
+        XCTAssertFalse(inline.showsBranches)
+        XCTAssertTrue(inline.placesCommitsInParallel)
+        let jsonLike = try GitGraphReading.gitGraph("---\nconfig: {\"gitGraph\" : {\"mainBranchName\": \"trunk\", \"rotateCommitLabel\": false}}\n---\ngitGraph\n commit\n checkout trunk")
+        XCTAssertEqual(jsonLike.options.mainBranchName, "trunk")
+        XCTAssertFalse(jsonLike.options.rotatesCommitLabels)
+        let manyLines = try GitGraphReading.gitGraph("---\nconfig: {\n  \"theme\": \"base\",\n  \"gitGraph\": {\n    \"showCommitLabel\": false\n  }\n}\n---\ngitGraph\n commit").options
+        XCTAssertFalse(manyLines.showsCommitLabels)
+    }
+
+    func testAnOptionPeleDoesNotReadAndAValueOfTheWrongKindSetNothing() throws {
+        let source = "---\nconfig:\n  gitGraph:\n    nodeLabel: x\n    useMaxWidth: false\n    showBranches: maybe\n    mainBranchOrder: 1.5\n    parallelCommits: 1\n---\ngitGraph\n commit"
+        XCTAssertEqual(try GitGraphReading.gitGraph(source).options, GitGraphOptions())
+        XCTAssertFalse(try GitGraphReading.gitGraph("%%{init: {'gitGraph': {'showBranches': false, 'nodeLabel': 'x'}}}%%\ngitGraph\n commit").options.showsBranches)
+        XCTAssertEqual(try GitGraphReading.gitGraph("%% gitGraph: release flow\ngitGraph\n commit\n %% gitGraph: a note").options, GitGraphOptions())
     }
 }

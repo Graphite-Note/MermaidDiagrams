@@ -5,8 +5,8 @@
  * Description: Reads the configuration a diagram's `%%{init: …}%%` directives give, as Pele reads it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 17/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import Foundation
@@ -20,20 +20,18 @@ import Foundation
 /// content is a single word. Keys that would reach an object's prototype are skipped. Pele merges the front matter's
 /// `config:` first, so a directive's option is applied over the front matter's.
 enum MermaidDirectiveConfiguration {
-    /// The options the directives in `bytes[start...]` set under `section` (as `pie` or `gitGraph`), applied over `values`.
-    /// A directive that gives `section` a value other than an object leaves the type no option, as in Pele, and a
-    /// `null` option is no option.
-    static func apply(section: String, in bytes: [UInt8], from start: Int, to values: inout [String: MermaidConfigurationOptions.Value]) {
+    /// The options the directives in `bytes[start...]` set under `section` (as `pie` or `gitGraph`), applied over `options`,
+    /// those inside an option that is an object under their path. A directive that gives `section` a value other than an
+    /// object leaves the type no option, as in Pele, and a `null` option is no option.
+    static func apply(section: String, in bytes: [UInt8], from start: Int, to options: inout MermaidConfigurationOptions) {
         // Most diagrams have no directive: nothing is decoded for them.
         guard contains(directiveStart, in: bytes, from: start) else { return }
         guard let sectionValue = configuration(in: bytes, from: start)[section] else { return }
-        guard case .object(let options) = sectionValue else {
-            values = [:]
+        guard case .object(let directiveOptions) = sectionValue else {
+            options.removeAll()
             return
         }
-        for (name, value) in options {
-            if let read = value.optionValue { values[name] = read } else { values.removeValue(forKey: name) }
-        }
+        for (name, value) in directiveOptions { options.record(value, named: name) }
     }
 
     /// Every `init` directive's object merged in their order.

@@ -6,8 +6,8 @@
  *              donut's hole and the legend's place, and values out of range left at their defaults.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -91,5 +91,15 @@ final class PieChartOptionsTests: XCTestCase {
                 XCTAssertFalse(entry.text.frame.intersects(pie))
             }
         }
+    }
+
+    func testHighlightSliceIsReadAndDrawsNothingAsInPele() throws {
+        // Pele's pie renderer reads textPosition, donutHole and legendPosition only: highlightSlice, which Mermaid's
+        // documentation shows, changes nothing there, and nothing here, so the chart is not refused either.
+        let highlighted = try layout(options: "    highlightSlice: Cats")
+        let plain = PieChartLayoutEngine.layout(try chart(options: ""), typography: typography)
+        XCTAssertEqual(highlighted, plain)
+        XCTAssertEqual(try chart(options: "    highlightSlice: Cats").options, PieChartOptions())
+        XCTAssertNoThrow(try MermaidDiagramPreparation.prepare(source: "---\nconfig:\n  pie:\n    highlightSlice: Cats\n---\n\(slices)", typography: typography))
     }
 }

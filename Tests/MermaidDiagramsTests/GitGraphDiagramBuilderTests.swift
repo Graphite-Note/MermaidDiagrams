@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphDiagramBuilderTests.swift
+ * ---------------------------------------
+ * Layer: Tests
+ * Description: Git graph statements played as Mermaid plays them: branches, commits, merges and cherry-picks.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -169,16 +180,13 @@ final class GitGraphDiagramBuilderTests: XCTestCase {
         XCTAssertEqual(readError("gitGraph\n checkout nope\n commit oops"), .invalidSyntax(line: 3, problem: .unexpectedText("oops")))
     }
 
-    func testTheMainBranchOfTheFrontMatterOrADirectiveIsPlayedAndAGraphThatSetsOptionsNotAppliedStopsWhereItsHistoryBreaks() throws {
+    func testTheMainBranchOfTheFrontMatterOrADirectiveIsPlayedAndAnOptionPeleDoesNotReadChangesNothing() throws {
         let diagram = try gitGraph("%%{init: {'gitGraph': {'mainBranchName': 'trunk'}}}%%\ngitGraph\n commit\n checkout trunk\n commit")
-        XCTAssertFalse(diagram.setsGitGraphOptions, "The directive's main branch is applied.")
-        XCTAssertEqual(diagram.commits.count, 2)
-        let notApplied = try gitGraph("%%{init: {'gitGraph': {'nodeLabel': 'x'}}}%%\ngitGraph\n commit\n checkout trunk\n commit")
-        XCTAssertTrue(notApplied.setsGitGraphOptions)
-        XCTAssertEqual(notApplied.commits.count, 1, "Its history stops without an error where it breaks.")
+        XCTAssertEqual(diagram.commits.count, 2, "The directive's main branch is applied.")
+        XCTAssertEqual(readError("%%{init: {'gitGraph': {'nodeLabel': 'x'}}}%%\ngitGraph\n commit\n checkout trunk\n commit"),
+                       GitGraphReading.problem(.unknownBranch(name: "trunk"), line: 4), "An option Pele does not read changes nothing: the history breaks as it does without it.")
         let named = try gitGraph("---\nconfig:\n  gitGraph:\n    mainBranchName: trunk\n    mainBranchOrder: 2\n---\ngitGraph\n commit\n branch dev\n commit\n"
                                  + " checkout trunk\n commit")
-        XCTAssertFalse(named.setsGitGraphOptions, "The front matter's main branch is applied.")
         XCTAssertEqual(named.commits.count, 3)
         XCTAssertEqual(named.branches.map(\.name), ["dev", "trunk"], "The main branch takes its lane by its order.")
         XCTAssertEqual(readError("---\nconfig:\n  gitGraph:\n    showBranches: false\n---\ngitGraph\n commit oops"),
