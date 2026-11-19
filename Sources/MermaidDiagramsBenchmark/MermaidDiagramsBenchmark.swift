@@ -1,3 +1,15 @@
+/**
+ * File: MermaidDiagramsBenchmark.swift
+ * ------------------------------------
+ * Layer: Benchmark
+ * Description: Times reading, laying out and drawing every diagram type on Pele's benchmark inputs and Mermaid's
+ *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Darwin
 import Foundation
@@ -5,7 +17,7 @@ import MermaidDiagrams
 
 /// Times reading, laying out and drawing flowcharts on the inputs of Pele's benchmark (`FlowchartCorpus`), and
 /// sequence diagrams on Mermaid's documentation examples as Pele collects them (`SequenceCorpus`), and the memory a
-/// layout holds. Each measurement repeats its work until about 300 ms have passed (at least 5 and at most
+/// layout holds; then every other type, and last what each type's scene and SVG add (`DiagramSceneBenchmark`). Each measurement repeats its work until about 300 ms have passed (at least 5 and at most
 /// 2,000 runs, as Pele's benchmark does) and prints the median and the 99th percentile of one run, per diagram:
 /// `swift run -c release --package-path Packages/MermaidDiagrams MermaidDiagramsBenchmark`.
 @main
@@ -54,6 +66,7 @@ struct MermaidDiagramsBenchmark {
         try QuadrantChartBenchmark.run(typography: typography)
         try XYChartBenchmark.run(typography: typography)
         try SankeyBenchmark.run(typography: typography)
+        try DiagramSceneBenchmark.run(typography: typography)
     }
 
     private static func report(_ name: String, sources: [String], typography: DiagramTypography) throws {
