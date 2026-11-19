@@ -150,21 +150,37 @@ public struct DiagramSceneText: Sendable {
     /// The turn about the block's center, in radians, positive turning clockwise on the page (whose y runs down); nil
     /// for text drawn as it lies.
     public let rotation: CGFloat?
+    /// The outline stroked under the text, or nil for none: a Sankey diagram's labels in the page's color.
+    public let outline: DiagramTextOutline?
     public let part: DiagramScenePart
 
     public init(block: DiagramTextBlock, paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, rotation: CGFloat? = nil,
-                part: DiagramScenePart) {
+                outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         self.block = block
         self.paint = paint
         self.isBold = isBold
         self.isItalic = isItalic
         self.rotation = rotation
+        self.outline = outline
         self.part = part
     }
 
     /// The font of the text: the scene's font at the block's size.
     public func font(in scene: DiagramScene) -> DiagramFont {
         DiagramFont(postScriptName: scene.font.postScriptName, size: block.fontSize)
+    }
+}
+
+/// The outline of a text's glyphs, stroked in a paint with round joins under the text itself, which keeps the text legible
+/// where it crosses shapes.
+public struct DiagramTextOutline: Hashable, Sendable {
+    public let paint: DiagramPaint
+    /// In points, centered on the glyphs' edges.
+    public let lineWidth: CGFloat
+
+    public init(paint: DiagramPaint, lineWidth: CGFloat) {
+        self.paint = paint
+        self.lineWidth = lineWidth
     }
 }
 

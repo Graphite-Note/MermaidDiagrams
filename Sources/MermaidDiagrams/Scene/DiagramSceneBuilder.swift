@@ -48,14 +48,16 @@ struct DiagramSceneBuilder {
     }
 
     mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, rotation: CGFloat? = nil,
-                       part: DiagramScenePart) {
+                       outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         guard let block, !block.lines.isEmpty else { return }
         finishRun()
-        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, rotation: rotation, part: part)))
+        finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, rotation: rotation, outline: outline,
+                                                    part: part)))
     }
 
-    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, part: DiagramScenePart) {
-        for block in blocks { text(block, paint, isBold: isBold, part: part) }
+    mutating func texts(_ blocks: [DiagramTextBlock], _ paint: DiagramPaint, isBold: Bool = false, outline: DiagramTextOutline? = nil,
+                        part: DiagramScenePart) {
+        for block in blocks { text(block, paint, isBold: isBold, outline: outline, part: part) }
     }
 
     /// The diagram's title, bold in the foreground color.

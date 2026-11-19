@@ -1,3 +1,14 @@
+/**
+ * File: XYChartParser.swift
+ * -------------------------
+ * Layer: Core
+ * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// Reads an XY chart's statements after its `xychart` or `xychart-beta` keyword, as Mermaid's grammar and Pele's
 /// parser do, over the tokens of `XYChartLexer`: an orientation after the keyword, then `title`, `x-axis` (a title,
 /// then categories in brackets or a range `start --> end`), `y-axis` (a title, then a range), `line` and `bar` (a
@@ -21,7 +32,10 @@ struct XYChartParser {
         var parser = XYChartParser(tokens: XYChartLexer.tokens(after: cursor), bytes: cursor.bytes, limits: limits)
         parser.readKeywordLines()
         try parser.readStatements()
-        return parser.builder.chart
+        var chart = parser.builder.chart
+        chart.options = XYChartOptions(MermaidConfigurationOptions(section: "xyChart", in: cursor.bytes))
+        if !chart.isOrientationWritten { chart.orientation = chart.options.orientation }
+        return chart
     }
 
     private var kind: XYChartTokenKind { tokens[index].kind }

@@ -1,3 +1,14 @@
+/**
+ * File: XYChartAxes.swift
+ * -----------------------
+ * Layer: Core
+ * Description: An XY chart's axes as Pele draws them: grid, axis lines, ticks, labels and titles.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// An XY chart's axes as Pele draws them: the grid across the plot at the value marks, the left and bottom axis lines,
@@ -11,23 +22,27 @@ struct XYChartAxes {
 
     init(frame: XYChartFrame) {
         let plot = frame.plot
-        let tick = XYChartLayoutEngine.tickLength
         let valueMarks = frame.isHorizontal ? frame.bottomMarks : frame.leftMarks
         gridLines = valueMarks.map { mark in XYChartAxes.rule(at: mark.fraction, in: plot, isHorizontal: frame.isHorizontal) }
-        var lines = [XYChartSegment(start: CGPoint(x: plot.minX, y: plot.minY), end: CGPoint(x: plot.minX, y: plot.maxY)),
-                     XYChartSegment(start: CGPoint(x: plot.minX, y: plot.maxY), end: CGPoint(x: plot.maxX, y: plot.maxY))]
+        var lines: [XYChartSegment] = []
+        if frame.leftAxis.showsAxisLine { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: plot.minY), end: CGPoint(x: plot.minX, y: plot.maxY))) }
+        if frame.bottomAxis.showsAxisLine { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: plot.maxY), end: CGPoint(x: plot.maxX, y: plot.maxY))) }
+        let leftTick = frame.leftAxis.tickLength
+        let bottomTick = frame.bottomAxis.tickLength
         var labels: [DiagramTextBlock] = []
         for mark in frame.leftMarks {
             let markY = frame.isHorizontal ? plot.minY + CGFloat(mark.fraction) * plot.height : plot.maxY - CGFloat(mark.fraction) * plot.height
-            lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: markY), end: CGPoint(x: plot.minX - tick, y: markY)))
+            if leftTick > 0 { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: markY), end: CGPoint(x: plot.minX - leftTick, y: markY))) }
+            guard frame.leftAxis.showsLabels else { continue }
             var label = mark.label
-            label.center = CGPoint(x: plot.minX - tick - XYChartLayoutEngine.leftLabelGap - label.size.width / 2, y: markY)
+            label.center = CGPoint(x: plot.minX - leftTick - XYChartLayoutEngine.leftLabelGap - label.size.width / 2, y: markY)
             labels.append(label)
         }
         for mark in frame.bottomMarks {
             let markX = plot.minX + CGFloat(mark.fraction) * plot.width
-            lines.append(XYChartSegment(start: CGPoint(x: markX, y: plot.maxY), end: CGPoint(x: markX, y: plot.maxY + tick)))
-            labels.append(XYChartLayoutEngine.placed(mark.label, x: markX, top: plot.maxY + tick + XYChartLayoutEngine.bottomLabelGap))
+            if bottomTick > 0 { lines.append(XYChartSegment(start: CGPoint(x: markX, y: plot.maxY), end: CGPoint(x: markX, y: plot.maxY + bottomTick))) }
+            guard frame.bottomAxis.showsLabels else { continue }
+            labels.append(XYChartLayoutEngine.placed(mark.label, x: markX, top: plot.maxY + bottomTick + XYChartLayoutEngine.bottomLabelGap))
         }
         axisLines = lines
         self.labels = labels
@@ -38,7 +53,7 @@ struct XYChartAxes {
             return placed
         }
         bottomTitle = frame.bottomTitle.map { title in
-            XYChartLayoutEngine.placed(title, x: plot.midX, top: XYChartLayoutEngine.pageSize.height - padding - title.size.height)
+            XYChartLayoutEngine.placed(title, x: plot.midX, top: frame.page.height - padding - title.size.height)
         }
     }
 

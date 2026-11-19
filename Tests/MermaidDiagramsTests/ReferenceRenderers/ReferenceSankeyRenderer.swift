@@ -20,16 +20,36 @@ enum ReferenceSankeyRenderer {
         let parts = SankeyDrawingParts(layout: layout)
         var text = DiagramTextDrawing(font: layout.font)
         for band in parts.bands {
-            fill(band, from: palette.seriesColor(at: band.sourceSeriesIndex), to: palette.seriesColor(at: band.targetSeriesIndex), in: context)
+            let source = band.sourceColor?.cgColor ?? palette.seriesColor(at: band.sourceSeriesIndex)
+            let target = band.targetColor?.cgColor ?? palette.seriesColor(at: band.targetSeriesIndex)
+            switch parts.linkColor {
+            case .gradient: fill(band, from: source, to: target, in: context)
+            case .source: fill(band, solid: source, in: context)
+            case .target: fill(band, solid: target, in: context)
+            case .fixed(let color): fill(band, solid: color.cgColor, in: context)
+            }
         }
         for (index, nodeFill) in parts.nodeFills.enumerated() where !nodeFill.isEmpty {
             context.setFillColor(palette.seriesColor(at: index))
             context.addPath(nodeFill)
             context.fillPath()
         }
-        for name in parts.names { text.draw(name, color: palette.foreground, in: context) }
-        for value in parts.values { text.draw(value, color: palette.muted, in: context) }
+        for colored in parts.coloredNodeFills {
+            context.setFillColor(colored.color.cgColor)
+            context.addPath(colored.path)
+            context.fillPath()
+        }
+        let outline = parts.hasOutlinedLabels ? (color: palette.background, lineWidth: SankeyDrawingParts.labelOutlineWidth) : nil
+        for name in parts.names { text.draw(name, color: palette.foreground, outline: outline, in: context) }
+        for value in parts.values { text.draw(value, color: palette.muted, outline: outline, in: context) }
         if let title = parts.title { text.draw(title, color: palette.foreground, isBold: true, in: context) }
+    }
+
+    /// The band filled in one color at `SankeyDrawingParts.bandOpacity`.
+    private static func fill(_ band: SankeyBandDrawing, solid color: CGColor, in context: CGContext) {
+        context.setFillColor(color.copy(alpha: color.alpha * SankeyDrawingParts.bandOpacity) ?? color)
+        context.addPath(band.outline)
+        context.fillPath()
     }
 
     /// The band filled with its gradient at `SankeyDrawingParts.bandOpacity`, the colors carried on past its ends.

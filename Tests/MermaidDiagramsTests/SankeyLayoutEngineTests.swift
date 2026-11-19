@@ -1,3 +1,14 @@
+/**
+ * File: SankeyLayoutEngineTests.swift
+ * -----------------------------------
+ * Layer: Tests
+ * Description: Sankey diagrams laid out with Pele's measurements and options.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -83,17 +94,15 @@ final class SankeyLayoutEngineTests: XCTestCase {
         let layout = try laidOut(source)
         XCTAssertTrue(layout.labels.allSatisfy { label in label.value == nil }, "showValues: false")
         XCTAssertEqual(layout.nodes[1].frame.minX - layout.nodes[0].frame.minX, 300 - 15, "The directive's width, the front matter's node width.")
-        XCTAssertThrowsError(try laidOut("%%{init: {'sankey': {'labelStyle': 'outlined'}}}%%\nsankey\na,b,1")) { error in
-            XCTAssertEqual(error as? SankeyLayoutError, .optionsNotDrawn)
-        }
+        XCTAssertTrue(try laidOut("%%{init: {'sankey': {'labelStyle': 'outlined'}}}%%\nsankey\na,b,1").hasOutlinedLabels)
     }
 
-    func testOptionsNotDrawnYetKeepTheDiagramFromBeingLaidOut() throws {
-        for option in ["labelStyle: outlined", "linkColor: source", "nodeColors:\n      a: \"#4e79a7\""] {
+    func testNoOptionKeepsTheDiagramFromBeingLaidOut() throws {
+        for option in ["labelStyle: outlined", "linkColor: source", "linkColor: target", "linkColor: \"#ff0000\"", "linkColor: gradient",
+                       "nodeColors:\n      a: \"#4e79a7\""] {
             let source = "---\nconfig:\n  sankey:\n    \(option)\n---\nsankey\na,b,1"
-            XCTAssertThrowsError(try laidOut(source), option) { error in XCTAssertEqual(error as? SankeyLayoutError, .optionsNotDrawn) }
+            XCTAssertNoThrow(try laidOut(source), option)
         }
-        XCTAssertNoThrow(try laidOut("---\nconfig:\n  sankey:\n    linkColor: gradient\n---\nsankey\na,b,1"), "The gradient is drawn")
     }
 
     func testCircularLinksAreNotLaidOut() {

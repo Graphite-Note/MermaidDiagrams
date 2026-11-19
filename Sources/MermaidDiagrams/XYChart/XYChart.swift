@@ -1,3 +1,14 @@
+/**
+ * File: XYChart.swift
+ * -------------------
+ * Layer: Core
+ * Description: An XY chart as its text describes it: orientation, titles, axes, series and options.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid XY chart (`xychart` or `xychart-beta`) as Mermaid's chart database holds it once its text is read: the
 /// orientation, the titles, the x axis (categories or a range of numbers), the y axis' title and range when one is
 /// written, and the bar and line series with their values placed along the x axis.
@@ -13,6 +24,10 @@ public struct XYChart: Equatable, Sendable {
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
+    /// The options the front matter and the directives set.
+    public internal(set) var options = XYChartOptions()
+    /// Whether the text writes an orientation after the keyword (`xychart horizontal`), which `options` does not override.
+    public internal(set) var isOrientationWritten = false
 
     init(orientation: XYChartOrientation = .vertical, title: String? = nil, xAxis: XYChartXAxis = XYChartXAxis(),
          yAxis: XYChartYAxis = XYChartYAxis(), series: [XYChartSeries] = [], accessibilityTitle: String? = nil,

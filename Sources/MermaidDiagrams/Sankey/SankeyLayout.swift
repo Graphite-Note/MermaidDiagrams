@@ -1,3 +1,14 @@
+/**
+ * File: SankeyLayout.swift
+ * ------------------------
+ * Layer: Core
+ * Description: A Sankey diagram laid out on a page: bars, bands, labels and title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A Sankey diagram laid out on a page whose origin is the top left corner and whose y runs down, in points, as Pele
@@ -14,6 +25,10 @@ public struct SankeyLayout: Equatable, Sendable {
     public let links: [SankeyLayoutLink]
     /// One label per node, in the order of `nodes`.
     public let labels: [SankeyLayoutLabel]
+    /// How the bands are colored (`SankeyOptions.linkColor`).
+    public let linkColor: SankeyLinkColor
+    /// Whether the labels are outlined in the page's color (`SankeyOptions.isOutlined`).
+    public let hasOutlinedLabels: Bool
 }
 
 public struct SankeyLayoutNode: Equatable, Sendable {
@@ -21,6 +36,8 @@ public struct SankeyLayoutNode: Equatable, Sendable {
     public let seriesIndex: Int
     /// The bar, at least a point tall.
     public let frame: CGRect
+    /// The color the options give the node (`SankeyOptions.nodeColors`) in place of its series color, or nil.
+    public let color: DiagramColor?
 }
 
 /// A band from the right side of one bar to the left side of another, its edges S-curves with their control points
@@ -50,6 +67,7 @@ public struct SankeyLayoutLabel: Equatable, Sendable {
 public enum SankeyLayoutError: Error, Equatable, Sendable {
     /// A link leads back to a node it comes from: a Sankey diagram's flows have no cycles, and Pele refuses them.
     case circularLinks
-    /// The front matter sets an option not drawn yet (`SankeyOptions.setsOptionsNotDrawn`).
+    /// No longer thrown: the options Pele reads for Sankey diagrams are all drawn. The case stays so that code that names it
+    /// still compiles.
     case optionsNotDrawn
 }

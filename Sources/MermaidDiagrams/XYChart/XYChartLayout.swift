@@ -1,3 +1,14 @@
+/**
+ * File: XYChartLayout.swift
+ * -------------------------
+ * Layer: Core
+ * Description: An XY chart laid out on its page: title, plot, axes, series, legend.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// An XY chart laid out on a page whose origin is the top left corner and whose y runs down, in points, as Pele lays
@@ -28,6 +39,9 @@ public struct XYChartLayout: Equatable, Sendable {
     public let lines: [XYChartLine]
     /// The labels of lines' points, in the text color.
     public let pointLabels: [DiagramTextBlock]
+    /// The values written past the bars' ends, in the text color, when the options show them (`showDataLabel`), for the
+    /// bars they fit beside.
+    public let barValues: [DiagramTextBlock]
     /// One entry for each series with a title, in the order they are written, while they fit the page's height.
     public let legend: [XYChartLegendEntry]
 }

@@ -1,3 +1,14 @@
+/**
+ * File: QuadrantChartPointPlacement.swift
+ * ---------------------------------------
+ * Layer: Core
+ * Description: Places a quadrant chart's points and their texts as Pele does.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Places a quadrant chart's points as Pele does. A point is drawn when both its coordinates are numbers from 0 to 1,
@@ -13,6 +24,8 @@ struct QuadrantChartPointPlacement {
     let quadrantTextBoxes: [CGRect]
     /// Each point's text measured, in the order the points are written.
     let pointTexts: [DiagramTextBlock]
+    /// The radius a point has unless its styles give one, and the distance between a point and its text: the options'.
+    let metrics: QuadrantChartMetrics
 
     /// Pele's `pointRadius`.
     static let standardRadius: CGFloat = 5
@@ -67,7 +80,7 @@ struct QuadrantChartPointPlacement {
         }
         let frame = plot.frame
         return DrawnPoint(center: CGPoint(x: frame.minX + CGFloat(xCoordinate) * frame.width, y: frame.minY + CGFloat(1 - yCoordinate) * frame.height),
-                          radius: min(CGFloat(style.radius ?? Self.standardRadius), Self.largestRadius),
+                          radius: min(CGFloat(style.radius ?? Double(metrics.pointRadius)), Self.largestRadius),
                           fill: style.color.map(QuadrantChartPaint.written) ?? .firstSeries, stroke: stroke, text: text)
     }
 
@@ -98,10 +111,10 @@ struct QuadrantChartPointPlacement {
     /// Below the point, above it, right of it, left of it, and below its quadrant's text, each with whether it is moved
     /// across to stay inside the plot, and how far from the plot's edges it then stays.
     private func candidatePlaces(_ point: DrawnPoint, halfSize: CGSize) -> [(place: CGPoint, isClamped: Bool, margin: CGFloat)] {
-        let away = point.reach + Self.textPadding
+        let away = point.reach + metrics.pointTextPadding
         let inset = min(away, max(0, (plot.quadrantSize.width - point.text.size.width) / 2))
         let quadrantText = quadrantTextBoxes[quadrantIndex(of: point.center)]
-        let belowQuadrantText = max(point.center.y + away, quadrantText.maxY + Self.textPadding) + halfSize.height
+        let belowQuadrantText = max(point.center.y + away, quadrantText.maxY + metrics.pointTextPadding) + halfSize.height
         let center = point.center
         return [
             (CGPoint(x: center.x, y: center.y + away + halfSize.height), true, 0),

@@ -32,7 +32,10 @@ final class DiagramSVGWriterTests: XCTestCase {
                 XCTAssertEqual(root.attributes["class"], "pele pele-\(prepared.kind.peleName)", sample.name)
                 XCTAssertEqual(reading.elements(named: "path").count, scene.shapes.count, sample.name)
                 let texts = reading.elements(named: "text")
-                XCTAssertEqual(texts.map(\.text), scene.texts.map { text in text.block.lines.joined() }, sample.name)
+                // A text with an outline is written twice: its outline first, then the text.
+                XCTAssertEqual(texts.map(\.text), scene.texts.flatMap { text in
+                    Array(repeating: text.block.lines.joined(), count: text.outline == nil ? 1 : 2)
+                }, sample.name)
                 XCTAssertEqual(texts.filter { text in text.attributes["xml:space"] != "preserve" }.count, 0,
                                "\(sample.name): every text keeps its spaces, of one line as of several")
                 XCTAssertFalse(document.contains("<script") || document.contains("href") || document.contains("url(h"), sample.name)

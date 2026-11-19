@@ -1,3 +1,14 @@
+/**
+ * File: XYChartCategoryScale.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: The places along an XY chart's category axis, as Pele finds them.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -63,7 +74,8 @@ struct XYChartCategoryScale {
     }
 
     /// The labelled places along an axis `length` points long: each category, thinned out where labels would run
-    /// into each other (`labelExtent` is the most room one takes along the axis), or the range's round numbers about
+    /// into each other (`labelExtent` is the most room one takes along the axis; a category without a measured label, as
+    /// when the axis shows none, has an empty one), or the range's round numbers about
     /// `rangeSpacing` points apart.
     func marks(length: CGFloat, categoryLabels: [DiagramTextBlock], labelExtent: CGFloat, rangeSpacing: CGFloat,
                text: some DiagramTextMeasuring) -> [XYChartMark] {
@@ -71,7 +83,8 @@ struct XYChartCategoryScale {
         case .categories(let categories):
             let every = max(1, Int((Double(labelExtent) / (Double(length) * slot)).rounded(.up)))
             return stride(from: 0, to: categories.count, by: every).map { index in
-                XYChartMark(fraction: (Double(index) + 0.5) * slot, label: categoryLabels[index])
+                XYChartMark(fraction: (Double(index) + 0.5) * slot, label: index < categoryLabels.count ? categoryLabels[index]
+                                : DiagramTextBlock(label: DiagramLabel(lines: []), measurer: text, maximumWidth: XYChartScaleMarks.unwrappedWidth))
             }
         case .range(let start, let end):
             let count = max(XYChartScaleMarks.fewestMarkSpans, min(XYChartScaleMarks.mostMarkSpans, Int((length / rangeSpacing).rounded(.down))))

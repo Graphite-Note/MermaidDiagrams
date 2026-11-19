@@ -1,3 +1,14 @@
+/**
+ * File: QuadrantChart.swift
+ * -------------------------
+ * Layer: Core
+ * Description: A quadrant chart as its text describes it: quadrant texts, axes, points, classes and options.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 /// A Mermaid quadrant chart (`quadrantChart`) as its text describes it: the four quadrants' texts, the axes' texts at
 /// their low and high ends, the points in the order they are written with their styles, and the classes of styles
 /// `classDef` names.
@@ -20,6 +31,8 @@ public struct QuadrantChart: Equatable, Sendable {
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
+    /// The options the front matter and the directives set.
+    public internal(set) var options = QuadrantChartOptions()
 
     /// Quadrants 1 to 4.
     public static let quadrantCount = 4

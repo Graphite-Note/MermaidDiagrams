@@ -1,3 +1,14 @@
+/**
+ * File: XYChartDrawingParts.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: A laid-out XY chart's geometry grouped by how it is painted.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out XY chart's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -16,7 +27,7 @@ public struct XYChartDrawingParts {
     public let axisLines: CGPath
     /// The marks' labels, in the muted color.
     public let axisLabels: [DiagramTextBlock]
-    /// The bottom axis' title, the point labels and the legend's titles, in the text color.
+    /// The bottom axis' title, the bars' values, the point labels and the legend's titles, in the text color.
     public let texts: [DiagramTextBlock]
     /// The left axis' title, in the text color, turned a quarter turn counterclockwise about its center; or nil.
     public let turnedText: DiagramTextBlock?
@@ -48,7 +59,7 @@ public struct XYChartDrawingParts {
             XYChartLineDrawing(line: line, swatches: layout.legend.filter { entry in entry.kind == .line && entry.seriesIndex == line.seriesIndex })
         }
         axisLabels = layout.axisLabels
-        texts = [layout.bottomAxisTitle].compactMap { title in title } + layout.pointLabels + layout.legend.map(\.text)
+        texts = [layout.bottomAxisTitle].compactMap { title in title } + layout.barValues + layout.pointLabels + layout.legend.map(\.text)
         turnedText = layout.leftAxisTitle
         title = layout.title
     }

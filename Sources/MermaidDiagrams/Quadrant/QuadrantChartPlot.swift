@@ -1,8 +1,20 @@
+/**
+ * File: QuadrantChartPlot.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Where a quadrant chart's title, axes' texts and quadrants go on its page.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
-/// Where a quadrant chart's title, axes' texts and quadrants go on Pele's page of 500 by 500 points: the title at the
-/// top, the y axis's texts turned at the left of the quadrants, the x axis's texts below them once the chart has points
-/// (above them before), and the four quadrants filling the rest, 4 points apart.
+/// Where a quadrant chart's title, axes' texts and quadrants go on Pele's page, 500 by 500 points unless the chart's
+/// options or a narrow column say otherwise (`QuadrantChartMetrics`): the title at the top, the y axis's texts turned at
+/// the left of the quadrants (or the right), the x axis's texts below them once the chart has points (above them before),
+/// and the four quadrants filling the rest, 4 points apart.
 struct QuadrantChartPlot {
     let title: DiagramTextBlock?
     /// The four quadrants and the gaps between them.
@@ -10,7 +22,7 @@ struct QuadrantChartPlot {
     let quadrantSize: CGSize
     let axisLabels: [QuadrantChartAxisLabel]
 
-    /// The page's side: Pele's `chartWidth` and `chartHeight`, which the front matter's configuration would set.
+    /// The page's side: Pele's `chartWidth` and `chartHeight`.
     static let pageSide: CGFloat = 500
     /// Around the page's content: Pele's `quadrantPadding`.
     static let padding: CGFloat = 8
@@ -25,28 +37,33 @@ struct QuadrantChartPlot {
     /// The narrowest a text wraps at.
     static let narrowestTextWidth: CGFloat = 40
 
-    init(chart: QuadrantChart, axisText: some DiagramTextMeasuring, titleText: some DiagramTextMeasuring) {
-        let side = Self.pageSide - 2 * Self.padding
+    /// The text of the axes is measured in `xAxisText` and `yAxisText`, which are one measurer unless the options give the
+    /// two axes different sizes.
+    init(chart: QuadrantChart, metrics: QuadrantChartMetrics, xAxisText: some DiagramTextMeasuring, yAxisText: some DiagramTextMeasuring,
+         titleText: some DiagramTextMeasuring) {
+        let padding = metrics.padding
+        let side = metrics.page.width - 2 * padding
         var title = Self.block(chart.title.map { title in DiagramLabelDecoder.label(from: title, form: .plain) }, measurer: titleText, maximumWidth: side)
-        let titleSpace = title.map { title in title.size.height + Self.titlePadding } ?? 0
-        let xLow = Self.block(chart.xAxisLowLabel, measurer: axisText, maximumWidth: chart.xAxisHighLabel == nil ? side : side / 2 - Self.textInset)
-        let xHigh = Self.block(chart.xAxisHighLabel, measurer: axisText, maximumWidth: side / 2 - Self.textInset)
+        let titleSpace = title.map { title in title.size.height + metrics.titlePadding } ?? 0
+        let xLow = Self.block(chart.xAxisLowLabel, measurer: xAxisText, maximumWidth: chart.xAxisHighLabel == nil ? side : side / 2 - Self.textInset)
+        let xHigh = Self.block(chart.xAxisHighLabel, measurer: xAxisText, maximumWidth: side / 2 - Self.textInset)
         let xHeight = max(xLow?.size.height ?? 0, xHigh?.size.height ?? 0)
-        let xSpace = xLow == nil && xHigh == nil ? 0 : xHeight + Self.axisLabelPadding
-        let tall = Self.pageSide - 2 * Self.padding - titleSpace - xSpace
-        let yLow = Self.block(chart.yAxisLowLabel, measurer: axisText, maximumWidth: chart.yAxisHighLabel == nil ? tall : tall / 2 - Self.textInset)
-        let yHigh = Self.block(chart.yAxisHighLabel, measurer: axisText, maximumWidth: tall / 2 - Self.textInset)
+        let xSpace = xLow == nil && xHigh == nil ? 0 : xHeight + metrics.xAxisLabelPadding
+        let tall = metrics.page.height - 2 * padding - titleSpace - xSpace
+        let yLow = Self.block(chart.yAxisLowLabel, measurer: yAxisText, maximumWidth: chart.yAxisHighLabel == nil ? tall : tall / 2 - Self.textInset)
+        let yHigh = Self.block(chart.yAxisHighLabel, measurer: yAxisText, maximumWidth: tall / 2 - Self.textInset)
         let yHeight = max(yLow?.size.height ?? 0, yHigh?.size.height ?? 0)
-        let ySpace = yLow == nil && yHigh == nil ? 0 : yHeight + Self.axisLabelPadding
-        let xAxisIsBelow = !chart.points.isEmpty
-        frame = CGRect(x: Self.padding + ySpace, y: Self.padding + titleSpace + (xAxisIsBelow ? 0 : xSpace), width: max(0, side - ySpace),
+        let ySpace = yLow == nil && yHigh == nil ? 0 : yHeight + metrics.yAxisLabelPadding
+        let xAxisIsBelow = metrics.xAxisIsBelowQuadrants
+        frame = CGRect(x: padding + (metrics.yAxisIsRight ? 0 : ySpace), y: padding + titleSpace + (xAxisIsBelow ? 0 : xSpace), width: max(0, side - ySpace),
                        height: max(0, tall))
         quadrantSize = CGSize(width: max(0, (frame.width - Self.quadrantGap) / 2), height: max(0, (frame.height - Self.quadrantGap) / 2))
-        let xMiddle = xAxisIsBelow ? frame.maxY + Self.axisLabelPadding + xHeight / 2 : frame.minY - Self.axisLabelPadding - xHeight / 2
+        let xMiddle = xAxisIsBelow ? frame.maxY + metrics.xAxisLabelPadding + xHeight / 2 : frame.minY - metrics.xAxisLabelPadding - xHeight / 2
+        let yMiddle = metrics.yAxisIsRight ? frame.maxX + metrics.yAxisLabelPadding + yHeight / 2 : frame.minX - metrics.yAxisLabelPadding - yHeight / 2
         axisLabels = Self.xAxisLabels(low: xLow, high: xHigh, frame: frame, middle: xMiddle)
-            + Self.yAxisLabels(low: yLow, high: yHigh, frame: frame, middle: frame.minX - Self.axisLabelPadding - yHeight / 2)
+            + Self.yAxisLabels(low: yLow, high: yHigh, frame: frame, middle: yMiddle)
         // Half the title's padding above it, the other half below it.
-        title?.center = CGPoint(x: Self.pageSide / 2, y: titleSpace / 2)
+        title?.center = CGPoint(x: metrics.page.width / 2, y: titleSpace / 2)
         self.title = title
     }
 

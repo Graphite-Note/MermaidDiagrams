@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartReading.swift
+ * --------------------------------
+ * Layer: Tests
+ * Description: Reads and lays out quadrant charts for tests.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
 @testable import MermaidDiagrams
 
 /// Reads a quadrant chart for a test, as the reading view does.
@@ -37,10 +49,14 @@ enum QuadrantChartReading {
 
     /// The quadrant chart of `source` laid out with text of fixed widths: quadrants 8 points a character at 16 points
     /// (24-point lines), axes 7 at 14 (21), points 6 at 12 (18), the title 8 at 16.
-    static func uniformLayout(_ source: String) throws -> QuadrantChartLayout {
+    /// A size the chart's options give is measured at half a size a character, in lines one and a half sizes high.
+    static func uniformLayout(_ source: String, availableWidth: CGFloat? = nil) throws -> QuadrantChartLayout {
         QuadrantChartLayoutEngine.layout(try quadrantChart(source), quadrantText: UniformWidthTextMeasurer(),
                                          axisText: UniformWidthTextMeasurer(characterWidth: 7, fontSize: 14, lineHeight: 21),
                                          pointText: UniformWidthTextMeasurer(characterWidth: 6, fontSize: 12, lineHeight: 18),
-                                         titleText: UniformWidthTextMeasurer(), font: DiagramFont(postScriptName: nil, size: 16))
+                                         titleText: UniformWidthTextMeasurer(), font: DiagramFont(postScriptName: nil, size: 16),
+                                         availableWidth: availableWidth) { size, _ in
+            UniformWidthTextMeasurer(characterWidth: size / 2, fontSize: size, lineHeight: (size * 1.5).rounded())
+        }
     }
 }

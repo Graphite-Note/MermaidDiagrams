@@ -1,3 +1,14 @@
+/**
+ * File: SankeyCorpusTests.swift
+ * -----------------------------
+ * Layer: Tests
+ * Description: Mermaid's Sankey documentation examples and the spec's energy flows read and laid out.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
@@ -7,21 +18,25 @@ import XCTest
 final class SankeyCorpusTests: XCTestCase {
     private let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
 
-    func testTheDocumentationExamplesAreDrawnBarThoseWithOptionsNotDrawnYet() throws {
+    func testEveryDocumentationExampleIsDrawnWithItsOptions() throws {
         let examples = try SankeyCorpus.documentationExamples()
-        var refused: [Int] = []
+        var withOutlinedLabels: [Int] = []
+        var withNodeColors: [Int] = []
         for (index, example) in examples.enumerated() {
             let diagram = try SankeyReading.diagram(example)
-            do {
-                let layout = try SankeyLayoutEngine.layout(diagram, typography: typography)
-                XCTAssertEqual(layout.nodes.count, diagram.nodes.count)
-                XCTAssertTrue(layout.nodes.allSatisfy { node in CGRect(origin: .zero, size: layout.size).contains(node.frame) }, example)
-            } catch {
-                XCTAssertEqual(error, .optionsNotDrawn)
-                refused.append(index)
-            }
+            let layout = try SankeyLayoutEngine.layout(diagram, typography: typography)
+            XCTAssertEqual(layout.nodes.count, diagram.nodes.count)
+            XCTAssertTrue(layout.nodes.allSatisfy { node in CGRect(origin: .zero, size: layout.size).contains(node.frame) }, example)
+            XCTAssertEqual(layout.labels.count, diagram.nodes.count)
+            if layout.hasOutlinedLabels { withOutlinedLabels.append(index) }
+            if layout.nodes.contains(where: { node in node.color != nil }) { withNodeColors.append(index) }
+            // Every example is also laid out for the narrowest column and fits it where Pele's labels leave room.
+            let narrow = try SankeyLayoutEngine.layout(diagram, typography: typography, availableWidth: 280)
+            XCTAssertLessThanOrEqual(narrow.size.width, layout.size.width, example)
+            XCTAssertTrue(narrow.nodes.allSatisfy { node in CGRect(origin: .zero, size: narrow.size).contains(node.frame) }, example)
         }
-        XCTAssertEqual(refused, [5, 7], "labelStyle: outlined, and nodeColors")
+        XCTAssertEqual(withOutlinedLabels, [5], "labelStyle: outlined")
+        XCTAssertEqual(withNodeColors, [7], "nodeColors")
     }
 
     func testTheEnergyFlowsAreLaidOutWithTheirBarsApart() throws {

@@ -1,3 +1,14 @@
+/**
+ * File: SankeyDrawingParts.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: A laid-out Sankey diagram's geometry grouped by how it is painted: bands, bars, labels and title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out Sankey diagram's geometry grouped by how it is painted, so that drawing it in any colors is a few fills,
@@ -10,6 +21,11 @@ public struct SankeyDrawingParts {
     /// For each series color, the bars filled in it: entry `k` is filled in `DiagramPalette.seriesColor(at: k)` and
     /// holds the bars of the nodes whose index leaves `k` when divided by the number of series colors.
     public let nodeFills: [CGPath]
+    /// The bars of the nodes the options give a color of their own, each in it.
+    public let coloredNodeFills: [SankeyColoredFill]
+    /// How the bands are colored, and whether the labels are outlined (`SankeyOptions`).
+    public let linkColor: SankeyLinkColor
+    public let hasOutlinedLabels: Bool
     /// The nodes' names, in the text color.
     public let names: [DiagramTextBlock]
     /// The nodes' values, in the muted color.
@@ -19,23 +35,42 @@ public struct SankeyDrawingParts {
 
     /// Pele's `fill-opacity` for the bands.
     public static let bandOpacity: CGFloat = 0.4
+    /// The width of the outline stroked around outlined labels' glyphs.
+    public static let labelOutlineWidth: CGFloat = 3
     /// The largest corner radius of a bar; a bar under 4 points tall is rounded by half its height.
     static let barCornerRadius: CGFloat = 2
     /// Pele's eight `--pele-series-*` colors, which the nodes take in turn.
     public static let seriesColorCount = DiagramPalette.peleSeries.count
 
     public init(layout: SankeyLayout) {
-        bands = layout.links.map(SankeyBandDrawing.init)
+        let nodeColors = layout.nodes.map(\.color)
+        bands = layout.links.map { link in SankeyBandDrawing(link: link, sourceColor: nodeColors[link.sourceSeriesIndex], targetColor: nodeColors[link.targetSeriesIndex]) }
         let fills = (0..<min(layout.nodes.count, Self.seriesColorCount)).map { _ in CGMutablePath() }
+        var coloredFills: [SankeyColoredFill] = []
         for node in layout.nodes {
             let radius = min(Self.barCornerRadius, node.frame.height / 2)
-            fills[node.seriesIndex % Self.seriesColorCount].addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
+            if let color = node.color {
+                let path = CGMutablePath()
+                path.addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
+                coloredFills.append(SankeyColoredFill(path: path, color: color))
+            } else {
+                fills[node.seriesIndex % Self.seriesColorCount].addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
+            }
         }
         nodeFills = fills
+        coloredNodeFills = coloredFills
+        linkColor = layout.linkColor
+        hasOutlinedLabels = layout.hasOutlinedLabels
         names = layout.labels.map(\.name)
         values = layout.labels.compactMap(\.value)
         title = layout.title
     }
+}
+
+/// A bar filled in a color of its own.
+public struct SankeyColoredFill {
+    public let path: CGPath
+    public let color: DiagramColor
 }
 
 /// A band's outline and the colors of its gradient.
@@ -48,8 +83,13 @@ public struct SankeyBandDrawing {
     public let endX: CGFloat
     public let sourceSeriesIndex: Int
     public let targetSeriesIndex: Int
+    /// The colors the options give the source and the target, or nil for their series colors.
+    public let sourceColor: DiagramColor?
+    public let targetColor: DiagramColor?
 
-    init(link: SankeyLayoutLink) {
+    init(link: SankeyLayoutLink, sourceColor: DiagramColor?, targetColor: DiagramColor?) {
+        self.sourceColor = sourceColor
+        self.targetColor = targetColor
         let middleX = (link.startX + link.endX) / 2
         let half = link.halfThickness
         let path = CGMutablePath()

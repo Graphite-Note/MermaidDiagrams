@@ -1,3 +1,14 @@
+/**
+ * File: XYChartLayoutEngine.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Lays an XY chart out as Pele does, on the page its options and a narrow column give.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays an XY chart out as Pele does, on its page of 700 by 500 points: the bold title above, the plot with a grid
@@ -6,8 +17,6 @@ import CoreGraphics
 /// and the legend 24 points right of the plot in rows of 26 points with 12-point swatches. A horizontal chart turns
 /// the axes: categories down the left, values along the bottom.
 public enum XYChartLayoutEngine {
-    /// Pele's chart width and height.
-    static let pageSize = CGSize(width: 700, height: 500)
     /// Around the chart.
     static let padding: CGFloat = 8
     /// Between the title and what is below it.
@@ -49,22 +58,33 @@ public enum XYChartLayoutEngine {
     /// The room a horizontal chart keeps right of its plot for point labels: their width and this, at most this share
     /// of the page's width.
     static let pointLabelReachGap: CGFloat = 12
+    /// The room past a horizontal chart's longest bar value, which is written beside the bar's end.
+    static let barValueReachGap: CGFloat = 8
+    /// How far past a horizontal bar's end its value starts, and how far a vertical bar's value is from its end's edge,
+    /// beside half a line of the value's text.
+    static let barValueOffset: CGFloat = 6
+    static let barValueRaise: CGFloat = 2
     static let pointLabelReachShare: CGFloat = 0.25
 
-    public static func layout(_ chart: XYChart, typography: DiagramTypography) throws(XYChartLayoutError) -> XYChartLayout {
+    /// `availableWidth`, the width of the column the chart is shown in, narrows the page as Pele narrows it
+    /// (`XYChartOptions.page`: not under 240 points, the height scaled with the width but by at least 0.6); nil keeps
+    /// the chart's own width.
+    public static func layout(_ chart: XYChart, typography: DiagramTypography, availableWidth: CGFloat? = nil) throws(XYChartLayoutError) -> XYChartLayout {
         try layout(chart, text: XYChartText(titleText: typography.boldNodeText, smallText: typography.edgeText, tinyText: typography.axisText),
-                   font: typography.font)
+                   font: typography.font, availableWidth: availableWidth)
     }
 
-    static func layout(_ chart: XYChart, text: XYChartText<some DiagramTextMeasuring>, font: DiagramFont) throws(XYChartLayoutError) -> XYChartLayout {
+    static func layout(_ chart: XYChart, text: XYChartText<some DiagramTextMeasuring>, font: DiagramFont,
+                       availableWidth: CGFloat? = nil) throws(XYChartLayoutError) -> XYChartLayout {
         guard !chart.series.isEmpty else { throw .noSeries }
-        let frame = XYChartFrame(chart: chart, text: text)
+        let page = chart.options.page(availableWidth: availableWidth)
+        let frame = XYChartFrame(chart: chart, text: text, page: page)
         let series = XYChartSeriesPlacement(chart: chart, frame: frame, text: text)
         let axes = XYChartAxes(frame: frame)
-        return XYChartLayout(size: pageSize, font: font, title: frame.title.map { title in placed(title, x: pageSize.width / 2, top: padding) },
+        return XYChartLayout(size: page, font: font, title: frame.title.map { title in placed(title, x: page.width / 2, top: padding) },
                              plotFrame: frame.plot, gridLines: axes.gridLines, axisLines: axes.axisLines + series.baseline,
                              axisLabels: axes.labels, bottomAxisTitle: axes.bottomTitle, leftAxisTitle: axes.leftTitle, bars: series.bars,
-                             lines: series.lines, pointLabels: series.pointLabels, legend: legend(frame))
+                             lines: series.lines, pointLabels: series.pointLabels, barValues: series.barValues, legend: legend(frame))
     }
 
     /// The legend's rows from the plot's right, centered down it, as many as fit the page's height.
@@ -74,7 +94,7 @@ public enum XYChartLayoutEngine {
         let left = frame.plot.maxX + frame.pointLabelReach + legendGap
         var entries: [XYChartLegendEntry] = []
         for (entry, rowHeight) in zip(frame.legendTexts, rowHeights) {
-            guard rowTop + rowHeight <= pageSize.height else { break }
+            guard rowTop + rowHeight <= frame.page.height else { break }
             let middle = rowTop + rowHeight / 2
             var text = entry.text
             text.center = CGPoint(x: left + swatchSide + swatchTextGap + text.size.width / 2, y: middle)

@@ -78,15 +78,16 @@ public enum DiagramSceneRenderer {
     /// The text where it lies, or turned by its rotation about its block's center.
     private static func draw(_ placed: DiagramSceneText, colors: inout DiagramPaintColors, text: inout DiagramTextDrawing, in context: CGContext) {
         let color = colors.color(of: placed.paint)
+        let outline = placed.outline.map { outline in (color: colors.color(of: outline.paint), lineWidth: outline.lineWidth) }
         guard let rotation = placed.rotation else {
-            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, in: context)
+            return text.draw(placed.block, color: color, isBold: placed.isBold, isItalic: placed.isItalic, outline: outline, in: context)
         }
         context.saveGState()
         context.translateBy(x: placed.block.center.x, y: placed.block.center.y)
         context.rotate(by: rotation)
         var centered = placed.block
         centered.center = .zero
-        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, in: context)
+        text.draw(centered, color: color, isBold: placed.isBold, isItalic: placed.isItalic, outline: outline, in: context)
         context.restoreGState()
     }
 }

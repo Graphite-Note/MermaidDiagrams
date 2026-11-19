@@ -1,8 +1,21 @@
+/**
+ * File: MindmapLayoutEngine.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Lays a mindmap out in Pele's style, spread to both sides or as an outline running down for a narrow
+ *              column.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a mindmap out in Pele's style: each node sized around its text, wrapped at 200 points; the root in the middle
 /// and its branches spread to its right and left, each subtree stacked in a band, a column further out per level;
-/// links as S curves from a parent's side to its child's, in the child's branch color; the title above.
+/// links as S curves from a parent's side to its child's, in the child's branch color; the title above. For a column too
+/// narrow for that, an outline running down instead (`MindmapOutlinePlacement`).
 public enum MindmapLayoutEngine {
     /// The widest a line of text is before it wraps.
     static let wrappingWidth: CGFloat = 200
@@ -11,18 +24,52 @@ public enum MindmapLayoutEngine {
     /// Between the title and the diagram.
     static let titleGap: CGFloat = 16
 
-    public static func layout(_ diagram: MindmapDiagram, typography: DiagramTypography) -> MindmapLayout {
-        layout(diagram, measurer: typography.nodeText, font: typography.font)
+    /// `availableWidth`, the width of the column the mindmap is shown in, turns it to run down as an outline when its map
+    /// does not fit and the column is under 640 points (`DiagramWidthFitting.turnToFit`), as Pele turns it, if that is
+    /// narrower; nil keeps the map spread to both sides.
+    public static func layout(_ diagram: MindmapDiagram, typography: DiagramTypography, availableWidth: CGFloat? = nil) -> MindmapLayout {
+        layout(diagram, measurer: typography.nodeText, font: typography.font, availableWidth: availableWidth)
     }
 
-    static func layout(_ diagram: MindmapDiagram, measurer: some DiagramTextMeasuring, font: DiagramFont) -> MindmapLayout {
-        let measured = MindmapMeasurement(diagram: diagram, measurer: measurer, wrappingWidth: wrappingWidth)
-        var bands = MindmapSubtreeBands(diagram: diagram, heights: measured.sizes.map(\.height))
-        let placement = MindmapPlacement(diagram: diagram, sizes: measured.sizes, bands: &bands)
-        let nodes = diagram.nodes.indices.map { index in placedNode(index, diagram: diagram, measured: measured, placement: placement) }
-        let edges = diagram.nodes.indices.dropFirst().compactMap { index in edge(to: index, diagram: diagram, nodes: nodes, placement: placement) }
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: measurer, maximumWidth: .greatestFiniteMagnitude) }
+    static func layout(_ diagram: MindmapDiagram, measurer: some DiagramTextMeasuring, font: DiagramFont, availableWidth: CGFloat? = nil) -> MindmapLayout {
+        DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: MindmapLayout) in layout.size.width }) { runsDown in
+            layout(diagram, measurer: measurer, font: font, availableWidth: availableWidth, runsDown: runsDown)
+        }
+    }
+
+    private static func layout(_ diagram: MindmapDiagram, measurer: some DiagramTextMeasuring, font: DiagramFont, availableWidth: CGFloat?,
+                               runsDown: Bool) -> MindmapLayout {
+        // An outline has the width the column gives it, less what its level is set in.
+        let outlineRoom = runsDown ? DiagramWidthFitting.limit(availableWidth).map { width in width - 2 * padding } ?? .infinity : nil
+        let measured = MindmapMeasurement(diagram: diagram, measurer: measurer, wrappingWidth: wrappingWidth, outlineRoom: outlineRoom)
+        let title = diagram.title.map { title in
+            DiagramTextBlock(label: DiagramLabel(title), measurer: measurer, maximumWidth: DiagramWidthFitting.titleRoom(availableWidth: availableWidth))
+        }
+        guard runsDown else {
+            var bands = MindmapSubtreeBands(diagram: diagram, heights: measured.sizes.map(\.height))
+            let placement = MindmapPlacement(diagram: diagram, sizes: measured.sizes, bands: &bands)
+            let nodes = diagram.nodes.indices.map { index in placedNode(index, diagram: diagram, measured: measured, placement: placement) }
+            let edges = diagram.nodes.indices.dropFirst().compactMap { index in edge(to: index, diagram: diagram, nodes: nodes, placement: placement) }
+            return finished(nodes: nodes, edges: edges, title: title, font: font)
+        }
+        let placement = MindmapOutlinePlacement(diagram: diagram, sizes: measured.sizes)
+        let nodes = diagram.nodes.indices.map { index in
+            outlineNode(index, diagram: diagram, measured: measured, centerAcross: placement.centersAcross[index], top: placement.tops[index])
+        }
+        let edges = MindmapOutlinePlacement.links(diagram: diagram, nodes: nodes).map { link in MindmapLayoutEdge(path: link.path, branchIndex: link.branchIndex) }
         return finished(nodes: nodes, edges: edges, title: title, font: font)
+    }
+
+    /// A node of an outline: its text starts at the left of its box when it is drawn as text alone, as a column of lines
+    /// would look ragged centered.
+    private static func outlineNode(_ index: Int, diagram: MindmapDiagram, measured: MindmapMeasurement, centerAcross: CGFloat, top: CGFloat) -> MindmapLayoutNode {
+        let size = measured.sizes[index]
+        let frame = CGRect(x: centerAcross - size.width / 2, y: top, width: size.width, height: size.height)
+        var text = measured.texts[index]
+        text.center = CGPoint(x: frame.midX, y: frame.midY)
+        let outline = measured.outlines[index]
+        return MindmapLayoutNode(outline: outline, frame: frame, text: text, branchIndex: diagram.nodes[index].branchIndex,
+                                 isTextLeftAligned: outline == .pill || outline == .text)
     }
 
     private static func placedNode(_ index: Int, diagram: MindmapDiagram, measured: MindmapMeasurement,

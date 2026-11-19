@@ -1,3 +1,14 @@
+/**
+ * File: MindmapLayout.swift
+ * -------------------------
+ * Layer: Core
+ * Description: A mindmap laid out on a page: its nodes, links and title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A mindmap laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing it
@@ -21,6 +32,17 @@ public struct MindmapLayoutNode: Equatable, Sendable {
     public let text: DiagramTextBlock
     /// The first-level branch whose color the node takes (`MindmapNode.branchIndex`), or nil for the root.
     public let branchIndex: Int?
+    /// Whether the text's lines start at the left of the node's box, as in an outline for a node drawn as text alone,
+    /// instead of each line being centered. A text of one line is the same either way.
+    public let isTextLeftAligned: Bool
+
+    init(outline: MindmapNodeOutline, frame: CGRect, text: DiagramTextBlock, branchIndex: Int?, isTextLeftAligned: Bool = false) {
+        self.outline = outline
+        self.frame = frame
+        self.text = text
+        self.branchIndex = branchIndex
+        self.isTextLeftAligned = isTextLeftAligned
+    }
 }
 
 /// A link from a node to one of its children, in the color of the child's branch.
@@ -48,7 +70,8 @@ public enum MindmapNodeOutline: Equatable, Sendable, CaseIterable {
 
 extension MindmapLayoutNode {
     func translated(by offset: CGVector) -> MindmapLayoutNode {
-        MindmapLayoutNode(outline: outline, frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset), branchIndex: branchIndex)
+        MindmapLayoutNode(outline: outline, frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset), branchIndex: branchIndex,
+                          isTextLeftAligned: isTextLeftAligned)
     }
 }
 

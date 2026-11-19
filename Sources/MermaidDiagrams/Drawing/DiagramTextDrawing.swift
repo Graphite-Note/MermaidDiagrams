@@ -32,8 +32,10 @@ struct DiagramTextDrawing {
         self.font = font
     }
 
-    /// Draws each line centered on the block's center, one line height below the last.
-    mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, isItalic: Bool = false, in context: CGContext) {
+    /// Draws each line centered on the block's center, one line height below the last, over its outline (the glyphs'
+    /// edges stroked in a color with round joins) when it has one.
+    mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, isItalic: Bool = false,
+                       outline: (color: CGColor, lineWidth: CGFloat)? = nil, in context: CGContext) {
         guard !block.lines.isEmpty else { return }
         let coreTextFont = coreTextFont(FontKey(size: block.fontSize, isBold: isBold, isItalic: isItalic))
         let attributes: [NSAttributedString.Key: Any] = [
@@ -44,13 +46,25 @@ struct DiagramTextDrawing {
         context.saveGState()
         // Core Text draws glyphs upright in a context whose y runs up; this one's runs down.
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        if let outline {
+            context.setTextDrawingMode(.stroke)
+            context.setStrokeColor(outline.color)
+            context.setLineWidth(outline.lineWidth)
+            context.setLineJoin(.round)
+            Self.drawLines(of: block, attributes: attributes, top: top, in: context)
+            context.setTextDrawingMode(.fill)
+        }
+        Self.drawLines(of: block, attributes: attributes, top: top, in: context)
+        context.restoreGState()
+    }
+
+    private static func drawLines(of block: DiagramTextBlock, attributes: [NSAttributedString.Key: Any], top: CGFloat, in context: CGContext) {
         for (index, line) in block.lines.enumerated() {
             let coreTextLine = CTLineCreateWithAttributedString(NSAttributedString(string: line, attributes: attributes))
-            let baseline = top + (CGFloat(index) + 0.5) * block.lineHeight + block.fontSize * Self.baselineShiftRatio
+            let baseline = top + (CGFloat(index) + 0.5) * block.lineHeight + block.fontSize * baselineShiftRatio
             context.textPosition = CGPoint(x: block.center.x - block.lineWidths[index] / 2, y: baseline)
             CTLineDraw(coreTextLine, context)
         }
-        context.restoreGState()
     }
 
     /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.
