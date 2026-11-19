@@ -12,7 +12,7 @@
 
 import Foundation
 
-/// Reads an Ishikawa diagram after its keyword as Pele's lexer and parser read it, on the text's UTF-16 units as
+/// Reads an Ishikawa diagram from its keyword as Pele's lexer and parser read it, on the text's UTF-16 units as
 /// JavaScript does: white space up to a `%%` comment, or up to the last line break in it, is a blank line; a single line
 /// break before text is a new line; other white space is indentation; and the rest of a line is text, unless it is the
 /// keyword again. A statement is a line of text, indented or not, or a blank line, each ended by a blank line, a line
@@ -35,8 +35,16 @@ enum IshikawaParser {
         let end: Int
     }
 
-    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> IshikawaDiagram {
-        let units = Array(cursor.text(from: cursor.position, to: cursor.bytes.count).utf16)
+    /// Reads the diagram whose type keyword, as the reader took it (letters, digits and `-`), ends at the cursor. Pele's
+    /// lexer takes `ishikawa-beta`, or failing that `ishikawa`, when no letter, digit or `_` follows it, and the rest of the
+    /// line as text (`ishikawa-notes` is `ishikawa` then the effect `-notes`); a keyword it does not take is no Ishikawa
+    /// diagram (`ishikawa_x`, `ishikawa2`).
+    static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> IshikawaDiagram {
+        let units = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
+        guard keywordLength(in: units, at: 0) != nil else {
+            let word = units.prefix { unit in isWordUnit(unit) || unit == hyphen }
+            throw .unsupportedDiagramType(keyword: String(decoding: word, as: UTF16.self))
+        }
         let tokens = tokenize(units)
         func line(at index: Int) -> Int {
             cursor.line + units[..<min(tokens[index].start, units.count)].count { unit in unit == newline }
@@ -48,7 +56,8 @@ enum IshikawaParser {
         }
         func isStop(_ index: Int) -> Bool { [.blankLine, .newLine, .endOfFile].contains(tokens[index].kind) }
         var builder = IshikawaTreeBuilder(limits: limits)
-        var index = tokens[0].kind == .newLine ? 1 : 0
+        // The first token is the keyword, as the text starts with it.
+        var index = tokens[1].kind == .newLine ? 2 : 1
         while true {
             let token = tokens[index]
             if token.kind == .text || (token.kind == .indentation && tokens[index + 1].kind == .text) {
@@ -132,6 +141,7 @@ enum IshikawaParser {
     private static let newline: UInt16 = 10
     private static let carriageReturn: UInt16 = 13
     private static let percent: UInt16 = 37
+    private static let hyphen: UInt16 = 45
 }
 
 /// Nests the lines as Mermaid's Ishikawa database does: the first is the effect; each later one is a cause at its

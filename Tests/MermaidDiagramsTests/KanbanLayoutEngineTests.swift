@@ -43,6 +43,9 @@ final class KanbanLayoutEngineTests: XCTestCase {
         // 17 and 20 characters of 7 points and the gap of 8 are wider than the card's 164 points of text.
         XCTAssertEqual(card.frame.height, 20 + 21 + 4 + 21 + 21)
         XCTAssertEqual(card.ticketLines[0].center.y + 21, card.assigneeLines[0].center.y)
+        // 12 and 11 characters, 161 points, fit the 164 but not with the gap of 8 Pele keeps between them.
+        let close = try XCTUnwrap(try layout("kanban\n todo\n  a@{ ticket: T-0123456789, assigned: abcdefghijk }").columns[0].cards.first)
+        XCTAssertEqual(close.frame.height, 20 + 21 + 4 + 21 + 21)
     }
 
     func testAWordTooLongForACardIsBrokenBetweenCharacters() throws {
@@ -65,6 +68,8 @@ final class KanbanLayoutEngineTests: XCTestCase {
         let one = try layout(source, maximumWidth: 300)
         XCTAssertEqual(one.size.width, 300)
         XCTAssertEqual(one.columns.map(\.frame.width), [284, 284, 284])
+        let capped = try layout("kanban\n one\n  a\n two\n  b", maximumWidth: 421)
+        XCTAssertEqual(capped.columns.map(\.frame.width), [400, 400], "A column of a row of one takes the row, up to twice its own width")
     }
 
     func testTheTitleIsCenteredAboveTheBoard() throws {
@@ -129,7 +134,11 @@ final class KanbanCardMetadataTests: XCTestCase {
         XCTAssertEqual(try fields(" a: 0, b: false, c: null, d: '', e: ~, f: true "), ["f": "true"], "JavaScript holds the others false")
         XCTAssertEqual(try fields(" label: 'it''s', other: \"tab\\there\" "), ["label": "it's", "other": "tab\there"])
         XCTAssertEqual(try fields(" url: https://example.com/x "), ["url": "https://example.com/x"], "A colon not followed by a blank is text")
-        XCTAssertEqual(try fields(" nested: { a: 1 }, list: [1, 2], kept: yes "), ["kept": "yes"])
+        XCTAssertEqual(try fields(" nested: { a: 1 }, list: [1, 2], kept: yes "), ["nested": "[object Object]", "list": "1,2", "kept": "yes"],
+                       "A flow collection is written as JavaScript's String writes it")
+        XCTAssertEqual(try fields(" priority: [High], assigned: [~, 1.50, [a, b], {c: d}, true], ticket: [] "),
+                       ["priority": "High", "assigned": ",1.5,a,b,[object Object],true"])
+        XCTAssertEqual(try fields("\n  label: [two, words]\n  ticket: {a: 1}\n"), ["label": "two,words", "ticket": "[object Object]"])
         XCTAssertEqual(try fields("\n  label: two\n    words\n  ticket: T\n"), ["label": "two words", "ticket": "T"])
         XCTAssertEqual(try fields("\n {ticket: T-1}\n"), ["ticket": "T-1"])
         XCTAssertEqual(try fields(" [1, 2] "), [:], "Metadata that is not a mapping is ignored")

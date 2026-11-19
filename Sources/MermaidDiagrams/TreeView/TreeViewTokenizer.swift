@@ -22,6 +22,8 @@ struct TreeViewToken {
         case indentation
         case quotedName
         case bareName
+        /// `treeView-beta` again, which no statement after the first line takes.
+        case keyword
     }
 
     let kind: Kind
@@ -32,7 +34,8 @@ struct TreeViewToken {
 /// Mermaid's tree view tokens (Pele's `TREEVIEW_TOKENS`), tried at each place in this order: `accDescr`, `accTitle` and
 /// `title` with the blanks before them, `:::class`, `icon(name)` and `## description` with the blanks before them, a run
 /// of blanks (indentation), a quoted name, then hidden `%%` comments and line breaks, then a bare name, which runs to the
-/// end of its line or to the blanks before an annotation. A place no token matches is a syntax error.
+/// end of its line or to the blanks before an annotation, unless it is exactly the keyword `treeView-beta`, whose token
+/// Pele tries first and keeps when no longer token matches. A place no token matches is a syntax error.
 struct TreeViewTokenizer {
     private let bytes: [UInt8]
     private var position = 0
@@ -60,7 +63,9 @@ struct TreeViewTokenizer {
             } else if let end = hiddenToken(at: start) {
                 position = end
             } else if let end = bareNameEnd(at: start) {
-                tokens.append(TreeViewToken(kind: .bareName, start: start, end: end))
+                // Pele's keyword token, tried first, wins unless the bare name is longer.
+                let isKeyword = end == start + Self.keyword.count && hasPrefix(Self.keyword, at: start)
+                tokens.append(TreeViewToken(kind: isKeyword ? .keyword : .bareName, start: start, end: end))
                 position = end
             } else {
                 return .failure(TreeViewLexingFailure(offset: start))
@@ -204,6 +209,7 @@ struct TreeViewTokenizer {
     }
 
     private static let apostrophe = UInt8(ascii: "'")
+    private static let keyword = "treeView-beta"
 }
 
 /// The byte offset where no token of the tree view's grammar matches.

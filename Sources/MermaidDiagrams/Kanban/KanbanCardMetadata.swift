@@ -15,8 +15,8 @@ import Foundation
 /// A kanban node's metadata as Pele reads it: the text on one line is a flow mapping (`{ ticket: MC-1, assigned: 'knsv' }`
 /// without its braces), the text over several lines a block mapping (`key: value` a line). Each field is read as YAML's
 /// JSON schema reads it and kept as JavaScript's `String` writes it, when JavaScript holds it true: no field for null,
-/// `false`, `0` or empty text. A nested collection is no field. Metadata that is not a mapping is ignored, as Pele ignores
-/// it; metadata that is not YAML is refused.
+/// `false`, `0` or empty text; a flow collection as `String` writes it (`KanbanYAMLValue.text`). A block collection under a
+/// key is no field. Metadata that is not a mapping is ignored, as Pele ignores it; metadata that is not YAML is refused.
 struct KanbanCardMetadata {
     private(set) var fields: [String: String] = [:]
 

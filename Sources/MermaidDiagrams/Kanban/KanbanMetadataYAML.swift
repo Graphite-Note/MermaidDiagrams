@@ -12,14 +12,15 @@
 
 import Foundation
 
-/// A YAML value of a kanban node's metadata, as the JSON schema reads it. A mapping keeps only the text of its fields.
+/// A YAML value of a kanban node's metadata, as the JSON schema reads it. A mapping keeps only the text of its fields, a
+/// sequence only the text JavaScript's `String` writes for it: its values' joined by commas.
 enum KanbanYAMLValue {
     case null
     case boolean(Bool)
     case number(Double)
     case text(String)
     case mapping([String: String])
-    case sequence
+    case sequence(String)
 
     /// A plain scalar: null, a Boolean or a number when it is written as one (`~`, `True`, `-1.5e3`, `0x1F`, `.inf`),
     /// else its text.
@@ -52,14 +53,24 @@ enum KanbanYAMLValue {
         return isNegative ? -value : value
     }
 
-    /// The value as JavaScript's `String` writes it, when JavaScript holds it true; nil for null, `false`, zero, NaN, empty
-    /// text and a collection, which a card's fields do not take.
+    /// The value as JavaScript's `String` writes it, when JavaScript holds it true: nil for null, `false`, zero, NaN and
+    /// empty text; a mapping `[object Object]` and a sequence its values joined by commas (`[High]` is `High`), as Pele
+    /// writes them. A sequence whose values join to nothing is no field either, where Pele would keep empty text.
     var text: String? {
         switch self {
-        case .null, .boolean(false), .mapping, .sequence: nil
+        case .null, .boolean(false): nil
         case .boolean(true): "true"
         case .number(let number): number == 0 || number.isNaN ? nil : JavaScriptNumberText.text(number)
-        case .text(let text): text.isEmpty ? nil : text
+        case .text(let text), .sequence(let text): text.isEmpty ? nil : text
+        case .mapping: "[object Object]"
+        }
+    }
+
+    /// The value as a value of a sequence JavaScript's `join` writes: null as nothing, anything else as `String` does.
+    var elementText: String {
+        switch self {
+        case .null: ""
+        default: keyText
         }
     }
 
@@ -71,7 +82,7 @@ enum KanbanYAMLValue {
         case .number(let number): JavaScriptNumberText.text(number)
         case .text(let text): text
         case .mapping: "[object Object]"
-        case .sequence: ""
+        case .sequence(let joined): joined
         }
     }
 }
@@ -153,13 +164,14 @@ struct KanbanFlowReader {
         let isMapping = closing == MermaidByte.closingBrace
         position += 1
         var fields: [String: String] = [:]
+        var elements: [String] = []
         var isSeparated = true
         while true {
             skipBlanks()
             guard let byte = peek() else { throw .notYAML }
             if byte == closing {
                 position += 1
-                return isMapping ? .mapping(fields) : .sequence
+                return isMapping ? .mapping(fields) : .sequence(elements.joined(separator: ","))
             }
             guard isSeparated, byte != MermaidByte.comma else { throw .notYAML }
             if isMapping {
@@ -172,7 +184,7 @@ struct KanbanFlowReader {
                 }
                 fields[key] = value.text
             } else {
-                _ = try readValue(stops: [MermaidByte.comma, closing], depth: depth + 1)
+                elements.append(try readValue(stops: [MermaidByte.comma, closing], depth: depth + 1).elementText)
             }
             skipBlanks()
             isSeparated = peek() == MermaidByte.comma

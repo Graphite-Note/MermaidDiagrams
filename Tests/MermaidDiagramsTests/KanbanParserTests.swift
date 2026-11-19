@@ -124,8 +124,8 @@ final class KanbanParserTests: XCTestCase {
 
     func testPrioritiesAreMermaidsFiveNamesInAnyCase() throws {
         let board = try board("kanban\n todo\n  a@{ priority: 'Very High' }\n  b@{ priority: ' very low ' }\n  c@{ priority: Medium }\n  d@{ priority: LOW }\n"
-                              + "  e@{ priority: urgent }")
-        XCTAssertEqual(board.columns[0].cards.map(\.priority), [.veryHigh, .veryLow, nil, .low, nil])
+                              + "  e@{ priority: urgent }\n  f@{ priority: [High] }")
+        XCTAssertEqual(board.columns[0].cards.map(\.priority), [.veryHigh, .veryLow, nil, .low, nil, .high], "[High] is written High, as Pele's String writes it")
     }
 
     func testMetadataThatIsNotYAMLOrNamesAShapeInCapitalsIsRefused() {

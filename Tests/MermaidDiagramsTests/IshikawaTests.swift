@@ -55,6 +55,20 @@ final class IshikawaParserTests: XCTestCase {
         XCTAssertEqual(try IshikawaReading.diagram("---\ntitle: Why\n---\nishikawa\n  Effect").title, "Why")
     }
 
+    /// Pele's lexer takes `ishikawa-beta`, or failing that `ishikawa`, where no letter, digit or `_` follows, and what
+    /// follows on the line is text: the effect.
+    func testTheKeywordEndsWherePelesLexerEndsIt() throws {
+        XCTAssertEqual(try outline("ishikawa-notes\n  Cause"), ["-notes", "  Cause"])
+        XCTAssertEqual(try outline("Ishikawa-Beta-2\n  Cause"), ["-2", "  Cause"])
+        XCTAssertEqual(try outline("ishikawa-betas\n  Cause"), ["-betas", "  Cause"])
+        XCTAssertEqual(try outline("ishikawa-beta\n  Effect"), ["Effect"])
+        for keyword in ["ishikawa_x", "ishikawa2", "ishikawabeta"] {
+            XCTAssertThrowsError(try IshikawaReading.diagram(keyword + "\n  Effect"), keyword) { error in
+                XCTAssertEqual(error as? MermaidDiagramReadError, .unsupportedDiagramType(keyword: keyword))
+            }
+        }
+    }
+
     func testWhatTheGrammarRefusesIsATypedErrorWithItsLine() {
         func error(_ source: String) -> MermaidDiagramReadError? {
             do {
@@ -105,6 +119,24 @@ final class IshikawaLayoutEngineTests: XCTestCase {
         XCTAssertEqual(cause.text.frame.maxX, boneAcrossAtRow - 18 - 5, accuracy: 0.0001)
         XCTAssertEqual(layout.spine?.start.x, category.arrow.tip.x - 28)
         XCTAssertEqual(layout.spineArrow?.tip, CGPoint(x: head.frame.minX, y: spineY))
+    }
+
+    /// A level cause with two causes of its own: the twigs stand along it, the one nearest the spine nearest the tail and
+    /// 22 apart, each on a row beyond the level bone's (rows 27 apart from 27.5), as Pele's arrange places them.
+    func testTwigsStandAlongTheirLevelBoneEachOnARowOfItsOwn() throws {
+        let layout = try layout("ishikawa\n  E\n    C\n      L\n        t1\n        t2")
+        let spineY = try XCTUnwrap(layout.head).frame.midY
+        let category = try XCTUnwrap(layout.categories.first)
+        let meeting = category.arrow.tip.x
+        func across(_ alongBone: CGFloat, _ rise: CGFloat) -> CGFloat { meeting + alongBone - rise * 0.5 }
+        XCTAssertEqual(Array(category.bones.dropFirst()), [
+            DiagramPath(start: CGPoint(x: across(0, 27.5), y: spineY - 27.5), segments: [.line(to: CGPoint(x: across(-3 * 22, 27.5), y: spineY - 27.5))]),
+            DiagramPath(start: CGPoint(x: across(-44, 27.5), y: spineY - 27.5), segments: [.line(to: CGPoint(x: across(-44, 54.5), y: spineY - 54.5))]),
+            DiagramPath(start: CGPoint(x: across(-22, 27.5), y: spineY - 27.5), segments: [.line(to: CGPoint(x: across(-22, 81.5), y: spineY - 81.5))]),
+        ])
+        XCTAssertEqual(category.causes.map(\.text.frame.maxX), [across(-71, 27.5), across(-49, 54.5), across(-27, 81.5)])
+        XCTAssertEqual(category.causes.map(\.isMuted), [false, true, true])
+        XCTAssertEqual(category.box.maxY, spineY - (14 + 3 * 27 + 8))
     }
 
     func testCategoriesAlternateAboveAndBelowAndPairsMoveTowardTheTail() throws {

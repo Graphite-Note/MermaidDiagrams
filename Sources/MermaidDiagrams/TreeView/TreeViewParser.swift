@@ -34,6 +34,7 @@ enum TreeViewParser {
         }
         var diagram = TreeViewDiagram()
         diagram.options = TreeViewOptions(MermaidConfigurationOptions(section: "treeView", in: cursor.bytes))
+        diagram.options.iconMaps = TreeViewIconMaps(frontMatterOf: cursor.bytes)
         var index = 0
         while index < tokens.count, let statement = source.headerStatement(tokens[index]) {
             switch statement {

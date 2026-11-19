@@ -50,7 +50,7 @@ public struct TreeViewEntry: Equatable, Sendable {
 }
 
 /// A tree view's options from its front matter (`config:` then `treeView:`) and its directives, as Pele applies them:
-/// a value outside its range is left at Pele's default. The maps of icons by file name and extension are not read.
+/// a value outside its range is left at Pele's default.
 public struct TreeViewOptions: Equatable, Sendable {
     /// Across and down around an entry's row.
     public internal(set) var paddingAcross: Double = 5
@@ -61,6 +61,8 @@ public struct TreeViewOptions: Equatable, Sendable {
     public internal(set) var lineThickness: Double = 1
     /// `showIcons`: every entry shows a file or folder icon, not only those with `icon(…)`.
     public internal(set) var showsIcons = false
+    /// `filenameIcons` and `extensionIcons`: the icon a file shows by its name or extension when icons are shown.
+    public internal(set) var iconMaps = TreeViewIconMaps()
 
     init() {}
 
@@ -89,21 +91,29 @@ public enum TreeViewGlyph: Equatable, Sendable {
     case file
     case folder
 
-    /// The icon an entry shows, or nil: `icon(none)` none; `icon(folder)` and `icon(file)` (with or without Mermaid's
-    /// `mermaid-treeview:` pack) that outline; any other `icon(…)` the outline of its kind, as no host draws it; without
-    /// `icon(…)`, the outline of its kind when the options show icons.
-    init?(entry: TreeViewEntry, showsIcons: Bool) {
+    /// The icon an entry shows, or nil, as Pele's getNodeIcon gives it: `icon(none)` none; `icon(folder)` and
+    /// `icon(file)` (with or without Mermaid's `mermaid-treeview:` pack) that outline; any other `icon(…)` the outline of
+    /// its kind, as no host draws it. Without `icon(…)`, only when the options show icons: a file the maps give `none`
+    /// none, a file they give `folder` or `file` that outline, and any other entry the outline of its kind.
+    init?(entry: TreeViewEntry, showsIcons: Bool, iconMaps: TreeViewIconMaps = TreeViewIconMaps()) {
         guard let icon = entry.icon else {
             guard showsIcons else { return nil }
-            self = entry.isFolder ? .folder : .file
+            let detected = entry.isFolder ? nil : iconMaps.icon(forFileNamed: entry.name)
+            guard detected != "none" else { return nil }
+            self.init(named: detected ?? "", isFolder: entry.isFolder)
             return
         }
         guard icon != "none" else { return nil }
+        self.init(named: icon, isFolder: entry.isFolder)
+    }
+
+    /// The outline an icon name gives: the built-in one it names, else the entry's kind's.
+    private init(named icon: String, isFolder: Bool) {
         let builtInName = icon.hasPrefix(Self.builtInPack) ? String(icon.dropFirst(Self.builtInPack.count)) : icon.contains(":") ? "" : icon
         switch builtInName {
         case "folder": self = .folder
         case "file": self = .file
-        default: self = entry.isFolder ? .folder : .file
+        default: self = isFolder ? .folder : .file
         }
     }
 

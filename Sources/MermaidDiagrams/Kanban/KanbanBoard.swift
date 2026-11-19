@@ -23,11 +23,6 @@ public struct KanbanBoard: Equatable, Sendable {
     /// host's icons, which take no room when the host has none, and classes only a style sheet applies.
     public internal(set) var unappliedDecorationCount = 0
     public internal(set) var options = KanbanOptions()
-
-    /// The columns and their cards together, which `MermaidDiagramLimits.maximumNodeCount` bounds.
-    var itemCount: Int {
-        columns.reduce(0) { count, column in count + 1 + column.cards.count }
-    }
 }
 
 /// A column of a kanban board: its title and its cards in order.

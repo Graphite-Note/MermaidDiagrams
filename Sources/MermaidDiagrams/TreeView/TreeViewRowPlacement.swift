@@ -52,7 +52,7 @@ struct TreeViewRowPlacement {
         rowIndexByEntry = Array(repeating: 0, count: diagram.entries.count)
         var pending: [(entryIndex: Int, leavesIconRoom: Bool)] = []
         func push(_ siblings: [Int]) {
-            let leavesIconRoom = siblings.contains { index in TreeViewGlyph(entry: diagram.entries[index], showsIcons: options.showsIcons) != nil }
+            let leavesIconRoom = siblings.contains { index in TreeViewGlyph(entry: diagram.entries[index], showsIcons: options.showsIcons, iconMaps: options.iconMaps) != nil }
             for index in siblings.reversed() { pending.append((index, leavesIconRoom)) }
         }
         push(diagram.topLevelIndices)
@@ -91,7 +91,7 @@ struct TreeViewRowPlacement {
         let rowHeightHere = isTight ? max(rowHeight, name.size.height + (description?.size.height ?? 0) + 2 * paddingDown) : rowHeight
         let middle = height + (isTight ? paddingDown + max(iconSide, name.size.height) / 2 : rowHeightHere / 2)
         return Row(entryIndex: entryIndex, isFolder: entry.isFolder, isHighlighted: entry.isHighlighted,
-                   glyph: TreeViewGlyph(entry: entry, showsIcons: diagram.options.showsIcons), left: left, nameLeft: nameLeft, top: height,
+                   glyph: TreeViewGlyph(entry: entry, showsIcons: diagram.options.showsIcons, iconMaps: diagram.options.iconMaps), left: left, nameLeft: nameLeft, top: height,
                    height: rowHeightHere, middle: middle, name: name, description: description)
     }
 

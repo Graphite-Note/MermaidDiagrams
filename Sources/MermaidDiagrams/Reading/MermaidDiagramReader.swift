@@ -65,9 +65,9 @@ public enum MermaidDiagramReader {
         case "sankey", "sankey-beta": return .sankey(titled(try SankeyParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "kanban": return .kanban(titled(try KanbanParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "treeView-beta": return .treeView(titled(try TreeViewParser.parse(cursor, limits: limits), frontMatterTitle: title))
-        // Pele reads `ishikawa` and `ishikawa-beta` in any case.
-        case _ where ["ishikawa", "ishikawa-beta"].contains(keyword.lowercased()):
-            return .ishikawa(titled(try IshikawaParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        // Pele reads `ishikawa` and `ishikawa-beta` in any case, and what follows them on their line as text.
+        case _ where keyword.lowercased().hasPrefix("ishikawa"):
+            return .ishikawa(titled(try IshikawaParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

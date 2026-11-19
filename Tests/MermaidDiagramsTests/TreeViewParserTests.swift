@@ -12,6 +12,7 @@
 
 import XCTest
 @testable import MermaidDiagrams
+@testable import MermaidDiagramsBenchmark
 
 /// Reads a tree view for a test, from its whole text, through `MermaidDiagramReader`.
 enum TreeViewReading {
@@ -120,6 +121,12 @@ final class TreeViewParserTests: XCTestCase {
         XCTAssertEqual(TreeViewReading.readError("treeView-beta extra"), .invalidSyntax(line: 1, problem: .treeViewExpectedName(" extra")))
         XCTAssertEqual(TreeViewReading.readError("treeView-beta\na :::x   \n  b"), .invalidSyntax(line: 3, problem: .treeViewExpectedName("  b")),
                        "Blanks after an annotation are a second indentation, as Mermaid's lexer reads them")
+        XCTAssertEqual(TreeViewReading.readError("treeView-beta\nsrc/\n    treeView-beta"), .invalidSyntax(line: 3, problem: .treeViewExpectedName("treeView-beta")),
+                       "The keyword again is its token, not a name, as in Pele")
+        XCTAssertEqual(TreeViewReading.readError("treeView-beta\na\ntreeView-beta ## note"),
+                       .invalidSyntax(line: 3, problem: .treeViewExpectedName("treeView-beta ## note")))
+        XCTAssertEqual(try TreeViewReading.tree("treeView-beta\na\ntreeView-beta.md\ntreeView-beta%%x").entries.map(\.name),
+                       ["a", "treeView-beta.md", "treeView-beta%%x"], "A longer bare name wins over the keyword")
         XCTAssertEqual(TreeViewReading.readError("treeView-beta\n├── src/\n    index.js"),
                        .invalidSyntax(line: 3, problem: .treeViewIndentationWithoutBoxDrawing))
         XCTAssertEqual(TreeViewReading.readError("treeView-beta\nroot/\n├── src/\n│   └── "), .invalidSyntax(line: 4, problem: .treeViewEntryWithoutName))
@@ -152,6 +159,38 @@ final class TreeViewParserTests: XCTestCase {
         XCTAssertEqual(glyph("App.tsx", icon: "logos:react"), .file, "No host draws another pack's icon")
         XCTAssertEqual(glyph("src", isFolder: true, icon: "rocket"), .folder)
         XCTAssertEqual(glyph("x", icon: "other:folder"), .file)
+    }
+
+    /// Mermaid's icons spec (`detectIcon` and `getNodeIcon` with configured maps), as the outline each name gives.
+    func testFilesShowTheIconTheirNameOrExtensionIsMappedTo() {
+        let maps = TreeViewIconMaps(filenameIcons: ["Dockerfile": "docker", "notes.TXT": "folder", "empty.ts": ""],
+                                    extensionIcons: [".ts": "folder", "tsx": "react", ".txt": "none", ".md": ""])
+        XCTAssertEqual(maps.icon(forFileNamed: "Dockerfile"), "docker")
+        XCTAssertEqual(maps.icon(forFileNamed: "a.ts"), "folder")
+        XCTAssertEqual(maps.icon(forFileNamed: "App.tsx"), "react", "With or without the leading dot")
+        XCTAssertEqual(maps.icon(forFileNamed: "A.TS"), "folder", "Extensions match in lower case")
+        XCTAssertEqual(maps.icon(forFileNamed: "notes.TXT"), "folder", "A file name wins over an extension")
+        XCTAssertEqual(maps.icon(forFileNamed: "empty.ts"), "folder", "An empty file name icon is none found")
+        XCTAssertEqual(maps.icon(forFileNamed: "archive.tar.ts"), "folder", "The last extension")
+        XCTAssertNil(maps.icon(forFileNamed: ".ts"), "A dot file has no extension")
+        XCTAssertNil(maps.icon(forFileNamed: "README.md"))
+        XCTAssertNil(maps.icon(forFileNamed: "Makefile"))
+        func glyph(_ name: String, isFolder: Bool = false, showsIcons: Bool = true) -> TreeViewGlyph? {
+            TreeViewGlyph(entry: TreeViewEntry(name: name, isFolder: isFolder, depth: 0, parentIndex: nil, icon: nil, classes: nil, description: nil),
+                          showsIcons: showsIcons, iconMaps: maps)
+        }
+        XCTAssertEqual([glyph("a.ts"), glyph("notes.txt"), glyph("Dockerfile"), glyph("README.md"), glyph("src.ts", isFolder: true)],
+                       [.folder, nil, .file, .file, .folder], "Mapped to a built-in name, to none, to another pack's icon, unmapped, a folder")
+        XCTAssertNil(glyph("a.ts", showsIcons: false), "The maps apply only when icons are shown")
+    }
+
+    func testTheIconMapsAreReadFromTheFrontMatter() throws {
+        let documented = try TreeViewReading.tree(try XCTUnwrap(TreeViewCorpus.documentationExamples().dropFirst(6).first))
+        XCTAssertEqual(documented.options.iconMaps, TreeViewIconMaps(filenameIcons: ["Dockerfile": "docker"],
+                                                                     extensionIcons: [".ts": "typescript", ".tsx": "react-ts", ".txt": "none"]))
+        let tree = try TreeViewReading.tree("---\nconfig:\n  treeView:\n    extensionIcons:\n      \".md\": 'folder' # a comment\n      .bin: 12\n"
+                                            + "      .log: null\n      .js: [a]\n    other:\n      .c: file\n  extensionIcons:\n    .h: file\n---\ntreeView-beta\na")
+        XCTAssertEqual(tree.options.iconMaps.extensionIcons, [".md": "folder"], "Only text values under config, treeView and the map's name")
     }
 }
 

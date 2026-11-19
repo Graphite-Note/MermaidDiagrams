@@ -40,6 +40,24 @@ final class TreeViewLayoutEngineTests: XCTestCase {
         XCTAssertEqual(layout.guideLineWidth, 1)
     }
 
+    /// With a step of 10 and no padding across, a guide has 3 points from the folder's line to the step's end: the
+    /// elbow's radius is cut to them, as Pele's min(ELBOW, tick - gx).
+    func testAnElbowIsNoWiderThanTheRoomToTheStepsEnd() throws {
+        let layout = try layout("---\nconfig:\n  treeView:\n    rowIndent: 10\n    paddingX: 0\n---\ntreeView-beta\nsrc/\n  a\n  b")
+        let corner = CGPoint(x: 15, y: 78)
+        XCTAssertEqual(layout.guides, [
+            DiagramPath(start: CGPoint(x: 15, y: 34), segments: [
+                .line(to: CGPoint(x: 15, y: 75)),
+                .curve(to: CGPoint(x: 18, y: 78), control1: CGPoint(x: 15, y: 75 + 2.0 / 3 * 3), control2: CGPoint(x: 18 + 2 / 3 * (corner.x - 18), y: 78)),
+                .line(to: CGPoint(x: 18, y: 78)),
+            ]),
+            DiagramPath(start: CGPoint(x: 15, y: 50), segments: [.line(to: CGPoint(x: 18, y: 50))]),
+        ])
+        let flat = try self.layout("---\nconfig:\n  treeView:\n    rowIndent: 4\n---\ntreeView-beta\nsrc/\n  a")
+        XCTAssertEqual(flat.guides, [DiagramPath(start: CGPoint(x: 15, y: 34), segments: [.line(to: CGPoint(x: 15, y: 50))])],
+                       "No room past the guide: no elbow and no tick")
+    }
+
     func testSiblingsLeaveRoomForAnIconWhenOneOfThemShowsOne() throws {
         let siblings = try layout("treeView-beta\na.txt icon(file)\nb.txt\nsrc/\n    c.txt")
         XCTAssertEqual(siblings.rows.map(\.glyph), [.file, nil, nil, nil])
@@ -70,6 +88,8 @@ final class TreeViewLayoutEngineTests: XCTestCase {
         let deepest = try XCTUnwrap(tight.rows.last)
         XCTAssertGreaterThan(deepest.nameLines.count, 1, "The long name is broken over lines")
         XCTAssertEqual(deepest.descriptionLines.first?.frame.minX, deepest.nameLines.first?.frame.minX, "The description goes under the name")
+        XCTAssertEqual(try XCTUnwrap(deepest.descriptionLines.last).frame.maxY + 2 + 8, tight.size.height,
+                       "The row holds its name and its description, padded 2 below, and the page's 8")
         XCTAssertEqual(try layout(source, maximumWidth: 2_000), loose, "A tree that fits stays loose")
     }
 

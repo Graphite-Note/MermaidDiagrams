@@ -34,6 +34,9 @@ struct KanbanBoardBuilder: MermaidOutlineBuilding {
     var board = KanbanBoard()
     private let limits: MermaidDiagramLimits
     private var columnIndentation = 0
+    /// The columns and cards made so far, which `MermaidDiagramLimits.maximumNodeCount` bounds: counted as they are made,
+    /// as counting the board's at each node took time growing with the square of the columns.
+    private var itemCount = 0
     /// The text of a node indented less than the columns, which no node may follow.
     private var misplacedText: String?
 
@@ -44,7 +47,8 @@ struct KanbanBoardBuilder: MermaidOutlineBuilding {
     mutating func addNode(_ definition: MindmapNodeDefinition, indentation: Int, metadata: String?, line: Int) throws(MermaidDiagramReadError) {
         let fields = try Self.fields(of: metadata, identifier: definition.identifier, line: line)
         if let misplacedText { throw .invalidSyntax(line: line, problem: .kanbanCardWithoutColumn(text: misplacedText)) }
-        guard board.itemCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        guard itemCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        itemCount += 1
         let label = fields["label"].map(MindmapNodeSyntax.label) ?? definition.label
         if fields["icon"] != nil { board.unappliedDecorationCount += 1 }
         if board.columns.isEmpty { columnIndentation = indentation }

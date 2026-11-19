@@ -61,6 +61,21 @@ final class OutlineDiagramPreparationTests: XCTestCase {
         }
     }
 
+    /// Reading takes time in proportion to the text: 20,000 columns, entries or causes, each a line, are read in a fraction
+    /// of the half minute a count of the board's nodes at each node took (KanbanBoardBuilder counted them all again).
+    func testReadingManyNodesTakesTimeInProportionToTheirCount() throws {
+        var limits = MermaidDiagramLimits.standard
+        limits.maximumSourceBytes = 1_000_000
+        limits.maximumNodeCount = 20_000
+        let sources = ["kanban\n" + String(repeating: "a\n", count: 20_000), "kanban\ntodo\n" + String(repeating: " a\n", count: 19_999),
+                       "treeView-beta\n" + String(repeating: "├── a\n", count: 20_000), "ishikawa\nE\n" + String(repeating: " c\n", count: 19_999)]
+        for source in sources {
+            let started = Date()
+            _ = try MermaidDiagramReader.read(source, limits: limits)
+            XCTAssertLessThan(Date().timeIntervalSince(started), 5, String(source.prefix(20)))
+        }
+    }
+
     /// Pele's stress tests for the three types, shortened to the source limit: each is read and laid out (or refused with
     /// a typed error) in well under Pele's three seconds, at a finite size.
     func testPelesWorstCasesAreDrawnOrRefusedQuickly() {
