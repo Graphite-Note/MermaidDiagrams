@@ -50,6 +50,7 @@ enum DiagramSceneSamples {
             ("eventmodeling", try EventModelCorpus.documentationExamples()),
             ("railroad", try RailroadCorpus.documentationExamples()),
             ("c4", try C4Corpus.documentationExamples()),
+            ("usecase", try UseCaseCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -88,6 +89,7 @@ enum DiagramSceneSamples {
             ("event model of 30 frames", EventModelCorpus.generated(frameCount: 30)),
             ("railroad grammar of 12 rules", RailroadCorpus.generated(ruleCount: 12)),
             ("c4 of 20 systems in 3 boundaries", C4Corpus.generated(shapeCount: 20, boundaryCount: 3, relationCount: 30)),
+            ("usecase of 20 use cases in 3 boundaries", UseCaseCorpus.generated(actorCount: 5, useCaseCount: 20, boundaryCount: 3, relationshipCount: 30)),
         ]
     }
 

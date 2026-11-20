@@ -66,6 +66,10 @@ enum NarrowColumnBenchmark {
                 guard case .c4(let c4) = diagram else { return false }
                 return (try? C4LayoutEngine.layout(c4, typography: typography, fittingWidth: width))?.size.width ?? 0 > 0
             }),
+            ("usecase", try UseCaseCorpus.documentationExamples(), { diagram, width in
+                guard case .useCase(let useCase) = diagram else { return false }
+                return (try? UseCaseLayoutEngine.layout(useCase, typography: typography, fittingWidth: width))?.size.width ?? 0 > 0
+            }),
         ]
     }
 

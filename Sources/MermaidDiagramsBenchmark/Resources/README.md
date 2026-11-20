@@ -32,3 +32,4 @@
 `eventmodeling-docs.json`: the 12 event model examples of Mermaid's documentation, as Pele collects them (`tests/corpus/eventmodeling-docs.json`, same licenses), used unchanged.
 `railroad-docs.json`: the 14 railroad diagram examples of Mermaid's documentation, in its four notations, as Pele collects them (`tests/corpus/railroad-docs.json`, same licenses), used unchanged.
 `c4-docs.json`: the 6 C4 diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/c4-docs.json`, same licenses), used unchanged.
+`usecase-docs.json`: the 24 use case diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/usecase-docs.json`, same licenses), used unchanged.

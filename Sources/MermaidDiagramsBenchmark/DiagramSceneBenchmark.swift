@@ -44,6 +44,7 @@ enum DiagramSceneBenchmark {
             (.eventModel, try EventModelCorpus.documentationExamples()),
             (.railroad, try RailroadCorpus.documentationExamples()),
             (.c4, try C4Corpus.documentationExamples()),
+            (.useCase, try UseCaseCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -117,6 +118,9 @@ enum DiagramSceneBenchmark {
         case .c4(let c4):
             let layOut = { try C4LayoutEngine.layout(c4, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .useCase(let useCase):
+            let layOut = { try UseCaseLayoutEngine.layout(useCase, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         }
     }
 
@@ -153,7 +157,7 @@ enum DiagramSceneBenchmark {
             return laidOutOutlineOrTrackDiagram(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph:
             return nil
-        case .venn, .cynefin, .wardleyMap, .c4:
+        case .venn, .cynefin, .wardleyMap, .c4, .useCase:
             return nil
         }
     }

@@ -279,4 +279,13 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case c4Description = "c4-descr"
     /// The wider lines of the page's color under lines that cross the border of a filled box.
     case casing = "casings"
+    /// A use case diagram's stereotypes (`«Human»`), an actor's figure, the slash of a business actor or use case, a
+    /// JSON table's lines, keys and values, and a package boundary's tab.
+    case stereotype
+    case actorFigure = "actor-figure"
+    case business
+    case jsonLines = "json-lines"
+    case jsonKey = "json-key"
+    case jsonValue = "json-value"
+    case boundaryTab = "boundary-tab"
 }

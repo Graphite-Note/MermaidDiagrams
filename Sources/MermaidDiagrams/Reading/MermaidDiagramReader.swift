@@ -40,6 +40,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     case eventModel(EventModelDiagram)
     case railroad(RailroadDiagram)
     case c4(C4Diagram)
+    case useCase(UseCaseDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -107,6 +108,7 @@ public enum MermaidDiagramReader {
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case _ where C4DiagramLevel(rawValue: keyword) != nil:
             return .c4(titled(try C4Parser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
+        case "usecase-beta": return .useCase(titled(try UseCaseParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

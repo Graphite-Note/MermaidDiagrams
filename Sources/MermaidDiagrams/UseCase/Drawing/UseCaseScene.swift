@@ -1,0 +1,126 @@
+/**
+ * File: UseCaseScene.swift
+ * ------------------------
+ * Layer: Core
+ * Description: A laid-out use case diagram's scene, as Pele paints it: the title, the system boundaries with their
+ *              titles, the casings, the lines with their marks, the lines' labels, then the actors, use cases, notes
+ *              and JSON tables with their texts.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 19/11/2026
+ */
+
+import CoreGraphics
+
+extension DiagramScene {
+    /// The use case diagram's painting, back to front as Pele writes it: the title in bold; each boundary's box in the
+    /// alternate surface at half its opacity outlined in the border color, a package's tab above it, its title muted;
+    /// the page-colored casings under lines that cross a filled boundary's border; each line in the line color (a note's
+    /// connector dashed 2 3, an include or extend 5 4, an animated relationship 9 5) with its marks; each label on a
+    /// patch of the page's color, an include's or extend's muted; then each node in the surface color outlined in the
+    /// border color, a note in the alternate surface, with its stereotype muted and its label. A style's colors, width
+    /// and dashes replace these, and text on a fill a style sets takes the dark or light text color that reads on it.
+    public init(layout: UseCaseLayout) {
+        var builder = DiagramSceneBuilder()
+        builder.title(layout.title)
+        for boundary in layout.boundaries { UseCaseScenePainting.add(boundary, to: &builder) }
+        for edge in layout.edges where edge.isCased { UseCaseScenePainting.addCasing(of: edge, to: &builder) }
+        for edge in layout.edges { UseCaseScenePainting.addLine(of: edge, to: &builder) }
+        for edge in layout.edges { UseCaseScenePainting.addLabel(of: edge, to: &builder) }
+        for node in layout.nodes { UseCaseNodePainting.add(node, to: &builder) }
+        self = builder.scene(size: layout.size, font: layout.font)
+    }
+}
+
+/// The boundaries and lines of a use case diagram's scene.
+enum UseCaseScenePainting {
+    static let cornerRadius = FlowchartShapeDrawing.rectangleCornerRadius
+    static let labelPatchRadius: CGFloat = 3
+    /// How much of the alternate surface a boundary shows over the page.
+    static let boundaryFillOpacity: CGFloat = 0.5
+    /// A casing is this much wider than its line.
+    static let casingWidening: CGFloat = 4
+
+    /// A look's outline: its stroke color, else the border's; its width, else 1; its dashes.
+    static func outline(_ look: UseCaseLook) -> (paint: DiagramPaint, stroke: DiagramStroke) {
+        (look.stroke.map(DiagramPaint.color) ?? .border, DiagramStroke(lineWidth: look.strokeWidth ?? 1, dashLengths: look.strokeDashLengths ?? []))
+    }
+
+    /// A text's color: its style's (unless the text does not read it), else the one picked over its fill (unless it
+    /// does not read that), else `usual`.
+    static func textPaint(_ look: UseCaseLook, usual: DiagramPaint, readsInk: Bool = true, readsTextColor: Bool = true) -> DiagramPaint {
+        (readsTextColor ? look.textColor.map(DiagramPaint.color) : nil) ?? (readsInk ? look.ink.map(DiagramPaint.color) : nil) ?? usual
+    }
+
+    static func add(_ boundary: UseCaseLayoutBoundary, to builder: inout DiagramSceneBuilder) {
+        let look = boundary.look
+        let fill = look.fill.map(DiagramPaint.color) ?? (look.setsFill ? .alternateSurface : DiagramPaint.alternateSurface.atOpacity(boundaryFillOpacity))
+        let (strokePaint, stroke) = outline(look)
+        if let tab = boundary.tabFrame {
+            builder.fillAndStroke(CGPath(rect: tab, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .boundaryTab)
+            let body = CGRect(x: boundary.frame.minX, y: tab.maxY, width: boundary.frame.width, height: boundary.frame.height - tab.height)
+            builder.fillAndStroke(CGPath(rect: body, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .cluster)
+        } else {
+            let box = CGPath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+            builder.fillAndStroke(box, fill: fill, stroke: strokePaint, stroke, part: .cluster)
+        }
+        builder.text(boundary.title, textPaint(look, usual: .muted), isBold: look.isBold, isItalic: look.isItalic, part: .clusterLabel)
+    }
+
+    /// A wider line of the page's color under the line and its marks.
+    static func addCasing(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+        let stroke = DiagramStroke.rounded(lineWidth: edge.lineWidth + casingWidening)
+        builder.stroke(DiagramEdgeDrawing.path(edge.path), .background, stroke, part: .casing)
+        let marks = CGMutablePath()
+        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) { addOutline(of: mark, to: marks) }
+        if !marks.isEmpty { builder.fillAndStroke(marks, fill: .background, stroke: .background, stroke, part: .casing) }
+    }
+
+    static func addLine(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+        let paint = edge.inkOverFill.map(DiagramPaint.color) ?? edge.look.stroke.map(DiagramPaint.color) ?? .line
+        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, DiagramStroke(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths, lineCap: .round),
+                       part: .edge)
+        let filled = CGMutablePath()
+        let stroked = CGMutablePath()
+        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) {
+            guard mark.marker == .hollowTriangle else {
+                DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
+                                           filled: filled, stroked: stroked)
+                continue
+            }
+            builder.fillAndStroke(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction),
+                                  fill: edge.fillUnderMarks.map(DiagramPaint.color) ?? .background, stroke: paint,
+                                  DiagramStroke(lineWidth: edge.lineWidth, lineCap: .round, lineJoin: .round), part: .marker)
+        }
+        builder.fill(filled, paint, part: .marker)
+        builder.stroke(stroked, paint, DiagramStroke(lineWidth: edge.lineWidth, lineCap: .round), part: .marker)
+    }
+
+    /// The mark's shape as its casing covers it: an arrow's triangle, a circle, a cross's arms, a triangle.
+    private static func addOutline(of mark: UseCaseLayoutMark, to path: CGMutablePath) {
+        if mark.marker == .hollowTriangle {
+            path.addPath(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction))
+        } else {
+            DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
+                                       filled: path, stroked: path)
+        }
+    }
+
+    private static func arrowhead(of marker: UseCaseMarker) -> FlowchartArrowhead {
+        switch marker {
+        case .point: .arrow
+        case .circle: .circle
+        case .cross: .cross
+        case .none, .hollowTriangle: .none
+        }
+    }
+
+    /// The label on a patch of the page's color: an include's or extend's muted, else in the style's text color.
+    static func addLabel(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+        guard let label = edge.label, let patch = edge.labelPatch else { return }
+        builder.fill(CGPath(roundedRect: patch, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius, transform: nil), .background,
+                     part: .labelBackground)
+        builder.text(label, edge.look.textColor.map(DiagramPaint.color) ?? (edge.isSemantic ? .muted : .foreground), part: .edgeLabel)
+    }
+}
