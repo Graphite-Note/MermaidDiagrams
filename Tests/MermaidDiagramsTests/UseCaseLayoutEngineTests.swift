@@ -6,7 +6,7 @@
  *              widths (half the size a character): node sizes, ranks, ends on outlines, loops, boundaries, labels.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -84,6 +84,20 @@ final class UseCaseLayoutEngineTests: XCTestCase {
         let starts = layout.edges.map(\.path.start.x)
         XCTAssertEqual(abs(starts[1] - starts[0]), 14)
         XCTAssertEqual((starts[0] + starts[1]) / 2, layout.node("A")?.center.x)
+        // Six ends share an oval's 88 wide bottom: spread over six tenths of it, each on the outline.
+        let fanned = try self.layout("direction TB", "A --> B", "A --> C", "A --> D", "A --> E", "A --> F", "A --> G")
+        let oval = try XCTUnwrap(fanned.node("A"))
+        let fannedStarts = fanned.edges.map(\.path.start).sorted { first, second in first.x < second.x }
+        XCTAssertEqual(fannedStarts[1].x - fannedStarts[0].x, 88 * 0.6 / 5, accuracy: 0.0001)
+        let along = fannedStarts[0].x - oval.center.x
+        XCTAssertEqual(oval.size.width, 88)
+        let halfHeight = oval.size.height / 2
+        XCTAssertEqual(fannedStarts[0].y, oval.center.y + halfHeight * (1 - (along / 44) * (along / 44)).squareRoot(), accuracy: 0.0001)
+        // An actor's ends above and below it sit 2 beyond its node.
+        let actor = try self.layout("direction TB", "actor P", "U --> P", "P --> V")
+        let person = try XCTUnwrap(actor.node("P"))
+        XCTAssertEqual(actor.edges[0].endMark?.tip.y, person.frame.minY - 2)
+        XCTAssertEqual(actor.edges[1].path.start.y, person.frame.maxY + 2)
     }
 
     /// A loop goes out of the bottom of a node whose flow runs across, its box in the layout 52 higher, and out of the
