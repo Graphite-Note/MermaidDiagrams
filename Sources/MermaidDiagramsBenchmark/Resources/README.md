@@ -38,3 +38,10 @@
 `swimlane-docs.json`: the 13 swimlane diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/swimlane-docs.json`, same licenses), used unchanged.
 `usecase-docs.json`: the 24 use case diagram examples of Mermaid's documentation, as Pele collects them (`tests/corpus/usecase-docs.json`, same licenses), used unchanged.
 `agentflow-docs.json`: the 12 agent flow examples of Mermaid's documentation, as Pele collects them (`tests/corpus/agentflow-docs.json`, same licenses), used unchanged. `agentflow-reference.json`: the 239 inputs of Pele's agent flow reference (`tests/corpus/agentflow-reference.json`, same licenses: its compatibility fixtures, documentation examples and mutated texts) with what Mermaid 12.1.0's browser build made of each, without its semantic model and the zero text offsets of its element positions.
+
+`pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json` and `pele-flowchart-compat.json`: what Pele 1.13.0 itself
+drew for every input of Pele's `tests/corpus` and the generated graphs of its benchmark, how long it took on the Mac that
+ran it, every diagram text of its `tests/compat` (Mermaid's specs, MIT licensed), and what its flowchart database made of
+each text Mermaid's flowchart specs parse, written by `scripts/pele/run.sh` (see `scripts/pele/README.md`).
+`PeleKnownDifferences.md`: every input whose scene differs from Pele's beyond the differential tests' tolerance, every
+flowchart spec text read otherwise than Pele reads it, and every compat file without copied texts, each with why.

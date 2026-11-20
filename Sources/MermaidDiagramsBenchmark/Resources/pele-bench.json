@@ -1,0 +1,357 @@
+{
+ "run": {
+  "pele": "1.13.0",
+  "measurer": "metricsMeasurer (Arial advance table, text/metrics.ts)",
+  "date": "2026-11-20T01:09:49.798Z",
+  "deno": "2.9.8",
+  "v8": "15.0.245.2-rusty",
+  "os": "darwin",
+  "arch": "aarch64"
+ },
+ "cases": [
+  {
+   "name": "docs: all examples",
+   "diagramCount": 114,
+   "renderedCount": 114,
+   "medianMillisecondsPerCase": 2.777,
+   "medianMicrosecondsPerDiagram": 24.356,
+   "percentile99MicrosecondsPerDiagram": 98.993,
+   "runs": 99
+  },
+  {
+   "name": "tree: 50 nodes",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 0.215,
+   "medianMicrosecondsPerDiagram": 214.625,
+   "percentile99MicrosecondsPerDiagram": 377.167,
+   "runs": 1340
+  },
+  {
+   "name": "mesh: 50 nodes, 20 extra labelled edges",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 0.466,
+   "medianMicrosecondsPerDiagram": 466.208,
+   "percentile99MicrosecondsPerDiagram": 703.75,
+   "runs": 621
+  },
+  {
+   "name": "tree: 500 nodes",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 2.076,
+   "medianMicrosecondsPerDiagram": 2075.666,
+   "percentile99MicrosecondsPerDiagram": 2645.834,
+   "runs": 142
+  },
+  {
+   "name": "mesh: 500 nodes, 200 extra labelled edges",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 6.849,
+   "medianMicrosecondsPerDiagram": 6848.5,
+   "percentile99MicrosecondsPerDiagram": 8398.25,
+   "runs": 44
+  }
+ ],
+ "perType": [
+  {
+   "name": "agentflow-docs",
+   "diagramCount": 12,
+   "renderedCount": 12,
+   "medianMillisecondsPerCase": 0.673,
+   "medianMicrosecondsPerDiagram": 56.111,
+   "percentile99MicrosecondsPerDiagram": 123.354,
+   "runs": 404
+  },
+  {
+   "name": "architecture-docs",
+   "diagramCount": 6,
+   "renderedCount": 6,
+   "medianMillisecondsPerCase": 0.182,
+   "medianMicrosecondsPerDiagram": 30.375,
+   "percentile99MicrosecondsPerDiagram": 54.354,
+   "runs": 1568
+  },
+  {
+   "name": "block-docs",
+   "diagramCount": 30,
+   "renderedCount": 30,
+   "medianMillisecondsPerCase": 0.24,
+   "medianMicrosecondsPerDiagram": 7.999,
+   "percentile99MicrosecondsPerDiagram": 13.643,
+   "runs": 1182
+  },
+  {
+   "name": "c4-docs",
+   "diagramCount": 6,
+   "renderedCount": 6,
+   "medianMillisecondsPerCase": 0.481,
+   "medianMicrosecondsPerDiagram": 80.153,
+   "percentile99MicrosecondsPerDiagram": 128.382,
+   "runs": 598
+  },
+  {
+   "name": "class-docs",
+   "diagramCount": 38,
+   "renderedCount": 38,
+   "medianMillisecondsPerCase": 0.977,
+   "medianMicrosecondsPerDiagram": 25.701,
+   "percentile99MicrosecondsPerDiagram": 41.556,
+   "runs": 289
+  },
+  {
+   "name": "cynefin-docs",
+   "diagramCount": 3,
+   "renderedCount": 3,
+   "medianMillisecondsPerCase": 0.077,
+   "medianMicrosecondsPerDiagram": 25.542,
+   "percentile99MicrosecondsPerDiagram": 52.25,
+   "runs": 2000
+  },
+  {
+   "name": "er-docs",
+   "diagramCount": 25,
+   "renderedCount": 25,
+   "medianMillisecondsPerCase": 0.692,
+   "medianMicrosecondsPerDiagram": 27.67,
+   "percentile99MicrosecondsPerDiagram": 48.447,
+   "runs": 407
+  },
+  {
+   "name": "eventmodeling-docs",
+   "diagramCount": 12,
+   "renderedCount": 12,
+   "medianMillisecondsPerCase": 0.173,
+   "medianMicrosecondsPerDiagram": 14.448,
+   "percentile99MicrosecondsPerDiagram": 23.875,
+   "runs": 1664
+  },
+  {
+   "name": "flowchart-docs",
+   "diagramCount": 114,
+   "renderedCount": 114,
+   "medianMillisecondsPerCase": 2.512,
+   "medianMicrosecondsPerDiagram": 22.031,
+   "percentile99MicrosecondsPerDiagram": 30.791,
+   "runs": 117
+  },
+  {
+   "name": "gantt-docs",
+   "diagramCount": 11,
+   "renderedCount": 11,
+   "medianMillisecondsPerCase": 0.273,
+   "medianMicrosecondsPerDiagram": 24.826,
+   "percentile99MicrosecondsPerDiagram": 39.648,
+   "runs": 1056
+  },
+  {
+   "name": "git-docs",
+   "diagramCount": 35,
+   "renderedCount": 35,
+   "medianMillisecondsPerCase": 0.937,
+   "medianMicrosecondsPerDiagram": 26.779,
+   "percentile99MicrosecondsPerDiagram": 38.019,
+   "runs": 311
+  },
+  {
+   "name": "info-docs",
+   "diagramCount": 2,
+   "renderedCount": 2,
+   "medianMillisecondsPerCase": 0.002,
+   "medianMicrosecondsPerDiagram": 1.125,
+   "percentile99MicrosecondsPerDiagram": 1.521,
+   "runs": 2000
+  },
+  {
+   "name": "ishikawa-docs",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 0.012,
+   "medianMicrosecondsPerDiagram": 11.75,
+   "percentile99MicrosecondsPerDiagram": 21.25,
+   "runs": 2000
+  },
+  {
+   "name": "journey-docs",
+   "diagramCount": 1,
+   "renderedCount": 1,
+   "medianMillisecondsPerCase": 0.011,
+   "medianMicrosecondsPerDiagram": 11,
+   "percentile99MicrosecondsPerDiagram": 19.042,
+   "runs": 2000
+  },
+  {
+   "name": "kanban-docs",
+   "diagramCount": 3,
+   "renderedCount": 3,
+   "medianMillisecondsPerCase": 0.054,
+   "medianMicrosecondsPerDiagram": 18.056,
+   "percentile99MicrosecondsPerDiagram": 34.278,
+   "runs": 2000
+  },
+  {
+   "name": "mindmap-docs",
+   "diagramCount": 13,
+   "renderedCount": 13,
+   "medianMillisecondsPerCase": 0.124,
+   "medianMicrosecondsPerDiagram": 9.532,
+   "percentile99MicrosecondsPerDiagram": 17.327,
+   "runs": 2000
+  },
+  {
+   "name": "packet-docs",
+   "diagramCount": 4,
+   "renderedCount": 4,
+   "medianMillisecondsPerCase": 0.039,
+   "medianMicrosecondsPerDiagram": 9.802,
+   "percentile99MicrosecondsPerDiagram": 15.51,
+   "runs": 2000
+  },
+  {
+   "name": "pie-docs",
+   "diagramCount": 2,
+   "renderedCount": 2,
+   "medianMillisecondsPerCase": 0.021,
+   "medianMicrosecondsPerDiagram": 10.271,
+   "percentile99MicrosecondsPerDiagram": 16.708,
+   "runs": 2000
+  },
+  {
+   "name": "quadrant-docs",
+   "diagramCount": 3,
+   "renderedCount": 3,
+   "medianMillisecondsPerCase": 0.041,
+   "medianMicrosecondsPerDiagram": 13.819,
+   "percentile99MicrosecondsPerDiagram": 25.986,
+   "runs": 2000
+  },
+  {
+   "name": "radar-docs",
+   "diagramCount": 3,
+   "renderedCount": 3,
+   "medianMillisecondsPerCase": 0.056,
+   "medianMicrosecondsPerDiagram": 18.833,
+   "percentile99MicrosecondsPerDiagram": 32.389,
+   "runs": 2000
+  },
+  {
+   "name": "railroad-docs",
+   "diagramCount": 14,
+   "renderedCount": 14,
+   "medianMillisecondsPerCase": 0.311,
+   "medianMicrosecondsPerDiagram": 22.205,
+   "percentile99MicrosecondsPerDiagram": 33.798,
+   "runs": 932
+  },
+  {
+   "name": "requirement-docs",
+   "diagramCount": 9,
+   "renderedCount": 9,
+   "medianMillisecondsPerCase": 0.269,
+   "medianMicrosecondsPerDiagram": 29.898,
+   "percentile99MicrosecondsPerDiagram": 51.528,
+   "runs": 1048
+  },
+  {
+   "name": "sankey-docs",
+   "diagramCount": 8,
+   "renderedCount": 8,
+   "medianMillisecondsPerCase": 0.32,
+   "medianMicrosecondsPerDiagram": 40,
+   "percentile99MicrosecondsPerDiagram": 108.865,
+   "runs": 868
+  },
+  {
+   "name": "sequence-docs",
+   "diagramCount": 38,
+   "renderedCount": 38,
+   "medianMillisecondsPerCase": 0.432,
+   "medianMicrosecondsPerDiagram": 11.377,
+   "percentile99MicrosecondsPerDiagram": 25.254,
+   "runs": 632
+  },
+  {
+   "name": "state-docs",
+   "diagramCount": 22,
+   "renderedCount": 22,
+   "medianMillisecondsPerCase": 0.944,
+   "medianMicrosecondsPerDiagram": 42.896,
+   "percentile99MicrosecondsPerDiagram": 76.619,
+   "runs": 294
+  },
+  {
+   "name": "swimlane-docs",
+   "diagramCount": 13,
+   "renderedCount": 13,
+   "medianMillisecondsPerCase": 0.634,
+   "medianMicrosecondsPerDiagram": 48.753,
+   "percentile99MicrosecondsPerDiagram": 100.375,
+   "runs": 425
+  },
+  {
+   "name": "timeline-docs",
+   "diagramCount": 14,
+   "renderedCount": 14,
+   "medianMillisecondsPerCase": 0.221,
+   "medianMicrosecondsPerDiagram": 15.786,
+   "percentile99MicrosecondsPerDiagram": 28.194,
+   "runs": 1283
+  },
+  {
+   "name": "treemap-docs",
+   "diagramCount": 8,
+   "renderedCount": 8,
+   "medianMillisecondsPerCase": 0.141,
+   "medianMicrosecondsPerDiagram": 17.656,
+   "percentile99MicrosecondsPerDiagram": 30.823,
+   "runs": 2000
+  },
+  {
+   "name": "treeview-docs",
+   "diagramCount": 13,
+   "renderedCount": 13,
+   "medianMillisecondsPerCase": 0.129,
+   "medianMicrosecondsPerDiagram": 9.929,
+   "percentile99MicrosecondsPerDiagram": 17.301,
+   "runs": 2000
+  },
+  {
+   "name": "usecase-docs",
+   "diagramCount": 24,
+   "renderedCount": 24,
+   "medianMillisecondsPerCase": 1.083,
+   "medianMicrosecondsPerDiagram": 45.141,
+   "percentile99MicrosecondsPerDiagram": 69.714,
+   "runs": 261
+  },
+  {
+   "name": "venn-docs",
+   "diagramCount": 8,
+   "renderedCount": 8,
+   "medianMillisecondsPerCase": 0.77,
+   "medianMicrosecondsPerDiagram": 96.198,
+   "percentile99MicrosecondsPerDiagram": 129.807,
+   "runs": 381
+  },
+  {
+   "name": "wardley-docs",
+   "diagramCount": 19,
+   "renderedCount": 19,
+   "medianMillisecondsPerCase": 0.242,
+   "medianMicrosecondsPerDiagram": 12.743,
+   "percentile99MicrosecondsPerDiagram": 22.463,
+   "runs": 1172
+  },
+  {
+   "name": "xychart-docs",
+   "diagramCount": 8,
+   "renderedCount": 8,
+   "medianMillisecondsPerCase": 0.104,
+   "medianMicrosecondsPerDiagram": 13,
+   "percentile99MicrosecondsPerDiagram": 24.562,
+   "runs": 2000
+  }
+ ]
+}
