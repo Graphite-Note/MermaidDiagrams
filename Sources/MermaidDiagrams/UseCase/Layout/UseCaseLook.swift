@@ -7,7 +7,7 @@
  *              a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -33,6 +33,13 @@ public struct UseCaseLook: Equatable, Sendable {
     public let setsFill: Bool
     /// Whether the fill paints anything (Pele's `paints`): written, not `none` or `transparent`, not fully clear.
     public let paintsFill: Bool
+    /// `fill-opacity`, when written as an amount.
+    public let fillOpacity: CGFloat?
+    /// `stroke-opacity` and `opacity`, 1 when not written as an amount.
+    public let strokeOpacity: CGFloat
+    public let opacity: CGFloat
+    /// Whether the stroke is written `none` or `transparent`: such a line has no casing (Pele's `casing`).
+    public let hidesStroke: Bool
 
     static let none = UseCaseLook(styles: [])
 
@@ -59,10 +66,21 @@ public struct UseCaseLook: Equatable, Sendable {
         let writtenFill = applied.last { declaration in declaration.property == "fill" }.flatMap(Self.value(of:))
         setsFill = writtenFill != nil
         let fillValue = writtenFill?.lowercased()
-        let opacity = (appearance.fillOpacity ?? 1) * (appearance.opacity ?? 1)
-        paintsFill = fillValue != nil && fillValue != "none" && fillValue != "transparent" && (appearance.fill?.alpha ?? 1) * opacity > 0
+        let shownFill = (appearance.fillOpacity ?? 1) * (appearance.opacity ?? 1)
+        paintsFill = fillValue != nil && fillValue != "none" && fillValue != "transparent" && (appearance.fill?.alpha ?? 1) * shownFill > 0
+        fillOpacity = appearance.fillOpacity.map { amount in CGFloat(amount) }
+        strokeOpacity = CGFloat(appearance.strokeOpacity ?? 1)
+        opacity = CGFloat(appearance.opacity ?? 1)
+        let writtenStroke = applied.last { declaration in declaration.property == "stroke" }.flatMap(Self.value(of:))
+        hidesStroke = writtenStroke == "none" || writtenStroke == "transparent"
         fontSize = applied.last { declaration in declaration.property == "font-size" }.flatMap(Self.value(of:)).flatMap(Self.fontSize(_:))
     }
+
+    /// How much of a fill shows: its `fill-opacity` (else `usual`) times its `opacity`.
+    func fillAmount(usual: CGFloat = 1) -> CGFloat { (fillOpacity ?? usual) * opacity }
+
+    /// How much of a stroke shows: its `stroke-opacity` times its `opacity`.
+    var strokeAmount: CGFloat { strokeOpacity * opacity }
 
     /// The value Pele's `resolveStyle` keeps: `!important` taken out and trimmed, nil when empty or unsafe.
     private static func value(of declaration: VennStyleDeclaration) -> String? {

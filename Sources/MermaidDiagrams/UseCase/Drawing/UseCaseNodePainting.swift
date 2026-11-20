@@ -6,7 +6,7 @@
  *              label, an oval or a box with its texts, a note with its folded corner, a JSON table with its rows.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -16,31 +16,32 @@ enum UseCaseNodePainting {
     static func add(_ node: UseCaseLayoutNode, to builder: inout DiagramSceneBuilder) {
         let look = node.look
         let (strokePaint, stroke) = UseCaseScenePainting.outline(look)
-        let fill = look.fill.map(DiagramPaint.color)
         let frame = node.frame
         let cornerRadius = UseCaseScenePainting.cornerRadius
         switch node.form {
         case .actor(let type, let isBusiness):
             addFigure(of: node, type: type, isBusiness: isBusiness, to: &builder)
-            builder.text(node.stereotype, .muted, isBold: look.isBold, isItalic: look.isItalic, part: .stereotype)
+            // Pele measures a stereotype in its node's weight and slant but draws it plain.
+            builder.text(node.stereotype, .muted, part: .stereotype)
             builder.text(node.label, UseCaseScenePainting.textPaint(look, usual: .foreground, readsInk: false), isBold: look.isBold, isItalic: look.isItalic,
                          part: .label)
             return
         case .ellipse(let isBusiness):
-            builder.fillAndStroke(CGPath(ellipseIn: frame, transform: nil), fill: fill ?? .surface, stroke: strokePaint, stroke, part: .node)
+            builder.fillAndStroke(CGPath(ellipseIn: frame, transform: nil), fill: UseCaseScenePainting.fill(look, usual: .surface), stroke: strokePaint, stroke, part: .node)
             if isBusiness { builder.stroke(UseCaseFigureShapes.ellipseSlash(in: frame), strokePaint, stroke, part: .business) }
         case .rectangle:
-            builder.fillAndStroke(CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil), fill: fill ?? .surface,
+            builder.fillAndStroke(CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil),
+                                  fill: UseCaseScenePainting.fill(look, usual: .surface),
                                   stroke: strokePaint, stroke, part: .node)
         case .note:
             let joined = DiagramStroke(lineWidth: stroke.lineWidth, dashLengths: stroke.dashLengths, lineJoin: .round)
-            builder.fillAndStroke(UseCaseFigureShapes.noteOutline(in: frame), fill: fill ?? .alternateSurface, stroke: strokePaint, joined, part: .note)
+            builder.fillAndStroke(UseCaseFigureShapes.noteOutline(in: frame), fill: UseCaseScenePainting.fill(look, usual: .alternateSurface), stroke: strokePaint,
+                                  joined, part: .note)
             builder.stroke(UseCaseFigureShapes.noteFold(in: frame), strokePaint, joined, part: .note)
         case .jsonTable:
             return addTable(node, to: &builder)
         }
-        builder.text(node.stereotype, UseCaseScenePainting.textPaint(look, usual: .muted, readsTextColor: false), isBold: look.isBold,
-                     isItalic: look.isItalic, part: .stereotype)
+        builder.text(node.stereotype, UseCaseScenePainting.textPaint(look, usual: .muted, readsTextColor: false), part: .stereotype)
         builder.text(node.label, UseCaseScenePainting.textPaint(look, usual: .foreground), isBold: look.isBold, isItalic: look.isItalic, part: .label)
     }
 
@@ -48,33 +49,33 @@ enum UseCaseNodePainting {
     private static func addFigure(of node: UseCaseLayoutNode, type: UseCaseActorType, isBusiness: Bool, to builder: inout DiagramSceneBuilder) {
         let look = node.look
         let (strokePaint, stroke) = UseCaseScenePainting.outline(look)
-        let fill = look.fill.map(DiagramPaint.color)
+        func fill(_ usual: DiagramPaint) -> DiagramPaint { UseCaseScenePainting.fill(look, usual: usual) }
         let middle = CGPoint(x: node.center.x, y: node.frame.minY + UseCaseNodeMeasurement.figureHeight / 2)
         var headY = UseCaseFigureShapes.headCenterY
         var radius = UseCaseFigureShapes.headRadius
         switch type {
         case .normal:
-            builder.fillAndStroke(UseCaseFigureShapes.head(radius: radius, at: middle), fill: fill ?? .surface, stroke: strokePaint, stroke, part: .actorFigure)
+            builder.fillAndStroke(UseCaseFigureShapes.head(radius: radius, at: middle), fill: fill(.surface), stroke: strokePaint, stroke, part: .actorFigure)
             builder.stroke(UseCaseFigureShapes.limbs(at: middle), strokePaint, stroke, part: .actorFigure)
         case .hollow:
             radius = UseCaseFigureShapes.hollowHeadRadius
-            builder.fillAndStroke(UseCaseFigureShapes.head(radius: radius, at: middle), fill: fill ?? .background, stroke: strokePaint, stroke, part: .actorFigure)
+            builder.fillAndStroke(UseCaseFigureShapes.head(radius: radius, at: middle), fill: fill(.background), stroke: strokePaint, stroke, part: .actorFigure)
             builder.keepNextShapeApart()
-            builder.fillAndStroke(UseCaseFigureShapes.hollowBody(at: middle), fill: fill ?? .background, stroke: strokePaint,
+            builder.fillAndStroke(UseCaseFigureShapes.hollowBody(at: middle), fill: fill(.background), stroke: strokePaint,
                                   DiagramStroke(lineWidth: stroke.lineWidth, dashLengths: stroke.dashLengths, lineJoin: .round), part: .actorFigure)
         case .awesome:
             let figure = UseCaseFigureShapes.awesomeFigure(at: middle)
             if let written = look.stroke {
-                builder.fillAndStroke(figure, fill: fill ?? .border, stroke: .color(written), stroke, part: .actorFigure)
+                builder.fillAndStroke(figure, fill: fill(.border), stroke: DiagramPaint.color(written).atOpacity(look.strokeAmount), stroke, part: .actorFigure)
             } else {
-                builder.fill(figure, fill ?? .border, part: .actorFigure)
+                builder.fill(figure, fill(.border), part: .actorFigure)
             }
         case .icon:
             headY = UseCaseFigureShapes.iconHeadCenterY
             radius = UseCaseFigureShapes.iconHeadRadius
             let box = UseCaseFigureShapes.iconBox.offsetBy(dx: middle.x, dy: middle.y)
             builder.fillAndStroke(CGPath(roundedRect: box, cornerWidth: UseCaseScenePainting.cornerRadius, cornerHeight: UseCaseScenePainting.cornerRadius,
-                                         transform: nil), fill: fill ?? .surface, stroke: strokePaint, stroke, part: .actorFigure)
+                                         transform: nil), fill: fill(.surface), stroke: strokePaint, stroke, part: .actorFigure)
         }
         if isBusiness { builder.stroke(UseCaseFigureShapes.actorSlash(headY: headY, radius: radius, at: middle), strokePaint, stroke, part: .business) }
     }
@@ -85,14 +86,15 @@ enum UseCaseNodePainting {
         let (strokePaint, stroke) = UseCaseScenePainting.outline(look)
         let radius = UseCaseScenePainting.cornerRadius
         builder.fillAndStroke(CGPath(roundedRect: node.frame, cornerWidth: radius, cornerHeight: radius, transform: nil),
-                              fill: look.fill.map(DiagramPaint.color) ?? .surface, stroke: strokePaint, stroke, part: .node)
+                              fill: UseCaseScenePainting.fill(look, usual: .surface), stroke: strokePaint, stroke, part: .node)
         builder.stroke(UseCaseFigureShapes.tableLines(in: node.frame, headHeight: node.headHeight, keyColumnWidth: node.keyColumnWidth), strokePaint, stroke,
                        part: .jsonLines)
         builder.text(node.label, UseCaseScenePainting.textPaint(look, usual: .foreground), isBold: true, isItalic: look.isItalic, part: .label)
         let keyPaint = UseCaseScenePainting.textPaint(look, usual: .muted, readsTextColor: false)
         let valuePaint = UseCaseScenePainting.textPaint(look, usual: .foreground)
         for row in node.rows {
-            builder.text(row.key, keyPaint, isBold: look.isBold, isItalic: look.isItalic, part: .jsonKey)
+            // Pele measures a key in its table's weight and slant but draws it plain.
+            builder.text(row.key, keyPaint, part: .jsonKey)
             builder.texts(row.valueLines, valuePaint, isBold: look.isBold, isItalic: look.isItalic, part: .jsonValue)
         }
     }
