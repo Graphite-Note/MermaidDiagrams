@@ -83,7 +83,8 @@ public struct AgentFlowVertex: Equatable, Sendable {
     public internal(set) var type: String?
     public internal(set) var styles: [String] = []
     public internal(set) var classes: [String] = []
-    public internal(set) var properties: [String: String] = [:]
+    /// What a node statement's text gave it beyond its label; nil for a connector no node statement named.
+    public internal(set) var properties: [String: String]?
     /// A `click … href` link made safe, or nil; and its target.
     public internal(set) var link: String?
     public internal(set) var linkTarget: String?

@@ -23,7 +23,8 @@ struct AgentFlowLayoutAssembly {
             return AgentFlowLayoutNode(identifier: node.identifier, shape: placed.shape, isCollapsedFlow: isCollapsed, frame: placed.frame,
                                        text: placed.text,
                                        paletteSlot: isCollapsed ? node.colorIndex ?? AgentFlowVertexKind.allCases.count : (node.kind ?? .task).paletteSlot,
-                                       kind: isCollapsed ? nil : node.kind ?? .task, style: measurement.styles[graphIndex])
+                                       kind: isCollapsed ? nil : node.kind ?? .task, style: measurement.styles[graphIndex],
+                                       isBold: measurement.textLooks[graphIndex].isBold, isItalic: measurement.textLooks[graphIndex].isItalic)
         }
         let flows = zip(clustered.subgraphGraphIndices, laidOut.clusters).map { graphIndex, cluster in
             AgentFlowLayoutFlow(identifier: graph.nodes[graphIndex].identifier, frame: cluster.frame, title: cluster.title,

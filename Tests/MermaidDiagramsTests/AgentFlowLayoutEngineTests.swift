@@ -16,9 +16,8 @@ import XCTest
 
 final class AgentFlowLayoutEngineTests: XCTestCase {
     private func layout(_ source: String, isTurned: Bool = false) throws -> AgentFlowLayout {
-        try AgentFlowLayoutEngine.layout(try AgentFlowReading.diagram(source), nodeText: UniformWidthTextMeasurer(),
-                                         edgeText: UniformWidthTextMeasurer(characterWidth: 7, fontSize: 14, lineHeight: 21),
-                                         font: UniformWidthLayout.font, limits: .standard, isTurnedToRunDown: isTurned)
+        try AgentFlowLayoutEngine.layout(try AgentFlowReading.diagram(source), measurers: BlockReading.measurers, font: UniformWidthLayout.font,
+                                         limits: .standard, isTurnedToRunDown: isTurned)
     }
 
     private func node(_ identifier: String, in layout: AgentFlowLayout) throws -> AgentFlowLayoutNode {
@@ -33,9 +32,11 @@ final class AgentFlowLayoutEngineTests: XCTestCase {
         let diamond = try node("d", in: laidOut).frame.size
         XCTAssertEqual(diamond.width, 91.2, accuracy: 0.001)
         XCTAssertEqual(diamond.height, 57, accuracy: 0.001)
-        // Wrapped at 120: "abcd abcd abcd" (112 points), then "abcd".
+        // Wrapped at 120: "abcd abcd abcd" (112 points), then "abcd", the lines 1.3 sizes apart (21 points), as Pele sets
+        // text of more than one line, and 12 above and below them.
         XCTAssertEqual(try node("w", in: laidOut).text.lines, ["abcd abcd abcd", "abcd"])
-        XCTAssertEqual(try node("w", in: laidOut).frame.size, CGSize(width: 156, height: 72))
+        XCTAssertEqual(try node("w", in: laidOut).text.lineHeight, 21)
+        XCTAssertEqual(try node("w", in: laidOut).frame.size, CGSize(width: 156, height: 66))
         // A tool's subroutine is 16 points wider than a box.
         XCTAssertEqual(try node("t", in: laidOut).frame.width, 172)
     }
@@ -49,6 +50,27 @@ final class AgentFlowLayoutEngineTests: XCTestCase {
         XCTAssertEqual(collapsed.paletteSlot, 7)
         XCTAssertEqual(laidOut.nodes.map(\.identifier), ["p", "x"])
         XCTAssertTrue(laidOut.flows.isEmpty)
+    }
+
+    func testTextOfSeveralLinesIsSetCloserAsPeleSetsIt() throws {
+        let laidOut = try layout("agentflow-beta TB\n  a[\"one<br>two\"] -->|abcd abcd abcd abcd abcd| b\n  flow f[\"F\"]\n    c --> f\n  end\n  f@{ view: collapsed }")
+        // Broken by `<br>`: 21 points apart; an edge's 14-point text wrapped at 120: 18 points apart; one line: 1.5 sizes.
+        XCTAssertEqual(try node("a", in: laidOut).text.lineHeight, 21)
+        XCTAssertEqual(try node("a", in: laidOut).frame.height, 66)
+        let edgeText = try XCTUnwrap(laidOut.edges.first?.text)
+        XCTAssertEqual(edgeText.lines.count, 2)
+        XCTAssertEqual(edgeText.lineHeight, 18)
+        XCTAssertEqual(try node("b", in: laidOut).text.lineHeight, 24)
+        XCTAssertEqual(try node("f", in: laidOut).text.lineHeight, 24)
+    }
+
+    func testTheEdgesOnASideOfANodeMeetInItsMiddle() throws {
+        // Pele's agent flow gives its nodes no span, so its edges are not spread along a side as a flowchart's are.
+        for source in ["agentflow-beta TB\n  a --> b\n  a -.- c", "agentflow-beta TB\n  flow f\n    a --> b\n    a --> c\n  end"] {
+            let laidOut = try layout(source)
+            let task = try node("a", in: laidOut).frame
+            XCTAssertEqual(laidOut.edges.map(\.path.start), [CGPoint(x: task.midX, y: task.maxY), CGPoint(x: task.midX, y: task.maxY)], source)
+        }
     }
 
     func testTheOptionsSetTheGapsAndTheWrapping() throws {
@@ -135,5 +157,46 @@ final class AgentFlowLayoutEngineTests: XCTestCase {
         XCTAssertEqual(texts.last?.paint, .color(try XCTUnwrap(DiagramColor(cssText: "#ff0000"))))
         // Pele's dark ink on a white fill.
         XCTAssertEqual(texts.first { text in text.part == .label }?.paint, .color(try XCTUnwrap(SequenceTextInk.ink(onColor: try XCTUnwrap(DiagramColor(cssText: "#ffffff"))))))
+    }
+
+    /// Pele's `overFills` and `edgeCasing`: `a --> b` inside the dark flow is drawn in white, its arrow too, and `b --x c`,
+    /// which leaves it, runs over a casing 5 points wide of the page's color, painted between the flows and the edges.
+    func testAnEdgeOnADarkFlowIsWhiteAndOneLeavingItIsCased() throws {
+        let scene = DiagramScene(layout: try layout("agentflow-beta TB\n  flow f\n    a --> b\n  end\n  b --x c\n  style f fill:#222"))
+        let casing = DiagramStroke.rounded(lineWidth: 5)
+        XCTAssertEqual(scene.shapes.filter { shape in shape.part == .casing }.map(\.painting).first, .stroke(.background, casing))
+        let edgePaints = scene.shapes.filter { shape in shape.part == .edge || shape.part == .marker }.map { shape -> DiagramPaint? in
+            switch shape.painting {
+            case .stroke(let paint, _), .fill(let paint): paint
+            case .fillAndStroke(let paint, _, _): paint
+            case .gradientFill: nil
+            }
+        }
+        XCTAssertEqual(edgePaints.first, .color(SequenceTextInk.onDark))
+        XCTAssertEqual(edgePaints[1], .color(SequenceTextInk.onDark))
+        XCTAssertEqual(edgePaints.last, .line)
+        let parts = scene.shapes.map(\.part)
+        XCTAssertLessThan(try XCTUnwrap(parts.lastIndex(of: .cluster)), try XCTUnwrap(parts.firstIndex(of: .casing)))
+        XCTAssertLessThan(try XCTUnwrap(parts.lastIndex(of: .casing)), try XCTUnwrap(parts.firstIndex(of: .edge)))
+        let plain = DiagramScene(layout: try layout("agentflow-beta TB\n  flow f\n    a --> b\n  end\n  b --x c"))
+        XCTAssertFalse(plain.shapes.contains { shape in shape.part == .casing })
+    }
+
+    /// Pele's `resolveStyle` gives a node's text its size, weight and slant, measured so and drawn so.
+    func testAStyleSetsTheSizeTheWeightAndTheSlantOfANodesText() throws {
+        let laidOut = try layout("agentflow-beta TB\n  a[\"abc\"]\n  b[\"abc\"]\n  style a font-size:20px,font-weight:bold,font-style:italic\n"
+            + "  classDef big font-size:30px\n  class b big")
+        let styled = try node("a", in: laidOut)
+        XCTAssertEqual(styled.text.fontSize, 20)
+        XCTAssertEqual(styled.text.lineHeight, 30)
+        XCTAssertEqual(styled.text.size.width, 30)
+        XCTAssertEqual(styled.frame.height, 54)
+        XCTAssertTrue(styled.isBold)
+        XCTAssertTrue(styled.isItalic)
+        XCTAssertEqual(try node("b", in: laidOut).text.fontSize, 30)
+        XCTAssertFalse(try node("b", in: laidOut).isBold)
+        let text = try XCTUnwrap(DiagramScene(layout: laidOut).texts.first { text in text.part == .label })
+        XCTAssertTrue(text.isBold)
+        XCTAssertTrue(text.isItalic)
     }
 }

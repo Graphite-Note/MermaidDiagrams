@@ -5,8 +5,8 @@
  * Description: Puts a placed flowchart on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 19/11/2026
+ * Version: 0.7
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -55,7 +55,7 @@ struct FlowchartPageAssembly {
         }
         let shapes = diagram.nodes.map(\.shape)
         let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters, shapes: shapes,
-                                       shapeSizes: measured.shapeSizes)
+                                       shapeSizes: measured.shapeSizes, spreadsEnds: measured.spreadsEdgeEnds)
         for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
             guard let sourcePoint = ports.sourcePoints[edgeIndex], let targetPoint = ports.targetPoints[edgeIndex] else { continue }
@@ -134,7 +134,8 @@ struct FlowchartPageAssembly {
         let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters + boxCenters,
                                        shapes: diagram.nodes.map { node in node.shape } + Array(repeating: .rectangle, count: boxCenters.count),
                                        shapeSizes: measured.shapeSizes + placement.clusterFrames.map { frame in frame.size },
-                                       keptClear: Self.borderCrossings(of: placement, firstBoxNode: diagram.nodes.count))
+                                       keptClear: Self.borderCrossings(of: placement, firstBoxNode: diagram.nodes.count),
+                                       spreadsEnds: measured.spreadsEdgeEnds)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
             if placement.strayEdgeIndices.contains(layoutIndex) {

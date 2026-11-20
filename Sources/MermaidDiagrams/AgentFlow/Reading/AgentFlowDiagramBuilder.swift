@@ -81,7 +81,7 @@ struct AgentFlowDiagramBuilder {
         }
         if let type { vertex.type = type }
         vertex.styles += styles ?? []
-        for (key, value) in properties { vertex.properties[key] = value }
+        vertex.properties = (vertex.properties ?? [:]).merging(properties) { _, new in new }
         if let document {
             vertex.metadata = AgentFlowMetadataReading.merged(vertex.metadata, with: document)
             if case .mapping(let fields) = document {

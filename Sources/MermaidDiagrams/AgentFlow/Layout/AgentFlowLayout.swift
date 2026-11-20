@@ -48,6 +48,9 @@ public struct AgentFlowLayoutNode: Equatable, Sendable {
     /// What the node means, nil for a collapsed flow.
     public let kind: AgentFlowVertexKind?
     public let style: DiagramElementStyle?
+    /// Whether its style sets its text bold, and italic; the size it sets is the text's own (`DiagramTextBlock.fontSize`).
+    public let isBold: Bool
+    public let isItalic: Bool
 }
 
 public struct AgentFlowLayoutEdge: Equatable, Sendable {
