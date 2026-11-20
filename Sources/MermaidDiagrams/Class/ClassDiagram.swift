@@ -5,7 +5,7 @@
  * Description: A Mermaid class diagram as its text describes it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -24,6 +24,9 @@ public struct ClassDiagram: Equatable, Sendable {
     /// The front matter's `class: hierarchicalNamespaces`: true unless it is false, when only the namespaces the text
     /// declares are drawn, side by side, each titled with its full name.
     public internal(set) var hierarchicalNamespaces = true
+    /// The front matter's `class: hideEmptyMembersBox: true`: a class with no attribute and no method is drawn as its title
+    /// alone, without its two empty compartments and their dividers, as Pele draws it.
+    public internal(set) var hidesEmptyMemberBoxes = false
     /// The diagram's title, from `title:` in the front matter, or nil.
     public internal(set) var title: String?
     /// `accTitle: …`, the short name a screen reader gives the diagram, or nil.
