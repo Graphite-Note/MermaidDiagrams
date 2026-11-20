@@ -4,9 +4,9 @@
  * Layer: Core
  * Description: Collects a flowchart as its statements are read.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 19/11/2026
  */
 
 /// Collects a flowchart as its statements are read: nodes by identifier, edges within the limits, and the groups open
@@ -227,6 +227,7 @@ struct FlowchartDiagramBuilder {
         case .classAssignment(let identifiers, let className):
             for identifier in identifiers { classAssignments.append((identifier, className)) }
         case .nodeStyle(let identifier, let declarations):
+            addNodeNamedByStyle(identifier)
             let (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
             nodeStyleStatements.append((identifier, style))
             if hasUnappliedDeclaration { countUnappliedStatement() }
@@ -241,6 +242,17 @@ struct FlowchartDiagramBuilder {
             linkStyleStatements.append((indices, style))
             if hasUnappliedDeclaration { countUnappliedStatement() }
         }
+    }
+
+    /// `style X …` adds X as a node when nothing has named it yet, as Pele's database does (its style statement calls
+    /// `addVertex`), without making it a member of an open group, as Pele's parser lists no member for a style statement.
+    /// A group's own identifier is left to the group, and past the node limit nothing is added (the style is then unapplied).
+    private mutating func addNodeNamedByStyle(_ identifier: String) {
+        guard nodeIndexByIdentifier[identifier] == nil, endedSubgraphIndexByIdentifier[identifier] == nil,
+              !openSubgraphs.contains(where: { group in group.writtenIdentifier == identifier }),
+              diagram.nodes.count < limits.maximumNodeCount else { return }
+        nodeIndexByIdentifier[identifier] = diagram.nodes.count
+        diagram.nodes.append(FlowchartNode(identifier: identifier, label: DiagramLabel(identifier)))
     }
 
     /// `A:::name`: the node at `index` takes the class.
