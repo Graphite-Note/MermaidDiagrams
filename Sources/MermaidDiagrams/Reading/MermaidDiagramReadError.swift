@@ -5,7 +5,7 @@
  * Description: Why a diagram's text was not read, and what each type's reader found where the syntax broke.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -171,4 +171,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case block(BlockSyntaxProblem)
     /// A problem of an architecture diagram's syntax, or a statement its database refuses.
     case architecture(ArchitectureSyntaxProblem)
+    /// A problem of an agent flow's syntax, or a statement its database refuses.
+    case agentFlow(AgentFlowSyntaxProblem)
 }

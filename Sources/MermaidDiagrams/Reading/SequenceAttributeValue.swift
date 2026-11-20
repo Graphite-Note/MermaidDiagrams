@@ -6,12 +6,12 @@
  *              text and into a truth value, as Mermaid uses `type` and `alias`.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
 /// A value of the YAML a participant's attributes (`@{ … }`) are read as, with the JSON schema Mermaid gives js-yaml.
-indirect enum SequenceAttributeValue: Equatable {
+indirect enum SequenceAttributeValue: Equatable, Sendable {
     case null
     case boolean(Bool)
     case number(Double)

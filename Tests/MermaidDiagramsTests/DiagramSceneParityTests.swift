@@ -7,7 +7,7 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -172,6 +172,8 @@ final class DiagramSceneParityTests: XCTestCase {
         case .venn, .cynefin, .wardleyMap, .eventModel, .railroad, .c4:
             throw NoReferenceRenderer()
         case .block, .architecture:
+            throw NoReferenceRenderer()
+        case .agentFlow:
             throw NoReferenceRenderer()
         }
     }

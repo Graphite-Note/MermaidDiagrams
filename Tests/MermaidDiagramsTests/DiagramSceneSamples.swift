@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -52,6 +52,7 @@ enum DiagramSceneSamples {
             ("c4", try C4Corpus.documentationExamples()),
             ("block", try BlockCorpus.documentationExamples()),
             ("architecture", try ArchitectureCorpus.documentationExamples()),
+            ("agentflow", try AgentFlowCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -92,6 +93,7 @@ enum DiagramSceneSamples {
             ("c4 of 20 systems in 3 boundaries", C4Corpus.generated(shapeCount: 20, boundaryCount: 3, relationCount: 30)),
             ("block grid of 40 blocks", BlockCorpus.grid(blockCount: 40)),
             ("architecture of 20 services", ArchitectureCorpus.generated(serviceCount: 20)),
+            ("agentflow of 6 flows", AgentFlowCorpus.generated(flowCount: 6, nodesPerFlow: 8)),
         ]
     }
 

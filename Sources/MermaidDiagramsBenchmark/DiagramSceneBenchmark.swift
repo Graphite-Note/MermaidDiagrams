@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 19/11/2026
  */
 
@@ -46,6 +46,7 @@ enum DiagramSceneBenchmark {
             (.c4, try C4Corpus.documentationExamples()),
             (.block, try BlockCorpus.documentationExamples()),
             (.architecture, try ArchitectureCorpus.documentationExamples()),
+            (.agentFlow, try AgentFlowCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -121,6 +122,9 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .block, .architecture:
             return laidOutGridDiagram(diagram, typography: typography)
+        case .agentFlow(let agentFlow):
+            let layOut = { try AgentFlowLayoutEngine.layout(agentFlow, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         }
     }
 
@@ -159,7 +163,7 @@ enum DiagramSceneBenchmark {
             return nil
         case .venn, .cynefin, .wardleyMap, .c4:
             return nil
-        case .block, .architecture:
+        case .block, .architecture, .agentFlow:
             return nil
         }
     }

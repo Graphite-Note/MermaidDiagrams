@@ -5,7 +5,7 @@
  * Description: The diagram types drawn, with Pele's name of each and what a screen reader calls one without a title.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -40,6 +40,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
     case c4
     case block
     case architecture
+    case agentFlow
 
     /// Pele's name of the type, which its SVG's root class (`pele-<name>`) and role description carry.
     public var peleName: String {
@@ -73,6 +74,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .c4: "c4"
         case .block: "block"
         case .architecture: "architecture"
+        case .agentFlow: "agentflow"
         }
     }
 
@@ -108,6 +110,7 @@ public enum MermaidDiagramKind: String, CaseIterable, Sendable {
         case .c4: "C4 diagram"
         case .block: "Block diagram"
         case .architecture: "Architecture diagram"
+        case .agentFlow: "Agent flow"
         }
     }
 }
@@ -145,6 +148,7 @@ extension MermaidDiagram {
         case .c4: .c4
         case .block: .block
         case .architecture: .architecture
+        case .agentFlow: .agentFlow
         }
     }
 }

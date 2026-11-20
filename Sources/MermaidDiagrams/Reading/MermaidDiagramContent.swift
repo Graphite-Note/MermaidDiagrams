@@ -5,7 +5,7 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -39,6 +39,7 @@ extension MermaidDiagram {
         case .c4(let diagram): diagram.shapes.isEmpty && diagram.boundaries.count == 1
         case .block(let diagram): diagram.drawsNoBlock
         case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
+        case .agentFlow(let diagram): diagram.graph.nodes.isEmpty
         case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }

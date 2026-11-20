@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -281,4 +281,6 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case casing = "casings"
     /// The text an architecture diagram's service shows in place of an icon.
     case iconText = "icon-text"
+    /// The three dots of an agent flow's collapsed flow.
+    case collapsedMark = "collapsed-mark"
 }

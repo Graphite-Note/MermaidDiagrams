@@ -5,7 +5,7 @@
  * Description: Lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single nodes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -43,6 +43,14 @@ public enum FlowchartLayoutEngine {
         let spacing = diagramSpacing == .compact ? Self.compactSpacing : Self.spacing
         let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText,
                                             wrappingWidth: diagramSpacing == .compact ? compactWrappingWidth : wrappingWidth)
+        return try layout(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing)
+    }
+
+    /// A flowchart already measured, its collapsed groups folded, laid out with `spacing`: in ranks, or in boxes when it
+    /// has subgraphs. A diagram drawn as a flowchart (an agent flow) measures its nodes its own way and is laid out here.
+    static func layout<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
+                                                       font: DiagramFont, limits: MermaidDiagramLimits,
+                                                       spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
         guard diagram.subgraphs.isEmpty else {
             return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing)
         }

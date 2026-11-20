@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.19
+ * Version: 0.20
  * Date: 19/11/2026
  */
 
@@ -42,6 +42,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     case c4(C4Diagram)
     case block(BlockDiagram)
     case architecture(ArchitectureDiagram)
+    case agentFlow(AgentFlowDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -112,6 +113,7 @@ public enum MermaidDiagramReader {
         case "block", "block-beta": return .block(titled(try BlockParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case "architecture", "architecture-beta":
             return .architecture(titled(try ArchitectureParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+        case "agentflow-beta": return .agentFlow(titled(try AgentFlowParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }
