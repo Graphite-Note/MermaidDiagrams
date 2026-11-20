@@ -6,7 +6,7 @@
  *              benchmark's corpora, a generated diagram heavy in series colors per type, and diagrams with styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -55,6 +55,7 @@ enum DiagramSceneSamples {
             ("requirement", try RequirementCorpus.documentationExamples()),
             ("swimlane", try SwimlaneCorpus.documentationExamples()),
             ("usecase", try UseCaseCorpus.documentationExamples()),
+            ("agentflow", try AgentFlowCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -98,6 +99,7 @@ enum DiagramSceneSamples {
             ("requirements of 12 boxes", RequirementCorpus.generated(requirementCount: 12)),
             ("swimlane process of 16 steps", SwimlaneCorpus.process(laneCount: 4, stepCount: 16)),
             ("usecase of 20 use cases in 3 boundaries", UseCaseCorpus.generated(actorCount: 5, useCaseCount: 20, boundaryCount: 3, relationshipCount: 30)),
+            ("agentflow of 6 flows", AgentFlowCorpus.generated(flowCount: 6, nodesPerFlow: 8)),
         ]
     }
 

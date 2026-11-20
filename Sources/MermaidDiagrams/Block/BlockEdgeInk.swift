@@ -3,11 +3,12 @@
  * ------------------------
  * Layer: Core
  * Description: How a block diagram's edge is inked over the composites a style fills, as Pele's overFills and
- *              edgeCasing (src/svg/edges.ts) decide it: plain, on a page-colored casing, or in the fill's own ink.
+ *              edgeCasing (src/svg/edges.ts) decide it: plain, on a page-colored casing, or in the fill's own ink; an
+ *              agent flow's edges over the flows a style fills are inked the same way.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -43,7 +44,18 @@ enum BlockEdgeInk: Equatable {
     static func ink(of edge: BlockLayoutEdge, over fills: [(box: CGRect, color: DiagramColor)]) -> BlockEdgeInk {
         guard !fills.isEmpty else { return .plain }
         let points = sampledPoints(of: edge.path)
-        let tips = [edge.sourceMark?.tip ?? edge.path.start, edge.targetMark?.tip ?? points[points.count - 1]]
+        return ink(along: points, tips: [edge.sourceMark?.tip ?? edge.path.start, edge.targetMark?.tip ?? points[points.count - 1]], over: fills)
+    }
+
+    /// Pele's `fillUnder` then `edgeInk` for a path whose end's mark reaches `targetTip`, or that ends where its path
+    /// does: an agent flow looks at its edges' ends only.
+    static func ink(of path: DiagramPath, targetTip: CGPoint?, over fills: [(box: CGRect, color: DiagramColor)]) -> BlockEdgeInk {
+        guard !fills.isEmpty else { return .plain }
+        let points = sampledPoints(of: path)
+        return ink(along: points, tips: [targetTip ?? points[points.count - 1]], over: fills)
+    }
+
+    private static func ink(along points: [CGPoint], tips: [CGPoint], over fills: [(box: CGRect, color: DiagramColor)]) -> BlockEdgeInk {
         var extent = CGRect.null
         for point in points + tips { extent = extent.union(CGRect(origin: point, size: .zero)) }
         var holder: (area: CGFloat, color: DiagramColor)?

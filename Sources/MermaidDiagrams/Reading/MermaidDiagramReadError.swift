@@ -5,7 +5,7 @@
  * Description: Why a diagram's text was not read, and what each type's reader found where the syntax broke.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 19/11/2026
  */
 
@@ -175,4 +175,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case requirement(RequirementSyntaxProblem)
     /// A problem of a use case diagram's syntax, or statements of it that contradict each other.
     case useCase(UseCaseSyntaxProblem)
+    /// A problem of an agent flow's syntax, or a statement its database refuses.
+    case agentFlow(AgentFlowSyntaxProblem)
 }

@@ -6,7 +6,7 @@
  *              a crash: every documentation example cut short and mutated, deep nesting on a small stack, style and size limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 19/11/2026
  */
 
@@ -67,6 +67,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         case .requirement(let requirement): try RequirementLayoutEngine.layout(requirement, typography: typography, limits: .standard).size
         case .swimlane(let swimlane): SwimlaneLayoutEngine.layout(swimlane, typography: typography).size
         case .useCase(let useCase): try UseCaseLayoutEngine.layout(useCase, typography: typography).size
+        case .agentFlow(let agentFlow): try AgentFlowLayoutEngine.layout(agentFlow, typography: typography).size
         }
     }
 
@@ -83,7 +84,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
              C4Corpus.documentationExamples(), BlockCorpus.documentationExamples(), ArchitectureCorpus.documentationExamples(),
              RequirementCorpus.documentationExamples(),
              SwimlaneCorpus.documentationExamples(),
-             UseCaseCorpus.documentationExamples()].flatMap { examples in examples }
+             UseCaseCorpus.documentationExamples(),
+             AgentFlowCorpus.documentationExamples()].flatMap { examples in examples }
             + DiagramSceneClusterSamples.all.map { _, source in source }
     }
 
@@ -105,8 +107,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
     /// and laid out at a finite size or refused with a typed error. About 30,000 texts.
     func testEveryExampleCutShortOrMutatedIsDrawnOrRefusedWithoutACrash() throws {
         let examples = try Self.allDocumentationExamples()
-        // The 510 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
-        XCTAssertEqual(examples.count, 517)
+        // The 522 documentation examples and the 7 samples of boxes and shapes (DiagramSceneClusterSamples).
+        XCTAssertEqual(examples.count, 529)
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         var generator = SeededGenerator(seed: 0x5EED)
         let insertedBytes = Array("[]{}()|\"'-->:;%`<>#\\".utf8)
@@ -138,7 +140,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         XCTAssertGreaterThan(refusedCount, 1_000)
     }
 
-    /// Groups, composite states, mindmap branches, class namespaces, entity relationship groups, block composites, architecture groups, groups in a swimlane and use case JSON tables nested as deep as the text limit allows are laid out on a secondary
+    /// Groups, composite states, mindmap branches, class namespaces, entity relationship groups, block composites, architecture groups, groups in a swimlane, use case JSON tables and agent flows nested as deep as the text limit allows are laid out on a secondary
     /// thread's stack without overflowing it, and their drawings are past the drawing limit, which a reader refuses.
     func testDeepNestingIsLaidOutOnASecondaryThreadStackAndIsPastTheDrawingLimit() {
         onSecondaryThreadStack {
@@ -160,7 +162,8 @@ final class MermaidDiagramSafetyTests: XCTestCase {
             let json = "usecase-beta\njson P@" + String(repeating: "{\"a\":", count: depth) + "1" + String(repeating: "}", count: depth)
             let swimlaneGroups = "swimlane-beta TD\nsubgraph lane\n" + (0..<depth).map { level in "subgraph s\(level)\n" }.joined() + "a --> b\n"
                 + String(repeating: "end\n", count: depth + 1)
-            for source in [flowchart, states, mindmap, namespaces, entityGroups, boundaries, blocks, groups, swimlaneGroups, json] {
+            let flows = "agentflow-beta TB\n" + (0..<depth).map { level in "flow f\(level)\n" }.joined() + "a --> b\n" + String(repeating: "end\n", count: depth)
+            for source in [flowchart, states, mindmap, namespaces, entityGroups, boundaries, blocks, groups, swimlaneGroups, json, flows] {
                 XCTAssertLessThanOrEqual(source.utf8.count, MermaidDiagramLimits.standard.maximumSourceBytes)
                 guard case .laidOut(let size) = Self.outcome(of: source, typography: typography) else {
                     XCTFail("Laid out: \(source.prefix(40))")

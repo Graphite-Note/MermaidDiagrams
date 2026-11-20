@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.19
+ * Version: 0.20
  * Date: 19/11/2026
  */
 
@@ -46,6 +46,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     /// A swimlane diagram: a flowchart whose top-level groups are lanes, read as a flowchart is.
     case swimlane(FlowchartDiagram)
     case useCase(UseCaseDiagram)
+    case agentFlow(AgentFlowDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -121,6 +122,7 @@ public enum MermaidDiagramReader {
             return .requirement(titled(try RequirementParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case "swimlane-beta": return .swimlane(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "usecase-beta": return .useCase(titled(try UseCaseParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
+        case "agentflow-beta": return .agentFlow(titled(try AgentFlowParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

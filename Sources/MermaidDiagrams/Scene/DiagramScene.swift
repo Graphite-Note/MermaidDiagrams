@@ -6,7 +6,7 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 19/11/2026
  */
 
@@ -293,4 +293,6 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case jsonKey = "json-key"
     case jsonValue = "json-value"
     case boundaryTab = "boundary-tab"
+    /// The three dots of an agent flow's collapsed flow.
+    case collapsedMark = "collapsed-mark"
 }

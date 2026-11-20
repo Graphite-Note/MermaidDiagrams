@@ -5,8 +5,8 @@
  * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -21,6 +21,9 @@ struct FlowchartMeasurement {
     let edgeTexts: [DiagramTextBlock?]
     /// For each node, the indexes of its edges to itself, in their written order.
     let selfLoopEdgeIndices: [[Int]]
+    /// Whether the edges meeting one side of a node spread along it, as a flowchart's do; an agent flow's meet in the
+    /// side's middle, as Pele gives its nodes no span.
+    var spreadsEdgeEnds = true
 
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, wrappingWidth: CGFloat) {
         var nodeTexts: [DiagramTextBlock] = []

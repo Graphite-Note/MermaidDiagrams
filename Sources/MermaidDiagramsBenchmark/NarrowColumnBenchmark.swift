@@ -6,7 +6,7 @@
  *              type's documentation examples, and the Gantt chart's JavaScript date forms.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -69,6 +69,10 @@ enum NarrowColumnBenchmark {
             ("usecase", try UseCaseCorpus.documentationExamples(), { diagram, width in
                 guard case .useCase(let useCase) = diagram else { return false }
                 return (try? UseCaseLayoutEngine.layout(useCase, typography: typography, fittingWidth: width))?.size.width ?? 0 > 0
+            }),
+            ("agentflow", try AgentFlowCorpus.documentationExamples(), { diagram, _ in
+                guard case .agentFlow(let agentFlow) = diagram else { return false }
+                return (try? AgentFlowLayoutEngine.layout(agentFlow, typography: typography, isTurnedToRunDown: true))?.size.width ?? 0 > 0
             }),
         ]
     }

@@ -6,7 +6,7 @@
  *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 19/11/2026
  */
 
@@ -83,6 +83,7 @@ struct MermaidDiagramsBenchmark {
         try ArchitectureBenchmark.run(typography: typography)
         try LayeredDiagramBenchmarks.run(typography: typography)
         try UseCaseBenchmark.run(typography: typography)
+        try AgentFlowBenchmark.run(typography: typography)
     }
 
     private static func report(_ name: String, sources: [String], typography: DiagramTypography) throws {

@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 19/11/2026
  */
 
@@ -48,6 +48,7 @@ enum DiagramSceneBenchmark {
             (.architecture, try ArchitectureCorpus.documentationExamples()),
             (.requirement, try RequirementCorpus.documentationExamples()),
             (.swimlane, try SwimlaneCorpus.documentationExamples()),
+            (.agentFlow, try AgentFlowCorpus.documentationExamples()),
         ]
         for (kind, sources) in corpora { report(kind, sources: sources, typography: typography) }
     }
@@ -123,12 +124,12 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .block, .architecture:
             return laidOutGridDiagram(diagram, typography: typography)
-        case .requirement, .swimlane, .useCase:
+        case .requirement, .swimlane, .useCase, .agentFlow:
             return laidOutLayeredDiagram(diagram, typography: typography)
         }
     }
 
-    /// A requirement diagram, a swimlane diagram or a use case diagram, the layered types added after the first graphs.
+    /// A requirement diagram, a swimlane diagram, a use case diagram or an agent flow, the layered types added after the first graphs.
     private static func laidOutLayeredDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
         switch diagram {
         case .requirement(let requirement):
@@ -139,6 +140,9 @@ enum DiagramSceneBenchmark {
             return LaidOut { DiagramScene(layout: layout) }
         case .useCase(let useCase):
             let layOut = { try UseCaseLayoutEngine.layout(useCase, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
+        case .agentFlow(let agentFlow):
+            let layOut = { try AgentFlowLayoutEngine.layout(agentFlow, typography: typography) }
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         default:
             return nil
@@ -177,7 +181,7 @@ enum DiagramSceneBenchmark {
         case .kanban, .treeView, .ishikawa, .eventModel, .railroad:
             return laidOutOutlineOrTrackDiagram(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph,
-             .venn, .cynefin, .wardleyMap, .c4, .block, .architecture, .requirement, .swimlane, .useCase:
+             .venn, .cynefin, .wardleyMap, .c4, .block, .architecture, .requirement, .swimlane, .useCase, .agentFlow:
             return nil
         }
     }

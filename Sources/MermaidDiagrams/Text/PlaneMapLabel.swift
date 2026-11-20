@@ -6,8 +6,8 @@
  *              text, wrapped at spaces past a width, and a text of several lines set closer, 1.3 times the size apart.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -28,6 +28,11 @@ enum PlaneMapLabel {
         guard let text, !text.isEmpty else { return nil }
         let label = DiagramLabelDecoder.label(from: text, form: form)
         guard !label.isEmpty else { return nil }
+        return block(label, measurer: measurer, maximumWidth: maximumWidth)
+    }
+
+    /// A label already decoded, measured as `block` measures a text; an empty label has no lines.
+    static func block(_ label: DiagramLabel, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat = unwrappedWidth) -> DiagramTextBlock {
         let block = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
         guard block.lines.count > 1 else { return block }
         let snug = (measurer.fontSize * wrappedLineHeightRatio).rounded()
