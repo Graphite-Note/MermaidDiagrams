@@ -5,7 +5,7 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -42,12 +42,34 @@ enum FlowchartNodeSyntax {
     /// Reads a shape and its text at the cursor, which is right after the identifier, or returns nil and leaves the
     /// cursor where it was when no shape opens there.
     static func readShape(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartNodeDefinition? {
+        if cursor.hasPrefix(propertyOpening) { return try readRectangleWithProperty(&cursor) }
         guard let brackets = shapeBrackets.first(where: { brackets in cursor.hasPrefix(brackets.opening) }) else { return nil }
         let openingLine = cursor.line
         cursor.advance(by: brackets.opening.count)
         let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closings.map(\.text),
                                                                      openingLine: openingLine)
         return FlowchartNodeDefinition(shape: brackets.closings[closingIndex].shape, label: label)
+    }
+
+    private static let propertyOpening = Array("[|".utf8)
+
+    /// `[|borders:lt|text]`, a rectangle with a property written before its text, as Pele's parser reads it
+    /// (`VERTEX_WITH_PROPS_START`, a word, `:`, a word, `|`, then the text up to `]`): the property is read and left, as
+    /// Pele keeps it without drawing it. Written otherwise, it is refused, as Pele refuses it.
+    private static func readRectangleWithProperty(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartNodeDefinition {
+        let openingLine = cursor.line
+        cursor.advance(by: propertyOpening.count)
+        for separator in [MermaidByte.colon, MermaidByte.verticalBar] {
+            let wordStart = cursor.position
+            while let byte = cursor.peek(), byte != separator, !MermaidByte.isSpace(byte), !MermaidByte.endsStatement(byte),
+                  byte != MermaidByte.colon, byte != MermaidByte.verticalBar, byte != MermaidByte.closingBracket { cursor.advance() }
+            guard cursor.position > wordStart, cursor.peek() == separator else {
+                throw .invalidSyntax(line: cursor.line, problem: cursor.isAtEnd ? .unclosedShape(closingText: "]") : .unexpectedText(cursor.excerpt()))
+            }
+            cursor.advance()
+        }
+        let (label, _) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: [Array("]".utf8)], openingLine: openingLine)
+        return FlowchartNodeDefinition(shape: .rectangle, label: label)
     }
 
     /// Whether `@{` follows, which opens a node's (or an edge's) attributes.

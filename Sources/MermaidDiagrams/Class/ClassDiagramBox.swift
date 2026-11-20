@@ -1,8 +1,21 @@
+/**
+ * File: ClassDiagramBox.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: A class's box measured around its text in Pele's measurements, its compartments and where its
+ *              annotations, name and members are placed.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 19/11/2026
+ */
+
 import CoreGraphics
 
 /// A class's box measured around its text, in Pele's measurements: the title compartment (annotations above the
 /// name) 8 points from its top and bottom, then the attributes and the methods, each 6 points from its lines or
-/// 10 points tall when empty, 12 points of padding on each side and 64 points wide at least.
+/// 10 points tall when empty, 12 points of padding on each side and 64 points wide at least. With `hideEmptyMembersBox`, a
+/// class with no member has neither compartment nor divider (Pele's `sections`).
 struct ClassDiagramBox {
     static let titlePadding: CGFloat = 8
     static let sectionPadding: CGFloat = 6
@@ -23,8 +36,9 @@ struct ClassDiagramBox {
     private let attributesHeight: CGFloat
     private let markRowHeight: CGFloat
     private let memberLineHeight: CGFloat
+    private let hasSections: Bool
 
-    init<Measurer: DiagramTextMeasuring>(_ declared: ClassDiagramClass, measurers: ClassDiagramTextMeasurers<Measurer>) {
+    init<Measurer: DiagramTextMeasuring>(_ declared: ClassDiagramClass, measurers: ClassDiagramTextMeasurers<Measurer>, hidesEmptySections: Bool = false) {
         func line(_ text: String, _ measurer: Measurer) -> DiagramTextBlock {
             DiagramTextBlock(label: DiagramLabel(text), measurer: measurer, maximumWidth: .greatestFiniteMagnitude)
         }
@@ -38,8 +52,9 @@ struct ClassDiagramBox {
         memberLineHeight = measurers.members.lineHeight
         let nameHeight = max(name.size.height, (measurers.names.fontSize * Self.nameRowHeightRatio).rounded())
         titleHeight = 2 * Self.titlePadding + CGFloat(annotations.count) * markRowHeight + nameHeight
-        attributesHeight = Self.sectionHeight(lineCount: attributes.count, lineHeight: memberLineHeight)
-        let methodsHeight = Self.sectionHeight(lineCount: methods.count, lineHeight: memberLineHeight)
+        hasSections = !(hidesEmptySections && attributes.isEmpty && methods.isEmpty)
+        attributesHeight = hasSections ? Self.sectionHeight(lineCount: attributes.count, lineHeight: memberLineHeight) : 0
+        let methodsHeight = hasSections ? Self.sectionHeight(lineCount: methods.count, lineHeight: memberLineHeight) : 0
         let widest = (annotations.map(\.size.width) + [name.size.width] + (attributes + methods).map(\.text.size.width)).max() ?? 0
         size = CGSize(width: max(widest + 2 * Self.horizontalPadding, Self.minimumWidth), height: titleHeight + attributesHeight + methodsHeight)
     }
@@ -61,7 +76,7 @@ struct ClassDiagramBox {
         let placedName = centered(name, at: CGPoint(x: frame.midX, y: (y + titleBottom - Self.titlePadding) / 2))
         let methodsTop = titleBottom + attributesHeight
         let members = leftAligned(attributes, top: titleBottom, left: frame.minX) + leftAligned(methods, top: methodsTop, left: frame.minX)
-        return ClassDiagramLayoutClass(frame: frame, dividerYs: [titleBottom, methodsTop], annotations: placedAnnotations, name: placedName, members: members)
+        return ClassDiagramLayoutClass(frame: frame, dividerYs: hasSections ? [titleBottom, methodsTop] : [], annotations: placedAnnotations, name: placedName, members: members)
     }
 
     private func leftAligned(_ lines: [ClassDiagramLayoutMember], top: CGFloat, left: CGFloat) -> [ClassDiagramLayoutMember] {

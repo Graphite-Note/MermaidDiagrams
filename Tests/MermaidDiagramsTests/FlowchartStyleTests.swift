@@ -5,8 +5,8 @@
  * Description: Flowchart colors: classDef, class, style and linkStyle read, resolved, laid out and drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 01/11/2026
+ * Version: 0.2
+ * Date: 19/11/2026
  */
 
 import XCTest
@@ -125,7 +125,8 @@ final class FlowchartStyleTests: XCTestCase {
         linkStyle 0 stroke:#f00,color:red
         click A "https://example.com"
         """)
-        XCTAssertEqual(diagram.unappliedStatementCount, 5, "An index out of range, an unknown node, a font size, a link's text color and a click")
+        XCTAssertEqual(diagram.unappliedStatementCount, 4, "An index out of range, a font size, a link's text color and a click")
+        XCTAssertEqual(diagram.nodes.map(\.identifier), ["A", "B", "Nowhere"], "A style names a node into being, as Pele's database adds it")
         XCTAssertEqual(diagram.nodes[0].style, DiagramElementStyle(fill: color(0xFF0000)), "What can be applied is")
         XCTAssertEqual(diagram.edges[0].style, DiagramElementStyle(stroke: color(0xFF0000)))
     }

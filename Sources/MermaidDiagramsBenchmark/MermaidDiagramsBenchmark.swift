@@ -3,10 +3,11 @@
  * ------------------------------------
  * Layer: Benchmark
  * Description: Times reading, laying out and drawing every diagram type on Pele's benchmark inputs and Mermaid's
- *              documentation examples, the memory a layout holds, and what each type's scene and SVG add.
+ *              documentation examples, the memory a layout holds, what each type's scene and SVG add, and the same
+ *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 19/11/2026
  */
 
@@ -17,8 +18,9 @@ import MermaidDiagrams
 
 /// Times reading, laying out and drawing flowcharts on the inputs of Pele's benchmark (`FlowchartCorpus`), and
 /// sequence diagrams on Mermaid's documentation examples as Pele collects them (`SequenceCorpus`), and the memory a
-/// layout holds; then every other type, and last what each type's scene and SVG add (`DiagramSceneBenchmark`). Each measurement repeats its work until about 300 ms have passed (at least 5 and at most
-/// 2,000 runs, as Pele's benchmark does) and prints the median and the 99th percentile of one run, per diagram:
+/// layout holds; then every other type, what each type's scene and SVG add (`DiagramSceneBenchmark`), and last the
+/// same inputs as Pele's own run on this Mac (`PeleComparisonBenchmark`). Each measurement repeats its work until about
+/// 300 ms have passed (at least 5 and at most 2,000 runs, as Pele's benchmark does) and prints the median and the 99th percentile of one run, per diagram:
 /// `swift run -c release --package-path Packages/MermaidDiagrams MermaidDiagramsBenchmark`.
 @main
 struct MermaidDiagramsBenchmark {
@@ -30,8 +32,21 @@ struct MermaidDiagramsBenchmark {
     /// How many layouts are kept while the heap's growth is measured.
     static let keptLayoutCount = 1_000
 
+    /// `--pele-comparison` times only the comparison with Pele; `--check-targets` exits with status 1, after a line
+    /// naming each, when a median misses a target of Graphite's plan (`PeleComparisonBenchmark`).
     static func main() throws {
+        let arguments = Set(CommandLine.arguments.dropFirst())
         let typography = DiagramTypography(font: font)
+        if !arguments.contains("--pele-comparison") { try runEveryType(typography: typography) }
+        let missedTargets = try PeleComparisonBenchmark.run(typography: typography)
+        if arguments.contains("--check-targets") {
+            for missed in missedTargets { print("missed target: \(missed)") }
+            if !missedTargets.isEmpty { exit(1) }
+        }
+    }
+
+    /// The flowchart's cases and memory, then every other type, the scenes and the narrow columns.
+    private static func runEveryType(typography: DiagramTypography) throws {
         print("typography for one font: \(measure(perDiagramOf: 1) { _ = DiagramTypography(font: font) })")
         let documentationExamples = try FlowchartCorpus.documentationExamples()
         let drawable = documentationExamples.filter { source in (try? layout(source, typography)) != nil } // An example the layout refuses is left out.
@@ -120,6 +135,13 @@ struct MermaidDiagramsBenchmark {
     /// Runs `work` until the time budget is spent, and gives the median and the 99th percentile of one run divided
     /// by `diagramCount`, in microseconds.
     static func measure(perDiagramOf diagramCount: Int, _ work: () -> Void) -> String {
+        let timing = timing(perDiagramOf: diagramCount, work)
+        return String(format: "median %.2f µs, p99 %.2f µs (%d runs)", timing.medianMicroseconds, timing.percentile99Microseconds, timing.runCount)
+    }
+
+    /// The median and the 99th percentile of one run of `work` divided by `diagramCount`, in microseconds, over runs until
+    /// the time budget is spent, after one run not counted (Pele's benchmark loop).
+    static func timing(perDiagramOf diagramCount: Int, _ work: () -> Void) -> BenchmarkTiming {
         let clock = ContinuousClock()
         var samples: [Duration] = []
         var spent = Duration.zero
@@ -130,12 +152,13 @@ struct MermaidDiagramsBenchmark {
             spent += elapsed
         }
         samples.sort()
-        func microseconds(_ duration: Duration) -> String {
+        func microseconds(_ duration: Duration) -> Double {
             let seconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-            return String(format: "%.2f µs", seconds * 1e6 / Double(diagramCount))
+            return seconds * 1e6 / Double(diagramCount)
         }
         let percentileIndex = min(samples.count - 1, Int((Double(samples.count) * 0.99).rounded(.up)) - 1)
-        return "median \(microseconds(samples[samples.count / 2])), p99 \(microseconds(samples[percentileIndex])) (\(samples.count) runs)"
+        return BenchmarkTiming(medianMicroseconds: microseconds(samples[samples.count / 2]), percentile99Microseconds: microseconds(samples[percentileIndex]),
+                               runCount: samples.count)
     }
 
     /// The growth of the heap's bytes in use while `keptLayoutCount` layouts of `source` are kept, per layout.

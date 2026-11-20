@@ -5,7 +5,7 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 19/11/2026
  */
 
@@ -83,7 +83,7 @@ struct ClassDiagramMeasurement {
 
     init<Measurer: DiagramTextMeasuring>(diagram: ClassDiagram, measurers: ClassDiagramTextMeasurers<Measurer>) {
         for declared in diagram.classes {
-            let box = ClassDiagramBox(declared, measurers: measurers)
+            let box = ClassDiagramBox(declared, measurers: measurers, hidesEmptySections: diagram.hidesEmptyMemberBoxes)
             nodes.append(.classBox(boxes.count))
             boxes.append(box)
             sizes.append(box.size)

@@ -6,7 +6,7 @@
  *              layout, the whole preparation with and without its narrow layout, painting the scene and writing its SVG.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 19/11/2026
  */
 
@@ -20,7 +20,7 @@ import MermaidDiagrams
 /// written with Pele's variables.
 enum DiagramSceneBenchmark {
     /// One diagram laid out, and how to make its scene from that layout.
-    private struct LaidOut {
+    struct LaidOut {
         let scene: () -> DiagramScene
     }
 
@@ -93,8 +93,9 @@ enum DiagramSceneBenchmark {
         try MermaidDiagramReader.read(source, limits: .standard)
     }
 
-    /// The diagram laid out once, or nil when its layout refuses it.
-    private static func laidOut(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
+    /// The diagram laid out once, or nil when its layout refuses it (also what `PeleComparisonBenchmark` times as reading
+    /// and layout).
+    static func laidOut(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
         switch diagram {
         case .flowchart(let flowchart):
             let layOut = { try FlowchartLayoutEngine.layout(flowchart, typography: typography, limits: .standard) }
