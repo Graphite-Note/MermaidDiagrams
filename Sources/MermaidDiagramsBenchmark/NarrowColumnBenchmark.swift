@@ -6,8 +6,8 @@
  *              type's documentation examples, and the Gantt chart's JavaScript date forms.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 20/11/2026
  */
 
 import CoreGraphics
@@ -62,6 +62,12 @@ enum NarrowColumnBenchmark {
                 return (try? GanttLayoutEngine.layout(chart, typography: typography, now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone,
                                                       limits: .standard, availableWidth: width))?.size.width ?? 0 > 0
             }),
+        ] + (try graphCorpora(typography: typography))
+    }
+
+    /// The graphs that narrow for a column: a C4 diagram and a use case diagram drawn tight, an agent flow turned to run down.
+    private static func graphCorpora(typography: DiagramTypography) throws -> [Corpus] {
+        [
             ("c4", try C4Corpus.documentationExamples(), { diagram, width in
                 guard case .c4(let c4) = diagram else { return false }
                 return (try? C4LayoutEngine.layout(c4, typography: typography, fittingWidth: width))?.size.width ?? 0 > 0
