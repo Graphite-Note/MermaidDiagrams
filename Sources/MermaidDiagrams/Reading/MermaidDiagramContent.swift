@@ -41,6 +41,7 @@ extension MermaidDiagram {
         case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
         case .requirement(let diagram): diagram.requirements.isEmpty && diagram.elements.isEmpty
         case .swimlane(let diagram): diagram.nodes.isEmpty && diagram.subgraphs.isEmpty
+        case .useCase(let diagram): diagram.actors.isEmpty && diagram.useCases.isEmpty && diagram.jsonNodes.isEmpty && diagram.systemBoundaries.isEmpty
         case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false
         }
     }

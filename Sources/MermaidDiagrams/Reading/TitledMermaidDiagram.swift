@@ -38,3 +38,4 @@ extension WardleyMap: TitledMermaidDiagram {}
 extension C4Diagram: TitledMermaidDiagram {}
 extension BlockDiagram: TitledMermaidDiagram {}
 extension ArchitectureDiagram: TitledMermaidDiagram {}
+extension UseCaseDiagram: TitledMermaidDiagram {}

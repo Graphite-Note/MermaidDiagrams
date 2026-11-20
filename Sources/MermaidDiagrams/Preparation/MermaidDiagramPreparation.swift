@@ -91,6 +91,7 @@ struct MermaidDiagramPreparationContext {
         case .architecture(let architecture): prepared(architecture)
         case .requirement(let requirement): try prepared(requirement)
         case .swimlane(let swimlane): prepared(swimlane: swimlane)
+        case .useCase(let useCase): try prepared(useCase)
         }
     }
 

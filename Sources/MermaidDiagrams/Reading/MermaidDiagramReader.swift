@@ -45,6 +45,7 @@ public enum MermaidDiagram: Equatable, Sendable {
     case requirement(RequirementDiagram)
     /// A swimlane diagram: a flowchart whose top-level groups are lanes, read as a flowchart is.
     case swimlane(FlowchartDiagram)
+    case useCase(UseCaseDiagram)
 }
 
 /// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
@@ -119,6 +120,7 @@ public enum MermaidDiagramReader {
         case _ where keyword.hasPrefix("requirement"):
             return .requirement(titled(try RequirementParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case "swimlane-beta": return .swimlane(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case "usecase-beta": return .useCase(titled(try UseCaseParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
         }
     }

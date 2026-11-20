@@ -173,4 +173,6 @@ public enum MermaidSyntaxProblem: Equatable, Sendable {
     case architecture(ArchitectureSyntaxProblem)
     /// A problem of a requirement diagram's own syntax, or more style copies than Pele allows.
     case requirement(RequirementSyntaxProblem)
+    /// A problem of a use case diagram's syntax, or statements of it that contradict each other.
+    case useCase(UseCaseSyntaxProblem)
 }

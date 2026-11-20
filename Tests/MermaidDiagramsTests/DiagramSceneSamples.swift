@@ -54,6 +54,7 @@ enum DiagramSceneSamples {
             ("architecture", try ArchitectureCorpus.documentationExamples()),
             ("requirement", try RequirementCorpus.documentationExamples()),
             ("swimlane", try SwimlaneCorpus.documentationExamples()),
+            ("usecase", try UseCaseCorpus.documentationExamples()),
         ]
         var samples = documentation.flatMap { type, sources in
             sources.enumerated().map { index, source in DiagramSceneSample(name: "\(type) documentation example \(index)", source: source) }
@@ -96,6 +97,7 @@ enum DiagramSceneSamples {
             ("architecture of 20 services", ArchitectureCorpus.generated(serviceCount: 20)),
             ("requirements of 12 boxes", RequirementCorpus.generated(requirementCount: 12)),
             ("swimlane process of 16 steps", SwimlaneCorpus.process(laneCount: 4, stepCount: 16)),
+            ("usecase of 20 use cases in 3 boundaries", UseCaseCorpus.generated(actorCount: 5, useCaseCount: 20, boundaryCount: 3, relationshipCount: 30)),
         ]
     }
 

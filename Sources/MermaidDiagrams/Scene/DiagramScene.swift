@@ -281,7 +281,16 @@ public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
     case casing = "casings"
     /// The text an architecture diagram's service shows in place of an icon.
     case iconText = "icon-text"
-    /// A requirement's or an element's stereotype (`«Requirement»`), and the names of its fields.
+    /// A requirement's or an element's stereotype (`«Requirement»`), a use case diagram's stereotypes (`«Human»`), and the
+    /// names of a requirement's fields.
     case stereotype
     case field
+    /// A use case diagram's actor figure, the slash of a business actor or use case, a JSON table's lines, keys and values,
+    /// and a package boundary's tab.
+    case actorFigure = "actor-figure"
+    case business
+    case jsonLines = "json-lines"
+    case jsonKey = "json-key"
+    case jsonValue = "json-value"
+    case boundaryTab = "boundary-tab"
 }

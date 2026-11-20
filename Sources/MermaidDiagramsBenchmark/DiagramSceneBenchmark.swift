@@ -123,12 +123,12 @@ enum DiagramSceneBenchmark {
             return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         case .block, .architecture:
             return laidOutGridDiagram(diagram, typography: typography)
-        case .requirement, .swimlane:
+        case .requirement, .swimlane, .useCase:
             return laidOutLayeredDiagram(diagram, typography: typography)
         }
     }
 
-    /// A requirement diagram or a swimlane diagram, the layered types added after the first graphs.
+    /// A requirement diagram, a swimlane diagram or a use case diagram, the layered types added after the first graphs.
     private static func laidOutLayeredDiagram(_ diagram: MermaidDiagram, typography: DiagramTypography) -> LaidOut? {
         switch diagram {
         case .requirement(let requirement):
@@ -137,6 +137,9 @@ enum DiagramSceneBenchmark {
         case .swimlane(let swimlane):
             let layout = SwimlaneLayoutEngine.layout(swimlane, typography: typography)
             return LaidOut { DiagramScene(layout: layout) }
+        case .useCase(let useCase):
+            let layOut = { try UseCaseLayoutEngine.layout(useCase, typography: typography) }
+            return (try? layOut()).map { layout in LaidOut { DiagramScene(layout: layout) } }
         default:
             return nil
         }
@@ -174,7 +177,7 @@ enum DiagramSceneBenchmark {
         case .kanban, .treeView, .ishikawa, .eventModel, .railroad:
             return laidOutOutlineOrTrackDiagram(diagram, typography: typography)
         case .flowchart, .stateDiagram, .classDiagram, .sequence, .entityRelationship, .gitGraph,
-             .venn, .cynefin, .wardleyMap, .c4, .block, .architecture, .requirement, .swimlane:
+             .venn, .cynefin, .wardleyMap, .c4, .block, .architecture, .requirement, .swimlane, .useCase:
             return nil
         }
     }
