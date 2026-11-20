@@ -7,7 +7,7 @@
  *              then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -31,7 +31,7 @@ struct UseCaseParser {
 
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> UseCaseDiagram {
         let written = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
-        let text = UseCaseCharacters(units: UseCaseColorSemicolons.dropping(in: written))
+        let text = UseCaseSourcePreparation.prepared(written)
         let tokens: UseCaseTokens
         do {
             tokens = try UseCaseLexer.tokens(of: text)

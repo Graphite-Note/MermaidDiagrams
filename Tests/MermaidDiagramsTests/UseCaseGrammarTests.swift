@@ -6,7 +6,7 @@
  *              parser/usecase.parser.spec.ts checks it, and names the line and the token where the text breaks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -145,8 +145,9 @@ final class UseCaseGrammarTests: XCTestCase {
             }
             XCTAssertEqual(found, "<<", body)
         }
-        XCTAssertEqual(UseCaseReading.problem("usecase-beta\nactor")?.problem, .unexpectedToken(found: "", expected: .name))
-        XCTAssertEqual(UseCaseReading.problem("usecase-beta\nA -->")?.problem, .unexpectedToken(found: "", expected: .name))
+        // Pele's parser reads the text with a line break added at its end, and finds that line break here.
+        XCTAssertEqual(UseCaseReading.problem("usecase-beta\nactor")?.problem, .unexpectedToken(found: "\n", expected: .name))
+        XCTAssertEqual(UseCaseReading.problem("usecase-beta\nA -->")?.problem, .unexpectedToken(found: "\n", expected: .name))
         XCTAssertEqual(UseCaseReading.problem("usecase-beta\nsystemBoundary sb1:::system@{ type: package }\nA\nend")?.problem,
                        .unexpectedToken(found: "@{", expected: .lineEnd))
         XCTAssertEqual(UseCaseReading.problem("%% first\n\nusecase-beta\nactor A\nactor B C")?.line, 5)

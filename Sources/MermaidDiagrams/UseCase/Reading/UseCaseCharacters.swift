@@ -6,7 +6,7 @@
  *              them: word characters, punctuation, blanks, line breaks and keywords.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 19/11/2026
  */
 
@@ -14,6 +14,8 @@
 /// a read is nil, which is in no class.
 struct UseCaseCharacters {
     let units: [UInt16]
+    /// The line breaks taken out with comment lines before the text was read, so that a line is named as written.
+    var removedLineBreaks: [UseCaseRemovedLineBreaks] = []
 
     subscript(index: Int) -> UInt16? { index >= 0 && index < units.count ? units[index] : nil }
 
@@ -31,6 +33,8 @@ struct UseCaseCharacters {
     }
 
     static func isBlank(_ unit: UInt16?) -> Bool { unit == 0x20 || unit == 0x09 }
+
+    static let lineFeed: UInt16 = 0x0A
 
     static func isLineBreak(_ unit: UInt16?) -> Bool { unit == 0x0A || unit == 0x0D }
 
@@ -111,8 +115,14 @@ struct UseCaseCharacters {
         }
     }
 
-    /// The 1-based line of `offset`, counting a line feed, a carriage return, or both together, as one line break.
+    /// The 1-based line of `offset` in the text as written: counting a line feed, a carriage return, or both together,
+    /// as one line break, and the line breaks taken out with comment lines before it.
     func line(of offset: Int) -> Int {
+        let line = lineInText(of: offset)
+        return line + (removedLineBreaks.last { removal in removal.line <= line }?.count ?? 0)
+    }
+
+    private func lineInText(of offset: Int) -> Int {
         var line = 1
         var index = 0
         let end = min(offset, units.count)
