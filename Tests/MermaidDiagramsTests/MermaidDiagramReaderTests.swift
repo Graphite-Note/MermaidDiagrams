@@ -5,7 +5,7 @@
  * Description: Reading Mermaid text: front matter, comments, directives and the diagram type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.12
+ * Version: 0.13
  * Date: 19/11/2026
  */
 
@@ -100,7 +100,7 @@ final class MermaidDiagramReaderTests: XCTestCase {
         for (source, keyword) in [("radar\naxis a", "radar"), ("packet-alpha", "packet-alpha"), ("treemap-x", "treemap-x"), ("infos", "infos")] {
             XCTAssertEqual(readError(source), .unsupportedDiagramType(keyword: keyword), source)
         }
-        XCTAssertEqual(MermaidDiagramKind.allCases.count, 29)
+        XCTAssertEqual(MermaidDiagramKind.allCases.count, 30)
     }
 
     func testADirectiveWrittenOverSeveralLinesInsideASimpleChartIsSkipped() throws {
@@ -162,5 +162,12 @@ final class MermaidDiagramReaderTests: XCTestCase {
         XCTAssertEqual(try BlockReading.block("---\ntitle: Grid\n---\nblock-beta\n  a").title, "Grid")
         XCTAssertEqual(readError("block:x\n  a"), .invalidSyntax(line: 1, problem: .block(.expectedKeyword)))
         XCTAssertEqual(readError("blocks\n  a"), .unsupportedDiagramType(keyword: "blocks"))
+    }
+
+    func testTheAgentFlowKeywordReadsItsType() throws {
+        XCTAssertEqual(try AgentFlowReading.diagram("%% agents\nagentflow-beta TB\n  a --> b").vertices.count, 2)
+        XCTAssertEqual(try AgentFlowReading.diagram("---\ntitle: Agents\n---\nagentflow-beta\n  a").title, "Agents")
+        XCTAssertEqual(readError("agentflow TB\n  a"), .unsupportedDiagramType(keyword: "agentflow"))
+        XCTAssertEqual(MermaidDiagramKind.agentFlow.peleName, "agentflow")
     }
 }

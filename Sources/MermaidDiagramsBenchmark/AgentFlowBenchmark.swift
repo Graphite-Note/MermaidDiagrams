@@ -20,7 +20,7 @@ enum AgentFlowBenchmark {
         let cases: [(name: String, sources: [String])] = [
             ("agentflow documentation examples", try AgentFlowCorpus.documentationExamples()),
             ("agentflow, 6 flows of 8 nodes", [AgentFlowCorpus.generated(flowCount: 6, nodesPerFlow: 8)]),
-            ("agentflow, 40 flows of 20 nodes", [AgentFlowCorpus.generated(flowCount: 40, nodesPerFlow: 20)]),
+            ("agentflow, 30 flows of 18 nodes", [AgentFlowCorpus.generated(flowCount: 30, nodesPerFlow: 18)]),
         ]
         for (name, sources) in cases { try report(name, sources: sources, typography: typography) }
         let generated = try read(AgentFlowCorpus.generated(flowCount: 6, nodesPerFlow: 8))

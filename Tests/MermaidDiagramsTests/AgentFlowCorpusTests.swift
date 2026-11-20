@@ -41,6 +41,22 @@ final class AgentFlowCorpusTests: XCTestCase {
         }
     }
 
+    /// Edges to a node's own flow, loops, styles, connectors and flows running across, each laid out soundly.
+    func testFeatureSamplesAreLaidOutSoundly() throws {
+        let samples = [
+            ("held", "agentflow-beta TB\n  flow f[\"Pipeline\"]\n    a[\"Plan\"] --> b[\"Act\"]\n    a --> f\n    f --> b\n  end\n  b --> b"),
+            ("styled", "agentflow-beta LR\n  classDef hot fill:#e45756,color:#ffffff\n  flow f[\"Styled\"]\n    a[\"Hot\"]:::hot -- yes --> b[\"Plain\"]\n  end\n"
+                + "  style f fill:#eeeeff,stroke:#3333aa\n  b --x c[\"Fail\"]\n  connector api[\"API\"]\n  c -.- api\n  linkStyle 0 stroke:#3333aa,stroke-width:3px"),
+            ("across", "agentflow-beta LR\n  flow one[\"One\"]\n    direction TB\n    a --> b\n  end\n  flow two[\"Two\"]\n    c --> d\n  end\n  one --> two"),
+        ]
+        for (name, source) in samples {
+            let diagram = try AgentFlowReading.diagram(source)
+            let layout = try AgentFlowLayoutEngine.layout(diagram, typography: typography)
+            assertSound(layout, diagram: diagram, source: source)
+            PlaneMapPictures.write(DiagramScene(layout: layout), named: "agentflow-\(name)")
+        }
+    }
+
     /// Every node and flow on the page; nodes apart from each other; each node and flow inside the flow holding it.
     private func assertSound(_ layout: AgentFlowLayout, diagram: AgentFlowDiagram, source: String, file: StaticString = #filePath, line: UInt = #line) {
         let page = CGRect(origin: .zero, size: layout.size).insetBy(dx: -0.5, dy: -0.5)

@@ -134,7 +134,7 @@ final class MermaidDiagramSafetyTests: XCTestCase {
         XCTAssertGreaterThan(refusedCount, 1_000)
     }
 
-    /// Groups, composite states, mindmap branches, class namespaces, entity relationship groups, block composites and architecture groups nested as deep as the text limit allows are laid out on a secondary
+    /// Groups, composite states, mindmap branches, class namespaces, entity relationship groups, block composites, architecture groups and agent flows nested as deep as the text limit allows are laid out on a secondary
     /// thread's stack without overflowing it, and their drawings are past the drawing limit, which a reader refuses.
     func testDeepNestingIsLaidOutOnASecondaryThreadStackAndIsPastTheDrawingLimit() {
         onSecondaryThreadStack {
