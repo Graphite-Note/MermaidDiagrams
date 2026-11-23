@@ -108,99 +108,20 @@ drawings.
 ## Mermaid's flowchart specs
 
 `FlowchartSpecDifferentialTests` reads every text Mermaid's flowchart specs parse (`pele-flowchart-compat.json`,
-recorded from Pele's ports in `tests/compat/flowchart`) and compares the flowchart with Pele's database. Each text that
-differs is listed by its index in that file, what differs (`FlowchartSpecComparison`) and why.
+recorded from Pele's ports in `tests/compat/flowchart`) and compares the flowchart with Pele's database, each of Pele's
+texts as its label layout draws it (`PeleDrawnText`: broken at `<br>`, `\n` and line breaks, trimmed, a Markdown string
+without its emphasis markers). Each text that differs is listed by its index in that file, what differs
+(`FlowchartSpecComparison`) and why.
 
 | Reason | What differs |
 |---|---|
-| identifier-characters | Pele's identifiers run over every token its grammar's `idString` takes (letters, digits, `!"#$%&'*+.` `` ` `` `?\_/`, `-` not before `>`, `-` or `.`, `,`, `:`, `&`, `*`, flowchart/parser.ts `ID` and lexer.ts `NODE_CHAR`), so `a.graph.node`, `node-graph`, `#node` and `odd-` are identifiers; the package reads letters, digits, `_`, characters beyond ASCII and a `-` before one of them (`MermaidTextCursor.readIdentifier`) and refuses the rest. |
-| text-brackets | Pele refuses `(`, `)` and `"` inside a square or round node's text (`A[This is a () in text]`), as Mermaid's specs expect; the package reads them as text. |
 | yaml-block-scalar | A node's `@{ … }` with a YAML block scalar (`label:`, a vertical bar and indented lines) is read by Pele's YAML reader; the package's attribute reader takes one line per value and refuses it. |
 | edge-identifier-and-quotes | `A id1@-->B` (an edge id after a space) and a single-quoted `shape: 'rect'` are read by Pele; the package refuses the line. |
-| markdown-text | A Markdown string's label: the package keeps its text as styled spans and the comparison strips Pele's marks, so a string with a line break or `*` inside words differs in what is compared, not in what is drawn (not traced further). |
-| spaces-in-text | `Chimpansen hoppar åäö  <br> -  ÅÄÖ`: the node's text differs in its spaces around the line break (not traced further). |
-| trailing-spaces-group | `subgraph myTitle   ` (spaces before the line's end) is a title without an identifier for Pele (`subGraph0` titled `myTitle`); the package takes `myTitle` as the identifier. |
 
 | Text | Differs in | Reason |
 |---|---|---|
 | 66 | refused | edge-identifier-and-quotes |
-| 345 | node texts, edge texts | markdown-text |
-| 346 | node texts, edge texts | markdown-text |
 | 366 | refused | yaml-block-scalar |
-| 417 | refused | identifier-characters |
-| 418 | refused | identifier-characters |
-| 419 | refused | identifier-characters |
-| 420 | refused | identifier-characters |
-| 421 | refused | identifier-characters |
-| 422 | refused | identifier-characters |
-| 423 | refused | identifier-characters |
-| 424 | refused | identifier-characters |
-| 425 | refused | identifier-characters |
-| 426 | refused | identifier-characters |
-| 427 | refused | identifier-characters |
-| 428 | refused | identifier-characters |
-| 429 | refused | identifier-characters |
-| 430 | refused | identifier-characters |
-| 431 | refused | identifier-characters |
-| 432 | refused | identifier-characters |
-| 433 | refused | identifier-characters |
-| 434 | refused | identifier-characters |
-| 453 | refused | identifier-characters |
-| 454 | refused | identifier-characters |
-| 455 | refused | identifier-characters |
-| 456 | refused | identifier-characters |
-| 457 | refused | identifier-characters |
-| 458 | refused | identifier-characters |
-| 459 | refused | identifier-characters |
-| 460 | refused | identifier-characters |
-| 461 | refused | identifier-characters |
-| 462 | refused | identifier-characters |
-| 463 | refused | identifier-characters |
-| 464 | refused | identifier-characters |
-| 465 | refused | identifier-characters |
-| 466 | refused | identifier-characters |
-| 467 | refused | identifier-characters |
-| 468 | refused | identifier-characters |
-| 469 | refused | identifier-characters |
-| 470 | refused | identifier-characters |
-| 485 | refused | identifier-characters |
-| 486 | refused | identifier-characters |
-| 487 | refused | identifier-characters |
-| 488 | refused | identifier-characters |
-| 489 | refused | identifier-characters |
-| 490 | refused | identifier-characters |
-| 492 | refused | identifier-characters |
-| 493 | refused | identifier-characters |
-| 494 | refused | identifier-characters |
-| 495 | refused | identifier-characters |
-| 496 | refused | identifier-characters |
-| 498 | refused | identifier-characters |
-| 499 | refused | identifier-characters |
-| 501 | refused | identifier-characters |
-| 502 | refused | identifier-characters |
-| 504 | refused | identifier-characters |
-| 505 | refused | identifier-characters |
-| 506 | refused | identifier-characters |
-| 507 | refused | identifier-characters |
-| 508 | refused | identifier-characters |
-| 510 | refused | identifier-characters |
-| 511 | refused | identifier-characters |
-| 513 | refused | identifier-characters |
-| 514 | refused | identifier-characters |
-| 516 | refused | identifier-characters |
-| 517 | refused | identifier-characters |
-| 518 | refused | identifier-characters |
-| 519 | refused | identifier-characters |
-| 520 | refused | identifier-characters |
-| 522 | refused | identifier-characters |
-| 523 | refused | identifier-characters |
-| 865 | refused | identifier-characters |
-| 869 | node texts | spaces-in-text |
-| 886 | refused | text-brackets |
-| 887 | refused | text-brackets |
-| 888 | refused | text-brackets |
-| 890 | refused | text-brackets |
-| 946 | groups | trailing-spaces-group |
 
 ## Compat files without copied texts
 

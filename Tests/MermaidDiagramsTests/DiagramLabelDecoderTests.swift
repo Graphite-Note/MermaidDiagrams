@@ -4,9 +4,9 @@
  * Layer: Tests
  * Description: How the text written for a node, an edge or a group becomes the lines drawn.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -21,14 +21,22 @@ final class DiagramLabelDecoderTests: XCTestCase {
         XCTAssertEqual(lines("one<br>two<BR/>three<br />four\nfive"), ["one", "two", "three", "four", "five"])
     }
 
-    func testALineBreakTagWithExtraSpacesOrAttributesEndsALineToo() {
-        XCTAssertEqual(lines("first<br  />second<BR\t/>third<br class=\"x\">fourth<br/ >fifth"), ["first", "second", "third", "fourth", "fifth"])
-        XCTAssertEqual(lines("<brand>kept as a tag</brand> word<br"), ["kept as a tag word<br"])
+    /// Pele breaks at `<br\s*\/?>` only (text/label.ts `RE_BREAK`); `<br class="x">` is another `br` tag, dropped
+    /// without a break, and `<br/ >` is no tag at all, so it stays as text.
+    func testALineBreakTagWithSpacesBeforeItsSlashEndsALineAndOtherFormsDoNot() {
+        XCTAssertEqual(lines("first<br  />second<BR\t/>third<br class=\"x\">fourth<br/ >fifth"), ["first", "second", "thirdfourth<br/ >fifth"])
+        XCTAssertEqual(lines("<b>kept</b> word<br"), ["kept word<br"])
     }
 
-    func testOtherTagsAreDroppedAndALessThanSignThatStartsNoTagStays() {
+    func testAWrittenBackslashAndNEndsALine() {
+        XCTAssertEqual(lines("one\\ntwo"), ["one", "two"])
+        XCTAssertEqual(lines("\\node"), ["", "ode"])
+    }
+
+    func testHTMLTagsAreDroppedAndAnythingElseShapedLikeATagStays() {
         XCTAssertEqual(lines("<b>bold</b> and <span style=\"x\">styled</span>"), ["bold and styled"])
         XCTAssertEqual(lines("a < b and c<5"), ["a < b and c<5"])
+        XCTAssertEqual(lines("List<T> and <brand>kept</brand>"), ["List<T> and <brand>kept</brand>"])
     }
 
     func testMermaidAndHTMLEntityCodesBecomeTheirCharacters() {
@@ -47,14 +55,18 @@ final class DiagramLabelDecoderTests: XCTestCase {
     func testAMarkdownStringLosesItsEmphasisMarkersAndKeepsUnderscoresBetweenLetters() {
         XCTAssertEqual(lines("**Bold** and *italic* in snake_case\n__strong__ _Markdown_", form: .markdown),
                        ["Bold and italic in snake_case", "strong Markdown"])
+        // A marker that opens nothing (no text after it, or none of its kind later) is text, as in Pele's `inline`.
+        XCTAssertEqual(lines("2 * 3 and a* b", form: .markdown), ["2 * 3 and a* b"])
     }
 
-    func testRunsOfSpacesBecomeOneAndLinesAreTrimmed() {
-        XCTAssertEqual(lines("  wide \t  gap  "), ["wide gap"])
+    /// Pele trims each line and draws the spaces inside it as written (text/label.ts `layoutLines`).
+    func testLinesAreTrimmedAndTheirSpacesInsideKept() {
+        XCTAssertEqual(lines("  wide \t  gap  "), ["wide \t  gap"])
+        XCTAssertEqual(lines("\n first  <br>  second \n"), ["first", "second"])
     }
 
     func testLiteralTextKeepsItsTagsAndStillBreaksAtBreakTags() {
-        XCTAssertEqual(lines("<b>kept</b> &amp; <i>as written</i><br/>next  line", form: .literal), ["<b>kept</b> & <i>as written</i>", "next line"])
+        XCTAssertEqual(lines("<b>kept</b> &amp; <i>as written</i><br/>next  line", form: .literal), ["<b>kept</b> & <i>as written</i>", "next  line"])
         XCTAssertEqual(lines("plain", form: .literal), ["plain"])
     }
 }

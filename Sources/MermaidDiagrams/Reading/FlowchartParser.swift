@@ -5,8 +5,8 @@
  * Description: Reads a flowchart's statements after its keyword.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 /// Reads a flowchart's statements after its `flowchart` or `graph` keyword: the direction, then chains of nodes and
@@ -104,25 +104,30 @@ struct FlowchartParser {
         }
     }
 
-    /// `A & B & C`: the indexes of the nodes, or nil for an edge's attributes (`e1@{ … }`), which name no node.
+    /// `A & B & C`: the indexes of the nodes, or nil for an edge's attributes (`e1@{ … }`), which name no node. As in
+    /// Pele's `node`, the `&` has spaces on both sides: written against a node it is part of the identifier, and
+    /// after a shape (`A[x]&B`) or before a node (`A &B`) the statement is refused.
     private mutating func readNodeGroup() throws(MermaidDiagramReadError) -> [Int]? {
         var indices: [Int] = []
-        repeat {
-            if !indices.isEmpty {
-                cursor.advance()
-                cursor.skipSpaces()
-            }
+        while true {
             guard let index = try readNode() else { return indices.isEmpty ? nil : indices }
             indices.append(index)
-            cursor.skipSpaces()
-        } while cursor.peek() == MermaidByte.ampersand
-        return indices
+            var lookahead = cursor
+            lookahead.skipSpaces()
+            guard lookahead.position > cursor.position, lookahead.peek() == MermaidByte.ampersand else { return indices }
+            lookahead.advance()
+            guard let next = lookahead.peek(), MermaidByte.isSpace(next) else {
+                throw .invalidSyntax(line: lookahead.line, problem: .unexpectedText(lookahead.excerpt()))
+            }
+            lookahead.skipSpaces()
+            cursor = lookahead
+        }
     }
 
     /// A node: its identifier, then its shape and text or its attributes, then any `:::class`, then any attributes.
     private mutating func readNode() throws(MermaidDiagramReadError) -> Int? {
         let line = cursor.line
-        guard let identifier = cursor.readIdentifier() else {
+        guard let identifier = FlowchartIdentifierSyntax.readIdentifier(&cursor) else {
             throw .invalidSyntax(line: line, problem: cursor.isAtEnd ? .expectedNode : .unexpectedText(cursor.excerpt()))
         }
         if FlowchartNodeSyntax.isAtAttributes(cursor), builder.isEdgeIdentifier(identifier) {
@@ -138,7 +143,7 @@ struct FlowchartParser {
         }
         while cursor.hasPrefix(Self.classMarker) {
             cursor.advance(by: Self.classMarker.count)
-            if let className = cursor.readIdentifier() { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
+            if let className = FlowchartIdentifierSyntax.readIdentifier(&cursor) { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
         }
         // Attributes may also follow a shape in brackets and its classes (`C[Hello]@{ shape: circle }`), as Pele reads them.
         if FlowchartNodeSyntax.isAtAttributes(cursor) { builder.define(nodeAt: index, as: try FlowchartNodeSyntax.readAttributes(&cursor)) }
@@ -162,7 +167,12 @@ struct FlowchartParser {
         skipStatement()
         let written = FlowchartTextSyntax.unquoted(cursor.trimmedText(from: wordsStart, to: cursor.position))
         let title = DiagramLabelDecoder.label(from: written.text, form: written.form)
-        let isOneWord = !written.text.isEmpty && !written.text.contains(where: \.isWhitespace)
+        // Pele's header text runs to the statement's end, spaces included, and names no group when it holds a space
+        // (flowchart/db.ts `addSubGraph`): `subgraph myTitle   ` is titled `myTitle` and named `subGraph0`.
+        var wordsEnd = cursor.position
+        if wordsEnd > wordsStart, cursor.bytes[wordsEnd - 1] == MermaidByte.carriageReturn { wordsEnd -= 1 }
+        let endsWithSpace = wordsEnd > wordsStart && MermaidByte.isWhitespace(cursor.bytes[wordsEnd - 1])
+        let isOneWord = !written.text.isEmpty && !written.text.contains(where: \.isWhitespace) && !endsWithSpace
         builder.openSubgraph(identifier: isOneWord ? written.text : nil, title: title)
     }
 

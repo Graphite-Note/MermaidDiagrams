@@ -6,8 +6,8 @@
  *              flowchart database made of it: refused or read, the direction, the nodes, the edges and the groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -35,7 +35,8 @@ enum FlowchartSpecComparison {
         if diagram.direction != direction(pele.direction) { found.append("direction") }
         let identifiers = diagram.nodes.map(\.identifier)
         if identifiers != (pele.nodes ?? []).map(\.id) { found.append("nodes") }
-        let peleTexts = Dictionary((pele.nodes ?? []).map { node in (node.id, text(node.text)) }, uniquingKeysWith: { first, _ in first })
+        let peleTexts = Dictionary((pele.nodes ?? []).map { node in (node.id, PeleDrawnText.lines(node.text, labelType: node.labelType)) },
+                                   uniquingKeysWith: { first, _ in first })
         if diagram.nodes.contains(where: { node in peleTexts[node.identifier].map { $0 != text(node.label) } ?? false }) {
             found.append("node texts")
         }
@@ -54,7 +55,9 @@ enum FlowchartSpecComparison {
         if zip(mine, peleEdges).contains(where: { edge, pele in marks(of: edge) != pele.type }) { found.append("edge marks") }
         if zip(mine, peleEdges).contains(where: { edge, pele in stroke(of: edge) != pele.stroke }) { found.append("edge strokes") }
         if zip(mine, peleEdges).contains(where: { edge, pele in edge.minimumRankSpan != pele.length }) { found.append("edge lengths") }
-        if zip(mine, peleEdges).contains(where: { edge, pele in text(edge.label ?? DiagramLabel("")) != text(pele.text) }) {
+        if zip(mine, peleEdges).contains(where: { edge, pele in
+            text(edge.label ?? DiagramLabel("")) != PeleDrawnText.lines(pele.text, labelType: pele.labelType)
+        }) {
             found.append("edge texts")
         }
         return found
@@ -106,16 +109,5 @@ enum FlowchartSpecComparison {
     /// A label's lines joined by line feeds.
     private static func text(_ label: DiagramLabel) -> String {
         label.lines.joined(separator: "\n")
-    }
-
-    /// Pele's text as it is drawn: its lines broken at `<br>` and trimmed, a Markdown string without its backticks and
-    /// its bold and italic marks, as the package's label holds it.
-    private static func text(_ peleText: String) -> String {
-        var written = peleText
-        if written.count >= 2, written.hasPrefix("`"), written.hasSuffix("`") {
-            written = String(written.dropFirst().dropLast()).replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "*", with: "")
-        }
-        return written.replacingOccurrences(of: "<br/>", with: "<br>").replacingOccurrences(of: "<br />", with: "<br>")
-            .components(separatedBy: "<br>").map { line in line.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n")
     }
 }

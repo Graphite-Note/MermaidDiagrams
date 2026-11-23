@@ -6,8 +6,8 @@
  *              tests/compat/flowchart/flow-node-data.spec.js that name shapes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -54,7 +54,9 @@ final class FlowchartShapeSyntaxTests: XCTestCase {
         XCTAssertEqual(diagram.nodes.map(\.shape), [.ellipse, .ellipse])
         XCTAssertEqual(diagram.nodes[0].label, DiagramLabel("An ellipse"))
         XCTAssertEqual(diagram.nodes[1].label, DiagramLabel("Closed by a slash"))
-        XCTAssertEqual(FlowchartReading.readError("flowchart LR\nA(-1)"), .invalidSyntax(line: 2, problem: .unclosedShape(closingText: "-)")))
+        // A lone `)` ends an ellipse's text in Pele's lexer, which refuses it there.
+        XCTAssertEqual(FlowchartReading.readError("flowchart LR\nA(-1)"), .invalidSyntax(line: 2, problem: .unexpectedText(")")))
+        XCTAssertEqual(FlowchartReading.readError("flowchart LR\nA(-1"), .invalidSyntax(line: 2, problem: .unclosedShape(closingText: "-)")))
     }
 
     // tests/compat/flowchart/flow-node-data.spec.js: the shape data statements.

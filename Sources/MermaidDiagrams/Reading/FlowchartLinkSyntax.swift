@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartLinkSyntax.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: Reads a flowchart's link: its stroke, its marks, its length, its text and the identifier before it.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// What a link between two nodes says: its stroke, its marks, how many ranks it spans and its text.
@@ -18,12 +29,13 @@ enum FlowchartLinkSyntax {
     /// Reads a link at the cursor, or returns nil and leaves the cursor where it was when none starts there.
     static func readLink(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartLink? {
         var lookahead = cursor
-        var identifier = lookahead.readIdentifier()
-        if identifier == nil || lookahead.peek() != MermaidByte.atSign || lookahead.peek(1) == MermaidByte.openingBrace {
-            lookahead = cursor
-            identifier = nil
-        } else {
-            lookahead.advance()
+        var identifier: String?
+        // Pele's `LINK_ID`: the characters up to the last `@` of the run, which neither `{` nor `"` follows; spaces may
+        // stand between it and the link, as Pele's link pattern starts with any.
+        if let end = FlowchartLexerText(bytes: cursor.bytes).endOfLinkIdentifier(at: cursor.position) {
+            identifier = cursor.text(from: cursor.position, to: end - 1)
+            lookahead.advance(by: end - cursor.position)
+            lookahead.skipSpaces()
         }
         guard var link = try readOperator(&lookahead) else { return nil }
         link.identifier = identifier
@@ -141,20 +153,14 @@ enum FlowchartLinkSyntax {
         return (periodCount + 1, .none, periodCount)
     }
 
-    /// Text between bars after a link: `|text|` or `|"text"|`.
+    /// Text between bars after a link, `|text|` or `|"text"|`, read as the text in a node's brackets is (Pele's lexer
+    /// reads both in its `text` state): a string, plain text without brackets or quotation marks, or both.
     private static func readBarredLabel(_ cursor: inout MermaidTextCursor, openingLine: Int) throws(MermaidDiagramReadError) -> DiagramLabel {
-        let textStart = cursor.position
-        var isInsideQuotation = false
-        while let byte = cursor.peek(), byte != MermaidByte.newline {
-            if byte == MermaidByte.quotationMark { isInsideQuotation.toggle() }
-            if byte == MermaidByte.verticalBar, !isInsideQuotation {
-                let written = FlowchartTextSyntax.unquoted(cursor.trimmedText(from: textStart, to: cursor.position))
-                cursor.advance()
-                return DiagramLabelDecoder.label(from: written.text, form: written.form)
-            }
-            cursor.advance()
+        do {
+            return try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: [[MermaidByte.verticalBar]], openingLine: openingLine).0
+        } catch .invalidSyntax(let line, .unclosedShape) {
+            throw .invalidSyntax(line: line, problem: .unclosedEdgeLabel)
         }
-        throw .invalidSyntax(line: openingLine, problem: .unclosedEdgeLabel)
     }
 
     private static func arrowhead(forMark mark: UInt8, isSourceEnd: Bool) -> FlowchartArrowhead? {

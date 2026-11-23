@@ -1,3 +1,14 @@
+/**
+ * File: XYChartParserTests.swift
+ * ------------------------------
+ * Layer: Tests
+ * Description: The inputs of Mermaid's XY chart specs read as Mermaid's database holds them, and the errors.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -66,9 +77,10 @@ final class XYChartParserTests: XCTestCase {
         XCTAssertEqual(XYChartReading.text(first.xAxis.title), "this is x axis")
         XCTAssertEqual(categories(first), ["category1", "category 2", "category3"])
         let second = try chart("xychart \nx-axis xAxisName    [  \"cat1  with space\"  ,   cat2 , cat3]   \n   ")
-        XCTAssertEqual(categories(second), ["cat1 with space", "cat2", "cat3"], "Runs of spaces are drawn as one, as an SVG shows them")
+        // Pele's label layout trims a text and keeps the spaces inside it, which it measures (text/label.ts).
+        XCTAssertEqual(categories(second), ["cat1  with space", "cat2", "cat3"])
         let third = try chart("xychart \nx-axis xAxisName    [  \"cat1  with space\"  ,   cat2 asdf , cat3]   \n   ")
-        XCTAssertEqual(categories(third), ["cat1 with space", "cat2asdf", "cat3"])
+        XCTAssertEqual(categories(third), ["cat1  with space", "cat2asdf", "cat3"])
     }
 
     func testUnbalancedCategoryBracketsAreErrors() {

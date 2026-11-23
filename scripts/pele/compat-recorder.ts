@@ -7,8 +7,8 @@
  *              differential parser tests. The specs' own assertions are not checked: Pele passes them in its suite.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  *
  * MIT licensed, as the package is. pele-runner.ts loads it for `--compat`.
  */
@@ -21,15 +21,16 @@ interface ParsedText {
   source: string;
   error?: string;
   direction?: string;
-  nodes?: { id: string; text: string; type: string }[];
-  edges?: { start: string; end: string; type: string; stroke: string; length: number; text: string }[];
+  // `labelType` is `markdown` for a Markdown string (its backticks gone from `text`), else `text` or `string`.
+  nodes?: { id: string; text: string; type: string; labelType: string }[];
+  edges?: { start: string; end: string; type: string; stroke: string; length: number; text: string; labelType: string }[];
   subgraphs?: { id: string; title: string; nodes: string[] }[];
 }
 
 interface FlowDatabase {
   direction?: string;
-  nodes: Map<string, { id: string; text?: string; type?: string }>;
-  edges: { start: string; end: string; type?: string; stroke?: string; length?: number; text: string }[];
+  nodes: Map<string, { id: string; text?: string; type?: string; labelType?: string }>;
+  edges: { start: string; end: string; type?: string; stroke?: string; length?: number; text: string; labelType?: string }[];
   subgraphs: { id: string; title: string; nodes: string[] }[];
 }
 
@@ -76,7 +77,12 @@ export async function recordFlowchartSpecs(peleRoot: string): Promise<ParsedText
     }
     const database = parser.yy;
     entry.direction = database.direction?.trim();
-    entry.nodes = [...database.nodes.values()].map((node) => ({ id: node.id, text: node.text ?? '', type: node.type ?? '' }));
+    entry.nodes = [...database.nodes.values()].map((node) => ({
+      id: node.id,
+      text: node.text ?? '',
+      type: node.type ?? '',
+      labelType: node.labelType ?? 'text',
+    }));
     entry.edges = database.edges.map((edge) => ({
       start: edge.start,
       end: edge.end,
@@ -84,6 +90,7 @@ export async function recordFlowchartSpecs(peleRoot: string): Promise<ParsedText
       stroke: edge.stroke ?? '',
       length: edge.length ?? 1,
       text: edge.text,
+      labelType: edge.labelType ?? 'text',
     }));
     entry.subgraphs = database.subgraphs.map((group) => ({ id: group.id, title: group.title, nodes: [...group.nodes] }));
   };

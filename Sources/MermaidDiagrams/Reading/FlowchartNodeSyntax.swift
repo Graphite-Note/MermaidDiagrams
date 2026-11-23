@@ -5,8 +5,8 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -47,11 +47,21 @@ enum FlowchartNodeSyntax {
         let openingLine = cursor.line
         cursor.advance(by: brackets.opening.count)
         let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closings.map(\.text),
-                                                                     openingLine: openingLine)
+                                                                     state: textState(after: brackets.opening), openingLine: openingLine)
         return FlowchartNodeDefinition(shape: brackets.closings[closingIndex].shape, label: label)
     }
 
     private static let propertyOpening = Array("[|".utf8)
+
+    /// The lexer state Pele reads the text after `opening` in: a trapezoid's after `[/` and `[\`, an ellipse's after
+    /// `(-`, plain text's after every other bracket.
+    private static func textState(after opening: [UInt8]) -> FlowchartTextState {
+        switch String(decoding: opening, as: UTF8.self) {
+        case "[/", "[\\": .trapezoid
+        case "(-": .ellipse
+        default: .text
+        }
+    }
 
     /// `[|borders:lt|text]`, a rectangle with a property written before its text, as Pele's parser reads it
     /// (`VERTEX_WITH_PROPS_START`, a word, `:`, a word, `|`, then the text up to `]`): the property is read and left, as

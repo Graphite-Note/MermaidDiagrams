@@ -5,8 +5,8 @@
  * Description: Collects a flowchart as its statements are read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 /// Collects a flowchart as its statements are read: nodes by identifier, edges within the limits, and the groups open
@@ -69,7 +69,7 @@ struct FlowchartDiagramBuilder {
         } else {
             guard diagram.nodes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
             index = diagram.nodes.count
-            diagram.nodes.append(FlowchartNode(identifier: identifier, label: DiagramLabel(identifier)))
+            diagram.nodes.append(FlowchartNode(identifier: identifier, label: Self.defaultLabel(identifier)))
             nodeIndexByIdentifier[identifier] = index
         }
         if !openSubgraphs.isEmpty { openSubgraphs[openSubgraphs.count - 1].add(memberName: identifier) }
@@ -252,7 +252,13 @@ struct FlowchartDiagramBuilder {
               !openSubgraphs.contains(where: { group in group.writtenIdentifier == identifier }),
               diagram.nodes.count < limits.maximumNodeCount else { return }
         nodeIndexByIdentifier[identifier] = diagram.nodes.count
-        diagram.nodes.append(FlowchartNode(identifier: identifier, label: DiagramLabel(identifier)))
+        diagram.nodes.append(FlowchartNode(identifier: identifier, label: Self.defaultLabel(identifier)))
+    }
+
+    /// The label of a node written without text: its identifier, drawn as Pele draws a vertex's text, which is its
+    /// identifier (flowchart/db.ts `addVertex`), through the label layout, so `\node` breaks at its `\n` there too.
+    private static func defaultLabel(_ identifier: String) -> DiagramLabel {
+        DiagramLabelDecoder.label(from: identifier, form: .plain)
     }
 
     /// `A:::name`: the node at `index` takes the class.

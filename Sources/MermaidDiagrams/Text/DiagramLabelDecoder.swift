@@ -4,14 +4,18 @@
  * Layer: Core
  * Description: Turns the text written for a node, an edge or a group into the lines drawn.
  *
- * Authors: Félix Chevalier
- * Version: 0.4
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
-/// Turns the text written for a node, an edge or a group into the plain lines that are drawn: `<br>` and line breaks
-/// end lines, other HTML tags are dropped, Mermaid's entity codes (`#quot;`, `#9829;`) and HTML's (`&lt;`) become
-/// their characters, a Markdown string loses its emphasis markers, and runs of spaces become one.
+import Foundation
+
+/// Turns the text written for a node, an edge or a group into the plain lines that are drawn, as Pele's label layout
+/// does (text/label.ts `layoutLines`): `<br>`, a written `\n` and line breaks end lines, other HTML tags are dropped
+/// (`DiagramLabelMarkup`), Mermaid's entity codes (`#quot;`, `#9829;`) and HTML's (`&lt;`) become
+/// their characters, a Markdown string loses its emphasis markers, and each line loses the spaces at its ends, as Pele's
+/// `layoutLines` trims each part (text/label.ts); spaces inside a line stay as written, as Pele draws them.
 enum DiagramLabelDecoder {
     /// How the text was written: plain or quoted, or as a Markdown string (`"`…`"`).
     enum Form {
@@ -22,13 +26,16 @@ enum DiagramLabelDecoder {
     }
 
     static func label(from rawText: String, form: Form) -> DiagramLabel {
-        // Most text is one plain line: nothing to break, drop, decode or collapse.
+        // Most text is one plain line: nothing to break, drop, decode or trim.
         if form != .markdown, isOnePlainLine(rawText) { return DiagramLabel(lines: [rawText]) }
         var lines: [String] = []
-        for writtenLine in lineBreakSeparated(rawText) {
-            var line = form == .literal ? writtenLine : withoutTags(writtenLine)
-            if form == .markdown { line = withoutEmphasisMarkers(line) }
-            lines.append(collapsingSpaces(decodingEntities(line)))
+        // Pele trims the whole text first, then each of its lines.
+        for writtenLine in lineBreakSeparated(trimmingSpaces(rawText)) {
+            // Pele trims each part before its tags, emphasis and entities are read, so `&nbsp;` at an end stays.
+            var line = trimmingSpaces(writtenLine)
+            if form != .literal { line = DiagramLabelMarkup.withoutTags(line) }
+            if form == .markdown { line = DiagramLabelMarkup.withoutEmphasisMarkers(line) }
+            lines.append(decodingEntities(line))
         }
         return DiagramLabel(lines: lines)
     }
@@ -39,7 +46,8 @@ enum DiagramLabelDecoder {
         var followsSpace = true
         for byte in text.utf8 {
             switch byte {
-            case UInt8(ascii: "<"), UInt8(ascii: "&"), UInt8(ascii: "#"), UInt8(ascii: "\n"), UInt8(ascii: "\r"), UInt8(ascii: "\t"): return false
+            case UInt8(ascii: "<"), UInt8(ascii: "&"), UInt8(ascii: "#"), UInt8(ascii: "\n"), UInt8(ascii: "\r"), UInt8(ascii: "\t"),
+                 UInt8(ascii: "\\"): return false
             case UInt8(ascii: " "):
                 if followsSpace { return false }
                 followsSpace = true
@@ -49,7 +57,8 @@ enum DiagramLabelDecoder {
         return !followsSpace || text.isEmpty
     }
 
-    /// The text split at `<br>`, `<br/>`, `<br />` (in any case) and at line breaks.
+    /// The text split where Pele's `RE_BREAK` (`/<br\s*\/?>|\\n|\n/gi`, text/label.ts) splits it: at `<br>`, `<br/>`,
+    /// `<br />` (in any case), at a written `\n` (a backslash and an `n`) and at line breaks.
     private static func lineBreakSeparated(_ text: String) -> [String] {
         var lines: [String] = []
         var current = ""
@@ -59,6 +68,10 @@ enum DiagramLabelDecoder {
                 lines.append(current)
                 current = ""
                 scalars = scalars.dropFirst()
+            } else if scalar == "\\", scalars.dropFirst().first == "n" {
+                lines.append(current)
+                current = ""
+                scalars = scalars.dropFirst(2)
             } else if scalar == "<", let length = lineBreakTagLength(in: scalars) {
                 lines.append(current)
                 current = ""
@@ -72,59 +85,21 @@ enum DiagramLabelDecoder {
         return lines
     }
 
-    /// The length of a `<br>` tag at the start of `scalars`, or nil when it is not one: `<br`, in any case, then a `>`,
-    /// or a space or a `/` and whatever else is written inside the tag (`<br />`, `<br  />`, `<br class="x">`) up to the
-    /// `>`. `<brand>` is another tag.
+    /// The length of a `<br>` tag at the start of `scalars`, or nil when it is not one: `<br`, in any case, any white
+    /// space, an optional `/` and `>` (`<br>`, `<br/>`, `<br  />`). `<brand>` and `<br class="x">` are other tags, which
+    /// are dropped without breaking the line, as Pele's `inline` drops them.
     private static func lineBreakTagLength(in scalars: Substring.UnicodeScalarView.SubSequence) -> Int? {
         let nameLength = 3
         guard String(String.UnicodeScalarView(scalars.prefix(nameLength))).lowercased() == "<br" else { return nil }
-        let afterName = scalars.index(scalars.startIndex, offsetBy: nameLength)
-        guard let next = scalars[afterName...].first, next == ">" || next == "/" || next.properties.isWhitespace else { return nil }
-        guard let closing = scalars[afterName...].firstIndex(of: ">") else { return nil }
-        return scalars.distance(from: scalars.startIndex, to: closing) + 1
+        var rest = scalars.dropFirst(nameLength)
+        while let next = rest.first, next.properties.isWhitespace { rest = rest.dropFirst() }
+        if rest.first == "/" { rest = rest.dropFirst() }
+        guard rest.first == ">" else { return nil }
+        return scalars.distance(from: scalars.startIndex, to: rest.startIndex) + 1
     }
 
-    /// The line without HTML tags: a `<` followed by a letter or `/` up to the next `>`. A `<` that starts no tag, as in
-    /// `a < b`, stays.
-    private static func withoutTags(_ line: String) -> String {
-        guard line.contains("<") else { return line }
-        var result = String.UnicodeScalarView()
-        var scalars = line.unicodeScalars[...]
-        while let scalar = scalars.first {
-            if scalar == "<", let next = scalars.dropFirst().first, next == "/" || next.properties.isAlphabetic,
-               let closing = scalars.firstIndex(of: ">") {
-                scalars = scalars[scalars.index(after: closing)...]
-                continue
-            }
-            result.append(scalar)
-            scalars = scalars.dropFirst()
-        }
-        return String(result)
-    }
-
-    /// The line without `*` and without the `_` that open or close emphasis; an underscore between two letters or
-    /// digits, as in `snake_case`, is text.
-    private static func withoutEmphasisMarkers(_ line: String) -> String {
-        let characters = Array(line)
-        var result = ""
-        for (index, character) in characters.enumerated() {
-            if character == "*" { continue }
-            if character == "_" {
-                let isBetweenWordCharacters = index > 0 && index + 1 < characters.count
-                    && isWordCharacter(characters[index - 1]) && isWordCharacter(characters[index + 1])
-                if !isBetweenWordCharacters { continue }
-            }
-            result.append(character)
-        }
-        return result
-    }
-
-    private static func isWordCharacter(_ character: Character) -> Bool {
-        character.isLetter || character.isNumber
-    }
-
-    private static func collapsingSpaces(_ line: String) -> String {
-        line.split(whereSeparator: { character in character == " " || character == "\t" }).joined(separator: " ")
+    private static func trimmingSpaces(_ line: String) -> String {
+        line.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The line with each entity code replaced by its character: `#name;` and `#123;` (Mermaid's), `&name;`, `&#123;`
