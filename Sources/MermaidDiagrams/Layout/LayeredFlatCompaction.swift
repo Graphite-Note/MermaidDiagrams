@@ -3,50 +3,77 @@
  * ---------------------------------
  * Layer: Core
  * Description: Aligns and compacts the blocks of Brandes and Köpf's four alignments (layered.ts position), with one set
- *              of working arrays that the four reuse.
+ *              of working lists that the four reuse, held in two buffers.
  *
  * Authors: Bahey Shalash
  * Version: 0.3
  * Date: 23/11/2026
  */
 
-/// The working arrays of one alignment and its compaction, made once and refilled for each of the four.
-struct LayeredPositioningWork {
-    var root: [Int]
-    var align: [Int]
+/// The working lists of one alignment and its compaction, made once and refilled for each of the four: every list of
+/// integers is a part of one buffer and every list of positions a part of another, so that the four alignments cost two
+/// allocations and their loops write without checks of uniqueness. Every index is a vertex, a block edge (at most one
+/// per vertex) or a place in a list of vertices, all below the vertex count the buffers were made for.
+final class LayeredPositioningWork {
+    private let integers: UnsafeMutableBufferPointer<Int>
+    private let positions: UnsafeMutableBufferPointer<Double>
+    let vertexCount: Int
+    /// Each vertex's block root and the vertex it is aligned to.
+    let root: UnsafeMutableBufferPointer<Int>
+    let align: UnsafeMutableBufferPointer<Int>
     /// Offset of each vertex from its block's root, so that aligned edges meet at their attachment points.
-    var shift: [Double]
+    let shift: UnsafeMutableBufferPointer<Double>
     /// The blocks as a graph: an edge from each block to the next in every rank, as wide as the room the two vertices
     /// need, and each block's edges out. A rank of n vertices gives n - 1 edges: at most one edge per vertex.
-    var edgeCount = 0
-    var edgeFrom: [Int]
-    var edgeTo: [Int]
-    var edgeWidth: [Double]
-    var remainingIn: [Int]
-    var outStart: [Int]
-    var outFill: [Int]
-    var outEdges: [Int]
-    var across: [Double]
-    var topological: [Int] = []
+    private var edgeCount = 0
+    private let edgeFrom: UnsafeMutableBufferPointer<Int>
+    private let edgeTo: UnsafeMutableBufferPointer<Int>
+    private let edgeWidth: UnsafeMutableBufferPointer<Double>
+    private let remainingIn: UnsafeMutableBufferPointer<Int>
+    /// Where each block's edges out start in `outEdges`, with the end of the last after them.
+    private let outStart: UnsafeMutableBufferPointer<Int>
+    private let outFill: UnsafeMutableBufferPointer<Int>
+    private let outEdges: UnsafeMutableBufferPointer<Int>
+    private let across: UnsafeMutableBufferPointer<Double>
+    /// The blocks in topological order, each once.
+    private let topological: UnsafeMutableBufferPointer<Int>
 
     init(vertexCount: Int) {
-        root = [Int](repeating: 0, count: vertexCount)
-        align = [Int](repeating: 0, count: vertexCount)
-        shift = [Double](repeating: 0, count: vertexCount)
-        edgeFrom = [Int](repeating: 0, count: vertexCount)
-        edgeTo = [Int](repeating: 0, count: vertexCount)
-        edgeWidth = [Double](repeating: 0, count: vertexCount)
-        remainingIn = [Int](repeating: 0, count: vertexCount)
-        outStart = [Int](repeating: 0, count: vertexCount + 1)
-        outFill = [Int](repeating: 0, count: vertexCount)
-        outEdges = [Int](repeating: 0, count: vertexCount)
-        across = [Double](repeating: 0, count: vertexCount)
-        topological.reserveCapacity(vertexCount)
+        self.vertexCount = vertexCount
+        let integers = UnsafeMutableBufferPointer<Int>.allocate(capacity: 9 * vertexCount + 1)
+        integers.initialize(repeating: 0)
+        let positions = UnsafeMutableBufferPointer<Double>.allocate(capacity: 3 * vertexCount)
+        positions.initialize(repeating: 0)
+        func integerList(_ index: Int, extra: Int = 0) -> UnsafeMutableBufferPointer<Int> {
+            UnsafeMutableBufferPointer(rebasing: integers[(index * vertexCount)..<((index + 1) * vertexCount + extra)])
+        }
+        func positionList(_ index: Int) -> UnsafeMutableBufferPointer<Double> {
+            UnsafeMutableBufferPointer(rebasing: positions[(index * vertexCount)..<((index + 1) * vertexCount)])
+        }
+        self.integers = integers
+        self.positions = positions
+        root = integerList(0)
+        align = integerList(1)
+        edgeFrom = integerList(2)
+        edgeTo = integerList(3)
+        remainingIn = integerList(4)
+        outFill = integerList(5)
+        outEdges = integerList(6)
+        topological = integerList(7)
+        outStart = integerList(8, extra: 1)
+        shift = positionList(0)
+        edgeWidth = positionList(1)
+        across = positionList(2)
+    }
+
+    deinit {
+        integers.deallocate()
+        positions.deallocate()
     }
 
     /// Aligns each vertex with its median neighbour above (upward) or below, sweeping each rank left to right or right
     /// to left.
-    mutating func align(_ graph: LayeredFlatGraph, conflict: [Bool], isUpward: Bool, isRightward: Bool) {
+    func align(_ graph: LayeredFlatGraph, conflict: [Bool], isUpward: Bool, isRightward: Bool) {
         resetAlignment()
         let starts = isUpward ? graph.predecessorStart : graph.successorStart
         let list = isUpward ? graph.predecessorSegments : graph.successorSegments
@@ -85,8 +112,8 @@ struct LayeredPositioningWork {
     }
 
     /// Every vertex a block of its own.
-    private mutating func resetAlignment() {
-        for vertex in root.indices {
+    private func resetAlignment() {
+        for vertex in 0..<vertexCount {
             root[vertex] = vertex
             align[vertex] = vertex
             shift[vertex] = 0
@@ -95,16 +122,18 @@ struct LayeredPositioningWork {
 
     /// The positions of the present alignment, written to `results` from `base`: its block graph laid out longest path
     /// first, then each block pulled towards its successors.
-    mutating func compact(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool, into results: inout [Double], at base: Int) {
+    func compact(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool, into results: inout [Double], at base: Int) {
         buildBlockGraph(graph, gap: gap, isRightward: isRightward)
-        let vertexCount = graph.vertexCount
-        topological.removeAll(keepingCapacity: true)
+        var topologicalCount = 0
         for vertex in 0..<vertexCount {
             across[vertex] = 0
-            if root[vertex] == vertex && remainingIn[vertex] == 0 { topological.append(vertex) }
+            if root[vertex] == vertex && remainingIn[vertex] == 0 {
+                topological[topologicalCount] = vertex
+                topologicalCount += 1
+            }
         }
         var queueIndex = 0
-        while queueIndex < topological.count {
+        while queueIndex < topologicalCount {
             let block = topological[queueIndex]
             queueIndex += 1
             for position in outStart[block]..<outStart[block + 1] {
@@ -112,10 +141,13 @@ struct LayeredPositioningWork {
                 let next = edgeTo[edge]
                 if across[block] + edgeWidth[edge] > across[next] { across[next] = across[block] + edgeWidth[edge] }
                 remainingIn[next] -= 1
-                if remainingIn[next] == 0 { topological.append(next) }
+                if remainingIn[next] == 0 {
+                    topological[topologicalCount] = next
+                    topologicalCount += 1
+                }
             }
         }
-        for block in topological.reversed() {
+        for block in topological[0..<topologicalCount].reversed() {
             var least = Double.infinity
             for position in outStart[block]..<outStart[block + 1] {
                 let edge = outEdges[position]
@@ -129,8 +161,7 @@ struct LayeredPositioningWork {
     }
 
     /// The block graph of the present alignment: an edge from each block to the next in every rank.
-    private mutating func buildBlockGraph(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool) {
-        let vertexCount = graph.vertexCount
+    private func buildBlockGraph(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool) {
         edgeCount = 0
         for vertex in 0..<vertexCount { remainingIn[vertex] = 0 }
         for vertex in 0...vertexCount { outStart[vertex] = 0 }

@@ -105,14 +105,18 @@ struct LayeredFlatCrossingReduction {
             if targetCount < 2 { continue }
             var leaves = 1
             while leaves < southLength { leaves <<= 1 }
-            for index in 0..<(2 * leaves) { tree[index] = 0 }
-            for target in targets[0..<targetCount] {
-                var index = target + leaves
-                tree[index] += 1
-                while index > 1 {
-                    if index & 1 == 0 { total += tree[index + 1] }
-                    index >>= 1
+            let targets = targets
+            // The tree's places are below 2 * leaves, which the tree was made long enough for.
+            tree.withUnsafeMutableBufferPointer { tree in
+                for index in 0..<(2 * leaves) { tree[index] = 0 }
+                for target in targets[0..<targetCount] {
+                    var index = target + leaves
                     tree[index] += 1
+                    while index > 1 {
+                        if index & 1 == 0 { total += tree[index + 1] }
+                        index >>= 1
+                        tree[index] += 1
+                    }
                 }
             }
         }

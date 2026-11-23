@@ -21,7 +21,7 @@ enum LayeredFlatPositioning {
         let conflict = conflictingSegments(graph)
         // The four layouts one after the other, made with one set of working arrays.
         var results = [Double](repeating: 0, count: 4 * vertexCount)
-        var work = LayeredPositioningWork(vertexCount: vertexCount)
+        let work = LayeredPositioningWork(vertexCount: vertexCount)
         for variant in 0..<4 {
             let isRightward = variant & 1 == 1
             work.align(graph, conflict: conflict, isUpward: variant < 2, isRightward: isRightward)
