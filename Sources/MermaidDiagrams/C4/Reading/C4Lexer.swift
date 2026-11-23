@@ -7,8 +7,8 @@
  *              text runs out in each of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a C4 diagram's tokens from its keyword on, on UTF-16 code units as Pele reads them. Every token's text is a
@@ -210,7 +210,7 @@ struct C4Lexer {
         var end = position + 1
         while end < count, C4Characters.isWord(units[end]) { end += 1 }
         guard end - position <= C4TokenKind.longestKeywordLength,
-              let kind = C4TokenKind.keywords[String(decoding: units[position..<end], as: UTF16.self)] else { return false }
+              let kind = C4TokenKind.keywords[UnicodeScalarText.string(utf16: units[position..<end])] else { return false }
         if kind > .deployment { condition = .macro }
         emit(kind, from: position, to: end)
         return true

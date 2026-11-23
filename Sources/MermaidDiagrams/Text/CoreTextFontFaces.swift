@@ -6,7 +6,7 @@
  *              per process, so that a layout or a painting that asks for a size again does not read the font again.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -24,10 +24,18 @@ struct CoreTextFontFaceKey: Hashable {
     let isMonospaced: Bool
 }
 
-/// A Core Text font and the advances of the characters from space (32) to tilde (126) in it.
-struct CoreTextFontFace {
+/// A Core Text font, its key, and the advances of the characters from space (32) to tilde (126) in it; made once per key
+/// and shared, never changed.
+final class CoreTextFontFace {
+    let key: CoreTextFontFaceKey
     let font: CTFont
     let printableASCIIAdvances: [CGFloat]
+
+    init(key: CoreTextFontFaceKey, font: CTFont, printableASCIIAdvances: [CGFloat]) {
+        self.key = key
+        self.font = font
+        self.printableASCIIAdvances = printableASCIIAdvances
+    }
 }
 
 /// The fonts made so far in this process. Making a Core Text font and reading its advances costs more than laying out a
@@ -71,9 +79,10 @@ final class CoreTextFontFaces: @unchecked Sendable {
     /// The width of a Core Text line of `text` in the face of `key`, laid out the first time it is asked for: text beyond
     /// printable ASCII, whose fallback fonts Core Text finds for each line it makes (a tree view's box drawing, a C4
     /// diagram's guillemets), costs microseconds a line.
-    func lineWidth(of text: String, in key: CoreTextFontFaceKey, font: CTFont) -> CGFloat {
+    func lineWidth(of text: String, in face: CoreTextFontFace) -> CGFloat {
+        let font = face.font
         guard text.utf8.count <= Self.longestKeptTextByteCount else { return Self.layOutLineWidth(of: text, font: font) }
-        let widthKey = LineWidthKey(face: key, text: text)
+        let widthKey = LineWidthKey(face: face.key, text: text)
         lock.lock()
         let known = lineWidthsByText[widthKey]
         lock.unlock()
@@ -104,6 +113,6 @@ final class CoreTextFontFaces: @unchecked Sendable {
         var advances = [CGSize](repeating: .zero, count: characters.count)
         CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
         CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
-        return CoreTextFontFace(font: font, printableASCIIAdvances: advances.map(\.width))
+        return CoreTextFontFace(key: key, font: font, printableASCIIAdvances: advances.map(\.width))
     }
 }

@@ -7,8 +7,8 @@
  *              boundaries nested through a counter, not recursion.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a C4 diagram from its keyword on. A statement is a title, an accessibility statement or a macro, each on its
@@ -193,7 +193,7 @@ struct C4Parser {
 
     private func text(at tokenIndex: Int, droppingFirst droppedCount: Int = 0) -> String {
         let start = min(tokens.starts[tokenIndex] + droppedCount, tokens.ends[tokenIndex])
-        return String(decoding: units[start..<tokens.ends[tokenIndex]], as: UTF16.self)
+        return UnicodeScalarText.string(utf16: units[start..<tokens.ends[tokenIndex]])
     }
 
     /// The line the token at `tokenIndex` starts on, in the whole text.

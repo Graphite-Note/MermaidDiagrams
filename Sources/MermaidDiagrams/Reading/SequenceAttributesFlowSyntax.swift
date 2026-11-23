@@ -193,7 +193,7 @@ enum SequenceAttributesFlowSyntax {
         scalar.value < 0x80 ? scalar.value == 0x20 || (0x09...0x0D).contains(scalar.value) : scalar.properties.isWhitespace
     }
 
-    static func string<Scalars: Sequence>(_ text: Scalars) -> String where Scalars.Element == Unicode.Scalar {
+    static func string<Scalars: Collection>(_ text: Scalars) -> String where Scalars.Element == Unicode.Scalar {
         UnicodeScalarText.string(text)
     }
 }

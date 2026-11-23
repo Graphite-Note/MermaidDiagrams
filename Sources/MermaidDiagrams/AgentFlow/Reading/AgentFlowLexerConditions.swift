@@ -6,8 +6,8 @@
  *              accessibility values, the direction after the keyword, clicks and callbacks, and metadata.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension AgentFlowLexer {
@@ -180,7 +180,7 @@ extension AgentFlowLexer {
             } else {
                 var runEnd = index
                 while runEnd < end, Int(units[runEnd]) != Unit.lineFeed { runEnd += 1 }
-                text += String(decoding: units[index..<runEnd], as: UTF16.self)
+                text += UnicodeScalarText.string(utf16: units[index..<runEnd])
                 index = runEnd
             }
         }

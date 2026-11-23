@@ -6,7 +6,7 @@
  *              are read from, and the characters its lexer tests on UTF-16 code units.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -105,7 +105,7 @@ enum C4Characters {
             return ""
         }
         if first == 0, last == units.count - 1 { return text }
-        return String(decoding: units[first...last], as: UTF16.self)
+        return UnicodeScalarText.string(utf16: units[first...last])
     }
 
     static let lineFeed: UInt16 = 10

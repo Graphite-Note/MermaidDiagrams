@@ -6,7 +6,7 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -45,7 +45,7 @@ enum TreeViewBoxDrawingReader {
                 var start = column + 1
                 while start < normalized.count, dashes.contains(normalized[start]) { start += 1 }
                 while start < normalized.count, normalized[start] == space { start += 1 }
-                let name = withoutTrailingWhitespace(String(decoding: normalized[start...], as: UTF16.self))
+                let name = withoutTrailingWhitespace(UnicodeScalarText.string(utf16: normalized[start...]))
                 guard !name.isEmpty else { throw .invalidSyntax(line: line.writtenLine, problem: .treeViewEntryWithoutName) }
                 converted.append(TreeViewSourceLine(text: String(repeating: "    ", count: depth) + name, writtenLine: line.writtenLine))
             } else if normalized.allSatisfy({ unit in boxCharacters.contains(unit) || isWhitespace(unit) }) {
