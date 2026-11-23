@@ -2,11 +2,12 @@
  * File: ProfilingLoop.swift
  * -------------------------
  * Layer: Benchmark
- * Description: Repeats the reading and layout, the whole preparation or the painting of one of the Pele comparison's
- *              cases for a few seconds, so that a sampler (sample, Instruments' Time Profiler) sees only that work.
+ * Description: Repeats the reading and layout, the whole preparation (with its SVG, or with the narrow scene Graphite
+ *              asks for) or the painting of one of the Pele comparison's cases for a few seconds, so that a sampler
+ *              (sample, Instruments' Time Profiler) sees only that work.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -14,13 +15,16 @@ import CoreGraphics
 import Foundation
 import MermaidDiagrams
 
-/// `--profile <case> [reading|preparation|painting] [seconds]`: the case is a name of Pele's benchmark (`tree: 500
-/// nodes`) or a documentation corpus (`treemap-docs`); the work repeats until the seconds (5 by default) are spent,
-/// then prints how many rounds it made.
+/// `--profile <case> [reading|preparation|narrow|painting] [seconds]`: the case is a name of Pele's benchmark (`tree: 500
+/// nodes`) or a documentation corpus (`treemap-docs`); `preparation` prepares without a narrow scene and writes the SVG,
+/// as the comparison with Pele times it, and `narrow` prepares with the narrow scene for Graphite's narrowest column and
+/// writes no SVG, as Graphite prepares; the work repeats until the seconds (5 by default) are spent, then prints how
+/// many rounds it made.
 enum ProfilingLoop {
     enum Work: String {
         case reading
         case preparation
+        case narrow
         case painting
     }
 
@@ -64,6 +68,14 @@ enum ProfilingLoop {
                 for source in sources {
                     _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil,
                                                                now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone).svgDocument()
+                }
+            }
+        case .narrow:
+            return {
+                for source in sources {
+                    _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography,
+                                                               narrowestColumnWidth: PreparedMermaidDiagram.standardNarrowestColumnWidth,
+                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
                 }
             }
         case .painting:
