@@ -128,3 +128,22 @@ export function recordPreprocessing(
     }
   });
 }
+
+/** Texts JavaScript's `new Date(text)` reads (V8's ISO and legacy parsers), which Pele's Gantt chart falls back to for a
+ *  start date that does not fit its `dateFormat`; run with TZ=UTC. */
+const dateCases: string[] = [
+  'March 7, 2014', 'March 7 2014', 'Mar 7, 2014 10:30', '7 March 2014', '7 Mar 2014 10:30 PM', 'Fri, 07 Mar 2014 10:00:00 GMT',
+  'Friday, March 7, 2014', '3/7/2014', '3/7/14', '2014/3/7', '2014-3-7', '2014-03-07', '2014-03-07T10:00', '2014-03-07T10:00Z',
+  '2014-03-07 10:00', 'March 2014', '2014', 'Mar 7', '7 Mar', 'March 7, 2014 10:30:15.250', 'Mar 7, 2014 GMT+0100',
+  'Mar 7, 2014 UTC-5', 'Mar 7, 2014 (CET)', 'Mar 7, 2014 EST', 'Sept 7 2014', 'Septem 7 2014', '7.3.2014', '2014 Mar 7',
+  'Mar 32 2014', 'Feb 30, 2014', '12 noon', 'tomorrow', '', '  March 7, 2014  ', 'March 7,2014', 'March,7,2014',
+  '07-Mar-2014', 'Mar-07-2014', '2014-Mar-07', '10:30 March 7 2014', 'March 7 2014 12:00 AM', 'March 7 2014 12:00 PM',
+  '99', '1 2 3', '50/1/1', '1/1/50', '+002014-03-07', 'Mar 7, 2014 10:30 +01:00',
+];
+
+export function recordDates(): { text: string; milliseconds: number | null }[] {
+  return dateCases.map((text) => {
+    const time = new Date(text).getTime();
+    return { text, milliseconds: Number.isNaN(time) ? null : time };
+  });
+}

@@ -6,8 +6,8 @@
  *              chart, as Pele's Sankey renderer applies them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -50,6 +50,28 @@ final class SankeyOptionsTests: XCTestCase {
         XCTAssertEqual(directive.nodeColors, ["Gas": DiagramColor(red: 0, green: 1, blue: 0)], "An entry that is itself a mapping is no color")
         let dotted = try SankeyReading.diagram("---\nconfig:\n  sankey:\n    nodeColors:\n      \"a.b\": red\n---\n" + rows).options
         XCTAssertEqual(dotted.nodeColors, ["a.b": DiagramColor(red: 1, green: 0, blue: 0)], "A name with a dot")
+    }
+
+    /// Pele writes `linkColor` and `nodeColors` into a style (sankey/render.ts `fillStyle`), where the page resolves a CSS
+    /// variable and a color name: a variable of Pele's palette is that role, any other one its fallback.
+    func testCSSVariablesAndColorNamesPaintAsThePageResolvesThem() throws {
+        let accent = try options("linkColor: var(--pele-accent)")
+        XCTAssertEqual(accent.fixedLinkPaint, .accent)
+        XCTAssertEqual(accent.linkColor, .source)
+        XCTAssertEqual(try options("linkColor: \"var(--mine, rebeccapurple)\"").fixedLinkPaint,
+                       .color(DiagramColor(red: 0x66 / 255.0, green: 0x33 / 255.0, blue: 0x99 / 255.0)))
+        XCTAssertNil(try options("linkColor: var(--mine)").fixedLinkPaint)
+        let nodes = try SankeyReading.diagram("---\nconfig:\n  sankey:\n    nodeColors:\n      Coal: var(--pele-series-3)\n      Gas: var(--_c)\n"
+                                              + "      Power: darkorange\n---\n" + rows).options
+        XCTAssertEqual(nodes.nodePaints, ["Coal": .series(2), "Gas": .accent, "Power": .color(DiagramColor(red: 1, green: 140 / 255.0, blue: 0))])
+        XCTAssertEqual(nodes.nodeColors, ["Power": DiagramColor(red: 1, green: 140 / 255.0, blue: 0)])
+        let scene = DiagramScene(layout: try laidOut("nodeColors: {Coal: var(--pele-critical)}; linkColor: var(--pele-muted)"))
+        let fills = scene.shapes.compactMap { shape -> DiagramPaint? in
+            if case .fill(let paint) = shape.painting { return paint }
+            return nil
+        }
+        XCTAssertTrue(fills.contains(.critical))
+        XCTAssertTrue(fills.contains(DiagramPaint.muted.atOpacity(SankeyDrawingParts.bandOpacity)))
     }
 
     func testANodeWithAColorCarriesItAndTheLayoutKeepsTheOptions() throws {

@@ -257,10 +257,10 @@ if (runsCompat) {
 }
 
 if (runsPreprocessing) {
-  const { recordYaml, recordPreprocessing } = await import('./preprocessing-recorder.ts');
+  const { recordYaml, recordPreprocessing, recordDates } = await import('./preprocessing-recorder.ts');
   const { parseYaml } = await import(`${peleRoot}/src/util/yaml.ts`);
   const { preprocess, encodeEntities } = await import(`${peleRoot}/src/preprocess.ts`);
-  const result = { yaml: recordYaml(parseYaml), preprocessing: recordPreprocessing(preprocess, encodeEntities) };
+  const result = { yaml: recordYaml(parseYaml), preprocessing: recordPreprocessing(preprocess, encodeEntities), dates: recordDates() };
   await Deno.writeTextFile(`${outputFolder}/pele-preprocessing.json`, JSON.stringify(result, null, 1) + '\n');
   console.log(`preprocessing: ${result.yaml.length} YAML texts and ${result.preprocessing.length} diagram texts`);
 }

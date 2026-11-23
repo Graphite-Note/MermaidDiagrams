@@ -564,5 +564,199 @@
    "title": null,
    "config": {}
   }
+ ],
+ "dates": [
+  {
+   "text": "March 7, 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 10:30",
+   "milliseconds": 1394188200000
+  },
+  {
+   "text": "7 March 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "7 Mar 2014 10:30 PM",
+   "milliseconds": 1394231400000
+  },
+  {
+   "text": "Fri, 07 Mar 2014 10:00:00 GMT",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "Friday, March 7, 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "3/7/2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "3/7/14",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014/3/7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-3-7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-03-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-03-07T10:00",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "2014-03-07T10:00Z",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "2014-03-07 10:00",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "March 2014",
+   "milliseconds": 1393632000000
+  },
+  {
+   "text": "2014",
+   "milliseconds": 1388534400000
+  },
+  {
+   "text": "Mar 7",
+   "milliseconds": 983923200000
+  },
+  {
+   "text": "7 Mar",
+   "milliseconds": 983923200000
+  },
+  {
+   "text": "March 7, 2014 10:30:15.250",
+   "milliseconds": 1394188215250
+  },
+  {
+   "text": "Mar 7, 2014 GMT+0100",
+   "milliseconds": 1394146800000
+  },
+  {
+   "text": "Mar 7, 2014 UTC-5",
+   "milliseconds": 1394168400000
+  },
+  {
+   "text": "Mar 7, 2014 (CET)",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 EST",
+   "milliseconds": 1394168400000
+  },
+  {
+   "text": "Sept 7 2014",
+   "milliseconds": 1410048000000
+  },
+  {
+   "text": "Septem 7 2014",
+   "milliseconds": 1410048000000
+  },
+  {
+   "text": "7.3.2014",
+   "milliseconds": 1404345600000
+  },
+  {
+   "text": "2014 Mar 7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 32 2014",
+   "milliseconds": null
+  },
+  {
+   "text": "Feb 30, 2014",
+   "milliseconds": 1393718400000
+  },
+  {
+   "text": "12 noon",
+   "milliseconds": null
+  },
+  {
+   "text": "tomorrow",
+   "milliseconds": null
+  },
+  {
+   "text": "",
+   "milliseconds": null
+  },
+  {
+   "text": "  March 7, 2014  ",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7,2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March,7,2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "07-Mar-2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar-07-2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-Mar-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "10:30 March 7 2014",
+   "milliseconds": 1394188200000
+  },
+  {
+   "text": "March 7 2014 12:00 AM",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7 2014 12:00 PM",
+   "milliseconds": 1394193600000
+  },
+  {
+   "text": "99",
+   "milliseconds": 915148800000
+  },
+  {
+   "text": "1 2 3",
+   "milliseconds": 1041465600000
+  },
+  {
+   "text": "50/1/1",
+   "milliseconds": -631152000000
+  },
+  {
+   "text": "1/1/50",
+   "milliseconds": -631152000000
+  },
+  {
+   "text": "+002014-03-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 10:30 +01:00",
+   "milliseconds": 1394184600000
+  }
  ]
 }

@@ -5,8 +5,8 @@
  * Description: A Sankey diagram laid out on a page: bars, bands, labels and title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -27,6 +27,8 @@ public struct SankeyLayout: Equatable, Sendable {
     public let labels: [SankeyLayoutLabel]
     /// How the bands are colored (`SankeyOptions.linkColor`).
     public let linkColor: SankeyLinkColor
+    /// What every band is painted in when `linkColor` names a color or a palette's variable (`SankeyOptions.fixedLinkPaint`).
+    public let fixedLinkPaint: DiagramPaint?
     /// Whether the labels are outlined in the page's color (`SankeyOptions.isOutlined`).
     public let hasOutlinedLabels: Bool
 }
@@ -38,6 +40,8 @@ public struct SankeyLayoutNode: Equatable, Sendable {
     public let frame: CGRect
     /// The color the options give the node (`SankeyOptions.nodeColors`) in place of its series color, or nil.
     public let color: DiagramColor?
+    /// What the options paint the node in (`SankeyOptions.nodePaints`), a color or a palette's role, or nil.
+    public let paint: DiagramPaint?
 }
 
 /// A band from the right side of one bar to the left side of another, its edges S-curves with their control points

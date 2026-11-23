@@ -14,8 +14,8 @@ import Foundation
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
 
-/// `pele-preprocessing.json`: YAML texts as Pele's util/yaml.ts read them, and diagram texts as its preprocess.ts and
-/// encodeEntities left them, each with the error when Pele refused it.
+/// `pele-preprocessing.json`: YAML texts as Pele's util/yaml.ts read them, diagram texts as its preprocess.ts and
+/// encodeEntities left them, each with the error when Pele refused it, and dates as JavaScript's `Date` reads them.
 struct PelePreprocessingResults: Decodable {
     struct YAMLText: Decodable {
         let source: String
@@ -34,8 +34,15 @@ struct PelePreprocessingResults: Decodable {
         let error: String?
     }
 
+    /// A text and the moment V8's `new Date(text)` reads, in milliseconds of Unix time with TZ=UTC; nil for NaN.
+    struct DateText: Decodable {
+        let text: String
+        let milliseconds: Double?
+    }
+
     let yaml: [YAMLText]
     let preprocessing: [DiagramText]
+    let dates: [DateText]
 }
 
 extension PeleResults {

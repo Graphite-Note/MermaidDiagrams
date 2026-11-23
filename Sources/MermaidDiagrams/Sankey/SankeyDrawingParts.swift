@@ -5,8 +5,8 @@
  * Description: A laid-out Sankey diagram's geometry grouped by how it is painted: bands, bars, labels and title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -23,8 +23,12 @@ public struct SankeyDrawingParts {
     public let nodeFills: [CGPath]
     /// The bars of the nodes the options give a color of their own, each in it.
     public let coloredNodeFills: [SankeyColoredFill]
+    /// The bars of the nodes the options paint in a role of the palette, each in it.
+    public let paintedNodeFills: [SankeyPaintedFill]
     /// How the bands are colored, and whether the labels are outlined (`SankeyOptions`).
     public let linkColor: SankeyLinkColor
+    /// What every band is painted in when the options name a color or a palette's variable (`SankeyLayout.fixedLinkPaint`).
+    public let fixedLinkPaint: DiagramPaint?
     public let hasOutlinedLabels: Bool
     /// The nodes' names, in the text color.
     public let names: [DiagramTextBlock]
@@ -43,23 +47,30 @@ public struct SankeyDrawingParts {
     public static let seriesColorCount = DiagramPalette.peleSeries.count
 
     public init(layout: SankeyLayout) {
-        let nodeColors = layout.nodes.map(\.color)
-        bands = layout.links.map { link in SankeyBandDrawing(link: link, sourceColor: nodeColors[link.sourceSeriesIndex], targetColor: nodeColors[link.targetSeriesIndex]) }
+        let nodes = layout.nodes
+        bands = layout.links.map { link in SankeyBandDrawing(link: link, source: nodes[link.sourceSeriesIndex], target: nodes[link.targetSeriesIndex]) }
         let fills = (0..<min(layout.nodes.count, Self.seriesColorCount)).map { _ in CGMutablePath() }
         var coloredFills: [SankeyColoredFill] = []
+        var paintedFills: [SankeyPaintedFill] = []
         for node in layout.nodes {
             let radius = min(Self.barCornerRadius, node.frame.height / 2)
-            if let color = node.color {
+            if let paint = node.paint {
                 let path = CGMutablePath()
                 path.addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
-                coloredFills.append(SankeyColoredFill(path: path, color: color))
+                if let color = node.color {
+                    coloredFills.append(SankeyColoredFill(path: path, color: color))
+                } else {
+                    paintedFills.append(SankeyPaintedFill(path: path, paint: paint))
+                }
             } else {
                 fills[node.seriesIndex % Self.seriesColorCount].addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
             }
         }
         nodeFills = fills
         coloredNodeFills = coloredFills
+        paintedNodeFills = paintedFills
         linkColor = layout.linkColor
+        fixedLinkPaint = layout.fixedLinkPaint
         hasOutlinedLabels = layout.hasOutlinedLabels
         names = layout.labels.map(\.name)
         values = layout.labels.compactMap(\.value)
@@ -73,6 +84,12 @@ public struct SankeyColoredFill {
     public let color: DiagramColor
 }
 
+/// A bar filled in a role of the palette the options name with a CSS variable (`var(--pele-accent)`).
+public struct SankeyPaintedFill {
+    public let path: CGPath
+    public let paint: DiagramPaint
+}
+
 /// A band's outline and the colors of its gradient.
 public struct SankeyBandDrawing {
     /// From the top of its start, an S-curve to the top of its end, down its end, and an S-curve back, the curves'
@@ -83,13 +100,18 @@ public struct SankeyBandDrawing {
     public let endX: CGFloat
     public let sourceSeriesIndex: Int
     public let targetSeriesIndex: Int
-    /// The colors the options give the source and the target, or nil for their series colors.
+    /// The colors the options give the source and the target, or nil for their series colors or a palette's role.
     public let sourceColor: DiagramColor?
     public let targetColor: DiagramColor?
+    /// What the source and the target are painted in: the options' paint, or their series colors.
+    public let sourcePaint: DiagramPaint
+    public let targetPaint: DiagramPaint
 
-    init(link: SankeyLayoutLink, sourceColor: DiagramColor?, targetColor: DiagramColor?) {
-        self.sourceColor = sourceColor
-        self.targetColor = targetColor
+    init(link: SankeyLayoutLink, source: SankeyLayoutNode, target: SankeyLayoutNode) {
+        sourceColor = source.color
+        targetColor = target.color
+        sourcePaint = source.paint ?? .series(link.sourceSeriesIndex)
+        targetPaint = target.paint ?? .series(link.targetSeriesIndex)
         let middleX = (link.startX + link.endX) / 2
         let half = link.halfThickness
         let path = CGMutablePath()

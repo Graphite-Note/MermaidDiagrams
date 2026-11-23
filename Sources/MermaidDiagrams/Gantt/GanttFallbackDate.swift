@@ -6,16 +6,16 @@
  *              dateFormat.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The dates JavaScript's `Date` reads that Mermaid falls back to when a start date does not fit `dateFormat`, among
 /// the forms read here: an ISO date (`2014-01-06`, `2014-01`, `2014`), which JavaScript takes at midnight UTC; an ISO
 /// date and time (`2014-01-06T10:00`, seconds and milliseconds optional), on the wall clock unless `Z` or an offset
-/// follows; and a year, a month and a day of one or two digits apart by `-` or `/` (`2014-1-6`, `202-12-01`), on the
-/// wall clock, a time after a space optional; then what V8's legacy parser reads (`JavaScriptDateReading`: month names, a
-/// day, a year of two or four digits, times with AM or PM, zones).
+/// follows; then what V8's legacy parser reads (`JavaScriptDateReading`: digits apart by `-` or `/` in other widths, as
+/// `2014-1-6` and `3/7/14`, month names with or without commas, as `March 7, 2014`, a day, a year of two or four digits,
+/// times with AM or PM, zones), checked against V8 itself (`JavaScriptDateDifferentialTests`).
 enum GanttFallbackDate {
     /// Mermaid refuses a fallback date whose year is further than this from year 0.
     static let largestYear: Int64 = 10_000
@@ -42,7 +42,9 @@ enum GanttFallbackDate {
         let bytes = Array(text.utf8)
         let timeSeparator = bytes.firstIndex { byte in byte == letterT || byte == MermaidByte.space }
         let dateBytes = Array(bytes[..<(timeSeparator ?? bytes.count)])
-        guard let date = DateFields(dateBytes) else { return nil }
+        // Only ISO 8601's forms here: digits apart by `/` or by `-` in other widths are V8's legacy parser's, which reads
+        // `3/7/14` as month, day and a two-digit year.
+        guard let date = DateFields(dateBytes), date.isISO else { return nil }
         var clock = ClockFields()
         if let timeSeparator {
             guard date.isISO == (bytes[timeSeparator] == letterT), date.hasDay,
