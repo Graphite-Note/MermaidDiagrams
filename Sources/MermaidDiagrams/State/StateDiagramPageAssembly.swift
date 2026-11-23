@@ -5,8 +5,8 @@
  * Description: Puts a placed state diagram on the page: states, transitions, loops, notes and composite boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -185,9 +185,10 @@ struct StateDiagramPageAssembly {
     /// The composite states' boxes, each name along its box's top clear of the transitions where it can be, and a dashed
     /// line between each two concurrent regions of a body.
     mutating func placeComposites(clustered: StateDiagramClusterGraph, placement: LayeredClusterPlacement) {
+        let crossings = FlowchartRoutePointIndex(transitionPoints)
         composites = diagram.composites.indices.map { compositeIndex in
             let frame = placement.clusterFrames[compositeIndex]
-            let title = clustered.titles[compositeIndex].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: transitionPoints) }
+            let title = clustered.titles[compositeIndex].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
             return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[compositeIndex], isTitleCrossed: title?.isCrossed ?? false)
         }
         regionDividers = clustered.regionClusterIndices.flatMap { regionIndices in

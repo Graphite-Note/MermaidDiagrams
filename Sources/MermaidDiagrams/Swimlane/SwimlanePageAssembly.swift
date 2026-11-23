@@ -6,8 +6,8 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -181,10 +181,11 @@ extension SwimlanePageAssembly {
     /// The groups inside lanes, each title along its box's top, clear of the edges where it can be, their depths counted from
     /// the lane they are in.
     private func groupsInsideLanes() -> [FlowchartLayoutCluster] {
+        let crossings = FlowchartRoutePointIndex(edgePoints)
         return diagram.subgraphs.indices.compactMap { subgraph in
             guard graph.nesting.subgraphParents[subgraph] != nil else { return nil }
             let frame = placement.frames[graph.subgraphBoxes[subgraph]]
-            let title = graph.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: edgePoints) }
+            let title = graph.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
             return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: graph.nesting.subgraphDepths[subgraph] - 1,
                                           isTitleCrossed: title?.isCrossed ?? false)
         }

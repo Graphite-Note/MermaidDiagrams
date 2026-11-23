@@ -134,7 +134,8 @@ struct FlowchartPageAssembly {
         let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters + boxCenters,
                                        shapes: diagram.nodes.map { node in node.shape } + Array(repeating: .rectangle, count: boxCenters.count),
                                        shapeSizes: measured.shapeSizes + placement.clusterFrames.map { frame in frame.size },
-                                       keptClear: Self.borderCrossings(of: placement, firstBoxNode: diagram.nodes.count),
+                                       keptClear: FlowchartBorderCrossings.crossings(routes: placement.edgeRoutes, frames: placement.clusterFrames,
+                                                                                 firstBoxNode: diagram.nodes.count),
                                        spreadsEnds: measured.spreadsEdgeEnds)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
@@ -153,30 +154,6 @@ struct FlowchartPageAssembly {
         }
     }
 
-    /// Where edges cross the boxes' borders, by `FlowchartEdgePorts.sideKey` of the box (numbered after the nodes, from
-    /// `firstBoxNode`) and its side, as offsets from the side's middle: an edge that ends at a box keeps clear of them.
-    private static func borderCrossings(of placement: LayeredClusterPlacement, firstBoxNode: Int) -> [Int: [CGFloat]] {
-        let tolerance: CGFloat = 0.01
-        var crossings: [Int: [CGFloat]] = [:]
-        for route in placement.edgeRoutes {
-            for point in route.points.dropFirst().dropLast() {
-                for (box, frame) in placement.clusterFrames.enumerated() {
-                    let alongTop = point.x > frame.minX && point.x < frame.maxX
-                    let alongSide = point.y > frame.minY && point.y < frame.maxY
-                    let side: DiagramSide? = if alongTop && abs(point.y - frame.minY) < tolerance { .top }
-                        else if alongTop && abs(point.y - frame.maxY) < tolerance { .bottom }
-                        else if alongSide && abs(point.x - frame.minX) < tolerance { .left }
-                        else if alongSide && abs(point.x - frame.maxX) < tolerance { .right }
-                        else { nil }
-                    guard let side else { continue }
-                    let offset = side.isHorizontal ? point.x - frame.midX : point.y - frame.midY
-                    crossings[FlowchartEdgePorts.sideKey(node: firstBoxNode + box, side: side), default: []].append(offset)
-                }
-            }
-        }
-        return crossings
-    }
-
     /// An end of a route through boxes: the side of its node or box that its first or last segment leaves or arrives
     /// by, along that segment's flow, and where along the side the route goes next.
     private static func routeEnd(of route: LayeredClusterRoute, edgeIndex: Int, isSourceEnd: Bool, item: Int) -> FlowchartEdgePorts.End {
@@ -191,8 +168,9 @@ struct FlowchartPageAssembly {
 
     /// The groups' boxes, each title along its box's top, clear of the edges where it can be.
     mutating func placeClusters(clustered: FlowchartClusterGraph, placement: LayeredClusterPlacement) {
+        let crossings = FlowchartRoutePointIndex(edgePoints)
         clusters = placement.clusterFrames.enumerated().map { subgraph, frame in
-            let title = clustered.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: edgePoints) }
+            let title = clustered.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
             return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[subgraph], isTitleCrossed: title?.isCrossed ?? false)
         }
     }

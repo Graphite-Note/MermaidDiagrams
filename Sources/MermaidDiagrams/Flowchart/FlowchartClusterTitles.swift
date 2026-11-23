@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartClusterTitles.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Where a group's title sits along the top of its box, clear of the edges crossing it where it can be.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Where a group's title sits along the top of its box, as Pele places it: at the left, else the middle, else the
@@ -18,9 +29,12 @@ enum FlowchartClusterTitles {
     /// The title placed in `frame`, `FlowchartClusterGraph.titleMargin` below its top, and whether an edge runs through it.
     /// - Parameter edgePoints: The points every edge passes through, its ends on their outlines included.
     static func placed(_ title: DiagramTextBlock, in frame: CGRect, edgePoints: [[CGPoint]]) -> (title: DiagramTextBlock, isCrossed: Bool) {
-        let crossings = edgePoints.joined().filter { point in
-            abs(point.y - frame.minY) < topTolerance && point.x > frame.minX && point.x < frame.maxX
-        }.map(\.x)
+        placed(title, in: frame, crossings: FlowchartRoutePointIndex(edgePoints))
+    }
+
+    /// The title placed in `frame`, the edges' points looked up in `crossings`, sorted once for every box.
+    static func placed(_ title: DiagramTextBlock, in frame: CGRect, crossings index: FlowchartRoutePointIndex) -> (title: DiagramTextBlock, isCrossed: Bool) {
+        let crossings = index.points(within: topTolerance, of: frame.minY).filter { point in point.x > frame.minX && point.x < frame.maxX }.map(\.x)
         let halfWidth = title.size.width / 2
         let padding = FlowchartClusterGraph.clusterPadding
         let candidates = [frame.minX + padding - sideReach + halfWidth, frame.midX, frame.maxX - padding + sideReach - halfWidth]
@@ -43,5 +57,27 @@ enum FlowchartClusterTitles {
         placed.center = CGPoint(x: best, y: frame.minY + FlowchartClusterGraph.titleMargin + title.size.height / 2)
         let isCrossed = crossings.contains { crossing in abs(crossing - best) < halfWidth + crossingReach }
         return (placed, isCrossed)
+    }
+}
+
+/// The points edges pass through, sorted down the page once, so that the points on each box's top are found by search.
+struct FlowchartRoutePointIndex {
+    private let points: [CGPoint]
+
+    init(_ routes: [[CGPoint]]) {
+        points = routes.joined().sorted { first, second in first.y < second.y }
+    }
+
+    /// The points less than `tolerance` from the line `along` across the page, in the order they are sorted.
+    func points(within tolerance: CGFloat, of along: CGFloat) -> ArraySlice<CGPoint> {
+        var low = 0
+        var high = points.count
+        while low < high {
+            let middle = (low + high) / 2
+            if points[middle].y <= along - tolerance { low = middle + 1 } else { high = middle }
+        }
+        var end = low
+        while end < points.count && points[end].y < along + tolerance { end += 1 }
+        return points[low..<end]
     }
 }
