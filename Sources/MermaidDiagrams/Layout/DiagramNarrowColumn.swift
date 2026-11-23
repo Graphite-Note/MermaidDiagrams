@@ -5,7 +5,7 @@
  * Description: Diagrams that run across turned to run down, for a column too narrow for them, as Pele turns them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -13,7 +13,8 @@
 /// container's width.
 public enum DiagramSpacing: Equatable, Sendable {
     case standard
-    /// Gaps between nodes, edges and ranks about two thirds of the standard ones, and text wrapped sooner.
+    /// Pele's tight gaps (flowchart/render.ts `draw` with `tight`): half the separation of nodes, three quarters of that
+    /// of ranks, the edges' kept, groups padded by 12; a swimlane diagram also wraps its text at 100 points.
     case compact
 }
 

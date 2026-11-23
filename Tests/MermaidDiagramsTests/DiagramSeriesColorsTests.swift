@@ -7,7 +7,7 @@
  *              hostile values.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -201,5 +201,24 @@ final class DiagramSeriesColorsTests: XCTestCase {
         PlaneMapPictures.write(pieScene, named: "theme-palette-pie-dark", palette: DiagramScenePaletteSamples.dark)
         let titleColored = try prepared(XYChartCorpus.documentationExamples()[7]).scene
         XCTAssertTrue(titleColored.seriesColors.isEmpty, "xyChart.titleColor is not one of Pele's palettes")
+    }
+
+    /// The scene drawn for a narrow column (Pele's drawing for a container that wide) keeps the theme's series colors:
+    /// a pie, a radar chart, a timeline and a treemap fitted to 280 points paint what their regular scene paints.
+    func testNarrowScenesPaintTheirThemeColors() throws {
+        let themed = "---\nconfig:\n  themeVariables:\n    pie1: red\n    cScale0: red\n    cScale1: lime\n---\n"
+        let examples: [(String, String)] = [
+            ("pie", themed + "pie title Pets\n  \"Dogs\": 386\n  \"Cats\": 85\n  \"Rats\": 150"),
+            ("radar", try RadarChartCorpus.documentationExamples()[2]),
+            ("timeline", try TimelineCorpus.documentationExamples()[8]),
+            ("treemap", themed + "treemap-beta\n\"Section\"\n  \"Leaf\": 12\n  \"Other\": 8"),
+        ]
+        for (name, source) in examples {
+            let diagram = try MermaidDiagramPreparation.prepare(source: source, typography: DiagramSceneSamples.typography, narrowestColumnWidth: 280,
+                                                                now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+            let narrow = try XCTUnwrap(diagram.narrowScene, "\(name) has a scene for 280 points")
+            XCTAssertFalse(diagram.scene.seriesColors.isEmpty, name)
+            XCTAssertEqual(narrow.seriesColors, diagram.scene.seriesColors, name)
+        }
     }
 }
