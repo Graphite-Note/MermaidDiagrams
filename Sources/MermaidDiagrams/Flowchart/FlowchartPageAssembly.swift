@@ -58,7 +58,12 @@ struct FlowchartPageAssembly {
                                        shapeSizes: measured.shapeSizes, spreadsEnds: measured.spreadsEdgeEnds)
         for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
-            guard let sourcePoint = ports.sourcePoints[edgeIndex], let targetPoint = ports.targetPoints[edgeIndex] else { continue }
+            // Each end where Pele's layout settled it, moved onto its shape's outline; the spread ends where it left none.
+            let path = placement.edgePaths[layeredIndex].map(axes.pagePoint)
+            let edge = diagram.edges[edgeIndex]
+            guard let sourcePoint = path.first.flatMap({ end in outlineEnd(end, node: edge.sourceIndex, loopSide: axes.loopSide) }) ?? ports.sourcePoints[edgeIndex],
+                  let targetPoint = path.last.flatMap({ end in outlineEnd(end, node: edge.targetIndex, loopSide: axes.loopSide) }) ?? ports.targetPoints[edgeIndex]
+            else { continue }
             let points = [sourcePoint] + route.dropFirst().dropLast().map(axes.pagePoint) + [targetPoint]
             let textCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint)
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
@@ -145,13 +150,33 @@ struct FlowchartPageAssembly {
                                              segmentsRunVertically: route.segmentsRunVertically)
                 continue
             }
-            guard let sourcePoint = ports.sourcePoints[edgeIndex], let targetPoint = ports.targetPoints[edgeIndex] else { continue }
+            let edge = diagram.edges[edgeIndex]
+            guard let sourcePoint = route.points.first.flatMap({ end in clusteredEnd(end, node: edge.sourceIndex, placement: placement) }) ?? ports.sourcePoints[edgeIndex],
+                  let targetPoint = route.points.last.flatMap({ end in clusteredEnd(end, node: edge.targetIndex, placement: placement) }) ?? ports.targetPoints[edgeIndex]
+            else { continue }
             let points = [sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint]
             edgePoints.append(points)
             let textCenter = placement.edgeLabelCenters[layoutIndex]
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, textCenter: textCenter, segmentsRunVertically: route.segmentsRunVertically)
         }
+    }
+
+    /// A route's end on the outline of `node`'s shape, from the side of its layout box the layout left it on.
+    private func outlineEnd(_ end: CGPoint, node: Int, loopSide: DiagramSide) -> CGPoint? {
+        FlowchartRouteEnds.outlinePoint(of: end, center: nodeCenters[node], boxSize: measured.layoutSize(of: node, loopSide: loopSide),
+                                        shape: diagram.nodes[node].shape, shapeSize: measured.shapeSizes[node])
+    }
+
+    /// A route's end through boxes on its node's outline, or on the box of the group the node stands for.
+    private func clusteredEnd(_ end: CGPoint, node: Int, placement: LayeredClusterPlacement) -> CGPoint? {
+        guard let clustered else { return nil }
+        if let subgraph = clustered.representedSubgraphs[node] {
+            let frame = placement.clusterFrames[subgraph]
+            return FlowchartRouteEnds.outlinePoint(of: end, center: CGPoint(x: frame.midX, y: frame.midY), boxSize: frame.size, shape: .rectangle,
+                                                   shapeSize: frame.size)
+        }
+        return outlineEnd(end, node: node, loopSide: clustered.loopSides[node])
     }
 
     /// An end of a route through boxes: the side of its node or box that its first or last segment leaves or arrives

@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartLayoutEngineTests.swift
+ * --------------------------------------
+ * Layer: Tests
+ * Description: Lays flowcharts out and checks Pele's sizes, ranks, spread ends, texts, loops and title.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -73,7 +84,9 @@ final class FlowchartLayoutEngineTests: XCTestCase {
         let targets = laidOut.edges.map { edge in edge.targetMark?.tip.x ?? 0 }
         XCTAssertEqual(Set(starts.map { start in Int(start.rounded()) }).count, 3)
         XCTAssertEqual(starts.indices.sorted { starts[$0] < starts[$1] }, targets.indices.sorted { targets[$0] < targets[$1] })
-        XCTAssertEqual(starts.max()! - starts.min()!, 2 * FlowchartEdgePorts.portSeparation, accuracy: accuracy)
+        // As Pele settles them: at least its port pitch apart, each leaning towards the node it leads to.
+        let sorted = starts.sorted()
+        for index in sorted.indices.dropFirst() { XCTAssertGreaterThanOrEqual(sorted[index] - sorted[index - 1], LayeredFlatConstants.portPitch - accuracy) }
     }
 
     func testAnEdgesTextTakesAPlaceBetweenTheRanks() throws {
