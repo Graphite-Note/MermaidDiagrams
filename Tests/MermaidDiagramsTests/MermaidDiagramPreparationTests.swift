@@ -6,8 +6,8 @@
  *              where its type has one, what a screen reader says of it, or a typed failure of the right kind.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -142,7 +142,9 @@ final class MermaidDiagramPreparationTests: XCTestCase {
             let diagram = try prepared(source)
             XCTAssertLessThan(try XCTUnwrap(diagram.narrowScene, source).size.width, diagram.scene.size.width, source)
         }
-        XCTAssertNil(try prepared(PieChartCorpus.pie(sliceCount: 8)).narrowScene, "A pie chart has no narrow layout")
+        let pie = try XCTUnwrap(try prepared(PieChartCorpus.pie(sliceCount: 8)).narrowScene,
+                                "A pie chart is drawn smaller with its legend below, as Pele's fitWidth draws it")
+        XCTAssertLessThanOrEqual(pie.size.width, PreparedMermaidDiagram.standardNarrowestColumnWidth)
         let map = try prepared(try WardleyMapCorpus.documentationExamples()[0])
         XCTAssertLessThanOrEqual(try XCTUnwrap(map.narrowScene, "A Wardley map is drawn tight to fit, as Pele's fitWidth draws it").size.width,
                                  PreparedMermaidDiagram.standardNarrowestColumnWidth + 120)

@@ -6,8 +6,8 @@
  *              quadrant and XY charts, user journeys and Sankey diagrams.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -21,11 +21,12 @@ extension MermaidDiagramPreparationContext {
                                       accessibility: MermaidDiagramAccessibility(mindmap: mindmap))
     }
 
-    /// A timeline, and for a narrow column the timeline with its periods one below the other.
+    /// A timeline, and for a narrow column the timeline with its periods one below the other, its columns sharing the
+    /// column's width.
     func prepared(_ timeline: TimelineDiagram) -> PreparedMermaidDiagram {
         let layout = TimelineLayoutEngine.layout(timeline, typography: typography)
-        let narrow = narrowScene(of: timeline.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
-            TimelineLayoutEngine.layout(turned, typography: typography)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (timeline, width) }, regularSize: layout.size, laidOut: { timeline, width in
+            TimelineLayoutEngine.layout(timeline, typography: typography, availableWidth: width)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .timeline, scene: DiagramScene(layout: layout), narrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(timeline: timeline))
@@ -33,7 +34,10 @@ extension MermaidDiagramPreparationContext {
 
     func prepared(_ chart: PieChart) -> PreparedMermaidDiagram {
         let layout = PieChartLayoutEngine.layout(chart, typography: typography)
-        return PreparedMermaidDiagram(kind: .pieChart, scene: DiagramScene(layout: layout),
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (chart, width) }, regularSize: layout.size, laidOut: { chart, width in
+            PieChartLayoutEngine.layout(chart, typography: typography, availableWidth: width)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .pieChart, scene: DiagramScene(layout: layout), narrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(pieChart: chart, layout: layout))
     }
 

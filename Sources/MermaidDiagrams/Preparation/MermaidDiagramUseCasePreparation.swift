@@ -6,8 +6,8 @@
  *              turnToFit draws it, and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -15,7 +15,7 @@ extension MermaidDiagramPreparationContext {
     func prepared(_ diagram: UseCaseDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: UseCaseLayout
         do { layout = try UseCaseLayoutEngine.layout(diagram, typography: typography, limits: limits) } catch { throw .useCaseLayout(error) }
-        let narrow = narrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
+        let narrow = turnedNarrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
             try UseCaseLayoutEngine.layout(turned, typography: typography, limits: limits)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .useCase, scene: DiagramScene(layout: layout), narrowScene: narrow,

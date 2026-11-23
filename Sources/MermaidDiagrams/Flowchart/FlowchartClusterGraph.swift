@@ -5,7 +5,7 @@
  * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -19,6 +19,8 @@ import CoreGraphics
 struct FlowchartClusterGraph {
     /// Pele's room inside a box, on its sides and below it, and above it when the group has no title.
     static let clusterPadding: CGFloat = 20
+    /// The room on a box's sides and below it in a tight layout (Pele's `groupPad` with `tight`); above it stays.
+    static let tightClusterPadding: CGFloat = 12
     /// Between the box's top and its title, and between the title and the box's content.
     static let titleMargin: CGFloat = 8
     /// How much narrower than its title and two paddings a box may be: Pele's.
@@ -39,8 +41,9 @@ struct FlowchartClusterGraph {
     let loopSides: [DiagramSide]
 
     /// Collapsed groups are folded into nodes before (`FlowchartCollapsedGroups`).
+    /// `groupPadding`: the room inside a box on its sides and below.
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, measured: FlowchartMeasurement, titleText: Measurer,
-                                         edgeTextRoom: CGSize) {
+                                         edgeTextRoom: CGSize, groupPadding: CGFloat = clusterPadding) {
         let nesting = FlowchartClusterNesting(diagram: diagram)
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
@@ -71,7 +74,7 @@ struct FlowchartClusterGraph {
         // empty group comes before the nodes of its box; a group an edge crosses runs as the box around it.
         let clusters = diagram.subgraphs.indices.map { subgraph in
             var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: nesting.subgraphDirections[subgraph],
-                                       title: measuredTitles[subgraph], spreadsEdgeEnds: measured.spreadsEdgeEnds)
+                                       title: measuredTitles[subgraph], spreadsEdgeEnds: measured.spreadsEdgeEnds, padding: groupPadding)
             cluster.sequence = CGFloat(nesting.subgraphOrder[subgraph] - diagram.subgraphs.count)
             return cluster
         }
@@ -85,12 +88,13 @@ struct FlowchartClusterGraph {
     /// A group's box: Pele's padding, the title's band along the top, at least as wide as the title. A flowchart's group
     /// spreads the edges meeting it along its whole side (flowchart/render.ts gives it an infinite span); an agent flow's
     /// keeps them at its middle, as agentflow/render.ts gives its groups, like its nodes, no span.
-    private static func cluster(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?, spreadsEdgeEnds: Bool) -> LayeredCluster {
+    private static func cluster(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?, spreadsEdgeEnds: Bool,
+                                padding: CGFloat) -> LayeredCluster {
         let titleSize = title?.size ?? .zero
         let top = title == nil ? clusterPadding : titleSize.height + 2 * titleMargin
         return LayeredCluster(parent: parent, direction: direction?.layeredDirection,
-                              padding: LayeredClusterPadding(side: clusterPadding, top: top, bottom: clusterPadding),
-                              minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance, sideSpan: spreadsEdgeEnds ? .infinity : 0)
+                              padding: LayeredClusterPadding(side: padding, top: top, bottom: padding),
+                              minimumWidth: titleSize.width + 2 * padding - titleWidthAllowance, sideSpan: spreadsEdgeEnds ? .infinity : 0)
     }
 
     /// The edges between two different ends, with their texts' room; an edge from a node or a group to itself loops

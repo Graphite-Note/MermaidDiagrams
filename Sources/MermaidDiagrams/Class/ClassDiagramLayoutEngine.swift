@@ -2,10 +2,11 @@
  * File: ClassDiagramLayoutEngine.swift
  * ------------------------------------
  * Layer: Core
- * Description: Lays a class diagram out in Pele's style, its namespaces as nested boxes.
+ * Description: Lays a class diagram out in Pele's style, its namespaces as nested boxes, and for a narrow container
+ *              turned, tightened and its unjoined parts set in rows as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -36,14 +37,37 @@ public enum ClassDiagramLayoutEngine {
                    font: typography.font, limits: limits)
     }
 
+    /// The diagram for a container `availableWidth` wide (nil for none), as Pele fits it (class/render.ts): one that runs
+    /// across is laid out from the top down when it does not fit a container under 640 points and that is narrower
+    /// (`turnToFit`); either way, tightly (a namespace a relation crosses into not widened for its title) when it does
+    /// not fit and tight is narrower (`tighten`); and each drawing wider than the container has its parts that nothing
+    /// joins set in rows (`ClassDiagramComponentRows`).
+    public static func layout(_ diagram: ClassDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits,
+                              availableWidth: CGFloat?) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
+        let measurers = ClassDiagramTextMeasurers(names: typography.boldNodeText, members: typography.edgeText, marks: typography.smallText,
+                                                  namespaceTitles: typography.nodeText)
+        func fitted(_ diagram: ClassDiagram) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
+            try DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: ClassDiagramLayout) in layout.size.width }) { isTight throws(ClassDiagramLayoutError) in
+                try layout(diagram, measurers: measurers, font: typography.font, limits: limits, isTight: isTight, availableWidth: availableWidth)
+            }
+        }
+        guard let turned = diagram.turnedTopToBottom else { return try fitted(diagram) }
+        return try DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: ClassDiagramLayout) in layout.size.width }) { isDown throws(ClassDiagramLayoutError) in
+            try fitted(isDown ? turned : diagram)
+        }
+    }
+
+    /// `isTight`: Pele's tight layout; `availableWidth`: the container's width, past which the parts are set in rows.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: ClassDiagram, measurers: ClassDiagramTextMeasurers<Measurer>, font: DiagramFont,
-                                                       limits: MermaidDiagramLimits) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
+                                                       limits: MermaidDiagramLimits, isTight: Bool = false,
+                                                       availableWidth: CGFloat? = nil) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
         var measured = ClassDiagramMeasurement(diagram: diagram, measurers: measurers)
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         if flowAxes.flowIsVertical { measured.widenCrowdedClasses() }
         let selfLoops = measured.selfLoopEdgeIndices
         guard diagram.namespaces.isEmpty else {
-            return try layoutInBoxes(diagram, measured: measured, selfLoops: selfLoops, measurers: measurers, font: font, limits: limits)
+            return try layoutInBoxes(diagram, measured: measured, selfLoops: selfLoops, measurers: measurers, font: font, limits: limits, isTight: isTight,
+                                     availableWidth: availableWidth)
         }
         let layeredEdgeIndices = measured.edges.indices.filter { edgeIndex in !measured.edges[edgeIndex].isSelfLoop }
         let graph = LayeredGraph(nodeSizes: measured.layoutSizes(selfLoops: selfLoops).map(flowAxes.flowSize(of:)),
@@ -66,17 +90,30 @@ public enum ClassDiagramLayoutEngine {
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
         }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        return finished(page, font: font, title: title, availableWidth: availableWidth)
+    }
+
+    /// The page finished; for a container `availableWidth` wide that the drawing (its title aside) is wider than, with
+    /// its parts that nothing joins set in rows that fit it, when that makes it narrower.
+    private static func finished(_ page: ClassDiagramPageAssembly, font: DiagramFont, title: DiagramTextBlock?,
+                                 availableWidth: CGFloat?) -> ClassDiagramLayout {
+        guard let available = DiagramWidthFitting.limit(availableWidth),
+              page.finished(font: font, title: nil, padding: padding, titleGap: titleGap).size.width > available,
+              let wrapped = page.wrappedInRows(rowWidth: max(1, available - 2 * padding), gap: spacing.nodeSeparation) else {
+            return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        }
+        return wrapped.page.finished(font: font, title: title, padding: padding, titleGap: titleGap, drawingBounds: CGRect(origin: .zero, size: wrapped.size))
     }
 
     /// A diagram with namespaces: each a box laid out on its own and placed in the box around it, as Pele's class
     /// renderer does (`ClassDiagramNamespaceTree`, `ClassDiagramClusterGraph`, `LayeredClusterLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: ClassDiagram, measured: ClassDiagramMeasurement, selfLoops: [[Int]],
                                                                       measurers: ClassDiagramTextMeasurers<Measurer>, font: DiagramFont,
-                                                                      limits: MermaidDiagramLimits) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
+                                                                      limits: MermaidDiagramLimits, isTight: Bool,
+                                                                      availableWidth: CGFloat?) throws(ClassDiagramLayoutError) -> ClassDiagramLayout {
         let clustered = ClassDiagramClusterGraph(tree: ClassDiagramNamespaceTree(diagram: diagram), measured: measured,
                                                  layoutSizes: measured.layoutSizes(selfLoops: selfLoops), direction: diagram.direction,
-                                                 titleText: measurers.namespaceTitles, edgeTextRoom: edgeTextRoom)
+                                                 titleText: measurers.namespaceTitles, edgeTextRoom: edgeTextRoom, isTight: isTight)
         var clusterSpacing = spacing(for: measured)
         clusterSpacing.borderSeparation = ClassDiagramClusterGraph.padding
         let placement: LayeredClusterPlacement
@@ -94,7 +131,7 @@ public enum ClassDiagramLayoutEngine {
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
         }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        return finished(page, font: font, title: title, availableWidth: availableWidth)
     }
 
     /// Pele's gaps, with ranks farther apart when any relation has a cardinality.

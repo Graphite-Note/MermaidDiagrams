@@ -6,8 +6,8 @@
  *              and the actor's stick figure.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -32,15 +32,17 @@ enum SequenceParticipantGeometry {
     /// How far a queue's rounded ends reach in from its sides.
     static let queueCapWidth: CGFloat = 6
 
-    /// The participant's size around text of `textSize`, its text in `fontSize`.
-    static func size(of kind: SequenceParticipantKind, textSize: CGSize, fontSize: CGFloat) -> CGSize {
+    /// The participant's size around text of `textSize`, its text in `fontSize`; a box at least `minimumWidth` wide with
+    /// `horizontalPadding` beside its text (a tight layout's are smaller).
+    static func size(of kind: SequenceParticipantKind, textSize: CGSize, fontSize: CGFloat, minimumWidth: CGFloat = minimumBoxWidth,
+                     horizontalPadding: CGFloat = horizontalPadding) -> CGSize {
         if kind.isFigure {
             return CGSize(width: max(minimumFigureWidth, textSize.width + figureExtraWidth),
                           height: figureHeight + (textSize.height > 0 ? figureTextGap + textSize.height : 0))
         }
         let minimumHeight = (fontSize * CoreTextDiagramTextMeasurer.lineHeightRatio).rounded() + boxHeightBeyondText
         let extraWidth: CGFloat = kind == .collections ? collectionsOffset : kind == .queue ? 2 * queueCapWidth : 0
-        return CGSize(width: max(minimumBoxWidth, textSize.width + 2 * horizontalPadding) + extraWidth,
+        return CGSize(width: max(minimumWidth, textSize.width + 2 * horizontalPadding) + extraWidth,
                       height: max(minimumHeight, textSize.height + 2 * verticalPadding) + (kind == .collections ? collectionsOffset : 0))
     }
 

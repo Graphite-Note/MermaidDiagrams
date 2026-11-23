@@ -5,7 +5,7 @@
  * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -79,7 +79,7 @@ struct FlowchartMeasurement {
         let size = shapeSizes[node]
         let loopEdgeIndices = selfLoopEdgeIndices[node]
         guard !loopEdgeIndices.isEmpty else { return size }
-        let room = FlowchartSelfLoops.room(textSizes: loopEdgeIndices.map { edgeIndex in edgeTexts[edgeIndex]?.size }, loopSide: loopSide)
+        let room = FlowchartSelfLoops.room(textSizes: loopEdgeIndices.map { edgeIndex in edgeTexts[edgeIndex]?.size }, flowRunsAcross: loopSide == .bottom)
         return loopSide == .right ? CGSize(width: size.width + 2 * room, height: size.height)
                                   : CGSize(width: size.width, height: size.height + 2 * room)
     }

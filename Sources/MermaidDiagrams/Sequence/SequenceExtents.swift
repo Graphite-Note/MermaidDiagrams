@@ -6,7 +6,7 @@
  *              the rows are placed, as Pele does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -14,7 +14,7 @@ import CoreGraphics
 
 /// How far across the page each note, block and the whole diagram reach, worked out before the rows are placed as
 /// Pele does: a block wraps what it holds with padding, widens to the right for its texts, and widens the block
-/// around it. A text that wraps (`wrap:`) wraps again to the room its message or note has.
+/// around it. A text that wraps (`wrap:`), or any text in a tight layout, wraps again to the room its message or note has.
 struct SequenceExtents {
     /// Each event's text when it is a message or a note, wrapped to its room; nil otherwise.
     private(set) var eventTexts: [DiagramTextBlock?]
@@ -57,10 +57,10 @@ struct SequenceExtents {
                 close(frameAt: closed, around: openFrameIndices.last, centers: columns.centers, measurers: measurers)
             case .message(let message):
                 let (left, right) = placeMessage(message, at: eventIndex, columns: columns, measurers: measurers)
-                include(from: left, to: right, in: openFrameIndices.last)
+                include(from: left, to: right, in: openFrameIndices.last, framePadding: measurers.measurements.framePadding)
             case .note(let note):
                 let (left, right) = placeNote(note, at: eventIndex, centers: columns.centers, measurers: measurers)
-                include(from: left, to: right, in: openFrameIndices.last)
+                include(from: left, to: right, in: openFrameIndices.last, framePadding: measurers.measurements.framePadding)
             case .activationStart, .activationEnd, .numbering:
                 continue
             }
@@ -85,9 +85,10 @@ struct SequenceExtents {
         }
         let left = min(source, target)
         let right = max(source, target)
-        if message.wrapsText {
-            let room = right - left - 2 * SequenceSpacing.messagePadding - SequenceSpacing.activationWidth
-            eventTexts[eventIndex] = measurers.messageBlock(message.text, wrappingWidth: max(SequenceSpacing.wrappingWidth, room))
+        let measurements = measurers.measurements
+        if message.wrapsText || measurements.isTight {
+            let room = right - left - 2 * measurements.messagePadding - SequenceSpacing.activationWidth
+            eventTexts[eventIndex] = measurers.messageBlock(message.text, wraps: true, width: max(measurements.wrappingWidth, room))
         }
         guard message.createsTarget else { return (left, right) }
         let createdHalfWidth = columns.participantSizes[message.targetIndex].width / 2
@@ -98,20 +99,21 @@ struct SequenceExtents {
     /// with an overhang, wider for its text.
     private mutating func placeNote<Measurer>(_ note: SequenceNote, at eventIndex: Int, centers: [CGFloat],
                                               measurers: SequenceTextMeasurers<Measurer>) -> (CGFloat, CGFloat) {
-        var width = (eventTexts[eventIndex]?.size.width ?? 0) + 2 * SequenceSpacing.notePadding
+        let measurements = measurers.measurements
+        var width = (eventTexts[eventIndex]?.size.width ?? 0) + 2 * measurements.notePadding
         let left: CGFloat
         switch note.placement {
         case .leftOf(let index): left = centers[index] - SequenceSpacing.noteGap - width
         case .rightOf(let index): left = centers[index] + SequenceSpacing.noteGap
         case .over(let first, let last) where first == last: left = centers[first] - width / 2
         case .over(let first, let last):
-            let start = min(centers[first], centers[last]) - SequenceSpacing.noteOverhang
-            let end = max(centers[first], centers[last]) + SequenceSpacing.noteOverhang
-            if note.wrapsText {
-                let room = end - start - 2 * SequenceSpacing.notePadding
-                let wrapped = measurers.messageBlock(note.text, wrappingWidth: max(SequenceSpacing.wrappingWidth, room))
+            let start = min(centers[first], centers[last]) - measurements.noteOverhang
+            let end = max(centers[first], centers[last]) + measurements.noteOverhang
+            if note.wrapsText || measurements.isTight {
+                let room = end - start - 2 * measurements.notePadding
+                let wrapped = measurers.messageBlock(note.text, wraps: true, width: max(measurements.wrappingWidth, room))
                 eventTexts[eventIndex] = wrapped
-                width = wrapped.size.width + 2 * SequenceSpacing.notePadding
+                width = wrapped.size.width + 2 * measurements.notePadding
             }
             width = max(end - start, width)
             left = (start + end - width) / 2
@@ -122,21 +124,22 @@ struct SequenceExtents {
     }
 
     /// Widens the diagram, and the innermost open block with its padding, to reach from `left` to `right`.
-    private mutating func include(from left: CGFloat, to right: CGFloat, in frameIndex: Int?) {
+    private mutating func include(from left: CGFloat, to right: CGFloat, in frameIndex: Int?, framePadding: CGFloat) {
         extend(from: left, to: right)
         guard let frameIndex else { return }
-        frames[frameIndex].left = min(frames[frameIndex].left, left - SequenceSpacing.framePadding)
-        frames[frameIndex].right = max(frames[frameIndex].right, right + SequenceSpacing.framePadding)
+        frames[frameIndex].left = min(frames[frameIndex].left, left - framePadding)
+        frames[frameIndex].right = max(frames[frameIndex].right, right + framePadding)
     }
 
     /// A block's reach once everything in it is known: across every lifeline when it holds nothing, then wider to
     /// the right for its texts, which wrap at the room they have or at the block text width.
     private mutating func close<Measurer>(frameAt index: Int, around parentIndex: Int?, centers: [CGFloat], measurers: SequenceTextMeasurers<Measurer>) {
         var frame = frames[index]
+        let measurements = measurers.measurements
         if frame.left > frame.right {
             let emptyDiagramWidth: CGFloat = 120
-            frame.left = centers.first.map { first in first - SequenceSpacing.framePadding } ?? 0
-            frame.right = centers.last.map { last in last + SequenceSpacing.framePadding } ?? emptyDiagramWidth
+            frame.left = centers.first.map { first in first - measurements.framePadding } ?? 0
+            frame.right = centers.last.map { last in last + measurements.framePadding } ?? emptyDiagramWidth
         }
         if let keyword = frame.kind.keyword {
             let keywordBlock = measurers.keywordBlock(keyword)
@@ -146,7 +149,7 @@ struct SequenceExtents {
                 let besideTab = labelIndex == 0 ? frame.tabWidth + SequenceSpacing.frameTextInset : 0
                 let room = frame.right - frame.left - 2 * SequenceSpacing.frameTextInset - besideTab
                 let text = Self.bracketed(label).map { bracketed in
-                    measurers.messageBlock(bracketed, wrappingWidth: max(room, SequenceSpacing.frameTextWidth))
+                    measurers.messageBlock(bracketed, wraps: true, width: max(room, measurements.frameTextWidth))
                 }
                 if let width = text?.size.width, width > room { frame.right += width - room }
                 frame.texts.append(text)
@@ -155,8 +158,8 @@ struct SequenceExtents {
         frames[index] = frame
         extend(from: frame.left, to: frame.right)
         guard let parentIndex else { return }
-        frames[parentIndex].left = min(frames[parentIndex].left, frame.left - SequenceSpacing.frameNesting)
-        frames[parentIndex].right = max(frames[parentIndex].right, frame.right + SequenceSpacing.frameNesting)
+        frames[parentIndex].left = min(frames[parentIndex].left, frame.left - measurements.frameNesting)
+        frames[parentIndex].right = max(frames[parentIndex].right, frame.right + measurements.frameNesting)
     }
 
     /// A block's text in brackets, as Pele draws it (`[Every minute]`); nil when the block has none.

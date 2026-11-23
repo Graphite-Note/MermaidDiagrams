@@ -2,7 +2,7 @@
  * File: TreemapLayoutEngine.swift
  * -------------------------------
  * Layer: Core
- * Description: Lays a treemap out with Pele's measurements.
+ * Description: Lays a treemap out with Pele's measurements, as wide as the container when that is narrower.
  *
  * Authors: Bahey Shalash
  * Version: 0.3
@@ -24,23 +24,35 @@ public enum TreemapLayoutEngine {
     static let titleGap: CGFloat = 8
     /// The corners' radius of a box at most.
     static let cornerRadius: CGFloat = 4
-    /// The widest the title is before it wraps: wide enough that it does not.
-    static let wrappingWidth: CGFloat = 4_000
     /// The area of a leaf below which the gap and the inset begin to shrink, in square points.
     private static let roomyLeafArea: Double = 800
+
+    /// The narrowest a treemap is made for a narrow container (Pele's `least`).
+    static let narrowestWidth: CGFloat = 200
 
     public static func layout(_ diagram: TreemapDiagram, typography: DiagramTypography) -> TreemapLayout {
         layout(diagram, text: typography.nodeText, boldText: typography.boldNodeText, font: typography.font)
     }
 
-    static func layout<Measurer: DiagramTextMeasuring>(_ diagram: TreemapDiagram, text: Measurer, boldText: Measurer, font: DiagramFont) -> TreemapLayout {
+    /// The treemap for a container `availableWidth` wide (nil for none): as wide as the container less the page's
+    /// padding when that is narrower than its own width, not under 200 points (Pele's `capWidth`), its height its own;
+    /// the title wrapped to the container.
+    public static func layout(_ diagram: TreemapDiagram, typography: DiagramTypography, availableWidth: CGFloat?) -> TreemapLayout {
+        layout(diagram, text: typography.nodeText, boldText: typography.boldNodeText, font: typography.font, availableWidth: availableWidth)
+    }
+
+    static func layout<Measurer: DiagramTextMeasuring>(_ diagram: TreemapDiagram, text: Measurer, boldText: Measurer, font: DiagramFont,
+                                                       availableWidth: CGFloat? = nil) -> TreemapLayout {
         let options = diagram.options
         let padding = options.diagramPadding
-        let width = TreemapSquarifiedPlacement.rounded(Double(options.nodeWidth) * 10)
+        let natural = CGFloat(options.nodeWidth) * 10
+        let width = TreemapSquarifiedPlacement.rounded(Double(DiagramWidthFitting.capWidth(availableWidth: availableWidth, natural: natural,
+                                                                                            least: narrowestWidth, around: 2 * padding)))
+        let titleRoom = DiagramWidthFitting.titleRoom(availableWidth: availableWidth)
         let height = TreemapSquarifiedPlacement.rounded(Double(options.nodeHeight) * 10)
         let (boxes, placed) = TreemapSquarifiedPlacement.place(diagram.nodes, width: width, height: height, insets: insets(of: diagram, width: width, height: height))
         let title = diagram.title.map { title in
-            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: wrappingWidth)
+            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleRoom)
         }.flatMap { block in block.lines.isEmpty ? nil : block }
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let origin = CGPoint(x: padding + max(0, ((title?.size.width ?? 0) - CGFloat(width)) / 2), y: padding + titleHeight)

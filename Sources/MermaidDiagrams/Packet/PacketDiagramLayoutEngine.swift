@@ -2,11 +2,12 @@
  * File: PacketDiagramLayoutEngine.swift
  * -------------------------------------
  * Layer: Core
- * Description: Lays a packet diagram out with Pele's measurements.
+ * Description: Lays a packet diagram out with Pele's measurements, and again with fewer, narrower bits to a row for a
+ *              container too narrow for it, as Pele turns one to fit.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -32,26 +33,57 @@ public enum PacketDiagramLayoutEngine {
     private static let smallestLabelScale: CGFloat = 0.5
 
     public static func layout(_ diagram: PacketDiagram, typography: DiagramTypography) -> PacketDiagramLayout {
-        layout(diagram, text: typography.nodeText, boldText: typography.boldNodeText, font: typography.font)
+        layout(diagram, typography: typography, availableWidth: nil)
+    }
+
+    /// The diagram for a container `availableWidth` wide (nil for none), as Pele's `turnToFit` draws it: as written,
+    /// and with fewer bits to a row (`PacketTurnedGrid`) when that does not fit a container under 640 points and is
+    /// narrower.
+    public static func layout(_ diagram: PacketDiagram, typography: DiagramTypography, availableWidth: CGFloat?) -> PacketDiagramLayout {
+        DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: PacketDiagramLayout) in layout.size.width }) { isTurned in
+            layout(diagram, text: typography.nodeText, boldText: typography.boldNodeText, labelText: typography.edgeText, font: typography.font,
+                   isTurned: isTurned, availableWidth: availableWidth)
+        }
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: PacketDiagram, text: Measurer, boldText: Measurer, font: DiagramFont) -> PacketDiagramLayout {
+        layout(diagram, text: text, boldText: boldText, labelText: text, font: font, isTurned: false, availableWidth: nil)
+    }
+
+    /// The diagram as written, or turned (Pele's `down`) with `PacketTurnedGrid`'s rows for a container `availableWidth`
+    /// wide: each field's label then wrapped into its box (`labelText`, seven eighths of the size) and each row
+    /// as high as its tallest label, and the title wrapped to the container.
+    static func layout<Measurer: DiagramTextMeasuring>(_ diagram: PacketDiagram, text: Measurer, boldText: Measurer, labelText: Measurer, font: DiagramFont,
+                                                       isTurned: Bool, availableWidth: CGFloat?) -> PacketDiagramLayout {
         let options = diagram.options
         let size = text.fontSize
         let bitNumberSize = (size * bitNumberScale).rounded()
-        let rows = PacketFieldRows.rows(of: diagram.fields, bitsPerRow: options.bitsPerRow)
+        let grid = isTurned ? PacketTurnedGrid(diagram, availableWidth: availableWidth, padding: padding)
+            : PacketTurnedGrid(bitsPerRow: options.bitsPerRow, bitWidth: options.bitWidth)
+        let rows = PacketFieldRows.rows(of: diagram.fields, bitsPerRow: grid.bitsPerRow)
+        let labels = !isTurned ? nil : turnedLabels(of: diagram, rows: rows, grid: grid, measurer: labelText)
         let numbersHeight = options.showsBitNumbers ? bitNumberSize + bitNumberRise : 0
-        let rowPitch = numbersHeight + options.rowHeight + options.verticalPadding
-        let gap = min(options.horizontalPadding, options.bitWidth - 1)
-        let rowsHeight = rows.isEmpty ? 0 : CGFloat(rows.count) * rowPitch - options.verticalPadding
-        let rowsWidth = rows.isEmpty ? 0 : CGFloat(options.bitsPerRow) * options.bitWidth - gap
+        let rowHeights = rows.indices.map { index in
+            max(options.rowHeight, (labels?[index].map { label in (label?.size.height ?? 0) + turnedLabelRoom }.max()) ?? 0)
+        }
+        var tops: [CGFloat] = []
+        var rowsHeight: CGFloat = 0
+        for height in rowHeights {
+            tops.append(rowsHeight)
+            rowsHeight += numbersHeight + height + options.verticalPadding
+        }
+        if !rows.isEmpty { rowsHeight -= options.verticalPadding }
+        let gap = min(options.horizontalPadding, grid.bitWidth - 1)
+        let rowsWidth = rows.isEmpty ? 0 : CGFloat(grid.bitsPerRow) * grid.bitWidth - gap
+        let titleWidth = isTurned ? DiagramWidthFitting.titleRoom(availableWidth: availableWidth) : wrappingWidth
         let title = diagram.title.map { title in
-            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: wrappingWidth)
+            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleWidth)
         }.flatMap { block in block.lines.isEmpty ? nil : block }
         let titleHeight = title.map { title in title.size.height + (rowsHeight > 0 ? titleGap : 0) } ?? 0
         let left = padding + max(0, ((title?.size.width ?? 0) - rowsWidth) / 2)
-        let grid = Grid(left: left, rowPitch: rowPitch, numbersHeight: numbersHeight, gap: gap, bitNumberSize: bitNumberSize)
-        let (boxes, bitNumbers) = fieldBoxes(of: diagram, rows: rows, grid: grid, text: text)
+        let placement = Grid(left: left, bitsPerRow: grid.bitsPerRow, bitWidth: grid.bitWidth, rowTops: tops, rowHeights: rowHeights,
+                             numbersHeight: numbersHeight, gap: gap, bitNumberSize: bitNumberSize)
+        let (boxes, bitNumbers) = fieldBoxes(of: diagram, rows: rows, grid: placement, turnedLabels: labels, text: text)
         let pageSize = CGSize(width: (max(rowsWidth, title?.size.width ?? 0) + 2 * padding).rounded(.up),
                               height: (rowsHeight + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
@@ -59,10 +91,32 @@ public enum PacketDiagramLayoutEngine {
         return PacketDiagramLayout(size: pageSize, font: font, fields: boxes, bitNumbers: bitNumbers, title: placedTitle)
     }
 
+    /// What a turned row leaves above and below its tallest label.
+    static let turnedLabelRoom: CGFloat = 10
+
+    /// Each piece's label in a turned grid, row by row, as Pele's `literalLabel` sets a field's text: every character
+    /// kept, wrapped at spaces or between characters to its box less the gap and the margin; nil for an empty label.
+    private static func turnedLabels<Measurer: DiagramTextMeasuring>(of diagram: PacketDiagram, rows: [[PacketFieldPiece]], grid: PacketTurnedGrid,
+                                                                      measurer: Measurer) -> [[DiagramTextBlock?]] {
+        let gap = min(diagram.options.horizontalPadding, grid.bitWidth - 1)
+        let texts = diagram.fields.map { field in DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines) }
+        return rows.map { row in
+            row.map { piece in
+                let room = max(1, CGFloat(piece.lastBit - piece.firstBit + 1) * grid.bitWidth - gap - labelMargin)
+                let block = DiagramTextBlock(literal: texts[piece.fieldIndex], measurer: measurer, room: room)
+                return block.lines.isEmpty ? nil : block
+            }
+        }
+    }
+
     /// Where the grid of rows starts and how it is spaced.
     private struct Grid {
         let left: CGFloat
-        let rowPitch: CGFloat
+        let bitsPerRow: Int
+        let bitWidth: CGFloat
+        /// Each row's top below the page's padding, above its bit numbers, and its boxes' height.
+        let rowTops: [CGFloat]
+        let rowHeights: [CGFloat]
         let numbersHeight: CGFloat
         /// Taken from each box's width.
         let gap: CGFloat
@@ -71,6 +125,7 @@ public enum PacketDiagramLayoutEngine {
 
     /// The box of each piece of a field, with its fitted label, and the bit numbers above the boxes.
     private static func fieldBoxes<Measurer: DiagramTextMeasuring>(of diagram: PacketDiagram, rows: [[PacketFieldPiece]], grid: Grid,
+                                                                    turnedLabels: [[DiagramTextBlock?]]?,
                                                                     text: Measurer) -> ([PacketLayoutField], [DiagramTextBlock]) {
         let options = diagram.options
         let size = text.fontSize
@@ -81,15 +136,17 @@ public enum PacketDiagramLayoutEngine {
         var bitNumbers: [DiagramTextBlock] = []
         var bitNumberMeasurers = DiagramTextMeasurerSizes(text)
         for (rowIndex, row) in rows.enumerated() {
-            let top = padding + CGFloat(rowIndex) * grid.rowPitch + grid.numbersHeight
-            for piece in row {
+            let top = padding + grid.rowTops[rowIndex] + grid.numbersHeight
+            for (pieceIndex, piece) in row.enumerated() {
                 let bitCount = piece.lastBit - piece.firstBit + 1
-                let column = piece.firstBit % options.bitsPerRow
-                let x = grid.left + CGFloat(options.isDescending ? options.bitsPerRow - column - bitCount : column) * options.bitWidth
-                let width = CGFloat(bitCount) * options.bitWidth - grid.gap
-                let frame = CGRect(x: x, y: top, width: width, height: options.rowHeight)
-                boxes.append(PacketLayoutField(frame: frame, firstBit: piece.firstBit, lastBit: piece.lastBit,
-                                               label: fitter.block(of: piece.fieldIndex, width: width - labelMargin, in: frame)))
+                let column = piece.firstBit % grid.bitsPerRow
+                let x = grid.left + CGFloat(options.isDescending ? grid.bitsPerRow - column - bitCount : column) * grid.bitWidth
+                let width = CGFloat(bitCount) * grid.bitWidth - grid.gap
+                let frame = CGRect(x: x, y: top, width: width, height: grid.rowHeights[rowIndex])
+                let label = turnedLabels.map { labels in
+                    labels[rowIndex][pieceIndex].map { block in EventModelText.placed(block, center: CGPoint(x: frame.midX, y: frame.midY)) }
+                } ?? fitter.block(of: piece.fieldIndex, width: width - labelMargin, in: frame)
+                boxes.append(PacketLayoutField(frame: frame, firstBit: piece.firstBit, lastBit: piece.lastBit, label: label))
                 if options.showsBitNumbers {
                     bitNumbers += Self.bitNumbers(piece, frame: frame, isDescending: options.isDescending, size: grid.bitNumberSize,
                                                   measurers: &bitNumberMeasurers)

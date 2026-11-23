@@ -6,8 +6,8 @@
  *              hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -19,18 +19,30 @@ extension MermaidDiagramPreparationContext {
     }
 
     func prepared(_ packet: PacketDiagram) -> PreparedMermaidDiagram {
-        PreparedMermaidDiagram(kind: .packet, scene: DiagramScene(layout: PacketDiagramLayoutEngine.layout(packet, typography: typography)),
-                               accessibility: MermaidDiagramAccessibility(packet: packet))
+        let layout = PacketDiagramLayoutEngine.layout(packet, typography: typography)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (packet, width) }, regularSize: layout.size, laidOut: { packet, width in
+            PacketDiagramLayoutEngine.layout(packet, typography: typography, availableWidth: width)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .packet, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(packet: packet))
     }
 
     func prepared(_ radar: RadarChart) -> PreparedMermaidDiagram {
-        PreparedMermaidDiagram(kind: .radar, scene: DiagramScene(layout: RadarChartLayoutEngine.layout(radar, typography: typography)),
-                               accessibility: MermaidDiagramAccessibility(radar: radar))
+        let layout = RadarChartLayoutEngine.layout(radar, typography: typography)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (radar, width) }, regularSize: layout.size, laidOut: { radar, width in
+            RadarChartLayoutEngine.layout(radar, typography: typography, availableWidth: width)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .radar, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(radar: radar))
     }
 
     func prepared(_ treemap: TreemapDiagram) -> PreparedMermaidDiagram {
-        PreparedMermaidDiagram(kind: .treemap, scene: DiagramScene(layout: TreemapLayoutEngine.layout(treemap, typography: typography)),
-                               accessibility: MermaidDiagramAccessibility(treemap: treemap), unappliedStatementCount: treemap.unappliedStatementCount)
+        let layout = TreemapLayoutEngine.layout(treemap, typography: typography)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (treemap, width) }, regularSize: layout.size, laidOut: { treemap, width in
+            TreemapLayoutEngine.layout(treemap, typography: typography, availableWidth: width)
+        }, scene: DiagramScene.init(layout:))
+        return PreparedMermaidDiagram(kind: .treemap, scene: DiagramScene(layout: layout), narrowScene: narrow,
+                                      accessibility: MermaidDiagramAccessibility(treemap: treemap), unappliedStatementCount: treemap.unappliedStatementCount)
     }
 }
 

@@ -6,8 +6,8 @@
  *              their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,7 @@ extension MermaidDiagramPreparationContext {
     /// An event model across, and for a narrow column the model down that column, a card per frame, as Pele turns it.
     func prepared(_ diagram: EventModelDiagram) -> PreparedMermaidDiagram {
         let layout = EventModelLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+        let narrow = turnedNarrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
             EventModelLayoutEngine.layout(diagram, typography: typography, columnWidth: width)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .eventModel, scene: DiagramScene(layout: layout), narrowScene: narrow,

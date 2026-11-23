@@ -6,8 +6,8 @@
  *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -16,7 +16,7 @@ extension MermaidDiagramPreparationContext {
     func prepared(_ diagram: RequirementDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: RequirementLayout
         do { layout = try RequirementLayoutEngine.layout(diagram, typography: typography, limits: limits) } catch { throw .requirementLayout(error) }
-        let narrow = narrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
+        let narrow = turnedNarrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
             try RequirementLayoutEngine.layout(turned, typography: typography, limits: limits)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .requirement, scene: DiagramScene(layout: layout), narrowScene: narrow,
@@ -42,8 +42,8 @@ extension MermaidDiagramPreparationContext {
     /// measurements, as Pele's `turnToFit` and `tighten` draw it.
     func prepared(swimlane diagram: FlowchartDiagram) -> PreparedMermaidDiagram {
         let layout = SwimlaneLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: diagram.swimlaneTurnedToRunDown ?? diagram, regularSize: layout.size, laidOut: { turned in
-            SwimlaneLayoutEngine.layout(turned, typography: typography, spacing: .compact, columnWidth: narrowestColumnWidth)
+        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+            SwimlaneLayoutEngine.layout(diagram, typography: typography, availableWidth: width)
         }, scene: DiagramScene.init(layout:))
         return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout), narrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(swimlane: diagram),
