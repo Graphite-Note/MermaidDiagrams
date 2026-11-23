@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.22
+ * Version: 0.24
  * Date: 23/11/2026
  */
 
@@ -88,6 +88,12 @@ public enum MermaidDiagramReader {
         }
     }
 
+    /// Whether the keyword, which is ASCII letters, digits and `-`, starts with `letter` in either case: tested before the
+    /// keyword is lowered to look for a type that starts with that letter in any case.
+    private static func startsWithLetter(_ letter: Unicode.Scalar, _ keyword: String) -> Bool {
+        keyword.utf8.first.map(MermaidByte.lowercased) == UInt8(ascii: letter)
+    }
+
     /// The diagram of one of the types this package reads since its first fourteen, from the kanban board on, most of them
     /// written `-beta` in Mermaid.
     private static func newerDiagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
@@ -96,7 +102,7 @@ public enum MermaidDiagramReader {
         case "kanban": return .kanban(titled(try KanbanParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "treeView-beta": return .treeView(titled(try TreeViewParser.parse(cursor, limits: limits), frontMatterTitle: title))
         // Pele reads `ishikawa` and `ishikawa-beta` in any case, and what follows them on their line as text.
-        case _ where keyword.lowercased().hasPrefix("ishikawa"):
+        case _ where Self.startsWithLetter("i", keyword) && keyword.lowercased().hasPrefix("ishikawa"):
             return .ishikawa(titled(try IshikawaParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         case "info": return .info(titled(try InfoDiagramParser.parse(cursor), frontMatterTitle: title))
         case "packet", "packet-beta": return .packet(titled(try PacketDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
@@ -107,7 +113,7 @@ public enum MermaidDiagramReader {
         case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case _ where keyword.hasPrefix("eventmodeling"):
             return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
-        case _ where RailroadNotation(typeKeyword: keyword) != nil:
+        case _ where Self.startsWithLetter("r", keyword) && RailroadNotation(typeKeyword: keyword) != nil:
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case _ where C4DiagramLevel(rawValue: keyword) != nil:
             return .c4(titled(try C4Parser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
@@ -141,8 +147,7 @@ public enum MermaidDiagramReader {
         let readFrontMatter = MermaidReadFrontMatter(in: sourceBytes)
         let (title, start) = try frontMatterTitleAndEnd(readFrontMatter, in: sourceBytes)
         let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
-        var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes)
-        cursor.readFrontMatter = readFrontMatter
+        var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes, readFrontMatter: readFrontMatter)
         cursor.advance(by: start)
         return (title, cursor)
     }

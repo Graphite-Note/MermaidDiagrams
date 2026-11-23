@@ -6,7 +6,7 @@
  *              plain scalar continued on deeper lines), a line's key and its comment, as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -19,9 +19,9 @@ extension SequenceAttributesBlockSyntax {
         var text = Self.trimmed(Self.withoutComment(rest))
         while lineIndex < lines.count {
             let line = lines[lineIndex]
-            if Self.trimmed(line).isEmpty {
+            if SequenceAttributesFlowSyntax.trimmedBounds(line).isEmpty {
                 var next = lineIndex
-                while next < lines.count, Self.trimmed(lines[next]).isEmpty { next += 1 }
+                while next < lines.count, SequenceAttributesFlowSyntax.trimmedBounds(lines[next]).isEmpty { next += 1 }
                 if next >= lines.count || Self.leadingWhitespace(of: lines[next]) <= indent { break }
                 text += Array(repeating: "\n", count: next - lineIndex)
                 lineIndex = next
@@ -46,7 +46,7 @@ extension SequenceAttributesBlockSyntax {
                 let (value, end) = try SequenceAttributesFlowSyntax.value(in: text, at: 0, stops: "")
                 let usedLineCount = text[..<end].count { scalar in scalar == "\n" }
                 let lineEnd = text[end...].firstIndex(of: "\n") ?? text.count
-                guard Self.trimmed(Self.withoutComment(Array(text[end..<lineEnd]))).isEmpty else { throw .invalid }
+                guard Self.isBlankBeforeComment(Array(text[end..<lineEnd])) else { throw .invalid }
                 lineIndex = start + usedLineCount
                 return value
             } catch {
@@ -162,6 +162,17 @@ extension SequenceAttributesBlockSyntax {
 
     /// The line up to a comment: a `#` at its start or after a space or a tab, outside quotation marks.
     static func withoutComment(_ line: Text) -> Text {
+        let end = commentStart(in: line)
+        return end == line.count ? line : Array(line[..<end])
+    }
+
+    /// Whether the line holds nothing but white space before its comment, found without copying it.
+    static func isBlankBeforeComment(_ line: Text) -> Bool {
+        SequenceAttributesFlowSyntax.trimmedBounds(line[..<commentStart(in: line)]).isEmpty
+    }
+
+    /// Where the line's comment starts, its length when it has none.
+    private static func commentStart(in line: Text) -> Int {
         var quote: Unicode.Scalar?
         var index = 0
         while index < line.count {
@@ -171,11 +182,11 @@ extension SequenceAttributesBlockSyntax {
             } else if scalar == "\"" || scalar == "'" {
                 quote = scalar
             } else if scalar == "#", index == 0 || line[index - 1] == " " || line[index - 1] == "\t" {
-                return Array(line[..<index])
+                return index
             }
             index += 1
         }
-        return line
+        return line.count
     }
 
     private static func isBlank(_ scalar: Unicode.Scalar) -> Bool {

@@ -5,7 +5,7 @@
  * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -13,42 +13,31 @@
 struct MermaidTextCursor {
     /// The text the diagram's statements are read from, preprocessed as Pele does (`MermaidPreprocessing`).
     let bytes: [UInt8]
-    /// The text as written, line breaks made line feeds, with its front matter and directives, which a type's options
-    /// are read from (`MermaidConfigurationOptions`).
-    let sourceBytes: [UInt8]
-    /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
-    var readFrontMatter: MermaidReadFrontMatter? {
-        get {
-            switch frontMatterLookup {
-            case .notLooked: nil
-            case .absent: MermaidReadFrontMatter(frontMatter: nil)
-            case .found(let found): found.read
-            }
-        }
-        set {
-            if let newValue {
-                frontMatterLookup = newValue.frontMatter == nil ? .absent : .found(MermaidReadFrontMatterReference(read: newValue))
-            } else {
-                frontMatterLookup = .notLooked
-            }
-        }
-    }
-    /// The front matter kept behind one reference, so that copying the cursor, as every lookahead does, retains no more
-    /// than the reference.
-    private var frontMatterLookup = MermaidFrontMatterLookup.notLooked
+    /// The text as written and its front matter, behind one reference, nil when they are `bytes` and not looked at: so
+    /// that copying the cursor, as every lookahead does, retains no more than its bytes and that reference.
+    private let source: MermaidCursorSource?
     private(set) var position: Int
     /// The 1-based line of `position` in the diagram's text.
     private(set) var line: Int
 
+    /// The text as written, line breaks made line feeds, with its front matter and directives, which a type's options
+    /// are read from (`MermaidConfigurationOptions`).
+    var sourceBytes: [UInt8] { source?.bytes ?? bytes }
+    /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
+    var readFrontMatter: MermaidReadFrontMatter? { source?.readFrontMatter }
+
     init(bytes: [UInt8]) {
-        self.init(bytes: bytes, sourceBytes: bytes)
+        self.bytes = bytes
+        source = nil
+        position = 0
+        line = 1
     }
 
-    init(bytes: [UInt8], sourceBytes: [UInt8]) {
+    init(bytes: [UInt8], sourceBytes: [UInt8], readFrontMatter: MermaidReadFrontMatter? = nil) {
         self.bytes = bytes
-        self.sourceBytes = sourceBytes
-        self.position = 0
-        self.line = 1
+        source = MermaidCursorSource(bytes: sourceBytes, readFrontMatter: readFrontMatter)
+        position = 0
+        line = 1
     }
 
     var isAtEnd: Bool { position >= bytes.count }
@@ -152,17 +141,14 @@ struct MermaidTextCursor {
     }
 }
 
-/// Whether the reader looked for the front matter of a cursor's text, and what it found.
-private enum MermaidFrontMatterLookup {
-    case notLooked
-    case absent
-    case found(MermaidReadFrontMatterReference)
-}
+/// The text a cursor's diagram was written as and the front matter the reader found in it, shared by every copy of the
+/// cursor and never changed.
+private final class MermaidCursorSource {
+    let bytes: [UInt8]
+    let readFrontMatter: MermaidReadFrontMatter?
 
-private final class MermaidReadFrontMatterReference {
-    let read: MermaidReadFrontMatter
-
-    init(read: MermaidReadFrontMatter) {
-        self.read = read
+    init(bytes: [UInt8], readFrontMatter: MermaidReadFrontMatter?) {
+        self.bytes = bytes
+        self.readFrontMatter = readFrontMatter
     }
 }

@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartPointStyleSyntax.swift
+ * -----------------------------------------
+ * Layer: Core
+ * Description: Reads the styles a quadrant chart's point or classDef writes, as Mermaid's quadrant database does: radius,
+ *              color, stroke-color and stroke-width, refusing another name or a value of the wrong form.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Reads the styles a quadrant chart's point or `classDef` writes, as Mermaid's quadrant database does: `radius: 10`
 /// (whole points), `color: #ff3300` and `stroke-color: #10f0f0` (six or three hexadecimal digits, the `#` optional) and
 /// `stroke-width: 5px`. Another name, or a value of the wrong form, is an error, as in Mermaid.
@@ -7,7 +19,7 @@ enum QuadrantChartPointStyleSyntax {
         var style = QuadrantChartPointStyle()
         for written in styles {
             let (name, value) = nameAndValue(written)
-            let invalid = MermaidDiagramReadError.invalidSyntax(line: line, problem: .invalidPointStyleValue(name: name, value: value))
+            var invalid: MermaidDiagramReadError { .invalidSyntax(line: line, problem: .invalidPointStyleValue(name: name, value: value)) }
             switch name {
             case radiusName:
                 guard let radius = wholeNumber(value) else { throw invalid }

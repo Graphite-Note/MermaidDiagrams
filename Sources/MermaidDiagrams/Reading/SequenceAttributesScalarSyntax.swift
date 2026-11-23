@@ -20,7 +20,10 @@ enum SequenceAttributesScalarSyntax {
     /// Booleans, decimal, hexadecimal (`0x`), octal (`0o`) and binary (`0b`) numbers, `.inf` and `.nan` numbers, and
     /// anything else text.
     static func scalar(_ raw: String) -> SequenceAttributeValue {
-        let text = SequenceAttributesFlowSyntax.string(SequenceAttributesFlowSyntax.trimmed(raw.unicodeScalars))
+        let scalars = raw.unicodeScalars
+        let isTrimmed = scalars.first.map { first in !SequenceAttributesFlowSyntax.isTrimmed(first) } ?? true
+            && scalars.last.map { last in !SequenceAttributesFlowSyntax.isTrimmed(last) } ?? true
+        let text = isTrimmed ? raw : SequenceAttributesFlowSyntax.string(SequenceAttributesFlowSyntax.trimmed(scalars))
         switch text {
         case "", "~", "null", "Null", "NULL": return .null
         case "true", "True", "TRUE": return .boolean(true)

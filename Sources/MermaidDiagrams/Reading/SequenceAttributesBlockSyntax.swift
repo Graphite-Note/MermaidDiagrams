@@ -6,7 +6,7 @@
  *              reader does, for a sequence participant's attributes written over several lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -34,9 +34,7 @@ struct SequenceAttributesBlockSyntax {
         }
         let normalized = !source.utf8.contains(0x0D) ? source
             : source.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        var reader = SequenceAttributesBlockSyntax(lines: normalized.split(separator: "\n", omittingEmptySubsequences: false).map { line in
-            Array(line.unicodeScalars)
-        })
+        var reader = SequenceAttributesBlockSyntax(lines: MermaidByte.lines(of: normalized).map { line in Array(line.unicodeScalars) })
         let value: SequenceAttributeValue
         do { value = try reader.block(minimumIndent: 0, depth: 0) } catch { throw .invalid }
         reader.skipBlankLines()
@@ -119,7 +117,7 @@ struct SequenceAttributesBlockSyntax {
             let keyText = try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: "").0.javaScriptText
             let rest = Array(current[valueStart...])
             lineIndex += 1
-            if Self.trimmed(Self.withoutComment(rest)).isEmpty {
+            if Self.isBlankBeforeComment(rest) {
                 entries[keyText] = try valueBelow(keyIndent: indent, depth: depth)
             } else {
                 entries[keyText] = try inlineValue(Self.trimmed(rest), indent: indent)

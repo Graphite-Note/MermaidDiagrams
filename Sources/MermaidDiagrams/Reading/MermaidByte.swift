@@ -73,6 +73,24 @@ enum MermaidByte {
         byte == newline || byte == semicolon || byte == carriageReturn
     }
 
+    /// The text split at its line feeds as `split(separator: "\n", omittingEmptySubsequences: false)` splits it at its
+    /// characters: a line feed is a character of its own but after a carriage return, so text without one is cut at its
+    /// bytes, straight from its storage.
+    static func lines(of text: String) -> [String] {
+        guard !text.utf8.contains(carriageReturn) else { return text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) }
+        var text = text
+        return text.withUTF8 { bytes in
+            var lines: [String] = []
+            var start = 0
+            for index in bytes.indices where bytes[index] == newline {
+                lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<index]), as: UTF8.self))
+                start = index + 1
+            }
+            lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start...]), as: UTF8.self))
+            return lines
+        }
+    }
+
     /// The value without its `!important`s, in any case, as CSS's priority is dropped from a style's values; a value
     /// without an exclamation mark's byte is returned as it is, as none can be found in it.
     static func withoutImportance(_ value: String) -> String {

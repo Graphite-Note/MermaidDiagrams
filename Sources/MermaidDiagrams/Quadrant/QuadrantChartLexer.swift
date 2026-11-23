@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartLexer.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Cuts a quadrant chart's statements into tokens as Mermaid's quadrant grammar does (Pele's port of its
+ *              lexer): comments, titles, accessibility statements, keywords, texts, points and punctuation.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Cuts a quadrant chart's statements into tokens as Mermaid's quadrant grammar does (Pele's port of its lexer):
 /// `%%` comments anywhere, `title` and the rest of its line, accessibility statements, the keywords `x-axis`,
 /// `y-axis`, `quadrant-1` to `quadrant-4` and the arrow `-->` with the spaces around them, `classDef`, text in
@@ -20,7 +32,7 @@ struct QuadrantChartLexer {
     }
 
     private mutating func readToken(startingWith byte: UInt8) throws(MermaidDiagramReadError) {
-        let start = cursor
+        let start = TokenStart(position: cursor.position, line: cursor.line)
         if skipComment(startingWith: byte) { return }
         if byte == MermaidByte.newline || byte == MermaidByte.carriageReturn {
             while let next = cursor.peek(), next == MermaidByte.newline || next == MermaidByte.carriageReturn { cursor.advance() }
@@ -39,7 +51,13 @@ struct QuadrantChartLexer {
         try readRunOrCharacter(startingWith: byte, from: start)
     }
 
-    private mutating func append(_ kind: QuadrantChartTokenKind, content: QuadrantChartTokenContent = .none, from start: MermaidTextCursor) {
+    /// Where a token starts: its position and line, kept without copying the cursor at every token.
+    private struct TokenStart {
+        let position: Int
+        let line: Int
+    }
+
+    private mutating func append(_ kind: QuadrantChartTokenKind, content: QuadrantChartTokenContent = .none, from start: TokenStart) {
         tokens.append(QuadrantChartToken(kind: kind, content: content, start: start.position, end: cursor.position, line: start.line))
     }
 
@@ -108,7 +126,7 @@ struct QuadrantChartLexer {
 
     /// Text in quotation marks, which may span lines, or a Markdown string between "` and `". Empty text makes no
     /// token, as in Mermaid's grammar; a quotation without its end is an error.
-    private mutating func readString(from start: MermaidTextCursor) throws(MermaidDiagramReadError) {
+    private mutating func readString(from start: TokenStart) throws(MermaidDiagramReadError) {
         let isMarkdown = cursor.peek(1) == MermaidByte.graveAccent
         cursor.advance(by: isMarkdown ? 2 : 1)
         let textStart = cursor.position
@@ -127,7 +145,7 @@ struct QuadrantChartLexer {
     }
 
     /// `:::` and a class's name: letters, digits and underscores, at least one.
-    private mutating func readClassName(from start: MermaidTextCursor) throws(MermaidDiagramReadError) {
+    private mutating func readClassName(from start: TokenStart) throws(MermaidDiagramReadError) {
         cursor.advance(by: Self.classMarker.count)
         let nameStart = cursor.position
         while let byte = cursor.peek(), Self.isWordByte(byte) { cursor.advance() }
@@ -136,7 +154,7 @@ struct QuadrantChartLexer {
     }
 
     /// A run of letters, of digits or of bytes beyond ASCII, or one character that makes a token alone.
-    private mutating func readRunOrCharacter(startingWith byte: UInt8, from start: MermaidTextCursor) throws(MermaidDiagramReadError) {
+    private mutating func readRunOrCharacter(startingWith byte: UInt8, from start: TokenStart) throws(MermaidDiagramReadError) {
         if MermaidByte.isLetter(byte) {
             skipRun(of: MermaidByte.isLetter)
             return append(.letters, from: start)
@@ -149,7 +167,7 @@ struct QuadrantChartLexer {
             skipRun(of: MermaidByte.isDigit)
             return append(.digits, from: start)
         }
-        guard let kind = Self.singleCharacters[byte] else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
+        guard let kind = Self.singleCharacterKinds[Int(byte)] else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         cursor.advance()
         append(kind, from: start)
     }
@@ -169,6 +187,9 @@ struct QuadrantChartLexer {
     }
 
     /// The characters that make a token alone, and the token each makes.
+    /// `singleCharacters` by byte, read without hashing at every token.
+    private static let singleCharacterKinds: [QuadrantChartTokenKind?] = (0...255).map { byte in singleCharacters[UInt8(byte)] }
+
     private static let singleCharacters: [UInt8: QuadrantChartTokenKind] = {
         var kinds: [UInt8: QuadrantChartTokenKind] = [
             MermaidByte.colon: .colon, MermaidByte.comma: .comma, MermaidByte.hyphen: .hyphen, numberSign: .numberSign,

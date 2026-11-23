@@ -24,7 +24,7 @@ struct TreeViewSourceLine {
 /// lines go with the blank lines before them, as Mermaid's preprocessing removes them.
 enum TreeViewBoxDrawingReader {
     static func lines(after keywordLine: Int, in text: String) throws(MermaidDiagramReadError) -> [TreeViewSourceLine] {
-        let written = withoutCommentLines(Self.splitLines(text).enumerated().map { offset, line in
+        let written = withoutCommentLines(MermaidByte.lines(of: text).enumerated().map { offset, line in
             TreeViewSourceLine(text: line, writtenLine: keywordLine + offset)
         })
         let unchanged = written.map { line in passesUnchanged(line.text) }
@@ -59,13 +59,6 @@ enum TreeViewBoxDrawingReader {
             }
         }
         return converted
-    }
-
-    /// The text split at its line feeds as its characters split it. A line feed is a character of its own but after a
-    /// carriage return, so text without one is split at its bytes.
-    private static func splitLines(_ text: String) -> [String] {
-        guard !text.utf8.contains(0x0D) else { return text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) }
-        return text.utf8.split(separator: 0x0A, omittingEmptySubsequences: false).map { line in String(Substring(line)) }
     }
 
     /// The lines without those Mermaid's preprocessing removes: a comment line (`%%` and text after blanks, not a
