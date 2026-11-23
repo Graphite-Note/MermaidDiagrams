@@ -5,8 +5,8 @@
  * Description: A class diagram with namespaces as a graph of nested boxes to lay out, as Pele's class renderer makes it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -37,16 +37,23 @@ struct ClassDiagramClusterGraph {
     let titles: [DiagramTextBlock?]
     /// How many namespace boxes each namespace's box is inside.
     let depths: [Int]
+    /// The namespace each node sits in, and the one each namespace is in, or nil.
+    let nodeNamespaces: [Int?]
+    let namespaceParents: [Int?]
 
+    /// `isTight`: a crossed namespace is not widened for its title (Pele's `tight`).
     init<Measurer: DiagramTextMeasuring>(tree: ClassDiagramNamespaceTree, measured: ClassDiagramMeasurement, layoutSizes: [CGSize],
-                                         direction: FlowchartDirection, titleText: Measurer, edgeTextRoom: CGSize) {
+                                         direction: FlowchartDirection, titleText: Measurer, edgeTextRoom: CGSize, isTight: Bool = false) {
         let measuredTitles = tree.namespaces.map { namespace in
             let title = DiagramTextBlock(label: namespace.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
             return title.lines.isEmpty ? nil : title
         }
         titles = measuredTitles
         let nodeClusters = Self.nodeClusters(tree: tree, measured: measured)
-        let crossed = Self.crossedNamespaces(tree: tree, measured: measured, nodeClusters: nodeClusters)
+        nodeNamespaces = nodeClusters
+        namespaceParents = tree.namespaces.map(\.parent)
+        let crossed = isTight ? [Bool](repeating: false, count: tree.namespaces.count)
+            : Self.crossedNamespaces(tree: tree, measured: measured, nodeClusters: nodeClusters)
         var holdsSomething = [Bool](repeating: false, count: tree.namespaces.count)
         for cluster in nodeClusters.compactMap({ cluster in cluster }) { holdsSomething[cluster] = true }
         for namespace in tree.namespaces { if let parent = namespace.parent { holdsSomething[parent] = true } }

@@ -6,7 +6,7 @@
  *              their lifelines, rows of events, the title and the padding.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -25,15 +25,66 @@ public enum SequenceLayoutEngine {
                           boldSmallestText: typography.measurer(size: keywordSize, isBold: true), font: typography.font)
     }
 
+    /// The diagram for a container `availableWidth` wide (nil for none), as Pele fits it (sequence/render.ts): laid out
+    /// with Pele's tight measurements (`SequenceMeasurements.tight`) when it does not fit and that is narrower
+    /// (`tighten`), the room the container then has to spare given to the gaps wrapped messages cross
+    /// (`SequenceGapWidening`).
+    public static func layout(_ diagram: SequenceDiagram, typography: DiagramTypography,
+                              availableWidth: CGFloat?) throws(SequenceLayoutError) -> SequenceLayout {
+        let keywordSize = SequenceTextMeasurers.smallestTextSize(participantText: typography.nodeText)
+        let boldSmallestText = typography.measurer(size: keywordSize, isBold: true)
+        return try DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: SequenceLayout) in layout.size.width }) { isTight throws(SequenceLayoutError) in
+            try layout(diagram, participantText: typography.nodeText, messageText: typography.edgeText, boldSmallestText: boldSmallestText,
+                       font: typography.font,
+                       measurements: isTight ? .tight(participantCount: diagram.participants.count, availableWidth: availableWidth) : .standard,
+                       availableWidth: isTight ? availableWidth : nil)
+        }
+    }
+
+    /// The most times a tight diagram is laid out again, holding back room its widened gaps took past the container.
+    private static var tightAttemptLimit: Int { 4 }
+
+    /// `measurements`: Pele's or its tight ones; `availableWidth`: in a tight layout, the container whose spare room
+    /// widens the gaps wrapped messages cross. A widened diagram wider than the container is laid out again with that
+    /// room held back, as Pele draws it again (`hold`).
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: SequenceDiagram, participantText: Measurer, messageText: Measurer,
-                                                       boldSmallestText: Measurer? = nil, font: DiagramFont) throws(SequenceLayoutError) -> SequenceLayout {
+                                                       boldSmallestText: Measurer? = nil, font: DiagramFont,
+                                                       measurements: SequenceMeasurements = .standard,
+                                                       availableWidth: CGFloat? = nil) throws(SequenceLayoutError) -> SequenceLayout {
         guard diagram.statementsNotLaidOut.isEmpty else { throw .statementsNotLaidOut(diagram.statementsNotLaidOut) }
-        let measurers = SequenceTextMeasurers(participantText: participantText, messageText: messageText, boldSmallestText: boldSmallestText)
+        let measurers = SequenceTextMeasurers(participantText: participantText, messageText: messageText, boldSmallestText: boldSmallestText,
+                                              measurements: measurements)
         let columns = SequenceColumns(diagram: diagram, measurers: measurers)
-        let extents = SequenceExtents(diagram: diagram, columns: columns, measurers: measurers)
-        var rows = SequenceRows(diagram: diagram, columns: columns, extents: extents, measurers: measurers)
-        rows.placeEvents()
-        return assemble(rows, title: diagram.title.map { title in measurers.participantBlock(DiagramLabel(title)) }, font: font)
+        let title = diagram.title.map { title in titleBlock(DiagramLabel(title), measurer: participantText, measurements: measurements, availableWidth: availableWidth) }
+        guard measurements.isTight, let available = DiagramWidthFitting.limit(availableWidth) else {
+            let extents = SequenceExtents(diagram: diagram, columns: columns, measurers: measurers)
+            var rows = SequenceRows(diagram: diagram, columns: columns, extents: extents, measurers: measurers)
+            rows.placeEvents()
+            return assemble(rows, title: title, font: font)
+        }
+        let widening = SequenceGapWidening(diagram: diagram, measurers: measurers)
+        var hold: CGFloat = 0
+        var byNeed = true
+        var attempt = 1
+        while true {
+            let widened = widening.widened(columns, availableWidth: available, hold: hold, byNeed: byNeed)
+            var rows = SequenceRows(diagram: diagram, columns: widened.columns, extents: widened.extents, measurers: measurers)
+            rows.placeEvents()
+            let laidOut = assemble(rows, title: title, font: font)
+            guard widened.isGrown, laidOut.size.width > available, attempt < tightAttemptLimit else { return laidOut }
+            hold = widened.isUneven ? hold : hold > 0 ? .infinity : laidOut.size.width - available.rounded(.down)
+            byNeed = false
+            attempt += 1
+        }
+    }
+
+    /// The title: unwrapped, or in a tight layout wrapped to the container less its padding and each line still wider
+    /// than that, or than 120 points, broken between characters (Pele's `titleRoom` and `breakLabel`).
+    private static func titleBlock<Measurer: DiagramTextMeasuring>(_ title: DiagramLabel, measurer: Measurer, measurements: SequenceMeasurements,
+                                                                   availableWidth: CGFloat?) -> DiagramTextBlock {
+        guard measurements.isTight else { return DiagramTextBlock(label: title, measurer: measurer, maximumWidth: .greatestFiniteMagnitude) }
+        let room = DiagramWidthFitting.titleRoom(availableWidth: availableWidth)
+        return DiagramTextBlock(label: title, measurer: measurer, wrappingWidth: room, breakingWidth: max(SequenceMeasurements.narrowestBreakingWidth, room))
     }
 
     /// The participants above and below their lifelines, the boxes behind them, the title centered above everything,
@@ -44,7 +95,7 @@ public enum SequenceLayoutEngine {
         let lastRow = rows.y
         let footerHeight = columns.participantSizes.indices.filter { index in rows.lifelineEnds[index] == nil }
             .map { index in columns.participantSizes[index].height }.max() ?? 0
-        let boxPadding = columns.boxRuns.runs.isEmpty ? 0 : SequenceSpacing.boxPadding
+        let boxPadding = columns.boxRuns.runs.isEmpty ? 0 : columns.boxRuns.padding
         if rows.extents.minimumX > rows.extents.maximumX { rows.extend(from: 0, to: max(title?.size.width ?? 0, emptyDiagramWidth)) }
         var topOfPage: CGFloat = 0
         var placedTitle = title.flatMap { block in block.lines.isEmpty ? nil : block }
@@ -98,9 +149,9 @@ public enum SequenceLayoutEngine {
             let edges = columns.boxRuns.edges(of: run, centers: columns.centers, sizes: columns.participantSizes)
             var title = run.title.flatMap { block in block.lines.isEmpty ? nil : block }
             if let height = title?.size.height {
-                title?.center = CGPoint(x: (edges.left + edges.right) / 2, y: SequenceSpacing.boxPadding / 2 + SequenceSpacing.boxTitleDepth + height / 2)
+                title?.center = CGPoint(x: (edges.left + edges.right) / 2, y: columns.boxRuns.padding / 2 + SequenceSpacing.boxTitleDepth + height / 2)
             }
-            return SequenceLayoutBox(frame: CGRect(x: edges.left, y: 0, width: edges.right - edges.left, height: bottom + SequenceSpacing.boxPadding),
+            return SequenceLayoutBox(frame: CGRect(x: edges.left, y: 0, width: edges.right - edges.left, height: bottom + columns.boxRuns.padding),
                                      color: rows.diagram.boxes[run.boxIndex].color, title: title)
         }
     }

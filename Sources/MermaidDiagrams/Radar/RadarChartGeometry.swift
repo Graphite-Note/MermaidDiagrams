@@ -6,8 +6,8 @@
  *              values lie.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -27,8 +27,14 @@ struct RadarChartGeometry {
     let curves: [RadarLayoutCurve]
 
     init(chart: RadarChart) {
+        self.init(chart: chart, width: chart.appearance.width, height: chart.appearance.height)
+    }
+
+    /// The geometry of a chart whose circle's box is `width` by `height` rather than its own (`width` and `height`), as
+    /// Pele's `fitWidth` draws a radar chart narrower.
+    init(chart: RadarChart, width: CGFloat, height: CGFloat) {
         let appearance = chart.appearance
-        let circleRadius = min(appearance.width, appearance.height) / 2
+        let circleRadius = min(width, height) / 2
         radius = circleRadius
         let count = chart.axes.count
         axisDirections = chart.axes.indices.map { index in
@@ -39,9 +45,9 @@ struct RadarChartGeometry {
         ringRadii = (0..<tickCount).map { index in min(circleRadius, circleRadius * CGFloat(index + 1) / CGFloat(chart.options.tickCount)) }
         spokeLength = circleRadius * appearance.axisScaleFactor
         labelDistance = circleRadius * appearance.axisLabelFactor + RadarChartLayoutEngine.labelOffset
-        frameWithMargins = CGRect(x: -appearance.width / 2 - appearance.marginLeft, y: -appearance.height / 2 - appearance.marginTop,
-                                  width: appearance.width + appearance.marginLeft + appearance.marginRight,
-                                  height: appearance.height + appearance.marginTop + appearance.marginBottom)
+        frameWithMargins = CGRect(x: -width / 2 - appearance.marginLeft, y: -height / 2 - appearance.marginTop,
+                                  width: width + appearance.marginLeft + appearance.marginRight,
+                                  height: height + appearance.marginTop + appearance.marginBottom)
         let valueRange = Self.valueRange(of: chart)
         let directions = axisDirections
         curves = chart.curves.enumerated().compactMap { index, curve in

@@ -6,8 +6,8 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 19/11/2026
+ * Version: 0.6
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -107,5 +107,13 @@ struct MermaidDiagramPreparationContext {
         let narrow = scene(layout)
         guard narrow.size.width < regularSize.width, limits.allowsDrawing(narrow.size) else { return nil }
         return narrow
+    }
+
+    /// The scene of `turned` for a diagram Pele turns to run down only (`turnToFit`): as `narrowScene`, and only for a
+    /// column under Pele's 640-point breakpoint, past which Pele keeps a diagram across however wide it is.
+    func turnedNarrowScene<Diagram, Layout>(of turned: Diagram?, regularSize: CGSize, laidOut: (Diagram) throws -> Layout,
+                                            scene: (Layout) -> DiagramScene) -> DiagramScene? {
+        guard let narrowestColumnWidth, narrowestColumnWidth < DiagramWidthFitting.defaultDirectionBreakpoint else { return nil }
+        return narrowScene(of: turned, regularSize: regularSize, laidOut: laidOut, scene: scene)
     }
 }

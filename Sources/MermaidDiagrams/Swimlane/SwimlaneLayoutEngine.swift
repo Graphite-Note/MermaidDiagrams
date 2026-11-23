@@ -6,8 +6,8 @@
  *              as a flowchart, its top-level groups lanes, laid out in lanes, drawn as a flowchart inside them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -36,6 +36,22 @@ public enum SwimlaneLayoutEngine {
                isTight: diagramSpacing == .compact, columnWidth: columnWidth)
     }
 
+    /// The diagram for a container `availableWidth` wide (nil for none), as Pele fits its flowchart variant: one that runs
+    /// across is turned to run down (`swimlaneTurnedToRunDown`) when it does not fit a container under 640 points and
+    /// turned is narrower (`turnToFit`); either way it takes the tight measurements when it does not fit and tight is
+    /// narrower (`tighten`).
+    public static func layout(_ diagram: FlowchartDiagram, typography: DiagramTypography, availableWidth: CGFloat?) -> SwimlaneLayout {
+        func fitted(_ diagram: FlowchartDiagram) -> SwimlaneLayout {
+            DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: SwimlaneLayout) in layout.size.width }) { isTight in
+                layout(diagram, typography: typography, spacing: isTight ? .compact : .standard, columnWidth: availableWidth)
+            }
+        }
+        guard let turned = diagram.swimlaneTurnedToRunDown else { return fitted(diagram) }
+        return DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: SwimlaneLayout) in layout.size.width }) { isDown in
+            fitted(isDown ? turned : diagram)
+        }
+    }
+
     static func layout<Measurer: DiagramTextMeasuring>(_ written: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, titleText: Measurer,
                                                        font: DiagramFont, isTight: Bool, columnWidth: CGFloat? = nil) -> SwimlaneLayout {
         let diagram = FlowchartCollapsedGroups.collapsing(written)
@@ -57,9 +73,6 @@ extension FlowchartDiagram {
     /// variant turned (`rootDir` "TB", whether it ran left or right); nil for one that runs down or up. Its groups keep their
     /// directions, which a lane has no use for. A flowchart turns otherwise (`turnedToRunDown`).
     public var swimlaneTurnedToRunDown: FlowchartDiagram? {
-        guard direction.runsAcross else { return nil }
-        var turned = self
-        turned.direction = .topToBottom
-        return turned
+        rootTurnedToRunDown
     }
 }

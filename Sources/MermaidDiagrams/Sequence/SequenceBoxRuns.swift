@@ -6,8 +6,8 @@
  *              padded, and widened for its title, as Pele places them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -29,8 +29,11 @@ struct SequenceBoxRuns {
     private(set) var runs: [SequenceBoxRun] = []
     /// The tallest title's height, 0 without titles.
     let titleHeight: CGFloat
+    /// The room around a box's participants (Mermaid's `boxMargin`, smaller in a tight layout).
+    let padding: CGFloat
 
     init<Measurer>(diagram: SequenceDiagram, measurers: SequenceTextMeasurers<Measurer>) {
+        padding = measurers.measurements.boxPadding
         for (index, participant) in diagram.participants.enumerated() {
             guard let boxIndex = participant.boxIndex else { continue }
             if let last = runs.last, last.boxIndex == boxIndex, last.lastParticipantIndex == index - 1 {
@@ -38,7 +41,7 @@ struct SequenceBoxRuns {
                 continue
             }
             let box = diagram.boxes[boxIndex]
-            let title = box.title.map { label in measurers.messageBlock(label, wrappingWidth: box.wrapsTitle ? SequenceSpacing.wrappingWidth : nil) }
+            let title = box.title.map { label in measurers.messageBlock(label, wraps: box.wrapsTitle) }
             runs.append(SequenceBoxRun(boxIndex: boxIndex, firstParticipantIndex: index, lastParticipantIndex: index, title: title))
         }
         titleHeight = runs.compactMap { run in run.title.map { title in title.lines.isEmpty ? 0 : title.size.height } }.max() ?? 0
@@ -47,14 +50,14 @@ struct SequenceBoxRuns {
     /// The room above the participants' boxes: the padding and the tallest title with its gap, or nothing without boxes.
     var topRoom: CGFloat {
         guard !runs.isEmpty else { return 0 }
-        return SequenceSpacing.boxPadding + (titleHeight > 0 ? titleHeight + SequenceSpacing.boxTitleGap : 0)
+        return padding + (titleHeight > 0 ? titleHeight + SequenceSpacing.boxTitleGap : 0)
     }
 
     /// What the boxes add to the gap between two neighbouring participants: a padding for each that is in a box, when
     /// their boxes differ.
-    static func room(between left: SequenceParticipant, and right: SequenceParticipant) -> CGFloat {
+    func room(between left: SequenceParticipant, and right: SequenceParticipant) -> CGFloat {
         guard left.boxIndex != right.boxIndex else { return 0 }
-        return (left.boxIndex == nil ? 0 : SequenceSpacing.boxPadding) + (right.boxIndex == nil ? 0 : SequenceSpacing.boxPadding)
+        return (left.boxIndex == nil ? 0 : padding) + (right.boxIndex == nil ? 0 : padding)
     }
 
     /// Widens the gaps around each run whose title is wider than its participants, by half the difference on each side,
@@ -74,7 +77,7 @@ struct SequenceBoxRuns {
 
     /// The run's left and right edges, the participants placed at `centers`.
     func edges(of run: SequenceBoxRun, centers: [CGFloat], sizes: [CGSize]) -> (left: CGFloat, right: CGFloat) {
-        (centers[run.firstParticipantIndex] - sizes[run.firstParticipantIndex].width / 2 - SequenceSpacing.boxPadding - run.growth,
-         centers[run.lastParticipantIndex] + sizes[run.lastParticipantIndex].width / 2 + SequenceSpacing.boxPadding + run.growth)
+        (centers[run.firstParticipantIndex] - sizes[run.firstParticipantIndex].width / 2 - padding - run.growth,
+         centers[run.lastParticipantIndex] + sizes[run.lastParticipantIndex].width / 2 + padding + run.growth)
     }
 }

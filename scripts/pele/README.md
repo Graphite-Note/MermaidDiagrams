@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--svg-at=<width>] [--max-width=<width>,…]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -46,6 +46,13 @@ With no flag it does the corpus, compat, random flat, bench and preprocessing ru
   (`random-flat.json`) and what Pele drew of them, recorded as the corpus is (`pele-random-flat.json`).
 - `--svg-of=<corpus>#<index>,…` writes the SVGs Pele draws of those inputs only (a random flat flowchart or a generated
   graph included) to `<output>/svg`; it records nothing.
+- `--svg-at=<width>` draws the `--svg-of` inputs as Pele's mount shows them in a container that wide (below), to
+  `svg/<corpus>-<index>-at-<width>.svg`.
+- `--max-width=<width>,…` writes `pele-narrow.json`: every documentation example (the `-docs` corpora) as Pele's mount
+  shows it in a container of each width (`src/mount.ts` `fit`: the drawing without a width when it fits or when drawing
+  it for no room at all changes nothing, else the drawing for that width, `maxWidth`), recorded as the corpus is with
+  `narrowed` saying which drawing it is, untimed. It runs only when asked for; the package keeps the run at 280, 390 and
+  600 points for `PeleNarrowDifferentialTests`.
 - `--bench` reproduces Pele's `scripts/bench.mjs` (its five cases: the 114 flowchart examples, a tree and a mesh of 50 and
   of 500 nodes, generated with the same seed; each case timed whole, one run not counted, then runs until 300 ms are
   spent, at least 5 and at most 2,000) and times each type's documentation examples the same way, and writes
@@ -58,7 +65,7 @@ With no flag it does the corpus, compat, random flat, bench and preprocessing ru
 - `--svg` writes the SVG Pele draws for each documentation example to `svg/<corpus>-<index>.svg` in the output folder
   (refused inputs have none), untimed, to compare a drawing with the package's by eye; it runs only when asked for.
 
-The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
+The package keeps `pele-corpus.json`, `pele-narrow.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
 `random-flat.json`, `pele-random-flat.json` and `pele-preprocessing.json` in
 `Sources/MermaidDiagramsBenchmark/Resources`; run the benchmark part on a quiet machine, then
 `swift run -c release MermaidDiagramsBenchmark --pele-comparison` on the same machine.

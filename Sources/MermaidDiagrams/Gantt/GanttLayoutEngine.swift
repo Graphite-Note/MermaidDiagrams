@@ -5,8 +5,8 @@
  * Description: Lays a Gantt chart out in Pele's style, with its options and for a narrow column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -66,7 +66,7 @@ public enum GanttLayoutEngine {
         let schedule = try GanttSchedule(chart: chart, now: wallClockNow, zone: zone, limits: limits)
         let rowText = chart.options.fontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? typography.rowText
         let sectionText = chart.options.sectionFontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? rowText
-        let measurers = GanttMeasurers(title: typography.nodeText, row: rowText, axis: typography.axisText, section: sectionText)
+        let measurers = GanttMeasurers(title: typography.boldNodeText, row: rowText, axis: typography.axisText, section: sectionText)
         return layout(chart, schedule: schedule.entries, now: wallClockNow, zone: zone, measurers: measurers, font: typography.font, availableWidth: availableWidth)
     }
 

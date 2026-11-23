@@ -5,7 +5,7 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -36,6 +36,9 @@ struct ClassDiagramPageAssembly {
     private var namespaces: [FlowchartLayoutCluster] = []
     /// For each relation placed through boxes, the points it passes: where it crosses a namespace's top.
     private var edgePoints: [[CGPoint]] = []
+    /// The namespace each node sits in and the one each namespace is in, for a diagram laid out in them.
+    private var nodeNamespaces: [Int?] = []
+    private var namespaceParents: [Int?] = []
 
     init(measured: ClassDiagramMeasurement, markRowHeight: CGFloat, axes: FlowchartFlowAxes) {
         self.measured = measured
@@ -181,6 +184,8 @@ struct ClassDiagramPageAssembly {
 
     /// The namespaces' boxes, each title along its box's top, clear of the relations where it can be.
     mutating func placeNamespaces(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
+        nodeNamespaces = clustered.nodeNamespaces
+        namespaceParents = clustered.namespaceParents
         let crossings = FlowchartRoutePointIndex(edgePoints)
         namespaces = placement.clusterFrames.enumerated().map { index, frame in
             let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
@@ -243,7 +248,30 @@ struct ClassDiagramPageAssembly {
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
     /// title, and centered under the title when the title is wider.
-    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> ClassDiagramLayout {
+    /// The diagram's parts that nothing joins set in rows `rowWidth` wide, `gap` apart, as Pele's `wrapComponents` sets
+    /// them for a diagram wider than its container (`ClassDiagramComponentRows`), with the size of the rows; nil when
+    /// nothing moves.
+    func wrappedInRows(rowWidth: CGFloat, gap: CGFloat) -> (page: ClassDiagramPageAssembly, size: CGSize)? {
+        let frames = nodeCenters.indices.map { node in
+            CGRect(x: nodeCenters[node].x - measured.sizes[node].width / 2, y: nodeCenters[node].y - measured.sizes[node].height / 2,
+                   width: measured.sizes[node].width, height: measured.sizes[node].height)
+        }
+        let placedEdges = measured.edges.indices.map { index in
+            edges[index].map { placed in ClassDiagramComponentRows.Edge(source: measured.edges[index].source, target: measured.edges[index].target, placed: placed) }
+        }
+        guard let rows = ClassDiagramComponentRows.placement(namespaceFrames: namespaces.map(\.frame), namespaceParents: namespaceParents,
+                                                             nodeFrames: frames,
+                                                             nodeNamespaces: nodeNamespaces.isEmpty ? Array(repeating: nil, count: frames.count) : nodeNamespaces,
+                                                             edges: placedEdges, rowWidth: rowWidth, gap: gap) else { return nil }
+        var wrapped = self
+        wrapped.nodeCenters = zip(nodeCenters, rows.nodeOffsets).map { center, offset in center.translated(by: offset) }
+        wrapped.edges = zip(edges, rows.edgeOffsets).map { edge, offset in edge?.translated(by: offset) }
+        wrapped.namespaces = zip(namespaces, rows.namespaceOffsets).map { namespace, offset in namespace.translated(by: offset) }
+        return (wrapped, rows.size)
+    }
+
+    /// `drawingBounds`: the rectangle the drawing is taken to cover, when it is set in rows; else the union of its parts.
+    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat, drawingBounds: CGRect? = nil) -> ClassDiagramLayout {
         let (classes, notes, interfaces) = placedNodes()
         var relations: [ClassDiagramLayoutEdge] = []
         var noteLinks: [ClassDiagramLayoutEdge] = []
@@ -251,8 +279,9 @@ struct ClassDiagramPageAssembly {
             guard let placed = edges[edgeIndex] else { continue }
             if edge.relationIndex == nil { noteLinks.append(placed) } else { relations.append(placed) }
         }
-        let bounds = ClassDiagramLayoutBounds.union(frames: classes.map(\.frame) + notes.map(\.frame) + interfaces.map(\.frame) + namespaces.map(\.frame),
-                                                    edges: relations + noteLinks)
+        let bounds = drawingBounds
+            ?? ClassDiagramLayoutBounds.union(frames: classes.map(\.frame) + notes.map(\.frame) + interfaces.map(\.frame) + namespaces.map(\.frame),
+                                              edges: relations + noteLinks)
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
         let titleHeight = title == nil ? 0 : titleSize.height + titleGap

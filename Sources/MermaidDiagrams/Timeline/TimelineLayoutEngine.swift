@@ -1,3 +1,15 @@
+/**
+ * File: TimelineLayoutEngine.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays a timeline out across or down with Pele's measurements, and for a narrow container turned to run down
+ *              with its columns sharing the container's width, as Pele turns it.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a timeline out in Pele's style: across, its periods in columns along an axis with their events below; down
@@ -16,11 +28,27 @@ public enum TimelineLayoutEngine {
         layout(diagram, periodText: typography.nodeText, eventText: typography.edgeText, font: typography.font)
     }
 
+    /// The timeline for a container `availableWidth` wide (nil for none), as Pele draws it: one written to run down runs
+    /// down with its columns sharing the container's width; one across stays across unless it does not fit a container
+    /// under 640 points and turned down (`turnedToRunDown`, its columns sharing the width) is narrower (`turnToFit`).
+    public static func layout(_ diagram: TimelineDiagram, typography: DiagramTypography, availableWidth: CGFloat?) -> TimelineLayout {
+        let room = DiagramWidthFitting.limit(availableWidth).map { width in width - 2 * padding } ?? .infinity
+        func laidOut(_ diagram: TimelineDiagram, room: CGFloat) -> TimelineLayout {
+            layout(diagram, periodText: typography.nodeText, eventText: typography.edgeText, font: typography.font, room: room)
+        }
+        guard let turned = diagram.turnedToRunDown else { return laidOut(diagram, room: room) }
+        return DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: TimelineLayout) in layout.size.width }) { isDown in
+            isDown ? laidOut(turned, room: room) : laidOut(diagram, room: .infinity)
+        }
+    }
+
+    /// `room`: what a timeline running down has for its columns (`TimelineMeasurement`), infinity for no limit.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: TimelineDiagram, periodText: Measurer, eventText: Measurer,
-                                                       font: DiagramFont) -> TimelineLayout {
+                                                       font: DiagramFont, room: CGFloat = .infinity) -> TimelineLayout {
         let isDown = diagram.direction == .topToBottom
+        let measured = TimelineMeasurement(diagram: diagram, periodText: periodText, eventText: eventText, isDown: isDown, room: isDown ? room : .infinity)
         let placement = TimelinePlacement(diagram: diagram,
-                                          measured: TimelineMeasurement(diagram: diagram, periodText: periodText, eventText: eventText, isDown: isDown),
+                                          measured: measured,
                                           groups: TimelineGroup.groups(of: diagram), periodText: periodText, eventText: eventText)
         let bodyWidth = placement.bodyWidth(isDown: isDown)
         let title = diagram.title.map { title in

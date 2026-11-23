@@ -43,5 +43,8 @@
 drew for every input of Pele's `tests/corpus` and the generated graphs of its benchmark, how long it took on the Mac that
 ran it, every diagram text of its `tests/compat` (Mermaid's specs, MIT licensed), and what its flowchart database made of
 each text Mermaid's flowchart specs parse, written by `scripts/pele/run.sh` (see `scripts/pele/README.md`).
-`PeleKnownDifferences.md`: every input whose scene differs from Pele's beyond the differential tests' tolerance, every
+`pele-narrow.json`: what Pele 1.13.0 shows of every documentation example in a container 280, 390 and 600 points wide,
+written by `scripts/pele/run.sh --max-width=280,390,600`.
+`PeleKnownDifferences.md`: every input whose scene differs from Pele's beyond the differential tests' tolerance (in a
+narrow column too), every
 flowchart spec text read otherwise than Pele reads it, and every compat file without copied texts, each with why.

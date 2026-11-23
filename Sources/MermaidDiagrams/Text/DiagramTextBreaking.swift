@@ -6,7 +6,7 @@
  *              character, and a block's lines placed from their left or right end, as Pele writes text by its start.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -27,7 +27,13 @@ extension DiagramTextBlock {
     /// text, as Pele's `fitLabel` and `breakLabel` keep its label's: 1.3 sizes when it wrapped to several lines, 1.5 when a
     /// single line is broken.
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, fittingWidth maximumWidth: CGFloat) {
-        let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
+        self.init(label: label, measurer: measurer, wrappingWidth: maximumWidth, breakingWidth: maximumWidth)
+    }
+
+    /// `label` wrapped at spaces to `wrappingWidth`, and each line still wider than `breakingWidth` broken between
+    /// characters, as Pele's `layoutLabel` then `breakLabel` set a text (a sequence diagram's in a tight layout).
+    init(label: DiagramLabel, measurer: some DiagramTextMeasuring, wrappingWidth: CGFloat, breakingWidth maximumWidth: CGFloat) {
+        let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: wrappingWidth)
         guard wrapped.lineWidths.contains(where: { width in width > maximumWidth }) else {
             self = wrapped
             return

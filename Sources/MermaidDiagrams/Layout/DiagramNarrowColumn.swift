@@ -5,8 +5,8 @@
  * Description: Diagrams that run across turned to run down, for a column too narrow for them, as Pele turns them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// How tightly a flowchart is laid out: Pele's gaps, or the tighter ones it takes when the diagram does not fit its
@@ -41,6 +41,17 @@ extension FlowchartDiagram {
     }
 }
 
+extension FlowchartDiagram {
+    /// The flowchart with its own direction turned to run down, its groups keeping theirs, as Pele turns one (`draw` with
+    /// `turned` lays it out top to bottom whether it ran right or left); nil when its own direction does not run across.
+    public var rootTurnedToRunDown: FlowchartDiagram? {
+        guard direction.runsAcross else { return nil }
+        var turned = self
+        turned.direction = .topToBottom
+        return turned
+    }
+}
+
 extension StateDiagram {
     /// The state diagram with its direction and every composite's turned to run down, or nil when nothing runs across.
     public var turnedToRunDown: StateDiagram? {
@@ -49,6 +60,17 @@ extension StateDiagram {
         var turned = self
         turned.direction = direction.turnedToRunDown
         for index in turned.composites.indices { turned.composites[index].direction = composites[index].direction?.turnedToRunDown }
+        return turned
+    }
+}
+
+extension StateDiagram {
+    /// The state diagram with its own direction from the top down and its composites keeping theirs, as Pele's `draw`
+    /// with `turned` lays out one that runs right or left (`rootDir` "TB"); nil when its own direction does not run across.
+    var turnedTopToBottom: StateDiagram? {
+        guard direction.runsAcross else { return nil }
+        var turned = self
+        turned.direction = .topToBottom
         return turned
     }
 }
@@ -63,12 +85,34 @@ extension ClassDiagram {
     }
 }
 
+extension ClassDiagram {
+    /// The class diagram laid out from the top down, as Pele's `draw` with `turned` lays out one that runs right or left
+    /// (`rootDir` "TB"); nil when it does not run across.
+    var turnedTopToBottom: ClassDiagram? {
+        guard direction.runsAcross else { return nil }
+        var turned = self
+        turned.direction = .topToBottom
+        return turned
+    }
+}
+
 extension EntityRelationshipDiagram {
     /// The entity relationship diagram turned to run down, or nil when it does not run across.
     public var turnedToRunDown: EntityRelationshipDiagram? {
         guard direction.runsAcross else { return nil }
         var turned = self
         turned.direction = direction.turnedToRunDown
+        return turned
+    }
+}
+
+extension EntityRelationshipDiagram {
+    /// The diagram laid out from the top down, as Pele's `draw` with `turned` lays out one that runs right or left
+    /// (`turned ? 'TB'`); nil when it does not run across.
+    var turnedTopToBottom: EntityRelationshipDiagram? {
+        guard direction.runsAcross else { return nil }
+        var turned = self
+        turned.direction = .topToBottom
         return turned
     }
 }

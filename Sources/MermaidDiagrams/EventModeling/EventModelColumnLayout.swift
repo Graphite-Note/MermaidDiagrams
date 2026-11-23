@@ -6,8 +6,8 @@
  *              below the other, relations between neighbours straight down and the others on rails at the right.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -96,8 +96,7 @@ struct EventModelColumnLayout {
         let name = EventModelText.label(frame.name, measurer: measurers.bold, maximumWidth: textRoom - Self.numberRoom)
             ?? EventModelText.block([], measurer: measurers.bold)
         let data = frame.data.map { data in
-            EventModelText.block(EventModelText.literalLines(DiagramLabelDecoder.decodingEntities(data), measurer: measurers.data, room: textRoom),
-                                 measurer: measurers.data)
+            EventModelText.literalBlock(DiagramLabelDecoder.decodingEntities(data), measurer: measurers.data, room: textRoom)
         }
         let width = max(cardWidth, laneNameWidth + 2 * padding, name.size.width + 2 * padding + Self.numberRoom, (data?.size.width ?? 0) + 2 * padding)
         let height = 2 * Engine.boxVerticalPadding + name.size.height + (data.map { data in data.size.height + Engine.dataGap } ?? 0)
@@ -151,8 +150,8 @@ struct EventModelColumnLayout {
         Engine.cardTexts(of: diagram).map { card in
             let padding = Engine.boxHorizontalPadding
             let heading = EventModelText.label(card.heading, measurer: measurers.bold, maximumWidth: textRoom) ?? EventModelText.block([], measurer: measurers.bold)
-            let body = EventModelText.block(EventModelText.literalLines(DiagramLabelDecoder.decodingEntities(card.rows.joined(separator: "\n")),
-                                                                        measurer: measurers.regular, room: textRoom), measurer: measurers.regular)
+            let body = EventModelText.literalBlock(DiagramLabelDecoder.decodingEntities(card.rows.joined(separator: "\n")), measurer: measurers.regular,
+                                                   room: textRoom)
             let cardFrame = CGRect(x: Engine.padding, y: top, width: max(cardWidth, heading.size.width + 2 * padding, body.size.width + 2 * padding),
                                    height: 2 * Engine.boxVerticalPadding + heading.size.height + body.size.height)
             let textTop = top + Engine.boxVerticalPadding

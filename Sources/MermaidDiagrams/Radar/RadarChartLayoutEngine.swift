@@ -2,11 +2,12 @@
  * File: RadarChartLayoutEngine.swift
  * ----------------------------------
  * Layer: Core
- * Description: Lays a radar chart out with Pele's measurements.
+ * Description: Lays a radar chart out with Pele's measurements, and narrower, its legend below it, for a container too
+ *              narrow for it, as Pele fits one to its width.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -33,13 +34,36 @@ public enum RadarChartLayoutEngine {
     static let leanThreshold: CGFloat = 0.01
     static let wrappingWidth: CGFloat = 4_000
 
+    /// The narrowest a radar chart's circle is made for a narrow container (Pele's `least`).
+    static let narrowestChartWidth: CGFloat = 160
+
     public static func layout(_ chart: RadarChart, typography: DiagramTypography) -> RadarChartLayout {
-        layout(chart, text: typography.nodeText, smallText: typography.edgeText, boldText: typography.boldNodeText, font: typography.font)
+        layout(chart, typography: typography, availableWidth: nil)
+    }
+
+    /// The chart for a container `availableWidth` wide (nil for none), as Pele's `fitWidth` draws it: at its own size when
+    /// it fits; else with its legend below the chart and its circle's box narrower by what the page overflows (its height
+    /// in proportion), drawn again up to three times, not under 160 points; the title wrapped to the container.
+    public static func layout(_ chart: RadarChart, typography: DiagramTypography, availableWidth: CGFloat?) -> RadarChartLayout {
+        let natural = chart.appearance.width
+        return DiagramWidthFitting.fitWidth(availableWidth: availableWidth, natural: natural, least: narrowestChartWidth,
+                                            width: { (layout: RadarChartLayout) in layout.size.width }) { width, isTight in
+            let geometry = RadarChartGeometry(chart: chart, width: width, height: chart.appearance.height * width / natural)
+            return layout(chart, geometry: geometry, text: typography.nodeText, smallText: typography.edgeText, boldText: typography.boldNodeText,
+                          font: typography.font, isTight: isTight, titleRoom: DiagramWidthFitting.titleRoom(availableWidth: availableWidth))
+        }
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ chart: RadarChart, text: Measurer, smallText: Measurer, boldText: Measurer,
                                                        font: DiagramFont) -> RadarChartLayout {
-        let geometry = RadarChartGeometry(chart: chart)
+        layout(chart, geometry: RadarChartGeometry(chart: chart), text: text, smallText: smallText, boldText: boldText, font: font, isTight: false,
+               titleRoom: wrappingWidth)
+    }
+
+    /// The chart with `geometry`; `isTight` (it did not fit its container with its legend beside it) puts the legend
+    /// below the chart, centered on it, half the legend's gap under everything else; the title wraps at `titleRoom`.
+    static func layout<Measurer: DiagramTextMeasuring>(_ chart: RadarChart, geometry: RadarChartGeometry, text: Measurer, smallText: Measurer,
+                                                       boldText: Measurer, font: DiagramFont, isTight: Bool, titleRoom: CGFloat) -> RadarChartLayout {
         // The chart is laid out around its own origin, and put on the page at the end.
         var extent = geometry.frameWithMargins
         let labels = zip(chart.axes, geometry.axisDirections).map { axis, direction in
@@ -48,10 +72,13 @@ public enum RadarChartLayoutEngine {
         for label in labels { extent = extent.union(label.frame) }
         let legendTexts = chart.options.showsLegend
             ? chart.curves.map { curve in DiagramTextBlock(label: curve.label, measurer: smallText, maximumWidth: wrappingWidth) } : []
-        let legendOrigin = CGPoint(x: extent.maxX + legendGap, y: -CGFloat(legendTexts.count) * legendRowHeight / 2)
+        let legendWidth = swatchSide + swatchTextGap + (legendTexts.map(\.size.width).max() ?? 0)
+        let legendOrigin = isTight ? CGPoint(x: -legendWidth / 2, y: extent.maxY + legendGap / 2)
+            : CGPoint(x: extent.maxX + legendGap, y: -CGFloat(legendTexts.count) * legendRowHeight / 2)
+        // Below the chart the legend is centered on the origin, so it widens the page evenly on both sides, as Pele's does.
         if !legendTexts.isEmpty { extent = extent.union(legendFrame(of: legendTexts, at: legendOrigin)) }
         let title = chart.title.map { title in
-            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: wrappingWidth)
+            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleRoom)
         }.flatMap { block in block.lines.isEmpty ? nil : block }
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let bodyWidth = max(extent.width, title?.size.width ?? 0)

@@ -6,10 +6,10 @@
 #              the output folder only, no network, no subprocess, no environment.
 #
 # Authors: Bahey Shalash
-# Version: 0.2
+# Version: 0.3
 # Date: 23/11/2026
 #
-# Usage: scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…]
+# Usage: scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--svg-at=<width>] [--max-width=<width>,…]
 set -eu
 pele=$(cd "$1" && pwd)
 output=$2

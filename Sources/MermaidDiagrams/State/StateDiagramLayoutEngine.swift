@@ -2,10 +2,11 @@
  * File: StateDiagramLayoutEngine.swift
  * ------------------------------------
  * Layer: Core
- * Description: Lays a state diagram out in Pele's style, its composite states as nested boxes.
+ * Description: Lays a state diagram out in Pele's style, its composite states as nested boxes, and from the top down
+ *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -36,6 +37,17 @@ public enum StateDiagramLayoutEngine {
     public static func layout(_ diagram: StateDiagram, typography: DiagramTypography,
                               limits: MermaidDiagramLimits) throws(StateDiagramLayoutError) -> StateDiagramLayout {
         try layout(diagram, nameText: typography.nodeText, smallText: typography.edgeText, font: typography.font, limits: limits)
+    }
+
+    /// The diagram for a container `availableWidth` wide (nil for none), as Pele fits it (state/render.ts): one whose own
+    /// direction runs across is laid out from the top down, its composites keeping their directions, when it does not
+    /// fit a container under 640 points and that is narrower (`turnToFit`).
+    public static func layout(_ diagram: StateDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits,
+                              availableWidth: CGFloat?) throws(StateDiagramLayoutError) -> StateDiagramLayout {
+        guard let turned = diagram.turnedTopToBottom else { return try layout(diagram, typography: typography, limits: limits) }
+        return try DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: StateDiagramLayout) in layout.size.width }) { isDown throws(StateDiagramLayoutError) in
+            try layout(isDown ? turned : diagram, typography: typography, limits: limits)
+        }
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: StateDiagram, nameText: Measurer, smallText: Measurer, font: DiagramFont,

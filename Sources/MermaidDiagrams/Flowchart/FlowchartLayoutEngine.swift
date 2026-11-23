@@ -2,10 +2,11 @@
  * File: FlowchartLayoutEngine.swift
  * ---------------------------------
  * Layer: Core
- * Description: Lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single nodes.
+ * Description: Lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single nodes,
+ *              and for a narrow container turned to run down and tightened as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -18,43 +19,68 @@ public enum FlowchartLayoutEngine {
     /// Pele's gaps; a border point of a box is 20 points from the rank next to it.
     static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 48, borderSeparation: 20,
                                         routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
-    /// The tighter gaps of a flowchart laid out for a narrow column (`DiagramSpacing.compact`), about two thirds of Pele's.
-    static let compactSpacing = LayeredSpacing(nodeSeparation: 24, edgeSeparation: 10, rankSeparation: 32, borderSeparation: 14,
+    /// Pele's tight gaps (`DiagramSpacing.compact`, flowchart/render.ts `draw` with `tight`): half the nodes'
+    /// separation and three quarters of the ranks'; the edges' and the border points' stay.
+    static let compactSpacing = LayeredSpacing(nodeSeparation: 20, edgeSeparation: 16, rankSeparation: 36, borderSeparation: 20,
                                                routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The widest a line of text is before it wraps.
     static let wrappingWidth: CGFloat = 200
-    /// The widest a line is in a compact layout, so that a long text makes its node taller rather than its rank wider.
-    static let compactWrappingWidth: CGFloat = 150
     /// The room an edge's text takes beyond its lines, for the patch drawn behind it.
     static let edgeTextRoom = CGSize(width: 12, height: 4)
     /// Between the title and the diagram.
     static let titleGap: CGFloat = 12
 
+    /// `spacing` `.compact` lays it out with Pele's tight gaps and its groups' tighter padding, its title unwrapped.
     public static func layout(_ diagram: FlowchartDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits,
                               spacing diagramSpacing: DiagramSpacing = .standard) throws(FlowchartLayoutError) -> FlowchartLayout {
         try layout(diagram, nodeText: typography.nodeText, edgeText: typography.edgeText, font: typography.font, limits: limits, spacing: diagramSpacing)
     }
 
+    /// The flowchart for a container `availableWidth` wide (nil for none), as Pele fits it (flowchart/render.ts): one
+    /// whose own direction runs across is turned to run down (its groups keep theirs) when it does not fit a container
+    /// under 640 points and turned is narrower (`turnToFit`); either way it is laid out with the tight gaps, its title
+    /// wrapped to the container, when it does not fit and tight is narrower (`tighten`).
+    public static func layout(_ diagram: FlowchartDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits,
+                              availableWidth: CGFloat?) throws(FlowchartLayoutError) -> FlowchartLayout {
+        func fitted(_ diagram: FlowchartDiagram) throws(FlowchartLayoutError) -> FlowchartLayout {
+            try DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: FlowchartLayout) in layout.size.width }) { isTight throws(FlowchartLayoutError) in
+                try layout(diagram, nodeText: typography.nodeText, edgeText: typography.edgeText, font: typography.font, limits: limits,
+                           spacing: isTight ? .compact : .standard,
+                           titleWidth: isTight ? DiagramWidthFitting.titleRoom(availableWidth: availableWidth) : .greatestFiniteMagnitude)
+            }
+        }
+        guard let turned = diagram.rootTurnedToRunDown else { return try fitted(diagram) }
+        return try DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: FlowchartLayout) in layout.size.width }) { isDown throws(FlowchartLayoutError) in
+            try fitted(isDown ? turned : diagram)
+        }
+    }
+
+    /// `titleWidth`: the width the title wraps at.
     static func layout<Measurer: DiagramTextMeasuring>(_ written: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, font: DiagramFont,
-                                                       limits: MermaidDiagramLimits,
-                                                       spacing diagramSpacing: DiagramSpacing = .standard) throws(FlowchartLayoutError) -> FlowchartLayout {
+                                                       limits: MermaidDiagramLimits, spacing diagramSpacing: DiagramSpacing = .standard,
+                                                       titleWidth: CGFloat = .greatestFiniteMagnitude) throws(FlowchartLayoutError) -> FlowchartLayout {
         // A collapsed group is drawn as one node, what it holds left out (`FlowchartCollapsedGroups`).
         let diagram = FlowchartCollapsedGroups.collapsing(written)
-        let spacing = diagramSpacing == .compact ? Self.compactSpacing : Self.spacing
-        let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText,
-                                            wrappingWidth: diagramSpacing == .compact ? compactWrappingWidth : wrappingWidth)
-        return try layout(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing)
+        let isTight = diagramSpacing == .compact
+        let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText, wrappingWidth: wrappingWidth)
+        return try layout(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: isTight ? compactSpacing : spacing,
+                          groupPadding: isTight ? FlowchartClusterGraph.tightClusterPadding : FlowchartClusterGraph.clusterPadding, titleWidth: titleWidth)
     }
 
     /// A flowchart already measured, its collapsed groups folded, laid out with `spacing`: in ranks, or in boxes when it
     /// has subgraphs. A diagram drawn as a flowchart (an agent flow) measures its nodes its own way and is laid out here.
+    /// `groupPadding`: the room inside a group's box on its sides and below (Pele's `groupPad`); `titleWidth`: the width
+    /// the title wraps at.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
-                                                       font: DiagramFont, limits: MermaidDiagramLimits,
-                                                       spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
+                                                       font: DiagramFont, limits: MermaidDiagramLimits, spacing: LayeredSpacing,
+                                                       groupPadding: CGFloat = FlowchartClusterGraph.clusterPadding,
+                                                       titleWidth: CGFloat = .greatestFiniteMagnitude) throws(FlowchartLayoutError) -> FlowchartLayout {
+        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: titleWidth) }
         guard diagram.subgraphs.isEmpty else {
-            return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing)
+            return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing,
+                                     groupPadding: groupPadding, title: title)
         }
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let layeredEdgeIndices = diagram.edges.indices.filter { edgeIndex in diagram.edges[edgeIndex].sourceIndex != diagram.edges[edgeIndex].targetIndex }
@@ -78,7 +104,6 @@ public enum FlowchartLayoutEngine {
         page.placeNodes(flowCenters: placement.nodeCenters)
         page.placeEdges(layeredEdgeIndices: layeredEdgeIndices, placement: placement)
         page.placeSelfLoops()
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: .greatestFiniteMagnitude) }
         let extent = flowAxes.flowIsVertical ? placement.extent : CGSize(width: placement.extent.height, height: placement.extent.width)
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: extent)
     }
@@ -86,9 +111,11 @@ public enum FlowchartLayoutEngine {
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
     /// (`FlowchartClusterGraph`, `LayeredClusterLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
-                                                                      font: DiagramFont, limits: MermaidDiagramLimits,
-                                                                      spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
-        let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom)
+                                                                      font: DiagramFont, limits: MermaidDiagramLimits, spacing: LayeredSpacing,
+                                                                      groupPadding: CGFloat,
+                                                                      title: DiagramTextBlock?) throws(FlowchartLayoutError) -> FlowchartLayout {
+        let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom,
+                                              groupPadding: groupPadding)
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
@@ -100,7 +127,6 @@ public enum FlowchartLayoutEngine {
         page.placeEdges(clustered: clustered, placement: placement)
         page.placeSelfLoops()
         page.placeClusters(clustered: clustered, placement: placement)
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: .greatestFiniteMagnitude) }
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: placement.size)
     }
 }

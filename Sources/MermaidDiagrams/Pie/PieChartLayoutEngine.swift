@@ -1,3 +1,15 @@
+/**
+ * File: PieChartLayoutEngine.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays a pie chart out with Pele's measurements, and smaller with its legend below for a container too narrow
+ *              for it, as Pele fits one to its width.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a pie chart out in Pele's style: a pie 120 points in radius, its slices clockwise from the top with their
@@ -10,8 +22,10 @@ public enum PieChartLayoutEngine {
     static let padding: CGFloat = 8
     /// Between the title and the pie.
     static let titleGap: CGFloat = 16
-    /// Between the pie and the legend.
+    /// Between the pie and the legend beside it.
     static let legendGap: CGFloat = 32
+    /// Between the pie and the legend above or below it.
+    static let stackedLegendGap: CGFloat = 20
     static let legendRowHeight: CGFloat = 26
     static let swatchSide: CGFloat = 12
     /// Between a swatch and its label.
@@ -23,21 +37,43 @@ public enum PieChartLayoutEngine {
     /// 2⁵³: past it, a double holds no fraction and not every whole number.
     private static let largestExactWholeNumber = 9_007_199_254_740_992.0
 
+    /// The narrowest a pie is made for a narrow container (Pele's `least`): 140 points across.
+    static let narrowestDiameter: CGFloat = 140
+
     public static func layout(_ chart: PieChart, typography: DiagramTypography) -> PieChartLayout {
-        layout(chart, text: typography.nodeText, smallText: typography.edgeText, font: typography.font)
+        layout(chart, typography: typography, availableWidth: nil)
+    }
+
+    /// The chart for a container `availableWidth` wide (nil for none), as Pele's `fitWidth` draws it: at its own size when
+    /// it fits; else with a legend beside the pie moved below it, and the pie made smaller by what the page overflows,
+    /// drawn again up to three times, not under 140 points across; the title wrapped to the container.
+    public static func layout(_ chart: PieChart, typography: DiagramTypography, availableWidth: CGFloat?) -> PieChartLayout {
+        DiagramWidthFitting.fitWidth(availableWidth: availableWidth, natural: 2 * radius, least: narrowestDiameter,
+                                     width: { (layout: PieChartLayout) in layout.size.width }) { diameter, isTight in
+            layout(chart, text: typography.nodeText, smallText: typography.edgeText, font: typography.font, radius: diameter / 2, isTight: isTight,
+                   titleRoom: DiagramWidthFitting.titleRoom(availableWidth: availableWidth))
+        }
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ chart: PieChart, text: Measurer, smallText: Measurer, font: DiagramFont) -> PieChartLayout {
+        layout(chart, text: text, smallText: smallText, font: font, radius: radius, isTight: false, titleRoom: wrappingWidth)
+    }
+
+    /// The chart with a pie `radius` points in radius; `isTight` (it did not fit its container with its legend beside
+    /// it) moves a legend on the left or right below the pie, and the title wraps at `titleRoom`.
+    static func layout<Measurer: DiagramTextMeasuring>(_ chart: PieChart, text: Measurer, smallText: Measurer, font: DiagramFont, radius: CGFloat,
+                                                       isTight: Bool, titleRoom: CGFloat) -> PieChartLayout {
         let options = chart.options
         let slices = PieChartSlicePlacement(values: chart.slices.map(\.value), smallText: smallText, radius: radius,
                                             percentagePosition: options.effectivePercentagePosition)
         let legendTexts = options.legendPosition == .none ? []
             : chart.slices.map { slice in legendText(for: slice, showsValue: chart.showsValues, measurer: smallText) }
         let title = chart.title.map { title in
-            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: text, maximumWidth: wrappingWidth)
+            DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: text, maximumWidth: titleRoom)
         }.flatMap { block in block.lines.isEmpty ? nil : block }
+        let besideMovedBelow = isTight && (options.legendPosition == .left || options.legendPosition == .right)
         let arrangement = Arrangement(pieDiameter: 2 * (radius + slices.outsideLabelRoom), legendSize: legendSize(of: legendTexts),
-                                      legendPosition: options.legendPosition, title: title)
+                                      legendPosition: besideMovedBelow ? .bottom : options.legendPosition, title: title)
         return PieChartLayout(size: arrangement.size, font: font, center: arrangement.pieCenter, radius: radius, innerRadius: radius * options.holeShare,
                               slices: slices.placed(around: arrangement.pieCenter), legend: legend(legendTexts, at: arrangement.legendOrigin),
                               title: arrangement.placedTitle)
@@ -83,8 +119,8 @@ public enum PieChartLayoutEngine {
         init(pieDiameter: CGFloat, legendSize: CGSize, legendPosition: PieChartLegendPosition, title: DiagramTextBlock?) {
             let titleHeight = title.map { title in title.size.height + PieChartLayoutEngine.titleGap } ?? 0
             let hasLegend = legendSize.width > 0
-            let gap = hasLegend ? PieChartLayoutEngine.legendGap : 0
             let isBeside = legendPosition == .right || legendPosition == .left
+            let gap = hasLegend ? (isBeside ? PieChartLayoutEngine.legendGap : PieChartLayoutEngine.stackedLegendGap) : 0
             let contentWidth = isBeside ? pieDiameter + gap + legendSize.width : max(pieDiameter, legendSize.width)
             let bodyWidth = max(contentWidth, title?.size.width ?? 0)
             let bodyHeight = isBeside ? max(pieDiameter, legendSize.height) : pieDiameter + gap + legendSize.height

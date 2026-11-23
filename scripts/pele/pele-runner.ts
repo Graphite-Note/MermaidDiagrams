@@ -7,7 +7,7 @@
  *              tests and its benchmark against Pele.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  *
  * MIT licensed, as the package is. It reads Pele's sources and corpora as data and runs none of Pele's scripts: see
@@ -56,7 +56,7 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--max-width=<width>,…] [--svg-at=<width>]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
@@ -66,6 +66,12 @@ const runsRandomFlat = flags.length === 0 || flags.includes('--random-flat');
 // --svg-of=<corpus>#<index>,… writes those inputs' SVGs to <output>/svg, to look at a drawing beside the package's.
 const svgInputs = flags.find((flag) => flag.startsWith('--svg-of='))?.slice('--svg-of='.length).split(',') ?? [];
 const runsPreprocessing = flags.length === 0 || flags.includes('--preprocessing');
+// --max-width=<width>,… writes pele-narrow.json: each documentation example as Pele's mount shows it in a container that
+// wide (mount.ts `fit`), for the package's narrow-column tests. It runs only when asked for.
+const narrowWidths = flags.find((flag) => flag.startsWith('--max-width='))?.slice('--max-width='.length).split(',').map(Number)
+  .filter((width) => width > 0) ?? [];
+// --svg-at=<width> draws the --svg-of inputs as Pele's mount shows them in a container that wide.
+const svgWidth = Number(flags.find((flag) => flag.startsWith('--svg-at='))?.slice('--svg-at='.length) ?? 'NaN');
 // --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
 const writesDrawings = flags.includes('--svg');
 
@@ -226,6 +232,27 @@ function record(corpus: string, index: number, source: string): InputRecord {
   };
 }
 
+/** What Pele's mount shows of `source` in a container `available` wide (mount.ts `fit`): the drawing without a width
+ *  when it fits, or when drawing it for no room at all changes nothing; else the drawing for that width. */
+function shown(source: string, available: number): Rendered & { narrowed: boolean } {
+  const base = { now: ganttNow, maxWidth: undefined };
+  const natural = core.render(source, base);
+  if (!(available > 0 && available < natural.width)) return { ...natural, narrowed: false };
+  if (core.render(source, { ...base, maxWidth: 1 }).svg === natural.svg) return { ...natural, narrowed: false };
+  return { ...core.render(source, { ...base, maxWidth: available }), narrowed: true };
+}
+
+function narrowRecord(corpus: string, index: number, source: string, maxWidth: number): InputRecord & { maxWidth: number; narrowed?: boolean } {
+  const base = { corpus, index, maxWidth, sourceHash: sourceHash(source) };
+  try {
+    const rendered = shown(source, maxWidth);
+    return { ...base, type: rendered.type, narrowed: rendered.narrowed, width: rendered.width, height: rendered.height, ...countParts(rendered.svg) };
+  } catch (error) {
+    const code = (error as { code?: string }).code ?? 'exception';
+    return { ...base, error: `${code}: ${String((error as Error).message ?? error).slice(0, 160)}` };
+  }
+}
+
 function timedCase(name: string, sources: string[]): TimedCase {
   let renderedCount = 0;
   const runAll = () => {
@@ -328,7 +355,21 @@ if (svgInputs.length > 0) {
       : allCorpora.find(([found]) => found === corpus)?.[1] ?? [];
     const source = sources[Number(indexText)];
     if (source === undefined) continue;
-    await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${indexText}.svg`, core.render(source, { now: ganttNow }).svg);
+    if (svgWidth > 0) {
+      await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${indexText}-at-${svgWidth}.svg`, shown(source, svgWidth).svg);
+    } else {
+      await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${indexText}.svg`, core.render(source, { now: ganttNow }).svg);
+    }
   }
   console.log(`svg: ${svgInputs.length} inputs written`);
+}
+
+if (narrowWidths.length > 0) {
+  const records: string[] = [];
+  for (const [corpus, sources] of allCorpora.filter(([name]) => name.endsWith('-docs'))) {
+    for (const maxWidth of narrowWidths) sources.forEach((source, index) => records.push(JSON.stringify(narrowRecord(corpus, index, source, maxWidth))));
+  }
+  const header = JSON.stringify({ pele: peleVersion, measurer: measurerName, fontSize: 16, ganttNow, maxWidths: narrowWidths });
+  await Deno.writeTextFile(`${outputFolder}/pele-narrow.json`, `{"run": ${header},\n"inputs": [\n${records.join(',\n')}\n]}\n`);
+  console.log(`narrow: ${records.length} drawings at ${narrowWidths.join(', ')} points`);
 }
