@@ -7,8 +7,8 @@
  *              names its scene's roles.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 19/11/2026
+ * Version: 0.6
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -28,8 +28,14 @@ final class DiagramSceneParityTests: XCTestCase {
         var comparedCount = 0
         var comparedNames: Set<String> = []
         var italicTextCount = 0
+        var themedCount = 0
         for sample in try DiagramSceneSamples.all() {
-            guard let diagram = try? DiagramSceneSamples.read(sample), let laidOut = try? Self.laidOut(diagram) else { continue }
+            guard let read = try? DiagramSceneSamples.read(sample) else { continue }
+            // The renderers before the scene had no theme palettes: the samples that set one are compared without it, and
+            // their palettes are painted in DiagramSeriesColorsTests.
+            let diagram = read.withoutSeriesColors
+            if diagram != read { themedCount += 1 }
+            guard let laidOut = try? Self.laidOut(diagram) else { continue }
             comparedTypes.insert(String(describing: diagram).prefix { character in character != "(" }.description)
             for (palette, scale) in [(DiagramScenePaletteSamples.light, CGFloat(1)), (DiagramScenePaletteSamples.dark, CGFloat(2))] {
                 let size = laidOut.scene.size
@@ -47,6 +53,7 @@ final class DiagramSceneParityTests: XCTestCase {
         for (name, _) in DiagramSceneSamples.styled { XCTAssertTrue(comparedNames.contains(name), name) }
         XCTAssertEqual(comparedTypes.count, 17, "\(comparedTypes.sorted())")
         XCTAssertGreaterThan(italicTextCount, 0, "Abstract class members, in italics, are compared (static ones underlined beside them)")
+        XCTAssertEqual(themedCount, 4, "the Git graph, timeline, radar chart and XY chart documentation examples with palettes")
         // The samples' texts the layouts refuse (options not drawn) are left out: 322 are drawn.
         XCTAssertGreaterThanOrEqual(comparedCount, 322)
     }
@@ -199,4 +206,21 @@ final class DiagramSceneParityTests: XCTestCase {
     private struct NotAChart: Error {}
     /// A type drawn from its scene since it was added, with no renderer from before the scene to compare with.
     private struct NoReferenceRenderer: Error {}
+}
+
+extension MermaidDiagram {
+    /// The diagram without the series colors its theme variables set.
+    fileprivate var withoutSeriesColors: MermaidDiagram {
+        switch self {
+        case .pieChart(var chart): chart.seriesColors = .none; return .pieChart(chart)
+        case .gitGraph(var graph): graph.seriesColors = .none; return .gitGraph(graph)
+        case .timeline(var timeline): timeline.seriesColors = .none; return .timeline(timeline)
+        case .radar(var chart): chart.seriesColors = .none; return .radar(chart)
+        case .treemap(var treemap): treemap.seriesColors = .none; return .treemap(treemap)
+        case .mindmap(var mindmap): mindmap.seriesColors = .none; return .mindmap(mindmap)
+        case .venn(var venn): venn.seriesColors = .none; return .venn(venn)
+        case .xyChart(var chart): chart.seriesColors = .none; return .xyChart(chart)
+        default: return self
+        }
+    }
 }

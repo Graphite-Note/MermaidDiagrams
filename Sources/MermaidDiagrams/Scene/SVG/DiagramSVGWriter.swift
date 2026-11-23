@@ -6,8 +6,8 @@
  *              no external reference.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,9 @@ import CoreGraphics
 /// pele-<type>`), its view box the scene's page, its title and description for screen readers, then each item back to
 /// front, a `path` per shape and a `text` per placed text, each with Pele's class for its part (`pele-node`,
 /// `pele-edge-label`). Every text is escaped; nothing is a script or refers outside the document (a gradient is named
-/// within it). Numbers are written to two decimals without trailing zeros.
+/// within it). Numbers are written to two decimals without trailing zeros. The series colors a diagram's theme variables
+/// set are written as Pele writes them, `--pele-series-N` declarations on the root's style, with Pele's variables, and are
+/// the series' colors written out with a palette.
 public struct DiagramSVGWriter: Sendable {
     public var colors: DiagramSVGColors
     /// What the document's ids start with (`<prefix>-title`, `<prefix>-gradient-1`), so that several documents can share
@@ -52,6 +54,7 @@ public struct DiagramSVGWriter: Sendable {
             head += "<desc id=\"\(identifierPrefix)-desc\">\(DiagramSVGSyntax.escaped(description))</desc>"
             labelling += " aria-describedby=\"\(identifierPrefix)-desc\""
         }
+        let colors = colors.overSeriesColors(of: scene)
         var body = DiagramSVGBody(colors: colors, identifierPrefix: identifierPrefix)
         if paintsBackground {
             let background = colors.text(of: .background)
@@ -60,6 +63,7 @@ public struct DiagramSVGWriter: Sendable {
         for item in scene.items { body.add(item) }
         let definitions = body.definitions.isEmpty ? "" : "<defs>" + body.definitions + "</defs>"
         let style = colors.rootStyle + "font-family:" + fontFamily(scene.font) + ";font-size:" + DiagramSVGSyntax.number(scene.font.size) + "px"
+            + colors.seriesStyle(of: scene)
         return "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" class=\"pele pele-\(type)\" viewBox=\"0 0 \(width) \(height)\" "
             + "width=\"\(width)\" height=\"\(height)\" style=\"\(DiagramSVGSyntax.escaped(style))\" role=\"graphics-document document\" "
             + "aria-roledescription=\"\(type)\"\(labelling)>" + head + definitions + body.content + "</svg>"

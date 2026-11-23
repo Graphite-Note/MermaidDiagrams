@@ -5,14 +5,17 @@
  * Description: A Mermaid treemap as its text describes it: sections and leaves in an outline, their classes and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// A Mermaid treemap (`treemap`, `treemap-beta`): an outline of quoted names, a leaf (`"Name": value`) sized by its value, a
 /// section (`"Name"`) holding the rows indented more than it, as many levels as the text nests. The nodes are kept in the
 /// order they are written, each after its parent; a row belongs to the nearest section above it that is indented less.
 public struct TreemapDiagram: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var nodes: [TreemapNode]
     /// What each class a `classDef` names sets, by the class's name: the look of the nodes that name it (`:::name`).
     public internal(set) var classStyles: [String: DiagramElementStyle]

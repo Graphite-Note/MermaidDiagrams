@@ -5,7 +5,7 @@
  * Description: Reads a treemap's rows after its `treemap` keyword and builds its hierarchy and its classes' styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -32,6 +32,7 @@ struct TreemapDiagramParser {
         parser.diagram.options = TreemapOptions(MermaidConfigurationOptions(section: "treemap", in: cursor))
         try parser.readRows()
         parser.finish()
+        parser.diagram.seriesColors = MermaidThemeSeriesPalette.treemap.seriesColors(in: cursor)
         return parser.diagram
     }
 

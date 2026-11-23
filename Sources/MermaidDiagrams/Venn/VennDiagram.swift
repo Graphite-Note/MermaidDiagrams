@@ -6,13 +6,16 @@
  *              the texts written inside them, and the styles of each.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Mermaid Venn diagram (`venn-beta`) as Mermaid's database holds it: every `set` and `union` statement in order, every
 /// `text` statement, every `style` statement, and the title.
 public struct VennDiagram: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     /// `title …`, without the spaces at its ends and one pair of quotation marks, else `title:` in the front matter.
     public internal(set) var title: String?
     /// Each `set` and `union` in the order written; a later statement about the same sets replaces an earlier one where

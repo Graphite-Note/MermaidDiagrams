@@ -1,3 +1,14 @@
+/**
+ * File: PieChartLayoutEngine.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays a pie chart out in Pele's style.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a pie chart out in Pele's style: a pie 120 points in radius, its slices clockwise from the top with their
@@ -38,9 +49,11 @@ public enum PieChartLayoutEngine {
         }.flatMap { block in block.lines.isEmpty ? nil : block }
         let arrangement = Arrangement(pieDiameter: 2 * (radius + slices.outsideLabelRoom), legendSize: legendSize(of: legendTexts),
                                       legendPosition: options.legendPosition, title: title)
-        return PieChartLayout(size: arrangement.size, font: font, center: arrangement.pieCenter, radius: radius, innerRadius: radius * options.holeShare,
-                              slices: slices.placed(around: arrangement.pieCenter), legend: legend(legendTexts, at: arrangement.legendOrigin),
-                              title: arrangement.placedTitle)
+        var layout = PieChartLayout(size: arrangement.size, font: font, center: arrangement.pieCenter, radius: radius, innerRadius: radius * options.holeShare,
+                                    slices: slices.placed(around: arrangement.pieCenter), legend: legend(legendTexts, at: arrangement.legendOrigin),
+                                    title: arrangement.placedTitle)
+        layout.seriesColors = chart.seriesColors
+        return layout
     }
 
     /// The label, with ` [value]` after its last line when the chart shows its values.

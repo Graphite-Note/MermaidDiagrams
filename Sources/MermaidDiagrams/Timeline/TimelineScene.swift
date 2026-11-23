@@ -5,8 +5,8 @@
  * Description: A laid-out timeline's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ extension DiagramScene {
     public init(layout: TimelineLayout) {
         var builder = DiagramSceneBuilder()
         TimelineDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
     }
 }
 
@@ -34,8 +34,8 @@ extension TimelineDrawingParts {
             builder.fill(group.eventBoxes, paint.atOpacity(Self.eventFillOpacity), part: .node)
             builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: Self.dotOutlineWidth), part: .marker)
         }
-        builder.texts(sectionTexts, .background, isBold: true, part: .clusterLabel)
-        builder.texts(periodTexts, .background, part: .label)
+        for (text, paint) in zip(sectionTexts, sectionTextPaints) { builder.text(text, paint, isBold: true, part: .clusterLabel) }
+        for (text, paint) in zip(periodTexts, periodTextPaints) { builder.text(text, paint, part: .label) }
         builder.texts(eventTexts, .foreground, part: .label)
         builder.title(title)
     }

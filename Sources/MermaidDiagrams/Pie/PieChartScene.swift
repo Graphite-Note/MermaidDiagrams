@@ -5,8 +5,8 @@
  * Description: A laid-out pie chart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,7 @@ extension DiagramScene {
     public init(layout: PieChartLayout) {
         var builder = DiagramSceneBuilder()
         PieChartDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
     }
 }
 
@@ -28,7 +28,7 @@ extension PieChartDrawingParts {
         for (index, seriesFill) in seriesFills.enumerated() { builder.fill(seriesFill, .series(index), part: .node) }
         builder.stroke(sliceEdges, .background, line, part: .node)
         builder.stroke(emptyPieOutline, .border, line, part: .node)
-        builder.texts(insidePercentages, .background, part: .label)
+        for (percentage, paint) in zip(insidePercentages, insidePercentagePaints) { builder.text(percentage, paint, part: .label) }
         builder.texts(outsidePercentages, .foreground, part: .label)
         builder.texts(legendTexts, .foreground, part: .legend)
         builder.title(title)

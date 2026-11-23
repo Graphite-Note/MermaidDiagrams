@@ -6,8 +6,8 @@
  *              before it when both are painted alike, opaque and apart, and a fill and the stroke of its path into one.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -71,8 +71,8 @@ struct DiagramSceneBuilder {
         text(block, .foreground, isBold: true, part: .title)
     }
 
-    func scene(size: CGSize, font: DiagramFont) -> DiagramScene {
-        DiagramScene(size: size, font: font, items: items)
+    func scene(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors = .none) -> DiagramScene {
+        DiagramScene(size: size, font: font, items: items, seriesColors: seriesColors)
     }
 
     /// `path` merged into the open run, or made the outline of its one filled path, or else the start of a new run.

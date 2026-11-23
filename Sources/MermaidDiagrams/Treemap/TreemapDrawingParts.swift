@@ -5,8 +5,8 @@
  * Description: A laid-out treemap's geometry grouped by how it is painted.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -59,7 +59,8 @@ public struct TreemapDrawingParts {
         var leafValues: [TreemapTextParts] = []
         for box in layout.boxes {
             let style = box.style
-            let contrast = TreemapInk.paint(onFill: style.fill)
+            // Pele's ink on a fill a class sets, else on the box's series color where the theme variables set it.
+            let contrast = style.fill == nil ? layout.seriesColors.ink(ofSeries: box.seriesIndex).map(DiagramPaint.color) : TreemapInk.paint(onFill: style.fill)
             let isBold = box.textStyle.isBold ?? false
             let isItalic = box.textStyle.isItalic ?? false
             if box.isSection {

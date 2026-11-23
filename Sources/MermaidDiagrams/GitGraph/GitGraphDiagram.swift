@@ -5,14 +5,17 @@
  * Description: A Git graph as its text describes it once its statements are played: commits, branches and options.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Mermaid Git graph (`gitGraph`) as its text describes it, once its statements have been played as Mermaid plays
 /// them: the commits in the order they were made, each on its branch with its parents, and the branches in the order
 /// their lanes are drawn.
 public struct GitGraphDiagram: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var direction: GitGraphDirection
     /// `title …` in the diagram, else `title:` in the front matter, else nil.
     public internal(set) var title: String?

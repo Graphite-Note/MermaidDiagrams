@@ -1,3 +1,14 @@
+/**
+ * File: PieChartDrawingParts.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: A laid-out pie chart's geometry grouped by how it is painted, with the paints of its percentages.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out pie chart's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -16,6 +27,9 @@ public struct PieChartDrawingParts {
     public let emptyPieOutline: CGPath
     /// The percentages inside their slices, drawn in the background color.
     public let insidePercentages: [DiagramTextBlock]
+    /// The paint of each of `insidePercentages`: the background color, or Pele's ink on its slice's color where the chart's
+    /// theme variables set that color (`DiagramSeriesColors.inks`).
+    public let insidePercentagePaints: [DiagramPaint]
     /// The percentages outside the rim, drawn in the text color.
     public let outsidePercentages: [DiagramTextBlock]
     /// The legend's labels, drawn in the text color.
@@ -45,7 +59,9 @@ public struct PieChartDrawingParts {
         sliceEdges = edges
         let pieFrame = CGRect(x: layout.center.x - layout.radius, y: layout.center.y - layout.radius, width: 2 * layout.radius, height: 2 * layout.radius)
         emptyPieOutline = layout.slices.isEmpty ? CGPath(ellipseIn: pieFrame, transform: nil) : CGMutablePath()
-        insidePercentages = layout.slices.filter { slice in slice.percentagePlacement == .insideSlice }.map(\.percentage)
+        let insideSlices = layout.slices.filter { slice in slice.percentagePlacement == .insideSlice }
+        insidePercentages = insideSlices.map(\.percentage)
+        insidePercentagePaints = insideSlices.map { slice in layout.seriesColors.ink(ofSeries: slice.seriesIndex).map(DiagramPaint.color) ?? .background }
         outsidePercentages = layout.slices.filter { slice in slice.percentagePlacement == .outsideRim }.map(\.percentage)
         legendTexts = layout.legend.map(\.text)
         title = layout.title

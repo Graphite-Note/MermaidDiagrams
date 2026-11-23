@@ -5,8 +5,8 @@
  * Description: A laid-out radar chart: its graticule, spokes, curves, axis labels, legend and title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -15,6 +15,8 @@ import CoreGraphics
 /// rings and the spokes around the center, the curves, each axis's label beyond its spoke, the legend beside the chart and
 /// the title above it.
 public struct RadarChartLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the text was measured in: the title at its size, labels and legend at their own.
     public let font: DiagramFont

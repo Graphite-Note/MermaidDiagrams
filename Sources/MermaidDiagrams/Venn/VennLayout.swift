@@ -6,8 +6,8 @@
  *              in each region with its color, and the title.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,6 +17,8 @@ import CoreGraphics
 /// that every region holds its text; the overlaps a style gives a look of their own; each region's text at its roomiest
 /// point; the bold title above.
 public struct VennLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the title was measured in (bold); a set's text is in its size, an overlap's in seven eighths of it, a
     /// region's texts in thirteen sixteenths.

@@ -5,8 +5,8 @@
  * Description: An XY chart laid out on its page: title, plot, axes, series, legend.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -15,6 +15,8 @@ import CoreGraphics
 /// it out: the title above, the plot with its grid, bars and lines, the axes on its left and bottom with their marks'
 /// labels and titles, and the legend on the right. Drawing it needs only colors.
 public struct XYChartLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the title was measured in; the axes, the legend and the point labels are in the same font at their
     /// own `fontSize`.

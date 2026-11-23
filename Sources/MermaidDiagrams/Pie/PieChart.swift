@@ -1,7 +1,22 @@
+/**
+ * File: PieChart.swift
+ * --------------------
+ * Layer: Core
+ * Description: A Mermaid pie chart as its text describes it: its slices, its options, and the series colors its theme
+ *              variables set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A Mermaid pie chart (`pie`) as its text describes it: the slices in the order they are written, each label once
 /// (a later slice with a label already used is left out, as in Mermaid), whether the legend shows the values, and
 /// the titles.
 public struct PieChart: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var slices: [PieChartSlice]
     /// `showData` after `pie`: the legend shows each slice's value after its label.
     public internal(set) var showsValues: Bool
