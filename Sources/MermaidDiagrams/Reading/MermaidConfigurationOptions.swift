@@ -5,7 +5,7 @@
  * Description: The options a diagram's front matter and its `%%{init: …}%%` directives give its type.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -45,6 +45,7 @@ struct MermaidConfigurationOptions {
     private init(section: String, in bytes: [UInt8], frontMatter read: MermaidReadFrontMatter) {
         if read.frontMatter != nil, case .object(let document)? = read.value {
             if case .object(let configuration)? = document["config"], case .object(let options)? = configuration[section] {
+                values.reserveCapacity(options.count)
                 for (name, value) in options { record(value, named: name) }
             }
             // The front matter's own `displayMode`, when it is truthy, is the Gantt chart's over its `config:`, as Pele
@@ -71,7 +72,7 @@ struct MermaidConfigurationOptions {
         if case .object(let object) = value {
             if !name.isEmpty { store(.collection, named: name) }
             guard depth < Self.deepestNesting else { return }
-            for (key, entry) in object where !Self.prototypeKeys.contains(key) {
+            for (key, entry) in object where !Self.isPrototypeKey(key) {
                 record(entry, named: name.isEmpty ? key : name + "." + key, depth: depth + 1)
             }
         } else if let read = value.optionValue {
@@ -94,12 +95,23 @@ struct MermaidConfigurationOptions {
         if Self.isPath(name) { nestedValues.removeValue(forKey: name) } else { values.removeValue(forKey: name) }
     }
 
-    /// Whether the name holds a dot, looked for in its bytes before its characters.
+    /// Whether the name holds a dot, looked for in its bytes (through their storage when the string has one) before its
+    /// characters.
     private static func isPath(_ name: String) -> Bool {
-        name.utf8.contains(UInt8(ascii: ".")) && name.contains(".")
+        let dot = UInt8(ascii: ".")
+        let holdsDotByte = name.utf8.withContiguousStorageIfAvailable { bytes in bytes.contains(dot) } ?? name.utf8.contains(dot)
+        return holdsDotByte && name.contains(".")
     }
 
-    private static let prototypeKeys: Set<String> = ["__proto__", "constructor", "prototype"]
+    /// Whether the key would reach an object's prototype: `__proto__`, `constructor` or `prototype`, ASCII names that
+    /// only their own bytes equal, told first by their length.
+    private static func isPrototypeKey(_ key: String) -> Bool {
+        switch key.utf8.count {
+        case 9: key == "__proto__" || key == "prototype"
+        case 11: key == "constructor"
+        default: false
+        }
+    }
     /// How deep a mapping's options are kept by their path, as deep as Pele's YAML reader nests collections.
     private static let deepestNesting = 64
 }

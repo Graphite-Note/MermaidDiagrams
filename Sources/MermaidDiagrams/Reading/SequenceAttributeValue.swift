@@ -3,11 +3,11 @@
  * ----------------------------------
  * Layer: Core
  * Description: A value of the YAML a sequence participant's attributes are read as, and how JavaScript turns it into
- *              text and into a truth value, as Mermaid uses `type` and `alias`.
+ *              text and into a truth value, as Mermaid uses `type` and `alias`; the values Pele's YAML reader builds.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// A value of the YAML a participant's attributes (`@{ … }`) are read as, with the JSON schema Mermaid gives js-yaml.
@@ -49,6 +49,20 @@ indirect enum SequenceAttributeValue: Equatable, Sendable {
         return JavaScriptNumberText.text(number)
     }
 }
+
+/// A value the port of Pele's YAML reader builds as it reads (`SequenceAttributesBlockSyntax`): a participant's
+/// attributes (`SequenceAttributeValue`) or a configuration's values (`DirectiveValue`), each made directly in its own
+/// cases rather than converted from the other's.
+protocol MermaidYAMLValue {
+    static var null: Self { get }
+    static func boolean(_ value: Bool) -> Self
+    static func number(_ value: Double) -> Self
+    static func text(_ value: String) -> Self
+    static func list(_ items: [Self]) -> Self
+    static func mapping(_ entries: [String: Self]) -> Self
+}
+
+extension SequenceAttributeValue: MermaidYAMLValue {}
 
 /// Why a participant's attributes are not YAML. `incomplete` is a quoted scalar or a flow collection that runs past
 /// the text read so far, which the reader of a block value retries with more lines before giving up.

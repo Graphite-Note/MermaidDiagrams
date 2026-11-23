@@ -7,12 +7,68 @@
  *              semicolon a style's colour loses.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
-/// Pele's preprocessing of a diagram's text, over its UTF-8 bytes.
+/// Pele's preprocessing of a diagram's text, over its UTF-8 bytes. Each pass gives back its input itself, uncopied, when
+/// it finds nothing to change.
 enum MermaidPreprocessing {
+    /// The bytes a pass changes or looks for that a text holds, found in one scan (`bytesFound`), so that the reader
+    /// runs no pass that would find none of them. The passes change none of these bytes but the carriage return (and a
+    /// directive's `%`), so the set found before any pass holds for the passes after it.
+    struct FoundBytes: OptionSet {
+        let rawValue: UInt8
+
+        static let carriageReturn = FoundBytes(rawValue: 1)
+        static let lessThan = FoundBytes(rawValue: 2)
+        static let greaterThan = FoundBytes(rawValue: 4)
+        static let percent = FoundBytes(rawValue: 8)
+        static let hash = FoundBytes(rawValue: 16)
+    }
+
+    /// Which of a carriage return, `<`, `>`, `%` and `#` the bytes hold, looked for sixteen bytes at a time.
+    static func bytesFound(in bytes: [UInt8]) -> FoundBytes {
+        bytes.withUnsafeBufferPointer { buffer in
+            var carriageReturns = SIMDMask<SIMD16<Int8>>(repeating: false)
+            var tagOpenings = carriageReturns
+            var tagClosings = carriageReturns
+            var percents = carriageReturns
+            var hashes = carriageReturns
+            var index = 0
+            if let base = buffer.baseAddress {
+                let raw = UnsafeRawPointer(base)
+                while index + 16 <= buffer.count {
+                    let chunk = raw.loadUnaligned(fromByteOffset: index, as: SIMD16<UInt8>.self)
+                    carriageReturns .|= chunk .== SIMD16(repeating: MermaidByte.carriageReturn)
+                    tagOpenings .|= chunk .== SIMD16(repeating: MermaidByte.lessThan)
+                    tagClosings .|= chunk .== SIMD16(repeating: MermaidByte.greaterThan)
+                    percents .|= chunk .== SIMD16(repeating: MermaidByte.percent)
+                    hashes .|= chunk .== SIMD16(repeating: hash)
+                    index += 16
+                }
+            }
+            var found: FoundBytes = []
+            if any(carriageReturns) { found.insert(.carriageReturn) }
+            if any(tagOpenings) { found.insert(.lessThan) }
+            if any(tagClosings) { found.insert(.greaterThan) }
+            if any(percents) { found.insert(.percent) }
+            if any(hashes) { found.insert(.hash) }
+            while index < buffer.count {
+                switch buffer[index] {
+                case MermaidByte.carriageReturn: found.insert(.carriageReturn)
+                case MermaidByte.lessThan: found.insert(.lessThan)
+                case MermaidByte.greaterThan: found.insert(.greaterThan)
+                case MermaidByte.percent: found.insert(.percent)
+                case hash: found.insert(.hash)
+                default: break
+                }
+                index += 1
+            }
+            return found
+        }
+    }
+
     /// `normalizeLineBreaks`: every carriage return and line feed pair, and every carriage return alone, a line feed.
     static func normalizedLineBreaks(_ bytes: [UInt8]) -> [UInt8] {
         guard bytes.contains(MermaidByte.carriageReturn) else { return bytes }
@@ -103,25 +159,26 @@ enum MermaidPreprocessing {
     /// space between, and later a semicolon, the line's last semicolon goes, so that `style A fill:#f00;B-->C` reads
     /// `style A fill:#f00B-->C`.
     static func droppingColorSemicolons(_ bytes: [UInt8], from start: Int) -> [UInt8] {
-        guard bytes[min(start, bytes.count)...].contains(UInt8(ascii: "#")) else { return bytes }
-        return droppingColorSemicolons(droppingColorSemicolons(bytes, after: Array("style".utf8), from: start), after: Array("classDef".utf8), from: start)
+        guard firstIndex(of: hash, in: bytes, from: min(start, bytes.count)) != nil else { return bytes }
+        return droppingColorSemicolons(droppingColorSemicolons(bytes, after: styleKeyword, from: start), after: classDefinitionKeyword, from: start)
     }
 
     private static func droppingColorSemicolons(_ bytes: [UInt8], after keyword: [UInt8], from start: Int) -> [UInt8] {
-        var dropped: Set<Int> = []
+        // The semicolons dropped, in the order they stand: one a line at most, each line after the one before.
+        var dropped: [Int] = []
         var from = firstIndex(of: keyword, in: bytes, from: start)
         while let keywordStart = from {
             let lineEnd = endOfLine(in: bytes, from: keywordStart)
             var isAfterColon = false
-            var hash: Int?
+            var hashIndex: Int?
             var index = keywordStart + keyword.count
             while index < lineEnd {
                 let byte = bytes[index]
                 if byte == MermaidByte.colon {
                     isAfterColon = true
-                } else if byte == UInt8(ascii: "#") {
+                } else if byte == hash {
                     if isAfterColon {
-                        hash = index
+                        hashIndex = index
                         break
                     }
                 } else if JavaScriptWhitespace.length(in: bytes, at: index) > 0 {
@@ -129,11 +186,21 @@ enum MermaidPreprocessing {
                 }
                 index += 1
             }
-            if let hash, let semicolon = bytes[hash..<lineEnd].lastIndex(of: MermaidByte.semicolon), semicolon > hash { dropped.insert(semicolon) }
+            if let hashIndex, let semicolon = bytes[hashIndex..<lineEnd].lastIndex(of: MermaidByte.semicolon), semicolon > hashIndex {
+                dropped.append(semicolon)
+            }
             from = lineEnd >= bytes.count ? nil : firstIndex(of: keyword, in: bytes, from: lineEnd + 1)
         }
         guard !dropped.isEmpty else { return bytes }
-        return bytes.indices.compactMap { index in dropped.contains(index) ? nil : bytes[index] }
+        var kept: [UInt8] = []
+        kept.reserveCapacity(bytes.count - dropped.count)
+        var keptFrom = 0
+        for semicolon in dropped {
+            kept.append(contentsOf: bytes[keptFrom..<semicolon])
+            keptFrom = semicolon + 1
+        }
+        kept.append(contentsOf: bytes[keptFrom...])
+        return kept
     }
 
     /// The first line terminator from `start` (a line feed, a carriage return, a line or paragraph separator), or the end.
@@ -148,16 +215,44 @@ enum MermaidPreprocessing {
         return bytes.count
     }
 
-    private static func firstIndex(of literal: [UInt8], in bytes: [UInt8], from start: Int) -> Int? {
+    /// The first place from `start` where `literal` stands: its first byte looked for sixteen bytes at a time, then
+    /// the rest compared.
+    static func firstIndex(of literal: [UInt8], in bytes: [UInt8], from start: Int) -> Int? {
+        guard let first = literal.first else { return nil }
         var index = start
-        while index + literal.count <= bytes.count {
-            if bytes[index] == literal[0], bytes[index..<index + literal.count].elementsEqual(literal) { return index }
-            index += 1
+        while let candidate = firstIndex(of: first, in: bytes, from: index), candidate + literal.count <= bytes.count {
+            var offset = 1
+            while offset < literal.count, bytes[candidate + offset] == literal[offset] { offset += 1 }
+            if offset == literal.count { return candidate }
+            index = candidate + 1
         }
         return nil
     }
 
-    private static func containsDirectiveStart(_ bytes: [UInt8], from start: Int) -> Bool {
-        firstIndex(of: Array("%%{".utf8), in: bytes, from: start) != nil
+    /// The first `byte` from `start`, looked for sixteen bytes at a time.
+    static func firstIndex(of byte: UInt8, in bytes: [UInt8], from start: Int) -> Int? {
+        guard start >= 0 else { return nil }
+        return bytes.withUnsafeBufferPointer { buffer in
+            var index = start
+            if let base = buffer.baseAddress {
+                let raw = UnsafeRawPointer(base)
+                let target = SIMD16(repeating: byte)
+                while index + 16 <= buffer.count, !any(raw.loadUnaligned(fromByteOffset: index, as: SIMD16<UInt8>.self) .== target) { index += 16 }
+            }
+            while index < buffer.count {
+                if buffer[index] == byte { return index }
+                index += 1
+            }
+            return nil
+        }
     }
+
+    private static func containsDirectiveStart(_ bytes: [UInt8], from start: Int) -> Bool {
+        firstIndex(of: directiveStart, in: bytes, from: start) != nil
+    }
+
+    private static let hash = UInt8(ascii: "#")
+    private static let styleKeyword = Array("style".utf8)
+    private static let classDefinitionKeyword = Array("classDef".utf8)
+    private static let directiveStart = Array("%%{".utf8)
 }

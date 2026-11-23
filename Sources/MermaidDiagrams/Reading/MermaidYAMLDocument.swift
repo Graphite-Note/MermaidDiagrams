@@ -6,7 +6,7 @@
  *              `@{ … }`, as the values a configuration holds.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -16,19 +16,13 @@
 enum MermaidYAMLDocument {
     /// The value `source` holds, or nil when Pele's reader refuses it.
     static func value(of source: String) -> DirectiveValue? {
-        guard let value = try? SequenceAttributesBlockSyntax.value(of: source) else { return nil }
-        return directiveValue(value)
+        value(of: Array(source.utf8))
     }
 
-    static func directiveValue(_ value: SequenceAttributeValue) -> DirectiveValue {
-        switch value {
-        case .null: .null
-        case .boolean(let boolean): .boolean(boolean)
-        case .number(let number): .number(number)
-        case .text(let text): .text(text)
-        case .list(let items): .array(items.map(directiveValue))
-        case .mapping(let entries): .object(entries.mapValues(directiveValue))
-        }
+    /// The value the UTF-8 bytes `source` hold, built as a configuration's values as it is read; nil when Pele's
+    /// reader refuses it.
+    static func value(of source: [UInt8]) -> DirectiveValue? {
+        try? SequenceAttributesBlockSyntax.value(of: source, as: DirectiveValue.self)
     }
 
     /// JavaScript's `String(value)`, as Pele writes the front matter's `title` and `displayMode`.
@@ -50,5 +44,16 @@ enum MermaidYAMLDocument {
         case .array(let items): .list(items.map(sequenceValue))
         case .object(let entries): .mapping(entries.mapValues(sequenceValue))
         }
+    }
+}
+
+/// A configuration's values as the YAML reader builds them: a list is an array, a mapping an object.
+extension DirectiveValue: MermaidYAMLValue {
+    static func list(_ items: [DirectiveValue]) -> DirectiveValue {
+        .array(items)
+    }
+
+    static func mapping(_ entries: [String: DirectiveValue]) -> DirectiveValue {
+        .object(entries)
     }
 }
