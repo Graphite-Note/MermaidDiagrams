@@ -6,7 +6,7 @@
  *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -16,10 +16,11 @@ extension MermaidDiagramPreparationContext {
     func prepared(_ diagram: RequirementDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: RequirementLayout
         do { layout = try RequirementLayoutEngine.layout(diagram, typography: typography, limits: limits) } catch { throw .requirementLayout(error) }
-        let narrow = turnedNarrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
-            try RequirementLayoutEngine.layout(turned, typography: typography, limits: limits)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .requirement, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = turnedNarrowSceneIsWanted(forRegularSize: layout.size)
+            ? turnedNarrowScene(of: diagram.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
+                try RequirementLayoutEngine.layout(turned, typography: typography, limits: limits)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .requirement, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(requirement: diagram),
                                       unappliedStatementCount: diagram.unappliedStatementCount)
     }
@@ -42,10 +43,11 @@ extension MermaidDiagramPreparationContext {
     /// measurements, as Pele's `turnToFit` and `tighten` draw it.
     func prepared(swimlane diagram: FlowchartDiagram) -> PreparedMermaidDiagram {
         let layout = SwimlaneLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-            SwimlaneLayoutEngine.layout(diagram, typography: typography, availableWidth: width)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+                SwimlaneLayoutEngine.layout(diagram, typography: typography, availableWidth: width)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(swimlane: diagram),
                                       unappliedStatementCount: diagram.unappliedStatementCount)
     }

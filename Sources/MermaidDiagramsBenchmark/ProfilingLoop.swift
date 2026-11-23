@@ -7,7 +7,7 @@
  *              (sample, Instruments' Time Profiler) sees only that work.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -18,8 +18,8 @@ import MermaidDiagrams
 /// `--profile <case> [reading|preparation|narrow|painting] [seconds]`: the case is a name of Pele's benchmark (`tree: 500
 /// nodes`) or a documentation corpus (`treemap-docs`); `preparation` prepares without a narrow scene and writes the SVG,
 /// as the comparison with Pele times it, and `narrow` prepares with the narrow scene for Graphite's narrowest column and
-/// writes no SVG, as Graphite prepares; the work repeats until the seconds (5 by default) are spent, then prints how
-/// many rounds it made.
+/// reads it, so that it is laid out, and writes no SVG, as Graphite prepares a diagram it shows in a narrow column; the
+/// work repeats until the seconds (5 by default) are spent, then prints how many rounds it made.
 enum ProfilingLoop {
     enum Work: String {
         case reading
@@ -75,7 +75,7 @@ enum ProfilingLoop {
                 for source in sources {
                     _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography,
                                                                narrowestColumnWidth: PreparedMermaidDiagram.standardNarrowestColumnWidth,
-                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone).narrowScene
                 }
             }
         case .painting:

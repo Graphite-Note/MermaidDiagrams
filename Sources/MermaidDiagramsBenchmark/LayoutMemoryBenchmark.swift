@@ -3,10 +3,11 @@
  * ---------------------------------
  * Layer: Benchmark
  * Description: Measures, per case of the comparison with Pele, the heap a diagram's layout holds and the heap its whole
- *              preparation holds, with and without its narrow scene, per diagram: the median and the largest.
+ *              preparation holds, without its narrow scene, with it not read yet and with it read, per diagram: the median
+ *              and the largest.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -26,28 +27,32 @@ enum LayoutMemoryBenchmark {
 
     static func run(typography: DiagramTypography) throws {
         print("heap held per diagram, median / largest in kB, \(keptCount) of each kept: layout; prepared without the narrow scene; "
-              + "prepared with it (narrowest column \(Int(PreparedMermaidDiagram.standardNarrowestColumnWidth)) points)")
+              + "prepared with it (narrowest column \(Int(PreparedMermaidDiagram.standardNarrowestColumnWidth)) points), not read and read")
         for comparisonCase in try PeleComparisonBenchmark.cases() {
             var layoutBytes: [Int] = []
             var preparedBytes: [Int] = []
             var preparedWithNarrowBytes: [Int] = []
+            var preparedWithNarrowReadBytes: [Int] = []
             for source in comparisonCase.sources {
                 guard let diagram = try? MermaidDiagramReader.read(source, limits: .standard),
                       DiagramSceneBenchmark.laidOut(diagram, typography: typography) != nil else { continue }
                 layoutBytes.append(heapGrowthPerKept { DiagramSceneBenchmark.laidOut(diagram, typography: typography) })
-                let prepared = { (narrowestColumnWidth: CGFloat?) in
+                let prepared = { (narrowestColumnWidth: CGFloat?, readsNarrowScene: Bool) in
                     heapGrowthPerKept {
-                        try? MermaidDiagramPreparation.prepare(diagram, typography: typography, narrowestColumnWidth: narrowestColumnWidth,
-                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+                        let prepared = try? MermaidDiagramPreparation.prepare(diagram, typography: typography, narrowestColumnWidth: narrowestColumnWidth,
+                                                                              now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+                        if readsNarrowScene { _ = prepared?.narrowScene }
+                        return prepared
                     }
                 }
-                preparedBytes.append(prepared(nil))
-                preparedWithNarrowBytes.append(prepared(PreparedMermaidDiagram.standardNarrowestColumnWidth))
+                preparedBytes.append(prepared(nil, false))
+                preparedWithNarrowBytes.append(prepared(PreparedMermaidDiagram.standardNarrowestColumnWidth, false))
+                preparedWithNarrowReadBytes.append(prepared(PreparedMermaidDiagram.standardNarrowestColumnWidth, true))
             }
             guard !layoutBytes.isEmpty else { continue }
             let over = layoutBytes.filter { bytes in bytes > targetBytes }.count
             print("\(comparisonCase.name) (\(layoutBytes.count)): layout \(kilobytes(layoutBytes)); prepared \(kilobytes(preparedBytes)); "
-                  + "with the narrow scene \(kilobytes(preparedWithNarrowBytes)); layouts over 64 kB: \(over)")
+                  + "with the narrow scene not read \(kilobytes(preparedWithNarrowBytes)), read \(kilobytes(preparedWithNarrowReadBytes)); layouts over 64 kB: \(over)")
         }
     }
 
