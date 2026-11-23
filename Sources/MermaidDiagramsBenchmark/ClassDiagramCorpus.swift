@@ -1,3 +1,15 @@
+/**
+ * File: ClassDiagramCorpus.swift
+ * ------------------------------
+ * Layer: Benchmark
+ * Description: The class diagram inputs of the benchmark and the tests: Mermaid's documentation examples as Pele
+ *              collects them, Pele's four-class diagram and generated hierarchies.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The class diagram inputs: Mermaid's 38 class diagram documentation examples as Pele collects them, the class
@@ -27,7 +39,7 @@ enum ClassDiagramCorpus {
     """
 
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "class-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "class-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

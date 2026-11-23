@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationshipCorpus.swift
+ * ------------------------------------
+ * Layer: Benchmark
+ * Description: The entity relationship inputs of the benchmark and the tests: Mermaid's documentation examples as Pele
+ *              collects them and generated schemas.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// Entity relationship diagrams to read and lay out: the 25 examples of Mermaid's documentation, as Pele's corpus
@@ -17,7 +29,7 @@ enum EntityRelationshipCorpus {
     }
 
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "er-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "er-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

@@ -7,7 +7,7 @@
  *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 23/11/2026
  */
 
@@ -32,17 +32,27 @@ struct MermaidDiagramsBenchmark {
     /// How many layouts are kept while the heap's growth is measured.
     static let keptLayoutCount = 1_000
 
-    /// `--pele-comparison` times only the comparison with Pele; `--check-targets` exits with status 1, after a line
-    /// naming each, when a median misses a target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one
-    /// case for a sampler (`ProfilingLoop`).
-    static func main() throws {
+    /// `--pele-comparison` times only the comparison with Pele; `--pele-javascriptcore` times it beside Pele run in
+    /// JavaScriptCore on this machine instead of Pele's run in Deno (`PeleJavaScriptCoreComparison`, what the iPad and
+    /// iPhone run as an XCTest); `--check-targets` exits with status 1, after a line naming each, when a median misses a
+    /// target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one case for a sampler (`ProfilingLoop`).
+    static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
         let arguments = Set(CommandLine.arguments.dropFirst())
-        if !arguments.contains("--pele-comparison") { try runEveryType(typography: typography) }
-        let missedTargets = try PeleComparisonBenchmark.run(typography: typography)
+        let missedTargets: [String]
+        if arguments.contains("--pele-javascriptcore") {
+            let report = try await PeleJavaScriptCoreComparison.run()
+            for line in report.lines { print(line) }
+            // A drawing unlike Deno's is not Pele's run on the Mac: the comparison does not hold.
+            if !report.differingDrawings.isEmpty { exit(1) }
+            missedTargets = report.missedTargets
+        } else {
+            if !arguments.contains("--pele-comparison") { try runEveryType(typography: typography) }
+            missedTargets = try PeleComparisonBenchmark.run(typography: typography)
+        }
         if arguments.contains("--check-targets") {
             for missed in missedTargets { print("missed target: \(missed)") }
             if !missedTargets.isEmpty { exit(1) }

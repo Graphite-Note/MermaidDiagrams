@@ -5,8 +5,8 @@
  * Description: The packet diagrams the benchmark times: Mermaid's documentation examples and generated packets.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -15,7 +15,7 @@ import Foundation
 /// (`tests/corpus/packet-docs.json`), and packets of many fields of 1 to 40 bits, with the seed of Pele's generated graphs.
 enum PacketDiagramCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "packet-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "packet-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

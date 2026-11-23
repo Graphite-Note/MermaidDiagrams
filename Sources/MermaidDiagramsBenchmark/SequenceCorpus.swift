@@ -1,3 +1,15 @@
+/**
+ * File: SequenceCorpus.swift
+ * --------------------------
+ * Layer: Benchmark
+ * Description: The sequence diagrams the benchmark and the tests run on: Mermaid's documentation examples as Pele
+ *              collects them and a generated long conversation.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The sequence diagrams the benchmark measures: Mermaid's 38 sequence diagram documentation examples, as Pele
@@ -5,7 +17,7 @@ import Foundation
 /// flowchart meshes.
 enum SequenceCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "sequence-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "sequence-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

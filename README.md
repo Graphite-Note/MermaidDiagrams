@@ -177,6 +177,34 @@ The visual style, the spacing and the shapes' geometry follow [Pele](https://git
 
 `PeleComparisonBenchmark`, last in the run (alone with `--pele-comparison`), times the package on the inputs of Pele's own benchmark (`scripts/bench.mjs`: Mermaid's 114 flowchart examples, trees and meshes of 50 and 500 nodes from the same generators and seed) and on each type's documentation examples, counted as Pele's benchmark counts them: every input of a case per run, refused ones included, one run not counted, then runs until 300 ms are spent (at least 5, at most 2,000), the median and the 99th percentile divided by the inputs. Beside each it prints Pele's time on the same inputs, measured by `scripts/pele/run.sh --bench` on the same Mac and kept in `pele-bench.json`: Pele's `render`, which reads, lays out and writes the SVG, in Deno 2.9.8 (V8), measuring text with its table of Arial's advances. The package's two times are reading and layout (the plan's "parse + layout"), and the whole preparation with its SVG (read, lay out, make the scene and what a screen reader says, write the SVG), which is what Pele's `render` does.
 
+On an iPad or an iPhone the same comparison runs as an XCTest beside Pele itself on the device
+(`PeleJavaScriptCoreComparison`, in `MermaidDiagramsDeviceBenchmarkTests`, skipped unless
+`MERMAID_DIAGRAMS_DEVICE_BENCHMARK` is set, which the shared scheme `MermaidDiagramsDeviceBenchmark` sets; that scheme
+tests that target alone, in Release, without code coverage):
+
+```sh
+xcodebuild test -scheme MermaidDiagramsDeviceBenchmark -configuration Release -enableCodeCoverage NO \
+  -destination id=<device> -allowProvisioningUpdates DEVELOPMENT_TEAM=<team>
+```
+
+The device must be unlocked. Pele runs from `pele-bundle.js`, its modules joined into one plain script by
+`scripts/pele/bundle.sh` (see `scripts/pele/README.md`), twice: in a JSContext (JavaScriptCore in the test's own process,
+which iOS lets run only its interpreters, so Pele interpreted) and in a WebKit page (a WKWebView in a window of the test's
+app, whose JavaScriptCore compiles to machine code: Pele as Obsidian runs it there). In both it measures text with its
+table of Arial's advances, as in Deno (the page's canvases give it no context); the JSContext gets a URL class for Pele's
+links (`javascriptcore-url.js`), which a page has. Before timing, each draws every documentation example and the test
+fails for one drawn otherwise than Pele drew it in Deno (`pele-bundle-drawings.json`: type, page and a hash of the SVG),
+but for the Gantt charts in the page when the device's time zone is not UTC (Pele writes their dates in the page's time
+zone, which an app cannot set). Each case is then timed as above, Pele in the JSContext with the same loop, and in the page
+with samples that each repeat the case for at least 50 ms (the page's clock moves by whole milliseconds) over 3 s, so its
+99th percentile is of those means and smoother than one run's; the
+speed-up and the targets are against Pele in the page. With `TEST_RUNNER_MERMAID_DIAGRAMS_CHECK_TARGETS=1` before
+`xcodebuild`, each missed target fails the test, as `--check-targets` fails the Mac's run. On the Mac,
+`--pele-javascriptcore` runs the same comparison beside Pele in a JSContext of the benchmark's own process (no page: the
+benchmark is a tool with no app); macOS gives that process JavaScriptCore's compilers only when it is signed with the
+`com.apple.security.cs.allow-jit` entitlement (`codesign -f -s - --entitlements <plist> <binary>`), and interprets Pele
+otherwise.
+
 `--profile <case> [reading|preparation|painting] [seconds]` repeats one case (a name of Pele's benchmark, `tree: 500 nodes`, or a corpus, `treemap-docs`) for a sampler such as `sample(1)` or Instruments' Time Profiler (`ProfilingLoop`). `--check-targets` exits with status 1 after a line `missed target: …` for each median that misses a target of Graphite's plan (`Docs/Native-diagrams-todo.md`, Performance targets) on documentation examples: reading and layout at most 30 µs a diagram, and ten times faster than Pele on the same inputs. The default run only reports.
 
 Measured 2026-11-23 on an Apple M5 Max (128 GB, macOS 27.2.1), release build, the machine otherwise quiet (load average about 2, under the 8 waited for), Pele 1.13.0's own run of 2026-11-20 (`pele-bench.json`); of three runs of the comparison one after the other, the run with the middle median of each case; per diagram, median / 99th percentile in µs:
@@ -224,5 +252,21 @@ Measured 2026-11-23 on an Apple M5 Max (128 GB, macOS 27.2.1), release build, th
 
 On the same Mac at the start of this measurement's work (main at ac087d6, 2026-11-23, load about 3), reading and layout per diagram were, in µs: flowchart examples 18.62, tree of 50 nodes 153.38, mesh of 50 nodes 412.33, tree of 500 nodes 1385.58, mesh of 500 nodes 5353.67, agent flow 78.48, architecture 42.03, block 10.63, C4 196.88, class 20.62, Cynefin 31.97, entity relationship 25.52, event model 15.64, Gantt 37.50, Git graph 34.31, info 0.42, Ishikawa 14.96, journey 7.79, kanban 32.97, mindmap 8.15, packet 40.92, pie 27.60, quadrant 32.38, radar 30.17, railroad 17.80, requirement 78.00, Sankey 47.73, sequence 23.49, state 28.92, swimlane 36.44, timeline 21.00, treemap 72.97, tree view 47.61, use case 74.29, Venn 23.73, Wardley 10.49, XY chart 31.64 (this section's table of 2026-11-20 had the flowchart examples at 8.6 µs: the grammar and layered layout branches merged since then read and lay out as Pele does, and cost more). Sampling the benchmark (`--profile`, `sample(1)`) found the time in making Core Text fonts again for sizes already made, laying out Core Text lines for the same text beyond ASCII, reading the front matter's YAML twice, writing numbers through `String(format:)`, Foundation's regular expressions and string searches through characters where the bytes answer, strings built a scalar at a time, copies of cursors, measurers and frames, and arrays grown an element at a time; each was changed only where its result is the same, the slow path kept for the rest, and kept only where it measured faster.
 
-Missed today: the ten-times target on every documentation corpus (the package's reading and layout is 0.7 to 4.6 times Pele's speed, 1.5 times on Pele's flowchart examples), and the 30 µs target on the examples of agent flows, C4 diagrams, Sankey diagrams, swimlane diagrams and use case diagrams. Six types are still slower than Pele on their examples: agent flows (51.5 against 45.7 µs), block diagrams (8.0 against 5.9), quadrant charts (14.9 against 13.0), requirement diagrams (28.4 against 27.7), tree views (10.3 against 9.3) and XY charts (12.5 against 12.3); the time left there is spread over their lexers, the YAML reader and the layered layout, with no single place to take it from. The whole preparation with its SVG is slower than Pele's `render` for every type but the Venn diagram and Pele's 500-node mesh: making the scene, what a screen reader says and the SVG costs more than reading and laying out. The 500-node mesh is past the drawing limit (Pele draws it 22,433 points wide), so its preparation is refused once its scene is made. Painting is not faster: Core Graphics paints a merged path over the whole of its bounds, so a 500-node tree's scene (49,082 points wide) takes about 0.2 s to paint at two pixels a point and the 500-node mesh about 1 s, nearly all of it in two paths (the edges and the nodes); painting them cut into pieces that share no pixel was tried and changes the edges' smoothing in a few hundred pixels, so it was left out. The iPad and iPhone measurements the plan asks for need a device and are not made.
+Missed today: the ten-times target on every documentation corpus (the package's reading and layout is 0.7 to 4.6 times Pele's speed, 1.5 times on Pele's flowchart examples), and the 30 µs target on the examples of agent flows, C4 diagrams, Sankey diagrams, swimlane diagrams and use case diagrams. Six types are still slower than Pele on their examples: agent flows (51.5 against 45.7 µs), block diagrams (8.0 against 5.9), quadrant charts (14.9 against 13.0), requirement diagrams (28.4 against 27.7), tree views (10.3 against 9.3) and XY charts (12.5 against 12.3); the time left there is spread over their lexers, the YAML reader and the layered layout, with no single place to take it from. The whole preparation with its SVG is slower than Pele's `render` for every type but the Venn diagram and Pele's 500-node mesh: making the scene, what a screen reader says and the SVG costs more than reading and laying out. The 500-node mesh is past the drawing limit (Pele draws it 22,433 points wide), so its preparation is refused once its scene is made. Painting is not faster: Core Graphics paints a merged path over the whole of its bounds, so a 500-node tree's scene (49,082 points wide) takes about 0.2 s to paint at two pixels a point and the 500-node mesh about 1 s, nearly all of it in two paths (the edges and the nodes); painting them cut into pieces that share no pixel was tried and changes the edges' smoothing in a few hundred pixels, so it was left out.
 
+Pele in JavaScriptCore on the same Mac (`--pele-javascriptcore`, 2026-11-23, load about 3, the package's columns as above
+within a few per cent), per diagram, median in µs: compiled (the benchmark signed with `com.apple.security.cs.allow-jit`),
+JavaScriptCore runs Pele faster than Deno's V8 does, so the package is about as fast as that Pele rather than faster;
+interpreted (the benchmark as `swift build` signs it), it is about ten times slower. Pele's flowchart examples: 15.83
+compiled, 158.46 interpreted, against 22.13 in Deno (package 15.63); agent flows 31.78 / 334.49 (package 52.54); block
+diagrams 5.71 / 71.99 (8.41); C4 56.72 / 671.99 (71.54); requirement diagrams 20.79 / 261.69 (29.66); use case diagrams
+26.12 / 346.38 (45.75); Venn diagrams 44.98 / 648.06 (21.17); the 500-node mesh 5,145.58 / 87,741.33 (5,304.42). Every
+documentation example was drawn as in Deno.
+
+Not measured on the devices yet: on 2026-11-23, from about 17:00 to 18:50, neither the iPad Pro 11-inch (3rd generation,
+iPad13,6) nor the iPhone 13 Pro (iPhone14,2), both paired with the Mac over the network, opened a connection to Xcode
+(`devicectl`: "The tunnel connection failed while the system tried to connect to the device"; `xcodebuild`: timed out
+waiting for the destination) in 36 attempts, nor in four more from about 18:55 to 19:15 with the test built anew for iOS
+in Release (each device listed as available at times, but no tunnel opened), so the test never started on either; it ran on an iOS simulator (whose
+numbers say nothing of a device and are not given). The command above, run with a device unlocked and reachable, fills
+in the device's table.

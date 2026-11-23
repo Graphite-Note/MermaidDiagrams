@@ -7,8 +7,8 @@
  *              tests; a warning in any of its targets fails the build.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 04/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 import PackageDescription
 
@@ -23,9 +23,13 @@ let package = Package(
     targets: [
         .target(name: "MermaidDiagrams"),
         // Times reading, layout and drawing on the inputs of Pele's benchmark (`swift run -c release MermaidDiagramsBenchmark`);
-        // its resources are the flowchart examples of Mermaid's documentation, as Pele's benchmark collects them.
-        .executableTarget(name: "MermaidDiagramsBenchmark", dependencies: ["MermaidDiagrams"], resources: [.copy("Resources")]),
-        .testTarget(name: "MermaidDiagramsTests", dependencies: ["MermaidDiagrams", "MermaidDiagramsBenchmark"])
+        // its resources are Mermaid's documentation examples as Pele's corpus collects them, Pele's own records and Pele
+        // itself as one script (BenchmarkResources/README.md).
+        .executableTarget(name: "MermaidDiagramsBenchmark", dependencies: ["MermaidDiagrams"], resources: [.copy("BenchmarkResources")]),
+        .testTarget(name: "MermaidDiagramsTests", dependencies: ["MermaidDiagrams", "MermaidDiagramsBenchmark"]),
+        // The comparison with Pele run in JavaScriptCore on an iPad or an iPhone (`xcodebuild test`), skipped unless
+        // MERMAID_DIAGRAMS_DEVICE_BENCHMARK is set; it imports the benchmark without testability, so it builds in Release.
+        .testTarget(name: "MermaidDiagramsDeviceBenchmarkTests", dependencies: ["MermaidDiagramsBenchmark"])
     ]
 )
 

@@ -1,10 +1,22 @@
+/**
+ * File: TimelineCorpus.swift
+ * --------------------------
+ * Layer: Benchmark
+ * Description: The timeline inputs of the benchmark and the tests: Mermaid's documentation examples as Pele collects
+ *              them and generated timelines.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The timeline inputs of the benchmark: Mermaid's 14 documentation examples, as Pele collects them, and generated
 /// timelines of sections, periods and events.
 enum TimelineCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "timeline-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "timeline-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

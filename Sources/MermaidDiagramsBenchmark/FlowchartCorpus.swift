@@ -1,3 +1,15 @@
+/**
+ * File: FlowchartCorpus.swift
+ * ---------------------------
+ * Layer: Benchmark
+ * Description: The inputs of Pele's flowchart benchmark: Mermaid's documentation examples, and trees and meshes
+ *              generated as Pele generates them, with the same seed.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The inputs of Pele's flowchart benchmark (`scripts/bench.mjs`): Mermaid's 114 documentation examples, and trees
@@ -23,7 +35,7 @@ enum FlowchartCorpus {
     """
 
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "flowchart-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "flowchart-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

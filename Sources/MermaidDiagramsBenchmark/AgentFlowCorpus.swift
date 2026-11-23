@@ -6,8 +6,8 @@
  *              collects them, what Mermaid itself built for Pele's reference inputs, and generated flows.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -22,14 +22,14 @@ enum AgentFlowCorpus {
     /// Pele's reference inputs with what Mermaid 12.1.0's browser build made of each (`tests/corpus/agentflow-reference.json`),
     /// cut to the fields the tests compare: the JSON text of the whole list.
     static func referenceData() throws -> Data {
-        guard let location = Bundle.module.url(forResource: "agentflow-reference", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "agentflow-reference", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try Data(contentsOf: location)
     }
 
     private static func strings(named name: String) throws -> [String] {
-        guard let location = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

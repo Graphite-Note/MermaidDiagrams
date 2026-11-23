@@ -1,10 +1,22 @@
+/**
+ * File: MindmapCorpus.swift
+ * -------------------------
+ * Layer: Benchmark
+ * Description: The mindmap inputs of the benchmark and the tests: Mermaid's documentation examples as Pele collects
+ *              them and generated trees.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The mindmap inputs of the benchmark: Mermaid's 13 documentation examples, as Pele collects them, and generated
 /// trees in the shape of Pele's flowchart trees.
 enum MindmapCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "mindmap-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "mindmap-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

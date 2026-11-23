@@ -1,4 +1,7 @@
-# Resources
+# Benchmark resources
+
+The folder is not named `Resources`: copied into an iPad or iPhone resource bundle, a folder of that name makes
+`codesign` refuse the bundle ("bundle format unrecognized"), and the device benchmark runs in such a bundle.
 
 `flowchart-docs.json`: the 114 flowchart examples of Mermaid's documentation, as Pele collects them for its benchmark (`tests/corpus/flowchart-docs.json` in https://github.com/obsidianmd/pele, MIT licensed, see `PELE-LICENSE`; the examples come from Mermaid's documentation, also MIT licensed). Used unchanged, so that the benchmark runs on the same inputs as Pele's.
 
@@ -48,3 +51,8 @@ written by `scripts/pele/run.sh --max-width=280,390,600`.
 `PeleKnownDifferences.md`: every input whose scene differs from Pele's beyond the differential tests' tolerance (in a
 narrow column too), every
 flowchart spec text read otherwise than Pele reads it, and every compat file without copied texts, each with why.
+`pele-bundle.js`: Pele 1.13.0's modules (`src/`, MIT licensed, its license at the top of the file) as Deno 2.9.8
+transpiled them, joined into one plain script by `scripts/pele/bundle.sh`, which JavaScriptCore's JSContext runs;
+`pele-bundle-drawings.json`: what Pele in Deno drew of each documentation example when the script was made (type, page
+and a hash of the SVG), which the script drew alike. `javascriptcore-url.js`: the URL class Pele's links ask for, which a
+JSContext lacks, for http and https (MIT licensed, as the package is).

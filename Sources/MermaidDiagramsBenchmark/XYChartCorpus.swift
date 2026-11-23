@@ -1,10 +1,22 @@
+/**
+ * File: XYChartCorpus.swift
+ * -------------------------
+ * Layer: Benchmark
+ * Description: The XY chart inputs of the benchmark and the tests: Mermaid's documentation examples as Pele collects
+ *              them and generated charts of bars and lines.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The XY chart inputs of the benchmark: Mermaid's 8 documentation examples, as Pele collects them
 /// (`tests/corpus/xychart-docs.json`), and charts of bars and lines generated with the seed of Pele's generated graphs.
 enum XYChartCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "xychart-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "xychart-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

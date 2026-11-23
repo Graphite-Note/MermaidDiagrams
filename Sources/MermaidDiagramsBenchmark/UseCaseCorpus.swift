@@ -6,8 +6,8 @@
  *              generated diagrams of many actors and use cases in boundaries with relationships between them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -16,7 +16,7 @@ import Foundation
 /// (`tests/corpus/usecase-docs.json`), and diagrams of many elements made with the seed of Pele's generated graphs.
 enum UseCaseCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "usecase-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "usecase-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

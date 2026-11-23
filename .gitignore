@@ -1,5 +1,13 @@
 .build/
-.swiftpm/
+# .swiftpm is Xcode's and SwiftPM's own, but for the device benchmark's shared scheme.
+.swiftpm/*
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/
+.swiftpm/xcode/xcshareddata/*
+!.swiftpm/xcode/xcshareddata/xcschemes/
+.swiftpm/xcode/xcshareddata/xcschemes/*
+!.swiftpm/xcode/xcshareddata/xcschemes/MermaidDiagramsDeviceBenchmark.xcscheme
 DerivedData/
 xcuserdata/
 *.xcuserstate

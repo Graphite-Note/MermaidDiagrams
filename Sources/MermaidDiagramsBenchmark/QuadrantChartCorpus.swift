@@ -1,10 +1,22 @@
+/**
+ * File: QuadrantChartCorpus.swift
+ * -------------------------------
+ * Layer: Benchmark
+ * Description: The quadrant charts the benchmark and the tests run on: Mermaid's documentation examples as Pele
+ *              collects them and generated charts of many points.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The quadrant charts the benchmark times: Mermaid's three documentation examples, as Pele's corpus collects them
 /// (`tests/corpus/quadrant-docs.json`), and charts of many points placed with the seed of Pele's generated graphs.
 enum QuadrantChartCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "quadrant-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "quadrant-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))
