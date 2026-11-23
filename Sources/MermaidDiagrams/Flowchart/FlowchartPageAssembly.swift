@@ -5,7 +5,7 @@
  * Description: Puts a placed flowchart on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 23/11/2026
  */
 
@@ -84,28 +84,25 @@ struct FlowchartPageAssembly {
                                    text: centered(measured.edgeTexts[edgeIndex], at: textCenter), style: edge.style)
     }
 
-    /// The loops of every node that has edges to itself; a group's from the middle of its box, as Pele loops a group
-    /// whose drawn node has no size.
+    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`FlowchartSelfLoops`); a group's
+    /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
+    /// does not count among the loops drawn before the next one.
     mutating func placeSelfLoops() {
         for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() {
             let isGroup = clustered?.representedSubgraphs[node] != nil
-            for (loopIndex, edgeIndex) in loopEdgeIndices.enumerated() {
+            let flowRunsAcross = (clustered?.loopSides[node] ?? axes.loopSide) == .bottom
+            var loopIndex = 0
+            for edgeIndex in loopEdgeIndices {
                 let edge = diagram.edges[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shape: measured.assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape, size: isGroup ? .zero : measured.shapeSizes[node],
-                                                   loopSide: clustered?.loopSides[node] ?? axes.loopSide, loopIndex: loopIndex,
-                                                   textSize: measured.edgeTexts[edgeIndex]?.size)
-                let arriving = unitVector(from: loop.control2, to: loop.back)
-                let leaving = unitVector(from: loop.control1, to: loop.leave)
-                let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-                let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
-                let start = CGPoint(x: loop.leave.x - leaving.dx * startTrim, y: loop.leave.y - leaving.dy * startTrim)
-                let end = CGPoint(x: loop.back.x - arriving.dx * endTrim, y: loop.back.y - arriving.dy * endTrim)
-                let path = DiagramPath(start: start, segments: [.curve(to: end, control1: loop.control1, control2: loop.control2)])
-                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: path,
-                                                       sourceMark: mark(edge.sourceArrowhead, tip: loop.leave, direction: leaving),
-                                                       targetMark: mark(edge.targetArrowhead, tip: loop.back, direction: arriving),
-                                                       text: loop.textCenter.flatMap { center in centered(measured.edgeTexts[edgeIndex], at: center) },
-                                                       style: edge.style)
+                defer { if edge.stroke != .invisible { loopIndex += 1 } }
+                let text = measured.edgeTexts[edgeIndex]
+                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
+                                                   flowRunsAcross: flowRunsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
+                                                   textSize: text?.size)
+                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: loop.path,
+                                                       sourceMark: mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoNodeAtLeave),
+                                                       targetMark: mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving),
+                                                       text: centered(text, at: loop.textCenter), style: edge.style)
             }
         }
     }
@@ -208,11 +205,6 @@ struct FlowchartPageAssembly {
         guard var text else { return nil }
         text.center = center
         return text
-    }
-
-    private func unitVector(from start: CGPoint, to end: CGPoint) -> CGVector {
-        let length = max(((end.x - start.x) * (end.x - start.x) + (end.y - start.y) * (end.y - start.y)).squareRoot(), 0.0001)
-        return CGVector(dx: (end.x - start.x) / length, dy: (end.y - start.y) / length)
     }
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the

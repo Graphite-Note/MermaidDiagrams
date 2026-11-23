@@ -6,7 +6,7 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -118,7 +118,7 @@ struct SwimlanePageAssembly {
                                                offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
     }
 
-    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`SwimlaneSelfLoops`); a group's
+    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`FlowchartSelfLoops`); a group's
     /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
     /// does not count among the loops drawn before the next one.
     private mutating func placeSelfLoops() {
@@ -129,11 +129,11 @@ struct SwimlanePageAssembly {
                 let edge = diagram.edges[edgeIndex]
                 defer { if edge.stroke != .invisible { loopIndex += 1 } }
                 let text = measured.edgeTexts[edgeIndex]
-                let loop = SwimlaneSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
+                let loop = FlowchartSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
                                                   flowRunsAcross: diagram.direction.runsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
                                                   textSize: text?.size)
                 edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: loop.path,
-                                                       sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoStepAtLeave),
+                                                       sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoNodeAtLeave),
                                                        targetMark: Self.mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving),
                                                        text: Self.centered(text, at: loop.textCenter), style: edge.style)
             }

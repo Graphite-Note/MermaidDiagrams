@@ -142,14 +142,16 @@ beyond the tolerance but for the reasons above.
 ## Drawn as Pele draws them
 
 Three drawings that look wrong were compared with Pele's own (`scripts/pele/run.sh --svg-of-texts=check-texts.json`,
-`--svg-of=sankey-docs#0`) and the package draws them as Pele does, positions and drawing order alike; they are Pele's own:
+`--svg-of=sankey-docs#0`); they are Pele's own, and the package draws them as Pele does, positions and drawing order alike:
 
 - A Gantt chart's `vert` line crosses a milestone's text when its date falls within the text (`check-texts.json` 0, with
   `click` tasks): Pele draws the vertical lines before the tasks and their texts (gantt/render.ts `pele-verts` before
   `pele-tasks`) and moves no text off a line; the scene paints them in the same order (`GanttDrawingParts.addScene`).
 - A flowchart group's edge to itself (`subgraph one … end`, `one --> one`, texts 1 and 2) loops out of the group's middle,
-  so it lands on whatever node is there: Pele gives a group's view no width (flowchart/render.ts), so the loop starts at
-  the group's center, beside it across the flow; the package places it there too.
+  so it lands on whatever node is there: Pele gives a group's view no width (flowchart/render.ts), so its `loopPath` starts
+  at the group's center, 4 points off it, and reaches 26 points out. The package placed the loop there too but drew every
+  flowchart and agent flow loop with a shape of its own; it now draws them with Pele's `loopPath` (`FlowchartSelfLoops`,
+  as swimlanes did), within 0.02 points of Pele's paths and texts for texts 1 to 4.
 - The labels of Mermaid's energy example (`sankey-docs#0`) run into each other where the bands are dense (H2 over
   Heating and cooling - commercial): every label stands where Pele's stands (the same x and y, Pele's moved by its
   group's padding), as `SankeyLabelPlacement` moves only the labels Pele moves.

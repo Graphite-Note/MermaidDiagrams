@@ -5,8 +5,8 @@
  * Description: Flowcharts with groups laid out as nested boxes, and what is not laid out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -109,8 +109,15 @@ final class FlowchartClusterGraphTests: XCTestCase {
         let laidOut = try layout("flowchart TD\nsubgraph one\nA\nend\none --> one")
         let box = laidOut.clusters[0].frame
         XCTAssertEqual(laidOut.edges.count, 1)
+        // Pele's loopPath for a node of no size: it leaves 4 points below the middle (its spread, the half side less 4, is
+        // -4) and its controls stand 26 points out and 8 points down and up, as Pele draws it (M54.9,114C80.9,118 80.9,102).
         XCTAssertEqual(laidOut.edges[0].path.start.x, box.midX, accuracy: accuracy)
-        XCTAssertEqual(laidOut.edges[0].path.start.y, box.midY, accuracy: accuracy)
+        XCTAssertEqual(laidOut.edges[0].path.start.y, box.midY + 4, accuracy: accuracy)
+        guard case .curve(_, let firstControl, let secondControl) = try XCTUnwrap(laidOut.edges[0].path.segments.first) else {
+            return XCTFail("A loop is one curve")
+        }
+        XCTAssertEqual(firstControl, CGPoint(x: box.midX + 26, y: box.midY + 8))
+        XCTAssertEqual(secondControl, CGPoint(x: box.midX + 26, y: box.midY - 8))
     }
 
     func testTwoNodesEnteredAcrossTheirGroupsFlowInOneRankAreLaidOut() throws {

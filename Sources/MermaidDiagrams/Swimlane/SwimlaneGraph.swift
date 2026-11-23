@@ -6,8 +6,8 @@
  *              graph: the groups, the nodes, and a lane for the nodes outside every group.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -80,11 +80,11 @@ struct SwimlaneGraph {
     }
 
     /// A node's size in its rank: `base`, its shape's or none for a group's, grown on both sides across the flow by the room
-    /// each of its loops takes, as Pele's flowchart renderer grows the node it lays out (`SwimlaneSelfLoops.room`).
+    /// each of its loops takes, as Pele's flowchart renderer grows the node it lays out (`FlowchartSelfLoops.room`).
     static func layoutSize(of node: Int, base: CGSize, measured: FlowchartMeasurement, flowRunsAcross: Bool) -> CGSize {
         var size = base
         for edgeIndex in measured.selfLoopEdgeIndices[node] {
-            let room = SwimlaneSelfLoops.room(textSize: measured.edgeTexts[edgeIndex]?.size, flowRunsAcross: flowRunsAcross)
+            let room = FlowchartSelfLoops.room(textSize: measured.edgeTexts[edgeIndex]?.size, flowRunsAcross: flowRunsAcross)
             if flowRunsAcross { size.height += 2 * room } else { size.width += 2 * room }
         }
         return size
