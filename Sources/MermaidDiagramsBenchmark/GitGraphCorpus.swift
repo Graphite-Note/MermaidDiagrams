@@ -1,10 +1,22 @@
+/**
+ * File: GitGraphCorpus.swift
+ * --------------------------
+ * Layer: Benchmark
+ * Description: The Git graph inputs of the benchmark and the tests: Mermaid's documentation examples as Pele collects
+ *              them and generated histories.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The Git graph inputs of the benchmark: Mermaid's 35 documentation examples, as Pele collects them, and generated
 /// histories of feature branches merged back into `main`.
 enum GitGraphCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "git-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "git-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

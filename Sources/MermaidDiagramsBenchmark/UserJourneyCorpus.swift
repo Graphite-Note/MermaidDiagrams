@@ -1,10 +1,22 @@
+/**
+ * File: UserJourneyCorpus.swift
+ * -----------------------------
+ * Layer: Benchmark
+ * Description: The user journeys the benchmark and the tests run on: Mermaid's documentation example as Pele collects
+ *              it and generated journeys.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The user journeys the benchmark times: Mermaid's documentation example, as Pele's corpus collects it
 /// (`tests/corpus/journey-docs.json`), and generated journeys of sections, tasks and actors.
 enum UserJourneyCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "journey-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "journey-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

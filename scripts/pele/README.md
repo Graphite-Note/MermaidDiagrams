@@ -60,5 +60,27 @@ With no flag it does the corpus, compat, random flat, bench and preprocessing ru
 
 The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
 `random-flat.json`, `pele-random-flat.json` and `pele-preprocessing.json` in
-`Sources/MermaidDiagramsBenchmark/Resources`; run the benchmark part on a quiet machine, then
+`Sources/MermaidDiagramsBenchmark/BenchmarkResources`; run the benchmark part on a quiet machine, then
 `swift run -c release MermaidDiagramsBenchmark --pele-comparison` on the same machine.
+
+## One script for JavaScriptCore
+
+```sh
+scripts/pele/bundle.sh <pele checkout> <output folder>
+```
+
+makes `pele-bundle.js`, Pele as one plain script that defines `Pele` (`render` with every type registered, `version`,
+and `textMeasuredWithTable`), for JavaScriptCore's JSContext, which runs scripts and loads no modules; the iPad and
+iPhone benchmark runs it (`PeleInJavaScriptCore`, `PeleInWebKit`). It runs `pele-bundler.ts` in the same sandbox as
+`run.sh` (read access to the Pele checkout, this folder and a Deno cache made anew in the output folder, write access to
+the output folder only, no network, no subprocess, no environment), with `DENO_DIR` set to that cache. No bundler runs:
+`deno bundle` would fetch esbuild from npm. The script loads Pele's core and every entry, as the runner does, which makes
+Deno write the JavaScript it transpiles of each module to its cache (`deno-cache/gen/file/<path>.js`); it then reads those
+274 files and joins them. Pele's modules form no import cycle and export no binding they change later, so each becomes a
+function run once, after the modules it imports, its imports constants taken from their exports, which is what an ES
+module's live bindings give it; every import and export statement must be one of the forms Deno writes, or the script
+stops. It then runs the joined script in Deno beside Pele's modules, draws every documentation example with both (the
+type, the page and the SVG must be the same; all 522 are), and writes `pele-bundle-drawings.json`, a hash of each
+drawing, which the device benchmark checks Pele in JavaScriptCore against. Copy both files into
+`Sources/MermaidDiagramsBenchmark/BenchmarkResources`.
+

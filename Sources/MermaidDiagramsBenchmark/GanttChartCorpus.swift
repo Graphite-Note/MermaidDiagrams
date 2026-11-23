@@ -1,3 +1,15 @@
+/**
+ * File: GanttChartCorpus.swift
+ * ----------------------------
+ * Layer: Benchmark
+ * Description: The Gantt charts the benchmark and the tests run on: Mermaid's documentation examples as Pele collects
+ *              them, generated charts, and the instant and time zone they are placed against.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The Gantt charts the benchmark times: Mermaid's eleven documentation examples, as Pele's corpus collects them
@@ -9,7 +21,7 @@ enum GanttChartCorpus {
     static let timeZone = TimeZone(identifier: "UTC") ?? .gmt
 
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "gantt-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "gantt-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

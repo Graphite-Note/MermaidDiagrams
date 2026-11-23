@@ -1,10 +1,22 @@
+/**
+ * File: PieChartCorpus.swift
+ * --------------------------
+ * Layer: Benchmark
+ * Description: The pie charts the benchmark and the tests run on: Mermaid's documentation examples as Pele collects
+ *              them and generated pies of many slices.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The pie charts the benchmark times: Mermaid's two documentation examples, as Pele's corpus collects them
 /// (`tests/corpus/pie-docs.json`), and pies of many slices generated with the seed of Pele's generated graphs.
 enum PieChartCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "pie-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "pie-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))

@@ -6,7 +6,7 @@
  *              recorded it on this Mac, and the inputs it was given, for the differential tests and the benchmark.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -125,7 +125,7 @@ enum PeleResults {
     }
 
     static func resource(named name: String, extension fileExtension: String) throws -> Data {
-        guard let location = Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try Data(contentsOf: location)

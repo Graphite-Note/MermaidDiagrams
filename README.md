@@ -168,6 +168,33 @@ The visual style, the spacing and the shapes' geometry follow [Pele](https://git
 
 `PeleComparisonBenchmark`, last in the run (alone with `--pele-comparison`), times the package on the inputs of Pele's own benchmark (`scripts/bench.mjs`: Mermaid's 114 flowchart examples, trees and meshes of 50 and 500 nodes from the same generators and seed) and on each type's documentation examples, counted as Pele's benchmark counts them: every input of a case per run, refused ones included, one run not counted, then runs until 300 ms are spent (at least 5, at most 2,000), the median and the 99th percentile divided by the inputs. Beside each it prints Pele's time on the same inputs, measured by `scripts/pele/run.sh --bench` on the same Mac and kept in `pele-bench.json`: Pele's `render`, which reads, lays out and writes the SVG, in Deno 2.9.8 (V8), measuring text with its table of Arial's advances. The package's two times are reading and layout (the plan's "parse + layout"), and the whole preparation with its SVG (read, lay out, make the scene and what a screen reader says, write the SVG), which is what Pele's `render` does.
 
+On an iPad or an iPhone the same comparison runs as an XCTest beside Pele itself on the device
+(`PeleJavaScriptCoreComparison`, in `MermaidDiagramsDeviceBenchmarkTests`, skipped unless
+`MERMAID_DIAGRAMS_DEVICE_BENCHMARK` is set, which the shared scheme `MermaidDiagramsDeviceBenchmark` sets; that scheme
+tests that target alone, in Release, without code coverage):
+
+```sh
+xcodebuild test -scheme MermaidDiagramsDeviceBenchmark -configuration Release -enableCodeCoverage NO \
+  -destination id=<device> -allowProvisioningUpdates DEVELOPMENT_TEAM=<team>
+```
+
+The device must be unlocked. Pele runs from `pele-bundle.js`, its modules joined into one plain script by
+`scripts/pele/bundle.sh` (see `scripts/pele/README.md`), twice: in a JSContext (JavaScriptCore in the test's own process,
+which iOS lets run only its interpreters, so Pele interpreted) and in a WebKit page (a WKWebView in a window of the test's
+app, whose JavaScriptCore compiles to machine code: Pele as Obsidian runs it there). In both it measures text with its
+table of Arial's advances, as in Deno (the page's canvases give it no context); the JSContext gets a URL class for Pele's
+links (`javascriptcore-url.js`), which a page has. Before timing, each draws every documentation example and the test
+fails for one drawn otherwise than Pele drew it in Deno (`pele-bundle-drawings.json`: type, page and a hash of the SVG),
+but for the Gantt charts in the page when the device's time zone is not UTC (Pele writes their dates in the page's time
+zone, which an app cannot set). Each case is then timed as above, Pele in the JSContext with the same loop, and in the page
+with samples that each repeat the case for at least 50 ms (the page's clock moves by whole milliseconds) over 3 s; the
+speed-up and the targets are against Pele in the page. With `TEST_RUNNER_MERMAID_DIAGRAMS_CHECK_TARGETS=1` before
+`xcodebuild`, each missed target fails the test, as `--check-targets` fails the Mac's run. On the Mac,
+`--pele-javascriptcore` runs the same comparison beside Pele in a JSContext of the benchmark's own process (no page: the
+benchmark is a tool with no app); macOS gives that process JavaScriptCore's compilers only when it is signed with the
+`com.apple.security.cs.allow-jit` entitlement (`codesign -f -s - --entitlements <plist> <binary>`), and interprets Pele
+otherwise.
+
 `--profile <case> [reading|preparation|painting] [seconds]` repeats one case (a name of Pele's benchmark, `tree: 500 nodes`, or a corpus, `treemap-docs`) for a sampler such as `sample(1)` or Instruments' Time Profiler (`ProfilingLoop`). `--check-targets` exits with status 1 after a line `missed target: …` for each median that misses a target of Graphite's plan (`Docs/Native-diagrams-todo.md`, Performance targets) on documentation examples: reading and layout at most 30 µs a diagram, and ten times faster than Pele on the same inputs. The default run only reports.
 
 Measured 2026-11-23 on an Apple M5 Max (128 GB, macOS 27.2.1), release build, the machine otherwise quiet (load average about 2, under the 8 waited for), Pele 1.13.0's own run of 2026-11-20 (`pele-bench.json`); of three runs of the comparison one after the other, the run with the middle median of each case; per diagram, median / 99th percentile in µs:

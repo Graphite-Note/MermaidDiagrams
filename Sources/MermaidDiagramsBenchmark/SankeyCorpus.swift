@@ -1,3 +1,15 @@
+/**
+ * File: SankeyCorpus.swift
+ * ------------------------
+ * Layer: Benchmark
+ * Description: The Sankey diagram inputs of the benchmark and the tests: Mermaid's documentation examples as Pele
+ *              collects them, the energy flows of Mermaid's spec and generated flows.
+ *
+ * Authors: Félix Chevalier
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The Sankey diagram inputs of the benchmark and the tests: Mermaid's 8 documentation examples, as Pele collects them
@@ -6,7 +18,7 @@ import Foundation
 /// with the seed of Pele's generated graphs.
 enum SankeyCorpus {
     static func documentationExamples() throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "sankey-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "sankey-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))
@@ -14,7 +26,7 @@ enum SankeyCorpus {
 
     /// The rows of `energy.csv`, which the spec puts after `sankey-beta` or `sankey`, a blank line and a space.
     static func energyRows() throws -> String {
-        guard let location = Bundle.module.url(forResource: "sankey-energy", withExtension: "csv", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "sankey-energy", withExtension: "csv", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try String(contentsOf: location, encoding: .utf8)

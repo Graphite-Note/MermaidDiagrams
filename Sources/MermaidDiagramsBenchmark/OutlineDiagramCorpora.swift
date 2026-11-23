@@ -6,8 +6,8 @@
  *              examples, as Pele collects them, and generated boards, trees and fishbones.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -15,7 +15,7 @@ import Foundation
 /// The documentation examples of a type, from the benchmark's resources (`<name>-docs.json`, Pele's `tests/corpus`).
 enum DocumentationCorpus {
     static func examples(named name: String) throws -> [String] {
-        guard let location = Bundle.module.url(forResource: "\(name)-docs", withExtension: "json", subdirectory: "Resources") else {
+        guard let location = Bundle.module.url(forResource: "\(name)-docs", withExtension: "json", subdirectory: "BenchmarkResources") else {
             throw FlowchartCorpus.MissingResource()
         }
         return try JSONDecoder().decode([String].self, from: Data(contentsOf: location))
