@@ -5,7 +5,7 @@
  * Description: Counts the crossings of an order of Pele's layered layout, with a tree over each rank's places.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -28,6 +28,10 @@ struct LayeredFlatCrossingReduction {
     var tree: [Int]
     var targets: [Int]
     var barycenter: [Double]
+    /// The vertices of the rank a sweep is moving, kept between ranks so that each sweep reuses one list.
+    var movingVertices: [Int] = []
+    /// The second list the sweeps' merge sort writes into.
+    var sortSpare: [Int] = []
     var groupDepth: [Int] = []
     var groupSum: [Double] = []
     var groupCount: [Int] = []
@@ -36,7 +40,7 @@ struct LayeredFlatCrossingReduction {
     init(graph: LayeredFlatGraph, nodes: [LayeredFlatNode]) {
         self.graph = graph
         pins = nodes.map(\.pin)
-        widest = (0...graph.maximumRank).map { rank in graph.rankStart[rank + 1] - graph.rankStart[rank] }.max() ?? 0
+        widest = Self.widestRank(of: graph)
         let segmentCount = graph.segmentCount
         usesPlaces = graph.hasOffsets
         place = [Int](repeating: 0, count: graph.hasOffsets ? segmentCount : 0)
@@ -50,6 +54,13 @@ struct LayeredFlatCrossingReduction {
         targets = [Int](repeating: 0, count: segmentCount)
         barycenter = [Double](repeating: 0, count: graph.vertexCount)
         if graph.hasOffsets { orderPlacesByOffset() }
+    }
+
+    /// How many vertices the graph's widest rank holds.
+    static func widestRank(of graph: LayeredFlatGraph) -> Int {
+        var widest = 0
+        for rank in 0...graph.maximumRank { widest = max(widest, graph.rankStart[rank + 1] - graph.rankStart[rank]) }
+        return widest
     }
 
     /// Sorts `list[start..<end]` by `offsets` when they differ there; whether they did.
@@ -94,14 +105,18 @@ struct LayeredFlatCrossingReduction {
             if targetCount < 2 { continue }
             var leaves = 1
             while leaves < southLength { leaves <<= 1 }
-            for index in 0..<(2 * leaves) { tree[index] = 0 }
-            for target in targets[0..<targetCount] {
-                var index = target + leaves
-                tree[index] += 1
-                while index > 1 {
-                    if index & 1 == 0 { total += tree[index + 1] }
-                    index >>= 1
+            let targets = targets
+            // The tree's places are below 2 * leaves, which the tree was made long enough for.
+            tree.withUnsafeMutableBufferPointer { tree in
+                for index in 0..<(2 * leaves) { tree[index] = 0 }
+                for target in targets[0..<targetCount] {
+                    var index = target + leaves
                     tree[index] += 1
+                    while index > 1 {
+                        if index & 1 == 0 { total += tree[index + 1] }
+                        index >>= 1
+                        tree[index] += 1
+                    }
                 }
             }
         }

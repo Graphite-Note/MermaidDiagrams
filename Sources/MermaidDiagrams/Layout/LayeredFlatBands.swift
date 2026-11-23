@@ -5,7 +5,7 @@
  * Description: The bands of Pele's layered layout along the flow: each rank's height and the gap under it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -27,7 +27,8 @@ struct LayeredFlatBands {
     let mostPitch: Double
     var height: Double = 0
 
-    init(layout: LayeredFlatLayout, graph: LayeredFlatGraph, across: [Double], emptyRanks: [Bool]?, pieces: LayeredEdgePieces?) {
+    init(layout: borrowing LayeredFlatLayout, graph: borrowing LayeredFlatGraph, across: [Double], emptyRanks: [Bool]?,
+         pieces: LayeredEdgePieces?) {
         let maximumRank = graph.maximumRank
         let options = layout.options
         let step = Double(layout.step)

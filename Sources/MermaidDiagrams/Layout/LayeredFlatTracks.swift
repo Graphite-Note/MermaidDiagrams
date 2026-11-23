@@ -5,7 +5,7 @@
  * Description: Gives the pieces of edges that cross one gap of Pele's layered layout their tracks or levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -36,6 +36,9 @@ struct LayeredFlatTracks {
     /// Each piece's least and greatest position across.
     let low: [Double]
     let high: [Double]
+    /// The pieces of the gap being given levels that turn onto levels, and those beside them; cleared after each gap.
+    var isLevel: [Bool]
+    var isBeside: [Bool]
 
     init(pieces: LayeredEdgePieces, isCurved: Bool, room: [Double], rankCount: Int) {
         self.pieces = pieces
@@ -47,6 +50,8 @@ struct LayeredFlatTracks {
         high = pieces.from.indices.map { piece in max(pieces.from[piece], pieces.to[piece]) }
         self.pieces.track = [Int](repeating: -1, count: pieces.count)
         self.pieces.levels = [Int](repeating: 0, count: pieces.count)
+        isLevel = [Bool](repeating: false, count: isCurved ? pieces.count : 0)
+        isBeside = isLevel
     }
 
     func isWithin(_ at: Double, _ piece: Int) -> Int {
@@ -94,14 +99,15 @@ struct LayeredFlatTracks {
 
     /// Gives every piece that does not run straight down a track across its gap (or a level), and counts the tracks.
     mutating func assign() {
-        var byRank: [Int: [Int]] = [:]
+        // The pieces of each gap, and the gaps in the order their first pieces come.
+        var byRank = [[Int]](repeating: [], count: trackCount.count)
         var rankOrder: [Int] = []
         for piece in 0..<pieces.count where abs(pieces.from[piece] - pieces.to[piece]) >= LayeredFlatConstants.inLine {
-            if byRank[pieces.rank[piece]] == nil { rankOrder.append(pieces.rank[piece]) }
-            byRank[pieces.rank[piece], default: []].append(piece)
+            if byRank[pieces.rank[piece]].isEmpty { rankOrder.append(pieces.rank[piece]) }
+            byRank[pieces.rank[piece]].append(piece)
         }
         for rank in rankOrder {
-            let all = byRank[rank] ?? []
+            let all = byRank[rank]
             if !isCurved {
                 var list = all
                 trackCount[rank] = lay(&list)

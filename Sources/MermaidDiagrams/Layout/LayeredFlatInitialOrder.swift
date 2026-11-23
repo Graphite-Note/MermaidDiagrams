@@ -5,7 +5,7 @@
  * Description: The order Pele's layered layout starts its sweeps from: depth first from the top, keys, pins and hints.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -15,24 +15,27 @@ extension LayeredFlatLayout {
     /// it and kept so (layout/layered.ts).
     func orderInitially(_ graph: inout LayeredFlatGraph) {
         depthFirstOrder(&graph)
-        for rank in 0...graph.maximumRank { _ = sortRank(&graph, rank: rank) { vertex in vertexKey[vertex] } }
+        // The keys are read through local copies, so that no closure holds the whole layout.
+        let keys = vertexKey
+        let nodes = nodes
+        for rank in 0...graph.maximumRank { _ = Self.sortRank(&graph, rank: rank) { vertex in keys[vertex] } }
         if nodes.contains(where: { node in node.pin != 0 }) {
             for rank in 0...graph.maximumRank {
                 var layer = Array(graph.order[graph.rankStart[rank]..<graph.rankStart[rank + 1]])
-                layer.sortStably { first, second in Double(pin(of: first) - pin(of: second)) }
+                layer.sortStably { first, second in Double(Self.pin(of: first, nodes: nodes) - Self.pin(of: second, nodes: nodes)) }
                 graph.order.replaceSubrange(graph.rankStart[rank]..<graph.rankStart[rank + 1], with: layer)
             }
         }
         // Preserve port order to avoid crossings outside the group.
         for rank in [0, graph.maximumRank] {
-            if sortRank(&graph, rank: rank, by: portHint(of:)) { graph.isRankFixed[rank] = true }
+            if Self.sortRank(&graph, rank: rank, by: { vertex in Self.portHint(of: vertex, nodes: nodes) }) { graph.isRankFixed[rank] = true }
         }
         graph.settlePositions()
     }
 
-    func pin(of vertex: Int) -> Int { vertex < nodes.count ? nodes[vertex].pin : 0 }
+    private static func pin(of vertex: Int, nodes: [LayeredFlatNode]) -> Int { vertex < nodes.count ? nodes[vertex].pin : 0 }
 
-    private func portHint(of vertex: Int) -> Double {
+    private static func portHint(of vertex: Int, nodes: [LayeredFlatNode]) -> Double {
         vertex < nodes.count && nodes[vertex].kind.isPort ? nodes[vertex].portHint : .nan
     }
 
@@ -44,9 +47,10 @@ extension LayeredFlatLayout {
             byRank[fill[graph.vertexRank[vertex]]] = vertex
             fill[graph.vertexRank[vertex]] += 1
         }
-        fill = Array(graph.rankStart[0...graph.maximumRank])
+        for rank in 0...graph.maximumRank { fill[rank] = graph.rankStart[rank] }
         var visited = [Bool](repeating: false, count: vertexCount)
         var stack: [Int] = []
+        stack.reserveCapacity(vertexCount)
         for start in byRank where !visited[start] {
             stack.append(start)
             while let vertex = stack.popLast() {
@@ -65,7 +69,7 @@ extension LayeredFlatLayout {
     }
 
     /// Sorts a rank by `key` when it has two vertices or more and every one has a key; whether it did.
-    private func sortRank(_ graph: inout LayeredFlatGraph, rank: Int, by key: (Int) -> Double) -> Bool {
+    private static func sortRank(_ graph: inout LayeredFlatGraph, rank: Int, by key: (Int) -> Double) -> Bool {
         let start = graph.rankStart[rank]
         let end = graph.rankStart[rank + 1]
         if end - start < 2 { return false }

@@ -5,7 +5,7 @@
  * Description: The steps of Pele's layered layout after ordering: positions, ends, straightening and the edges' pieces.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -19,10 +19,10 @@ extension LayeredFlatLayout {
         if let fromEnds = segmentFromEnd, let toEnds = segmentToEnd {
             let free = graph.freeEnds(fromEnds: fromEnds, toEnds: toEnds)
             LayeredFlatLabelAlignment(graph: graph, nodes: nodes, free: free, options: options, emptyRanks: emptyRanks).align(&across)
-            var settling = LayeredFlatEndSettling(graph: graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds, free: free,
-                                                  emptyRanks: emptyRanks)
+            var settling = LayeredFlatEndSettling(graph: consume graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds,
+                                                  free: free, emptyRanks: emptyRanks)
             settling.settle()
-            graph = settling.graph
+            graph = (consume settling).graph
             var snapping = LayeredFlatSnapping(graph: graph, options: options, emptyRanks: emptyRanks)
             snapping.snap(&across)
             for edgeIndex in edges.indices where !isDirect[edgeIndex] {
@@ -54,6 +54,8 @@ extension LayeredFlatLayout {
     /// bend to stay clear of its twin, or has a bend left out in a rank of labels, is drawn through its bends as it is.
     private func cutPieces(graph: LayeredFlatGraph, across: [Double], emptyRanks: [Bool]?, isOnLine: [Bool]) -> (LayeredEdgePieces, [Int]) {
         var pieces = LayeredEdgePieces()
+        // Each piece crosses one gap or more: no more pieces than segments.
+        pieces.reserve(graph.segmentCount)
         var pieceStart = [Int](repeating: 0, count: edges.count + 1)
         for edgeIndex in edges.indices {
             pieceStart[edgeIndex] = pieces.count
@@ -79,6 +81,13 @@ extension LayeredFlatLayout {
 }
 
 extension LayeredEdgePieces {
+    mutating func reserve(_ count: Int) {
+        from.reserveCapacity(count)
+        to.reserveCapacity(count)
+        rank.reserveCapacity(count)
+        lower.reserveCapacity(count)
+    }
+
     mutating func append(from: Double, to: Double, rank: Int, lower: Int) {
         self.from.append(from)
         self.to.append(to)

@@ -5,7 +5,7 @@
  * Description: Brings nearly straight edges of Pele's layered layout into line, moving blocks of what is in line.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -22,14 +22,26 @@ struct LayeredFlatSnapping {
     private var upperOffset: [Double] = []
     private var lowerOffset: [Double] = []
     private var block: [Int]
-    private var members: [[Int]]
+    /// The members of each block as a list in the order they joined: its first and last member and how many it has,
+    /// and each member's next (-1 after the last).
+    private var firstMember: [Int]
+    private var lastMember: [Int]
+    private var memberCount: [Int]
+    private var nextMember: [Int]
 
     init(graph: LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: [Bool]?) {
         self.graph = graph
         self.options = options
         self.emptyRanks = emptyRanks
         block = Array(0..<graph.vertexCount)
-        members = (0..<graph.vertexCount).map { vertex in [vertex] }
+        firstMember = block
+        lastMember = block
+        memberCount = [Int](repeating: 1, count: graph.vertexCount)
+        nextMember = [Int](repeating: -1, count: graph.vertexCount)
+        upper.reserveCapacity(graph.segmentCount)
+        lower.reserveCapacity(graph.segmentCount)
+        upperOffset.reserveCapacity(graph.segmentCount)
+        lowerOffset.reserveCapacity(graph.segmentCount)
         for segment in 0..<graph.segmentCount {
             let from = graph.segmentFrom[segment]
             if emptyRanks != nil && graph.vertexKind[from] == .bend && emptyRanks?[graph.vertexRank[from]] == true { continue }
@@ -49,17 +61,36 @@ struct LayeredFlatSnapping {
         var keep = block[first]
         var drop = block[second]
         if keep == drop { return }
-        if members[keep].count < members[drop].count { swap(&keep, &drop) }
-        for vertex in members[drop] {
+        if memberCount[keep] < memberCount[drop] { swap(&keep, &drop) }
+        var vertex = firstMember[drop]
+        while vertex >= 0 {
             block[vertex] = keep
-            members[keep].append(vertex)
+            vertex = nextMember[vertex]
         }
-        members[drop] = []
+        nextMember[lastMember[keep]] = firstMember[drop]
+        lastMember[keep] = lastMember[drop]
+        memberCount[keep] += memberCount[drop]
+        firstMember[drop] = -1
+        lastMember[drop] = -1
+        memberCount[drop] = 0
+    }
+
+    /// Whether every member of block `identifier` is a bend.
+    private func holdsOnlyBends(_ identifier: Int) -> Bool {
+        var vertex = firstMember[identifier]
+        while vertex >= 0 {
+            if graph.vertexKind[vertex] != .bend { return false }
+            vertex = nextMember[vertex]
+        }
+        return true
     }
 
     /// Whether every vertex of block `identifier` can move by `shift` and keep its room from those beside it.
     private func canMove(_ identifier: Int, by shift: Double, across: [Double]) -> Bool {
-        for vertex in members[identifier] {
+        var member = firstMember[identifier]
+        while member >= 0 {
+            let vertex = member
+            member = nextMember[member]
             let start = graph.rankStart[graph.vertexRank[vertex]]
             let end = graph.rankStart[graph.vertexRank[vertex] + 1]
             let index = start + graph.position[vertex]
@@ -101,12 +132,17 @@ struct LayeredFlatSnapping {
         // The smaller of the two blocks moves, if it can; else the other.
         let upperBlock = block[upper[edge]]
         let lowerBlock = block[lower[edge]]
-        let first = members[upperBlock].count <= members[lowerBlock].count ? upperBlock : lowerBlock
-        for identifier in [first, first == upperBlock ? lowerBlock : upperBlock] {
+        let first = memberCount[upperBlock] <= memberCount[lowerBlock] ? upperBlock : lowerBlock
+        for attempt in 0..<2 {
+            let identifier = attempt == 0 ? first : (first == upperBlock ? lowerBlock : upperBlock)
             let shift = identifier == upperBlock ? distance : -distance
-            if abs(distance) > LayeredFlatConstants.nodeSnap && !members[identifier].allSatisfy({ vertex in graph.vertexKind[vertex] == .bend }) { continue }
+            if abs(distance) > LayeredFlatConstants.nodeSnap && !holdsOnlyBends(identifier) { continue }
             if !canMove(identifier, by: shift, across: across) { continue }
-            for vertex in members[identifier] { across[vertex] += shift }
+            var vertex = firstMember[identifier]
+            while vertex >= 0 {
+                across[vertex] += shift
+                vertex = nextMember[vertex]
+            }
             join(upper[edge], lower[edge])
             break
         }

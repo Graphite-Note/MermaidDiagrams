@@ -5,7 +5,7 @@
  * Description: Moves the bends of Pele's layered layout onto straight lines and leaves out those nothing is in the way of.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -94,16 +94,29 @@ extension LayeredFlatGraph {
             }
         }
         if !any { return }
+        // The labels of each rank in their order across it, so that a bend is checked against its rank's labels only.
+        var labelStart = [Int](repeating: 0, count: maximumRank + 2)
+        var labels: [Int] = []
+        for rank in 0...maximumRank {
+            labelStart[rank] = labels.count
+            for index in rankStart[rank]..<rankStart[rank + 1] where isLabelled[rank] && vertexKind[order[index]] == .label {
+                labels.append(order[index])
+            }
+        }
+        labelStart[maximumRank + 1] = labels.count
         for edgeIndex in firstBend.indices where firstBend[edgeIndex] >= 0 {
             let firstOfEdge = firstBend[edgeIndex]
             let end = firstOfEdge + edgeRankSpan[edgeIndex] - 1
             for bend in firstOfEdge..<end where vertexKind[bend] == .bend && isLabelled[vertexRank[bend]] {
-                passLabel(bend, firstOfEdge: firstOfEdge, end: end, across: &across, clearance: clearance, isOnLine: &isOnLine)
+                let rank = vertexRank[bend]
+                passLabel(bend, firstOfEdge: firstOfEdge, end: end, labels: labels[labelStart[rank]..<labelStart[rank + 1]], across: &across,
+                          clearance: clearance, isOnLine: &isOnLine)
             }
         }
     }
 
-    private func passLabel(_ bend: Int, firstOfEdge: Int, end: Int, across: inout [Double], clearance: Double, isOnLine: inout [Bool]) {
+    private func passLabel(_ bend: Int, firstOfEdge: Int, end: Int, labels: ArraySlice<Int>, across: inout [Double], clearance: Double,
+                           isOnLine: inout [Bool]) {
         // The points on either side that the edge is held at, past any bends already left out.
         var first = bend
         var last = bend
@@ -115,11 +128,7 @@ extension LayeredFlatGraph {
         let finish = across[segmentTo[below]] + segmentToOffset[below]
         let low = min(start, finish) - clearance
         let high = max(start, finish) + clearance
-        let rank = vertexRank[bend]
-        for index in rankStart[rank]..<rankStart[rank + 1] {
-            let label = order[index]
-            if vertexKind[label] == .label && across[label] + vertexWidth[label] / 2 > low && across[label] - vertexWidth[label] / 2 < high { return }
-        }
+        for label in labels where across[label] + vertexWidth[label] / 2 > low && across[label] - vertexWidth[label] / 2 < high { return }
         isOnLine[bend] = true
         // The bends left out between the two points lie on the line between them.
         let steps = Double(last - first + 2)
