@@ -6,7 +6,7 @@
  *              a light color, white on a dark one, where the color's contrast is known (Pele's src/svg/ink.ts).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -43,6 +43,9 @@ enum DiagramSeriesInk {
         let channels: [Double]
         if isHueSaturationLightness {
             let hueSector = (hue(list[0]).truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360) / 30
+            // JavaScript's Math.min and Math.max give NaN for a hue that is no number (a percentage); Swift's min and max
+            // would drop it and pick a channel, so such a hue has no ink here as in Pele.
+            guard !hueSector.isNaN else { return nil }
             let saturation = amount(list[1], full: 100)
             let lightness = amount(list[2], full: 100)
             let chroma = saturation * min(lightness, 1 - lightness)

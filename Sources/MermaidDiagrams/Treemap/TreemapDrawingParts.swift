@@ -59,8 +59,10 @@ public struct TreemapDrawingParts {
         var leafValues: [TreemapTextParts] = []
         for box in layout.boxes {
             let style = box.style
-            // Pele's ink on a fill a class sets, else on the box's series color where the theme variables set it.
-            let contrast = style.fill == nil ? layout.seriesColors.ink(ofSeries: box.seriesIndex).map(DiagramPaint.color) : TreemapInk.paint(onFill: style.fill)
+            // Pele's ink on a fill a class sets (none for a fill whose color is not read), else on the box's series color
+            // where the theme variables set it.
+            let setsFill = style.fill != nil || box.textStyle.setsFill == true
+            let contrast = setsFill ? TreemapInk.paint(onFill: style.fill) : layout.seriesColors.ink(ofSeries: box.seriesIndex).map(DiagramPaint.color)
             let isBold = box.textStyle.isBold ?? false
             let isItalic = box.textStyle.isItalic ?? false
             if box.isSection {

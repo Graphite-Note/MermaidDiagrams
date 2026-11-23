@@ -7,7 +7,7 @@
  *              hostile values.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -111,6 +111,8 @@ final class DiagramSeriesColorsTests: XCTestCase {
             ("#ffffff80", onLight), ("rgb(255, 255, 255)", onLight), ("rgb(100%, 0, 0)", nil), ("rgb(0 0 0 / 40%)", nil), ("hsl(60, 100%, 50%)", onLight),
             ("hsl(240 100% 25%)", onDark), ("hsl(0.5turn 100% 90%)", onLight), ("rgb(none 0 0)", onDark), ("oklch(70% 0.1 200)", nil),
             ("var(--pele-accent)", nil), ("transparent", nil), ("color-mix(in srgb, red, blue)", nil),
+            // A hue in percent is no number to Pele, and NaN stays NaN through its Math.min and Math.max: no ink.
+            ("hsl(50% 100% 50%)", nil), ("hsl(0%, 0%, 100%)", nil),
         ]
         for (color, ink) in cases { XCTAssertEqual(DiagramSeriesInk.ink(on: color), ink, color) }
         XCTAssertEqual(colors(["#ffeb3b", nil, "navy"]).inks, [onLight, nil, onDark, nil, nil, nil, nil, nil])
@@ -125,6 +127,22 @@ final class DiagramSeriesColorsTests: XCTestCase {
                       String(repeating: "a", count: 201), "rgb(0 0 0)\"", "#12345"]
         for value in unsafe { XCTAssertNil(DiagramThemeColor(cssText: value), value) }
         XCTAssertEqual(DiagramThemeColor(cssText: "\u{A0}red\u{FEFF}\u{2028}")?.cssText, "red", "JavaScript's trim takes Unicode's spaces away")
+    }
+
+    /// Pele's treemap writes the ink of a fill a class sets, and none when it does not know that fill's contrast
+    /// (`fill:none`), rather than the ink of the series color under it; a fill it drops as unsafe leaves the series' ink.
+    func testATreemapClassFillTakesTheSeriesInksPlace() throws {
+        let themed = "%%{init: {\"themeVariables\": {\"cScale0\": \"#ffeb3b\", \"cScale1\": \"#ffeb3b\"}}}%%\ntreemap\n\"a\": 1:::cc\n\"b\": 1\nclassDef cc "
+        // The names of a and b, then their values.
+        func paints(_ fill: String) throws -> [DiagramPaint] {
+            try prepared(themed + fill).scene.texts.map(\.paint)
+        }
+        let onLight = DiagramPaint.color(DiagramSeriesInk.onLight)
+        XCTAssertEqual(try paints("fill:none"), [.background, onLight, .background, onLight])
+        XCTAssertEqual(try paints("fill:#000"), [.color(DiagramSeriesInk.onDark), onLight, .color(DiagramSeriesInk.onDark), onLight])
+        XCTAssertEqual(try paints("fill:var(--x)"), [.background, onLight, .background, onLight])
+        XCTAssertEqual(try paints("fill:url(x)"), [onLight, onLight, onLight, onLight])
+        XCTAssertEqual(try paints("stroke:#000"), [onLight, onLight, onLight, onLight])
     }
 
     func testHostileValuesNeverCrashOrRecurseWithoutEnd() {
