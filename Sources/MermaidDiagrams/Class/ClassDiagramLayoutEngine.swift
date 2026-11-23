@@ -17,7 +17,9 @@ import CoreGraphics
 /// sides they meet, with their marks, text and cardinalities; relations from a class to itself as loops beside it;
 /// and the title above.
 public enum ClassDiagramLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 56)
+    /// Pele's gaps; the class diagram sets the ends of relations on one side of a box apart itself, so two relations between
+    /// the same boxes need no bend (class/render.ts `apart`).
+    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 56, routing: LayeredRouting(keepsTwinsApart: true))
     /// Between ranks when any relation has a cardinality, which needs room at both ends.
     static let rankSeparationWithCardinalities: CGFloat = 72
     /// Around the whole diagram.

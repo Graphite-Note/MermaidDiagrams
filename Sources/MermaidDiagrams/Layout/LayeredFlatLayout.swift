@@ -91,11 +91,13 @@ struct LayeredFlatLayout {
         return result
     }
 
-    /// Spans and bend counts; past `maximumBends` bends, the longest edges are drawn direct. Returns the bends left.
+    /// Spans and bend counts; past `maximumBends` bends, the longest edges are drawn direct. Returns the bends left. An
+    /// edge whose ends share a rank (only an edge from a node to itself, which callers lay out beside the node and Pele
+    /// never hands its layout) is drawn direct too, so that every segment runs from one rank to the next.
     private mutating func chooseDirectEdges() -> Int {
         edgeRankSpan = edges.map { edge in abs(nodes[edge.head].rank - nodes[edge.tail].rank) }
         var bendCount = edgeRankSpan.reduce(0) { total, span in total + max(0, span - 1) }
-        isDirect = [Bool](repeating: false, count: edges.count)
+        isDirect = edgeRankSpan.map { span in span == 0 }
         guard bendCount > LayeredFlatConstants.maximumBends else { return bendCount }
         var longest = edges.indices.filter { edgeIndex in edgeRankSpan[edgeIndex] > 1 }
         longest.sortStably { first, second in Double(edgeRankSpan[second] - edgeRankSpan[first]) }

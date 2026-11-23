@@ -105,4 +105,13 @@ final class LayeredCompoundTrackTests: XCTestCase {
             XCTAssertEqual(route[index], end, accuracy: 1e-5)
         }
     }
+
+    func testAFlatLayoutGivenAnEdgeFromANodeToItselfDrawsItDirectAndLaysTheRestOut() {
+        var nodes = (0..<4).map { _ in LayeredFlatNode(width: 40, height: 30) }
+        var edges = [(0, 1), (1, 1), (1, 2), (2, 3), (3, 1), (2, 2)].map { tail, head in LayeredFlatEdge(tail: tail, head: head, labelWidth: 20, labelHeight: 10) }
+        let result = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: Testing.options)
+        XCTAssertNotNil(result)
+        XCTAssertTrue(nodes.allSatisfy { node in node.x.isFinite && node.y.isFinite })
+        XCTAssertTrue(edges.allSatisfy { edge in edge.points.count >= 2 })
+    }
 }

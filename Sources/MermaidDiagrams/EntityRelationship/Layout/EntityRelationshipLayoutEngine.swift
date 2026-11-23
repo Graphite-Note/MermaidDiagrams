@@ -17,7 +17,8 @@ import CoreGraphics
 /// and meet the boxes straight and curve between, spread along the sides they meet, with a label wrapped at 200
 /// points on its own rank; relationships of an entity with itself as loops beside it; and the title above.
 public enum EntityRelationshipLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 48, edgeSeparation: 20, rankSeparation: 64)
+    /// Pele's gaps; a border point of a group's box is 24 points from the rank next to it (er/render.ts `portSep`).
+    static let spacing = LayeredSpacing(nodeSeparation: 48, edgeSeparation: 20, rankSeparation: 64, borderSeparation: 24)
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The room a label takes beyond its lines, for the patch drawn behind it.
@@ -76,11 +77,9 @@ public enum EntityRelationshipLayoutEngine {
         let labelSizes = measured.labels.map { label in
             label.map { label in CGSize(width: label.size.width + labelRoom.width, height: label.size.height + labelRoom.height) }
         }
-        var clusterSpacing = spacing
-        clusterSpacing.borderSeparation = EntityRelationshipClusterGraph.padding
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: clusterSpacing,
+            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: spacing,
                                                        maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
