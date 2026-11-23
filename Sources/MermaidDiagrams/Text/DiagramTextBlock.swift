@@ -1,7 +1,20 @@
+/**
+ * File: DiagramTextBlock.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: Lines of a diagram's text measured in a font and placed around a center, wrapped at a width as Pele's
+ *              layoutLabel wraps them, a text of more than one line set 1.3 times its size apart.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.5
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lines of text placed in a diagram: each line's width in the font it was measured in, and where the block's center is.
-/// Lines are drawn centered on the block's center, one `lineHeight` apart.
+/// Lines are drawn centered on the block's center, one `lineHeight` apart: the measurer's line height (1.5 times the size)
+/// for a single line, 1.3 times the size, rounded, for a text of more than one (Pele's `WRAPPED_LINE_HEIGHT`).
 public struct DiagramTextBlock: Equatable, Sendable {
     public let lines: [String]
     public let lineWidths: [CGFloat]
@@ -29,8 +42,18 @@ public struct DiagramTextBlock: Equatable, Sendable {
         self.lines = lines
         self.lineWidths = widths
         self.fontSize = measurer.fontSize
-        self.lineHeight = measurer.lineHeight
+        self.lineHeight = Self.lineHeight(lineCount: lines.count, measurer: measurer)
         self.center = .zero
+    }
+
+    /// Pele's distance between the lines of a text of more than one line, as a multiple of the size
+    /// (text/label.ts `WRAPPED_LINE_HEIGHT`), which makes the lines read as one block.
+    static let severalLinesHeightRatio: CGFloat = 1.3
+
+    /// The distance between lines of a text of `lineCount` lines, as Pele's `layoutLabel` sets it: the measurer's own for
+    /// one line or none, 1.3 times the size, rounded, for more.
+    static func lineHeight(lineCount: Int, measurer: some DiagramTextMeasuring) -> CGFloat {
+        lineCount > 1 ? (measurer.fontSize * severalLinesHeightRatio).rounded() : measurer.lineHeight
     }
 
     private static func wrapped(_ line: String, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> [(String, CGFloat)] {

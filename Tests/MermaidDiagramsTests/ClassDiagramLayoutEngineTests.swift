@@ -5,8 +5,8 @@
  * Description: Class diagrams laid out in Pele's measurements.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -168,8 +168,9 @@ final class ClassDiagramLayoutEngineTests: XCTestCase {
         let laidOut = try layout("classDiagram\nclass MyClass\nnote \"General<br>note\"\nnote for MyClass \"About it\"")
         XCTAssertEqual(laidOut.notes.count, 2)
         XCTAssertEqual(laidOut.notes[0].text.lines, ["General", "note"])
-        // Two lines of 21 points with 8 points above and below; 7 characters of 7 points with 12 points each side.
-        XCTAssertEqual(laidOut.notes[0].frame.size, CGSize(width: 7 * 7 + 24, height: 42 + 16))
+        // Two lines 18 points apart (1.3 times 14, rounded, as Pele sets lines that are several) with 8 points above and
+        // below; 7 characters of 7 points with 12 points each side.
+        XCTAssertEqual(laidOut.notes[0].frame.size, CGSize(width: 7 * 7 + 24, height: 2 * 18 + 16))
         XCTAssertEqual(laidOut.noteLinks.count, 1)
         let link = laidOut.noteLinks[0]
         XCTAssertEqual(link.line, .dotted)

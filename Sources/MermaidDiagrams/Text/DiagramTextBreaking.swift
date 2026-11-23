@@ -6,8 +6,8 @@
  *              character, and a block's lines placed from their left or right end, as Pele writes text by its start.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -23,7 +23,9 @@ extension DiagramTextBlock {
     }
 
     /// `label` wrapped at spaces to `maximumWidth`, and each line still wider broken between characters, as Pele's kanban
-    /// fits a card's text: a card cannot grow sideways to hold a long word.
+    /// fits a card's text: a card cannot grow sideways to hold a long word. The lines keep the distance of the wrapped
+    /// text, as Pele's `fitLabel` and `breakLabel` keep its label's: 1.3 sizes when it wrapped to several lines, 1.5 when a
+    /// single line is broken.
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, fittingWidth maximumWidth: CGFloat) {
         let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
         var lines: [String] = []
@@ -52,7 +54,7 @@ extension DiagramTextBlock {
             lines.append(current)
             widths.append(currentWidth)
         }
-        self.init(lines: lines, lineWidths: widths, fontSize: measurer.fontSize, lineHeight: measurer.lineHeight)
+        self.init(lines: lines, lineWidths: widths, fontSize: measurer.fontSize, lineHeight: wrapped.lineHeight)
     }
 
     /// Text that keeps every character but the spaces a line breaks at, as Pele's literal labels (a file's name) do:

@@ -7,8 +7,8 @@
  *              technology in italic.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -26,12 +26,9 @@ enum C4TextLabel {
         // Lines with nothing on them still take their height, as Pele lays out each part between breaks.
         let lines = wrapped.lines.isEmpty ? (label.lines.isEmpty ? [""] : label.lines) : wrapped.lines
         let widths = wrapped.lines.isEmpty ? lines.map { _ in CGFloat(0) } : wrapped.lineWidths
-        let lineHeight = lines.count > 1 ? (measurer.fontSize * wrappedLineHeightRatio).rounded() : measurer.lineHeight
-        return DiagramTextBlock(lines: lines, lineWidths: widths, fontSize: measurer.fontSize, lineHeight: lineHeight)
+        return DiagramTextBlock(lines: lines, lineWidths: widths, fontSize: measurer.fontSize,
+                                lineHeight: DiagramTextBlock.lineHeight(lineCount: lines.count, measurer: measurer))
     }
-
-    /// Pele's `WRAPPED_LINE_HEIGHT`.
-    static let wrappedLineHeightRatio: CGFloat = 1.3
 }
 
 extension DiagramTextBlock? {

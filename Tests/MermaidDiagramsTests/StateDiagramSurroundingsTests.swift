@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramSurroundingsTests.swift
+ * -----------------------------------------
+ * Layer: Tests
+ * Description: A state diagram's notes and what surrounds its states: where notes sit, how they are sized and joined.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.5
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -22,7 +33,8 @@ final class StateDiagramSurroundingsTests: XCTestCase {
         let note = try XCTUnwrap(layout("stateDiagram-v2\nA\nnote right of A\nfirst line\nsecond\nend note").notes.first)
         XCTAssertEqual(note.text.lines, ["first line", "second"])
         XCTAssertEqual(note.text.fontSize, 14)
-        XCTAssertEqual(note.frame.size, CGSize(width: 10 * 7 + 24, height: 2 * 21 + 16))
+        // Two lines 18 points apart, 1.3 times 14 rounded, as Pele sets a text of several lines.
+        XCTAssertEqual(note.frame.size, CGSize(width: 10 * 7 + 24, height: 2 * 18 + 16))
         XCTAssertEqual(note.text.center, CGPoint(x: note.frame.midX, y: note.frame.midY))
     }
 

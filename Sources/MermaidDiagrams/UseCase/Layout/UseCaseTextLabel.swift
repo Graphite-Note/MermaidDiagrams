@@ -7,8 +7,8 @@
  *              closer once there are several; and the measurers of the sizes and styles they are drawn in.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -47,9 +47,6 @@ extension UseCaseTextMeasurers where Measurer == CoreTextDiagramTextMeasurer {
 }
 
 enum UseCaseTextLabel {
-    /// Pele's distance between lines that are several, as a multiple of the size.
-    static let severalLinesHeightRatio: CGFloat = 1.3
-
     /// `text` measured in `measurer`, wrapped at `room`: no lines for no text. A plain text is one line as written, its
     /// ends trimmed and only Mermaid's codes (`#quot;`, `#40;`) read; a Markdown one loses its emphasis and breaks
     /// where it breaks. Several lines are 1.3 times the size apart, rounded, as Pele sets them.
@@ -60,20 +57,14 @@ enum UseCaseTextLabel {
         guard !label.isEmpty else {
             return DiagramTextBlock(lines: [""], lineWidths: [0], fontSize: measurer.fontSize, lineHeight: measurer.lineHeight)
         }
-        return closerWhenSeveral(DiagramTextBlock(label: label, measurer: measurer, maximumWidth: room), measurer: measurer)
+        return DiagramTextBlock(label: label, measurer: measurer, maximumWidth: room)
     }
 
     /// A title, whose tags, line breaks and entity codes are read as a node's are (Pele's `titleLabel`), in bold.
     static func titleBlock(_ text: String, measurer: some DiagramTextMeasuring, room: CGFloat) -> DiagramTextBlock? {
         let label = DiagramLabelDecoder.label(from: text, form: .plain)
         guard !label.isEmpty else { return nil }
-        return closerWhenSeveral(DiagramTextBlock(label: label, measurer: measurer, maximumWidth: room), measurer: measurer)
-    }
-
-    private static func closerWhenSeveral(_ block: DiagramTextBlock, measurer: some DiagramTextMeasuring) -> DiagramTextBlock {
-        guard block.lines.count > 1 else { return block }
-        return DiagramTextBlock(lines: block.lines, lineWidths: block.lineWidths, fontSize: block.fontSize,
-                                lineHeight: (measurer.fontSize * severalLinesHeightRatio).rounded())
+        return DiagramTextBlock(label: label, measurer: measurer, maximumWidth: room)
     }
 
     static func empty(_ measurer: some DiagramTextMeasuring) -> DiagramTextBlock {
