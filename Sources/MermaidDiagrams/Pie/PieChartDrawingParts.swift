@@ -5,7 +5,7 @@
  * Description: A laid-out pie chart's geometry grouped by how it is painted, with the paints of its percentages.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -44,7 +44,10 @@ public struct PieChartDrawingParts {
     static let swatchCornerRadius: CGFloat = 2
 
     public init(layout: PieChartLayout) {
-        let fills = (0..<min(layout.legend.count, Self.seriesColorCount)).map { _ in CGMutablePath() }
+        // One fill per series colour in use, counted from the slices and the legend: a pie drawn without a legend
+        // (legendPosition: none) still paints its slices.
+        let seriesCount = (layout.slices.map(\.seriesIndex) + layout.legend.map(\.seriesIndex)).max().map { $0 + 1 } ?? 0
+        let fills = (0..<min(seriesCount, Self.seriesColorCount)).map { _ in CGMutablePath() }
         let edges = CGMutablePath()
         for slice in layout.slices {
             let wedge = Self.wedge(slice, center: layout.center, radius: layout.radius, innerRadius: layout.innerRadius)

@@ -6,8 +6,8 @@
  *              donut's hole and the legend's place, and values out of range left at their defaults.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -91,6 +91,16 @@ final class PieChartOptionsTests: XCTestCase {
                 XCTAssertFalse(entry.text.frame.intersects(pie))
             }
         }
+    }
+
+    func testAPieWithoutALegendIsPreparedAndPaintsEverySlice() throws {
+        // legendPosition: none left the drawing parts without a fill for the slices and stopped the host on preparing.
+        let prepared = try MermaidDiagramPreparation.prepare(source: "---\nconfig:\n  pie:\n    legendPosition: none\n---\n\(slices)",
+                                                             typography: typography)
+        XCTAssertFalse(prepared.scene.items.isEmpty)
+        let parts = PieChartDrawingParts(layout: try layout(options: "    legendPosition: none"))
+        XCTAssertEqual(parts.seriesFills.count, 3)
+        XCTAssertTrue(parts.seriesFills.allSatisfy { fill in !fill.isEmpty })
     }
 
     func testHighlightSliceIsReadAndDrawsNothingAsInPele() throws {
