@@ -1,3 +1,15 @@
+/**
+ * File: PieChartStatementText.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: The pieces of a pie chart's statements, read as the tokens of Mermaid's pie grammar: keywords,
+ *              quoted strings, numbers, the text of a line, accessibility descriptions, spaces and comments.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// The pieces of a pie chart's statements, read as the tokens of Mermaid's pie grammar: keywords, quoted strings with
@@ -123,7 +135,7 @@ enum PieChartStatementText {
     }
 
     private static func collapsingSpaces(_ text: String) -> String {
-        guard text.contains("  ") || text.contains("\t") else { return text }
+        guard MermaidByte.hasBlankRun(text), text.contains("  ") || text.contains("\t") else { return text }
         return text.split(whereSeparator: { character in character == " " || character == "\t" }).joined(separator: " ")
     }
 }

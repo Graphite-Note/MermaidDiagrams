@@ -6,7 +6,7 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -24,16 +24,17 @@ struct TreeViewSourceLine {
 /// lines go with the blank lines before them, as Mermaid's preprocessing removes them.
 enum TreeViewBoxDrawingReader {
     static func lines(after keywordLine: Int, in text: String) throws(MermaidDiagramReadError) -> [TreeViewSourceLine] {
-        let written = withoutCommentLines(text.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map { offset, line in
-            TreeViewSourceLine(text: String(line), writtenLine: keywordLine + offset)
+        let written = withoutCommentLines(Self.splitLines(text).enumerated().map { offset, line in
+            TreeViewSourceLine(text: line, writtenLine: keywordLine + offset)
         })
-        let content = written.dropFirst().filter { line in !passesUnchanged(line.text) && !isDecorationOnly(line.text) }
-            .map { line in expandingTabs(line.text) }
+        let unchanged = written.map { line in passesUnchanged(line.text) }
+        let content = written.indices.dropFirst().filter { index in !unchanged[index] && !isDecorationOnly(written[index].text) }
+            .map { index in expandingTabs(written[index].text) }
         guard content.contains(where: containsBoxCharacter) else { return written }
         let segmentWidth = content.lazy.compactMap { line in branchColumn(in: Array(line.utf16)) }.first { column in column > 0 } ?? 4
         var converted = [written[0]]
-        for line in written.dropFirst() {
-            if passesUnchanged(line.text) {
+        for (index, line) in written.enumerated().dropFirst() {
+            if unchanged[index] {
                 converted.append(line)
                 continue
             }
@@ -60,11 +61,22 @@ enum TreeViewBoxDrawingReader {
         return converted
     }
 
+    /// The text split at its line feeds as its characters split it. A line feed is a character of its own but after a
+    /// carriage return, so text without one is split at its bytes.
+    private static func splitLines(_ text: String) -> [String] {
+        guard !text.utf8.contains(0x0D) else { return text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) }
+        return text.utf8.split(separator: 0x0A, omittingEmptySubsequences: false).map { line in String(Substring(line)) }
+    }
+
     /// The lines without those Mermaid's preprocessing removes: a comment line (`%%` and text after blanks, not a
     /// directive's `%%{`), with the lines of blanks just before it.
     private static func withoutCommentLines(_ lines: [TreeViewSourceLine]) -> [TreeViewSourceLine] {
         var kept: [TreeViewSourceLine] = []
         for line in lines {
+            if let first = firstScalarAfterBlanks(line.text), isOwnCharacter(first), first != "%" {
+                kept.append(line)
+                continue
+            }
             let content = line.text.drop { character in character.isWhitespace }
             guard content.hasPrefix("%%"), !content.hasPrefix("%%{"), content.count > 2, kept.count > 0 else {
                 kept.append(line)
@@ -76,6 +88,10 @@ enum TreeViewBoxDrawingReader {
     }
 
     private static func passesUnchanged(_ line: String) -> Bool {
+        // A line led by a character that starts none of the lines that pass: told from its first scalar after the blanks.
+        if let first = firstScalarAfterBlanks(line), isOwnCharacter(first), first != "%", first != "t", first != "a" {
+            return false
+        }
         let content = line.drop { character in character == " " || character == "\t" }
         if content.isEmpty || content.allSatisfy(\.isWhitespace) || content.hasPrefix("%%") { return true }
         if content.hasPrefix("title ") || content.hasPrefix("title\t") { return true }
@@ -87,6 +103,18 @@ enum TreeViewBoxDrawingReader {
     }
 
     /// A line of blanks and vertical bars only, which carries no entry.
+    /// The first scalar after the spaces and tabs a line starts with, nil when there is none.
+    private static func firstScalarAfterBlanks(_ line: String) -> Unicode.Scalar? {
+        line.unicodeScalars.first { scalar in scalar != " " && scalar != "\t" }
+    }
+
+    /// Whether a scalar is white space for no one and starts a character of its own after a space or a tab: a printable
+    /// ASCII character or a box-drawing one. The blanks before it are then each a character of their own and the line's
+    /// first character after them starts with it, so the checks on the line's characters can be made on its scalars.
+    private static func isOwnCharacter(_ scalar: Unicode.Scalar) -> Bool {
+        (0x21...0x7E).contains(scalar.value) || (0x2500...0x257F).contains(scalar.value)
+    }
+
     private static func isDecorationOnly(_ line: String) -> Bool {
         !line.isEmpty && line.utf16.allSatisfy { unit in isWhitespace(unit) || unit == lightVertical || unit == heavyVertical }
     }

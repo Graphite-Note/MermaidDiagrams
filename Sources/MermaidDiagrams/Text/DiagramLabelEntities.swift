@@ -6,7 +6,7 @@
  *              named, decimal and hexadecimal codes into their characters, a code that names none left as HTML's.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -19,13 +19,14 @@
 enum DiagramLabelEntities {
     /// `text` with every code read.
     static func decoded(_ text: String) -> String {
-        guard text.contains(";"), text.contains("#") || text.contains("&") else { return text }
+        // Most text has no semicolon byte, so has no `;` character either: looked for in the bytes first.
+        guard text.utf8.contains(UInt8(ascii: ";")), text.contains(";"), text.contains("#") || text.contains("&") else { return text }
         return htmlCodesRead(mermaidCodesAsHTML(Array(text.unicodeScalars)))
     }
 
     /// `text` with HTML's codes read and Mermaid's left as written: text whose Mermaid codes are already HTML's.
     static func htmlDecoded(_ text: String) -> String {
-        guard text.contains("&"), text.contains(";") else { return text }
+        guard text.utf8.contains(UInt8(ascii: "&")), text.contains("&"), text.contains(";") else { return text }
         return htmlCodesRead(Array(text.unicodeScalars))
     }
 

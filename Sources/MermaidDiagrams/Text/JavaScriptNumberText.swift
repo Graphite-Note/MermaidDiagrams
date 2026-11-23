@@ -44,16 +44,34 @@ enum JavaScriptNumberText {
     /// The shortest digits of a positive double that read back as it, without leading or trailing zeros, and where
     /// the decimal point goes among them: `0.00125` is `125` with the point at -2, `1500` is `15` at 4.
     static func shortestDigits(of magnitude: Double) -> (digits: String, pointPosition: Int) {
-        // Swift's description is the shortest form that reads back as the same double, as JavaScript's is.
-        let written = magnitude.description
-        let parts = written.split(separator: "e", maxSplits: 1)
-        let exponent = parts.count == 2 ? Int(parts[1]) ?? 0 : 0
-        let mantissa = parts[0].split(separator: ".", maxSplits: 1)
-        let integerDigits = mantissa[0]
-        let allDigits = Substring(integerDigits + (mantissa.count == 2 ? mantissa[1] : ""))
-        let leadingZeroCount = allDigits.prefix { character in character == "0" }.count
-        let significant = allDigits.dropFirst(leadingZeroCount)
-        let trimmed = significant.prefix(significant.count - significant.reversed().prefix { character in character == "0" }.count)
-        return (String(trimmed), integerDigits.count + exponent - leadingZeroCount)
+        // Swift's description is the shortest form that reads back as the same double, as JavaScript's is: digits, maybe
+        // a point and more digits, maybe `e`, a sign and the exponent's digits. Read from its bytes in one pass.
+        var digits: [UInt8] = []
+        digits.reserveCapacity(24)
+        var integerDigitCount = 0
+        var isAfterPoint = false
+        var isInExponent = false
+        var exponent = 0
+        var exponentSign = 1
+        for byte in magnitude.description.utf8 {
+            if isInExponent {
+                if byte == UInt8(ascii: "-") {
+                    exponentSign = -1
+                } else if byte != UInt8(ascii: "+") {
+                    exponent = exponent * 10 + Int(byte &- UInt8(ascii: "0"))
+                }
+            } else if byte == UInt8(ascii: "e") {
+                isInExponent = true
+            } else if byte == UInt8(ascii: ".") {
+                isAfterPoint = true
+            } else {
+                digits.append(byte)
+                if !isAfterPoint { integerDigitCount += 1 }
+            }
+        }
+        let leadingZeroCount = digits.prefix { byte in byte == UInt8(ascii: "0") }.count
+        var end = digits.count
+        while end > leadingZeroCount, digits[end - 1] == UInt8(ascii: "0") { end -= 1 }
+        return (String(decoding: digits[leadingZeroCount..<end], as: UTF8.self), integerDigitCount + exponentSign * exponent - leadingZeroCount)
     }
 }

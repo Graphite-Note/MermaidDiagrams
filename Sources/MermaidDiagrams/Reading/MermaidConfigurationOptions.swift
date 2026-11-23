@@ -87,11 +87,16 @@ struct MermaidConfigurationOptions {
 
     private mutating func store(_ value: Value, named name: String) {
         guard !name.isEmpty else { return }
-        if name.contains(".") { nestedValues[name] = value } else { values[name] = value }
+        if Self.isPath(name) { nestedValues[name] = value } else { values[name] = value }
     }
 
     private mutating func removeValue(named name: String) {
-        if name.contains(".") { nestedValues.removeValue(forKey: name) } else { values.removeValue(forKey: name) }
+        if Self.isPath(name) { nestedValues.removeValue(forKey: name) } else { values.removeValue(forKey: name) }
+    }
+
+    /// Whether the name holds a dot, looked for in its bytes before its characters.
+    private static func isPath(_ name: String) -> Bool {
+        name.utf8.contains(UInt8(ascii: ".")) && name.contains(".")
     }
 
     private static let prototypeKeys: Set<String> = ["__proto__", "constructor", "prototype"]

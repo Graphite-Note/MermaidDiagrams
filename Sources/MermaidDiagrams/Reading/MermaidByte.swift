@@ -1,3 +1,15 @@
+/**
+ * File: MermaidByte.swift
+ * -----------------------
+ * Layer: Core
+ * Description: The bytes of Mermaid's syntax, the classes of bytes its readers test, and a look at a text's bytes before
+ *              a search through its characters.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// The bytes of Mermaid's syntax, and the classes of bytes its readers test.
 enum MermaidByte {
     static let newline = UInt8(ascii: "\n")
@@ -56,5 +68,16 @@ enum MermaidByte {
     /// Whether a statement ends at this byte: a line break, a semicolon or a carriage return.
     static func endsStatement(_ byte: UInt8) -> Bool {
         byte == newline || byte == semicolon || byte == carriageReturn
+    }
+
+    /// Whether the text's bytes hold two spaces in a row or a tab: false when its characters hold neither, so that a
+    /// search through its characters can be left out.
+    static func hasBlankRun(_ text: String) -> Bool {
+        var previous: UInt8 = 0
+        for byte in text.utf8 {
+            if byte == UInt8(ascii: "\t") || (byte == space && previous == space) { return true }
+            previous = byte
+        }
+        return false
     }
 }

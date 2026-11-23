@@ -1,3 +1,15 @@
+/**
+ * File: GanttDateFormat.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: A Gantt chart's date format in the tokens of Mermaid's date library: splits its template into tokens and
+ *              literal text, writes a time in it and reads a date strictly in it.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A date format in the tokens of Mermaid's date library (dayjs with the plugins Mermaid loads, in English): it
 /// formats a time, and reads a date strictly as `dayjs(text, format, true)` does, field by field, keeping the result
 /// only when formatting it gives the text back. A token Mermaid's library cannot format (`w`, `gggg`, `z`) makes the
@@ -24,6 +36,8 @@ struct GanttDateFormat {
 
     /// Splits a template into tokens, `[escaped text]` and the characters between, trying longer tokens first.
     private static func pieces(of template: String) -> [Piece] {
+        // In ASCII without a carriage return every byte is a character of its own, so the bytes are split instead.
+        if template.utf8.allSatisfy({ byte in byte < 0x80 && byte != 0x0D }) { return pieces(ofASCII: Array(template.utf8)) }
         var pieces: [Piece] = []
         var rest = Substring(template)
         while let first = rest.first {
@@ -40,6 +54,28 @@ struct GanttDateFormat {
         }
         return pieces
     }
+
+    /// `pieces(of:)` on the bytes of an ASCII template.
+    private static func pieces(ofASCII bytes: [UInt8]) -> [Piece] {
+        var pieces: [Piece] = []
+        var index = 0
+        while index < bytes.count {
+            let byte = bytes[index]
+            if byte == UInt8(ascii: "["), let closing = bytes[(index + 1)...].firstIndex(of: UInt8(ascii: "]")), closing > index + 1 {
+                pieces.append(.literal(String(decoding: bytes[(index + 1)..<closing], as: UTF8.self)))
+                index = closing + 1
+            } else if let (spelling, token) = asciiSpellings.first(where: { spelling, _ in bytes[index...].starts(with: spelling) }) {
+                pieces.append(.token(token))
+                index += spelling.count
+            } else {
+                pieces.append(.literal(String(Unicode.Scalar(byte))))
+                index += 1
+            }
+        }
+        return pieces
+    }
+
+    private static let asciiSpellings = GanttDateToken.spellings.map { spelling, token in (Array(spelling.utf8), token) }
 
     /// The time written in this format, or nil when the format has a token Mermaid's library cannot format.
     func format(_ time: GanttTime, zone: GanttTimeZone) -> String? {

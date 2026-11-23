@@ -17,7 +17,25 @@ struct MermaidTextCursor {
     /// are read from (`MermaidConfigurationOptions`).
     let sourceBytes: [UInt8]
     /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
-    var readFrontMatter: MermaidReadFrontMatter?
+    var readFrontMatter: MermaidReadFrontMatter? {
+        get {
+            switch frontMatterLookup {
+            case .notLooked: nil
+            case .absent: MermaidReadFrontMatter(frontMatter: nil)
+            case .found(let found): found.read
+            }
+        }
+        set {
+            if let newValue {
+                frontMatterLookup = newValue.frontMatter == nil ? .absent : .found(MermaidReadFrontMatterReference(read: newValue))
+            } else {
+                frontMatterLookup = .notLooked
+            }
+        }
+    }
+    /// The front matter kept behind one reference, so that copying the cursor, as every lookahead does, retains no more
+    /// than the reference.
+    private var frontMatterLookup = MermaidFrontMatterLookup.notLooked
     private(set) var position: Int
     /// The 1-based line of `position` in the diagram's text.
     private(set) var line: Int
@@ -131,5 +149,20 @@ struct MermaidTextCursor {
         // Never cut a character in two.
         while end < bytes.count, end > position, bytes[end] & 0xC0 == 0x80 { end -= 1 }
         return text(from: position, to: end)
+    }
+}
+
+/// Whether the reader looked for the front matter of a cursor's text, and what it found.
+private enum MermaidFrontMatterLookup {
+    case notLooked
+    case absent
+    case found(MermaidReadFrontMatterReference)
+}
+
+private final class MermaidReadFrontMatterReference {
+    let read: MermaidReadFrontMatter
+
+    init(read: MermaidReadFrontMatter) {
+        self.read = read
     }
 }

@@ -32,7 +32,8 @@ struct SequenceAttributesBlockSyntax {
                 throw .invalid
             }
         }
-        let normalized = source.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        let normalized = !source.utf8.contains(0x0D) ? source
+            : source.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         var reader = SequenceAttributesBlockSyntax(lines: normalized.split(separator: "\n", omittingEmptySubsequences: false).map { line in
             Array(line.unicodeScalars)
         })
