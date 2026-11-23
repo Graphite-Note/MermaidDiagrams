@@ -5,14 +5,17 @@
  * Description: An XY chart as its text describes it: orientation, titles, axes, series and options.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Mermaid XY chart (`xychart` or `xychart-beta`) as Mermaid's chart database holds it once its text is read: the
 /// orientation, the titles, the x axis (categories or a range of numbers), the y axis' title and range when one is
 /// written, and the bar and line series with their values placed along the x axis.
 public struct XYChart: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var orientation: XYChartOrientation
     /// `title …` in the chart, else `title:` in the front matter, or nil.
     public internal(set) var title: String?

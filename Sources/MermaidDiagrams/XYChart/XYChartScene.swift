@@ -5,8 +5,8 @@
  * Description: A laid-out XY chart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ extension DiagramScene {
     public init(layout: XYChartLayout) {
         var builder = DiagramSceneBuilder()
         XYChartDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
     }
 }
 

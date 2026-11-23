@@ -5,8 +5,8 @@
  * Description: Lays a Git graph out in Pele's style: lanes, commits, ids, tags, branch names and the title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -43,9 +43,11 @@ public enum GitGraphLayoutEngine {
         let offset = CGVector(dx: padding - body.minX + (innerWidth - body.width) / 2, dy: padding + titleHeight - body.minY)
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        return GitGraphLayout(size: size, font: font, direction: diagram.direction, lanes: placement.lanes.map { lane in lane.translated(by: offset) },
-                              connectors: connectors.map { connector in connector.translated(by: offset) },
-                              commits: placement.commits.map { commit in commit.translated(by: offset) }, title: placedTitle)
+        var layout = GitGraphLayout(size: size, font: font, direction: diagram.direction, lanes: placement.lanes.map { lane in lane.translated(by: offset) },
+                                    connectors: connectors.map { connector in connector.translated(by: offset) },
+                                    commits: placement.commits.map { commit in commit.translated(by: offset) }, title: placedTitle)
+        layout.seriesColors = diagram.seriesColors
+        return layout
     }
 }
 

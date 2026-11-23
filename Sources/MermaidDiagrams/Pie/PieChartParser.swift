@@ -5,7 +5,7 @@
  * Description: Reads a pie chart's statements after its `pie` keyword, as Mermaid's grammar does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -30,6 +30,7 @@ struct PieChartParser {
         parser.chart.options = PieChartOptions(MermaidConfigurationOptions(section: "pie", in: cursor))
         parser.readShowData()
         try parser.readStatements()
+        parser.chart.seriesColors = MermaidThemeSeriesPalette.pieChart.seriesColors(in: cursor)
         return parser.chart
     }
 

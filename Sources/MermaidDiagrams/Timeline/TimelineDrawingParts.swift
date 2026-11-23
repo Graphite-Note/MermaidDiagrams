@@ -1,3 +1,15 @@
+/**
+ * File: TimelineDrawingParts.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: A laid-out timeline's geometry grouped by how it is painted, with the paints of its sections' and
+ *              periods' text.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out timeline's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -27,6 +39,10 @@ public struct TimelineDrawingParts {
     /// Section headings' text, bold, and periods' text, on their boxes in the background color.
     public let sectionTexts: [DiagramTextBlock]
     public let periodTexts: [DiagramTextBlock]
+    /// The paints of `sectionTexts` and `periodTexts`: the background color, or Pele's ink on their box's series color
+    /// where the timeline's theme variables set that color (`DiagramSeriesColors.inks`).
+    public let sectionTextPaints: [DiagramPaint]
+    public let periodTextPaints: [DiagramPaint]
     /// Events' text, in the foreground color.
     public let eventTexts: [DiagramTextBlock]
     /// The title, drawn bold, or nil.
@@ -60,6 +76,12 @@ public struct TimelineDrawingParts {
         self.connectors = connectors
         sectionTexts = layout.sections.map(\.text)
         periodTexts = layout.periods.map(\.text)
+        func ink(_ color: TimelineColor) -> DiagramPaint {
+            guard case .series(let index) = color, let ink = layout.seriesColors.ink(ofSeries: index) else { return .background }
+            return .color(ink)
+        }
+        sectionTextPaints = layout.sections.map { section in ink(.series(section.sectionIndex)) }
+        periodTextPaints = layout.periods.map { period in ink(period.color) }
         eventTexts = layout.periods.flatMap { period in period.events.map(\.text) }
         title = layout.title
     }

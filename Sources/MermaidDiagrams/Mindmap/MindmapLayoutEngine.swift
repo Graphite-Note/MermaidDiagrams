@@ -6,8 +6,8 @@
  *              column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -50,14 +50,14 @@ public enum MindmapLayoutEngine {
             let placement = MindmapPlacement(diagram: diagram, sizes: measured.sizes, bands: &bands)
             let nodes = diagram.nodes.indices.map { index in placedNode(index, diagram: diagram, measured: measured, placement: placement) }
             let edges = diagram.nodes.indices.dropFirst().compactMap { index in edge(to: index, diagram: diagram, nodes: nodes, placement: placement) }
-            return finished(nodes: nodes, edges: edges, title: title, font: font)
+            return finished(nodes: nodes, edges: edges, title: title, font: font, seriesColors: diagram.seriesColors)
         }
         let placement = MindmapOutlinePlacement(diagram: diagram, sizes: measured.sizes)
         let nodes = diagram.nodes.indices.map { index in
             outlineNode(index, diagram: diagram, measured: measured, centerAcross: placement.centersAcross[index], top: placement.tops[index])
         }
         let edges = MindmapOutlinePlacement.links(diagram: diagram, nodes: nodes).map { link in MindmapLayoutEdge(path: link.path, branchIndex: link.branchIndex) }
-        return finished(nodes: nodes, edges: edges, title: title, font: font)
+        return finished(nodes: nodes, edges: edges, title: title, font: font, seriesColors: diagram.seriesColors)
     }
 
     /// A node of an outline: its text starts at the left of its box when it is drawn as text alone, as a column of lines
@@ -98,7 +98,8 @@ public enum MindmapLayoutEngine {
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the title,
     /// and centered under the title when the title is wider.
-    private static func finished(nodes: [MindmapLayoutNode], edges: [MindmapLayoutEdge], title: DiagramTextBlock?, font: DiagramFont) -> MindmapLayout {
+    private static func finished(nodes: [MindmapLayoutNode], edges: [MindmapLayoutEdge], title: DiagramTextBlock?, font: DiagramFont,
+                                 seriesColors: DiagramSeriesColors) -> MindmapLayout {
         let bounds = nodes.reduce(CGRect.null) { bounds, node in bounds.union(node.frame) }
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
@@ -107,7 +108,9 @@ public enum MindmapLayoutEngine {
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (bounds.height + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        return MindmapLayout(size: size, font: font, nodes: nodes.map { node in node.translated(by: offset) },
-                             edges: edges.map { edge in edge.translated(by: offset) }, title: placedTitle)
+        var layout = MindmapLayout(size: size, font: font, nodes: nodes.map { node in node.translated(by: offset) },
+                                   edges: edges.map { edge in edge.translated(by: offset) }, title: placedTitle)
+        layout.seriesColors = seriesColors
+        return layout
     }
 }

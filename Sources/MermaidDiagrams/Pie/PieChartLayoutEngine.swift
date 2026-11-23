@@ -6,7 +6,7 @@
  *              for it, as Pele fits one to its width.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -74,9 +74,11 @@ public enum PieChartLayoutEngine {
         let besideMovedBelow = isTight && (options.legendPosition == .left || options.legendPosition == .right)
         let arrangement = Arrangement(pieDiameter: 2 * (radius + slices.outsideLabelRoom), legendSize: legendSize(of: legendTexts),
                                       legendPosition: besideMovedBelow ? .bottom : options.legendPosition, title: title)
-        return PieChartLayout(size: arrangement.size, font: font, center: arrangement.pieCenter, radius: radius, innerRadius: radius * options.holeShare,
-                              slices: slices.placed(around: arrangement.pieCenter), legend: legend(legendTexts, at: arrangement.legendOrigin),
-                              title: arrangement.placedTitle)
+        var layout = PieChartLayout(size: arrangement.size, font: font, center: arrangement.pieCenter, radius: radius, innerRadius: radius * options.holeShare,
+                                    slices: slices.placed(around: arrangement.pieCenter), legend: legend(legendTexts, at: arrangement.legendOrigin),
+                                    title: arrangement.placedTitle)
+        layout.seriesColors = chart.seriesColors
+        return layout
     }
 
     /// The label, with ` [value]` after its last line when the chart shows its values.

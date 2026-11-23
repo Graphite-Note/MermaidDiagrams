@@ -6,8 +6,8 @@
  *              parser.ts and db.ts): titles, sets, unions, texts and styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Reads a Venn diagram's statements, as Mermaid's grammar does. A token is read only when the grammar must look at one
@@ -31,6 +31,7 @@ struct VennParser {
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> VennDiagram {
         var parser = VennParser(lexer: VennLexer(bytes: cursor.bytes, position: cursor.position), bytes: cursor.bytes, limits: limits)
         try parser.readStatements()
+        parser.diagram.seriesColors = MermaidThemeSeriesPalette.venn.seriesColors(in: cursor)
         return parser.diagram
     }
 

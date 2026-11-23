@@ -5,8 +5,8 @@
  * Description: Reads the declarations of a treemap's `classDef` as Mermaid's treemap and Pele read them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -30,6 +30,9 @@ enum TreemapClassStyle {
                                               value: String(declaration[declaration.index(after: colon)...])) {
                 if !isApplied { unappliedCount += 1 }
                 continue
+            }
+            if let colon = declaration.firstIndex(of: ":"), declaration[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "fill" {
+                textStyle.readFill(value: String(declaration[declaration.index(after: colon)...]))
             }
             let read = DiagramElementStyle.reading(String(declaration))
             style = style.overridden(by: read.style)

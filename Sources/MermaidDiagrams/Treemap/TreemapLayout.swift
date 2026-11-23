@@ -5,8 +5,8 @@
  * Description: A laid-out treemap: its boxes with their texts and styles, and its title.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -15,6 +15,8 @@ import CoreGraphics
 /// with a size and every section holding one, parents before children (so a child is painted over its parent), the title
 /// above.
 public struct TreemapLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the text was measured in: the title at its size, the names and values at their own.
     public let font: DiagramFont

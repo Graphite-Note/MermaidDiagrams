@@ -86,12 +86,14 @@ public enum RadarChartLayoutEngine {
         let shift = CGVector(dx: padding + (bodyWidth - extent.width) / 2 - extent.minX, dy: padding + titleHeight - extent.minY)
         var placedTitle = title
         placedTitle?.center = CGPoint(x: pageSize.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        return RadarChartLayout(size: pageSize, font: font, center: CGPoint(x: shift.dx, y: shift.dy), radius: geometry.radius, ringRadii: geometry.ringRadii,
-                                graticule: chart.options.graticule, axisDirections: geometry.axisDirections, spokeLength: geometry.spokeLength,
-                                axisLabels: labels.map { label in label.translated(by: shift) },
-                                curves: geometry.curves.map { curve in curve.translated(by: shift) },
-                                legend: legend(legendTexts, at: legendOrigin.applying(CGAffineTransform(translationX: shift.dx, y: shift.dy))),
-                                title: placedTitle)
+        var layout = RadarChartLayout(size: pageSize, font: font, center: CGPoint(x: shift.dx, y: shift.dy), radius: geometry.radius, ringRadii: geometry.ringRadii,
+                                      graticule: chart.options.graticule, axisDirections: geometry.axisDirections, spokeLength: geometry.spokeLength,
+                                      axisLabels: labels.map { label in label.translated(by: shift) },
+                                      curves: geometry.curves.map { curve in curve.translated(by: shift) },
+                                      legend: legend(legendTexts, at: legendOrigin.applying(CGAffineTransform(translationX: shift.dx, y: shift.dy))),
+                                      title: placedTitle)
+        layout.seriesColors = chart.seriesColors
+        return layout
     }
 
     /// An axis's label centered on the point `distance` from the origin along `direction`, then moved out by half its size

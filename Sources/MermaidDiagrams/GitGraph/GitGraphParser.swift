@@ -5,7 +5,7 @@
  * Description: Reads a Git graph's statements as Mermaid's grammar does and plays them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -27,6 +27,7 @@ struct GitGraphParser {
         try parser.readStatements()
         parser.diagram.options = options
         try parser.play(limits: limits)
+        parser.diagram.seriesColors = MermaidThemeSeriesPalette.gitGraph.seriesColors(in: cursor)
         return parser.diagram
     }
 

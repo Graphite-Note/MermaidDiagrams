@@ -6,8 +6,8 @@
  *              overlap with its text at its roomiest point, the scale grown until each region holds its text, the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -63,9 +63,11 @@ public enum VennLayoutEngine {
             VennLayoutSet(identifier: circle.identifier, center: CGPoint(x: circle.x, y: circle.y), radius: circle.radius, seriesIndex: index,
                           appearance: regions.appearance(of: [circle.identifier]))
         }
-        return VennLayout(size: size, font: font, title: title.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: size.width / 2, y: padding + block.size.height / 2)) },
-                          sets: sets, overlaps: regions.overlaps(placedCircles: placed),
-                          regions: regions.placedRegions(scale: scale, offset: offset))
+        var layout = VennLayout(size: size, font: font, title: title.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: size.width / 2, y: padding + block.size.height / 2)) },
+                                sets: sets, overlaps: regions.overlaps(placedCircles: placed),
+                                regions: regions.placedRegions(scale: scale, offset: offset))
+        layout.seriesColors = diagram.seriesColors
+        return layout
     }
 
     /// The circles' extent and the extent of each region's text around its spot, scaled; nothing for no circles.

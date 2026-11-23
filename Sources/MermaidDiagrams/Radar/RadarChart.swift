@@ -5,8 +5,8 @@
  * Description: A Mermaid radar chart as its text describes it: axes, curves over them, the chart's options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Mermaid radar chart (`radar-beta`): the axes in the order they are written, the curves (each a value per axis in the
@@ -14,6 +14,9 @@
 /// `graticule`) and its titles. A curve written with a value for an axis only some axes have is refused while the chart is
 /// read; a curve of numbers whose count is not the axes' count is kept and left out of the drawing, as Mermaid leaves it.
 public struct RadarChart: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var axes: [RadarAxis]
     public internal(set) var curves: [RadarCurve]
     /// What the chart's own statements set.

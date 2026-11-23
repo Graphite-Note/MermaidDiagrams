@@ -5,7 +5,7 @@
  * Description: Reads a radar chart's statements after its `radar-beta` keyword: axes, curves, options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -42,6 +42,7 @@ struct RadarChartParser {
         parser.skipOptionalColon()
         try parser.readStatements()
         try parser.finish()
+        parser.chart.seriesColors = MermaidThemeSeriesPalette.radar.seriesColors(in: cursor)
         return parser.chart
     }
 

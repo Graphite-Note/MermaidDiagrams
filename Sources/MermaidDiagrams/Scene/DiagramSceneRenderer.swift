@@ -6,8 +6,8 @@
  *              painter of every diagram type.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,8 +17,10 @@ import CoreGraphics
 /// same scene in another palette is cheap. Each stroke sets its own width, dashes, caps and joins; the context's state is
 /// restored afterwards.
 public enum DiagramSceneRenderer {
+    /// The series the diagram's own theme variables set are drawn in their colors over `palette`'s
+    /// (`DiagramScene.palette(over:)`).
     public static func draw(_ scene: DiagramScene, in context: CGContext, palette: DiagramPalette) {
-        var colors = DiagramPaintColors(palette: palette)
+        var colors = DiagramPaintColors(palette: scene.palette(over: palette))
         var text = DiagramTextDrawing(font: scene.font)
         context.saveGState()
         for item in scene.items {

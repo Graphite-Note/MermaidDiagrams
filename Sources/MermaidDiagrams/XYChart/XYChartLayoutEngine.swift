@@ -5,8 +5,8 @@
  * Description: Lays an XY chart out as Pele does, on the page its options and a narrow column give.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -81,10 +81,12 @@ public enum XYChartLayoutEngine {
         let frame = XYChartFrame(chart: chart, text: text, page: page)
         let series = XYChartSeriesPlacement(chart: chart, frame: frame, text: text)
         let axes = XYChartAxes(frame: frame)
-        return XYChartLayout(size: page, font: font, title: frame.title.map { title in placed(title, x: page.width / 2, top: padding) },
-                             plotFrame: frame.plot, gridLines: axes.gridLines, axisLines: axes.axisLines + series.baseline,
-                             axisLabels: axes.labels, bottomAxisTitle: axes.bottomTitle, leftAxisTitle: axes.leftTitle, bars: series.bars,
-                             lines: series.lines, pointLabels: series.pointLabels, barValues: series.barValues, legend: legend(frame))
+        var layout = XYChartLayout(size: page, font: font, title: frame.title.map { title in placed(title, x: page.width / 2, top: padding) },
+                                   plotFrame: frame.plot, gridLines: axes.gridLines, axisLines: axes.axisLines + series.baseline,
+                                   axisLabels: axes.labels, bottomAxisTitle: axes.bottomTitle, leftAxisTitle: axes.leftTitle, bars: series.bars,
+                                   lines: series.lines, pointLabels: series.pointLabels, barValues: series.barValues, legend: legend(frame))
+        layout.seriesColors = chart.seriesColors
+        return layout
     }
 
     /// The legend's rows from the plot's right, centered down it, as many as fit the page's height.

@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphDrawingParts.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: A laid-out Git graph's geometry grouped by how it is painted, with the paints of its branch names.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out Git graph's geometry grouped by how it is painted, so that drawing it in any colors is a few fills and
@@ -44,6 +55,9 @@ public struct GitGraphDrawingParts {
     public let tagTexts: [DiagramTextBlock]
     /// The branch names, in the background color on their boxes.
     public let names: [DiagramTextBlock]
+    /// The paint of each of `names`: the background color, or Pele's ink on its lane's color where the graph's theme
+    /// variables set that color (`DiagramSeriesColors.inks`).
+    public let namePaints: [DiagramPaint]
     /// The title, drawn bold, or nil.
     public let title: DiagramTextBlock?
 
@@ -99,7 +113,15 @@ public struct GitGraphDrawingParts {
         self.tagHoles = tagHoles
         tagTexts = layout.commits.flatMap { commit in commit.tags.map(\.text) }
         names = layout.lanes.compactMap(\.name)
+        namePaints = Self.namePaints(layout)
         title = layout.title
+    }
+
+    /// The paint of each lane's name: Pele's ink on the lane's color where the theme variables set it, else the background.
+    private static func namePaints(_ layout: GitGraphLayout) -> [DiagramPaint] {
+        layout.lanes.enumerated().compactMap { laneIndex, lane in
+            lane.name.map { _ in layout.seriesColors.ink(ofSeries: laneIndex).map(DiagramPaint.color) ?? .background }
+        }
     }
 
     /// The rounded patch behind an id, centered on its text and turned with it.

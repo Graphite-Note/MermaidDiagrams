@@ -77,7 +77,9 @@ public enum TreemapLayoutEngine {
                               height: (CGFloat(height) + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: pageSize.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        return TreemapLayout(size: pageSize, font: font, boxes: layoutBoxes, title: placedTitle)
+        var layout = TreemapLayout(size: pageSize, font: font, boxes: layoutBoxes, title: placedTitle)
+        layout.seriesColors = diagram.seriesColors
+        return layout
     }
 
     /// The gap and the inset: the options' gap, else 2 to 4 points, and 3 to 6 points of inset, growing with the average

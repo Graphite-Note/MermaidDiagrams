@@ -1,8 +1,22 @@
+/**
+ * File: PieChartLayout.swift
+ * --------------------------
+ * Layer: Core
+ * Description: A pie chart laid out on a page: the pie, its slices, its legend and title, and the series colors its
+ *              theme variables set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A pie chart laid out on a page whose origin is the top left corner and whose y runs down, in points: the pie, its
 /// legend on the right and its title above. Drawing it needs only colors.
 public struct PieChartLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the text was measured in: the title at its size, percentages and legend at their own `fontSize`.
     public let font: DiagramFont

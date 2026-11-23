@@ -5,8 +5,8 @@
  * Description: A mindmap laid out on a page: its nodes, links and title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -14,6 +14,8 @@ import CoreGraphics
 /// A mindmap laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing it
 /// needs only colors: every position, path and text measurement is here.
 public struct MindmapLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the text was measured in.
     public let font: DiagramFont
