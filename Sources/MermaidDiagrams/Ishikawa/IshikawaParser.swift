@@ -6,7 +6,7 @@
  *              its causes by their indentation as Mermaid's database does.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -54,10 +54,7 @@ enum IshikawaParser {
             let excerpt = String(decoding: units[token.start..<min(token.end, token.start + 24)], as: UTF16.self)
             return .invalidSyntax(line: line(at: index), problem: token.kind == .endOfFile ? .expectedNode : .unexpectedText(excerpt))
         }
-        func isStop(_ index: Int) -> Bool {
-            let kind = tokens[index].kind
-            return kind == .blankLine || kind == .newLine || kind == .endOfFile
-        }
+        func isStop(_ index: Int) -> Bool { Self.isStop(tokens[index].kind) }
         var builder = IshikawaTreeBuilder(limits: limits)
         // The first token is the keyword, as the text starts with it.
         var index = tokens[1].kind == .newLine ? 2 : 1
@@ -118,6 +115,11 @@ enum IshikawaParser {
     }
 
     private static let keywordUnits = Array("ishikawa-beta".utf16)
+
+    /// Whether a token of `kind` ends an entry's line: a blank line, a line break or the end of the file.
+    private static func isStop(_ kind: TokenKind) -> Bool {
+        kind == .blankLine || kind == .newLine || kind == .endOfFile
+    }
 
     /// `ishikawa-beta`, or failing that `ishikawa`, in any case and ending at a word's end: its length, else nil.
     private static func keywordLength(in units: [UInt16], at start: Int) -> Int? {
