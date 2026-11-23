@@ -6,8 +6,8 @@
  *              drawing: the page within a tolerance, the texts and the edges; every difference listed with its reason.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -34,7 +34,7 @@ final class PeleDifferentialTests: XCTestCase {
 
     func testEveryListedInputIsOneOfPelesAndEveryReasonIsExplained() throws {
         let known = try Self.knownDifferences.get()
-        let names = Set(try PeleResults.corpus().inputs.map { input in "\(input.corpus)#\(input.index)" })
+        let names = Set(try PeleResults.everyInput().map { input in "\(input.corpus)#\(input.index)" })
         XCTAssertEqual(Set(known.inputs.keys).subtracting(names), [])
         XCTAssertEqual(known.namedReasons.subtracting(known.reasons), [])
         XCTAssertGreaterThan(known.reasons.count, 10)
@@ -85,6 +85,13 @@ final class PeleDifferentialTests: XCTestCase {
 
     func testGeneratedGraphsOfPelesBenchmark() throws {
         try compare("bench-generated")
+    }
+
+    /// The random flat flowcharts of the runner (`--random-flat`): 60 graphs of 4 to 33 nodes in the four directions,
+    /// with long, labelled, dotted and backward edges, laid out by the layered layout alone.
+    func testRandomFlatFlowcharts() throws {
+        try compare("random-flat")
+        XCTAssertEqual(try PeleResults.randomFlat().inputs.count, 60)
     }
 
     func testGanttCharts() throws {

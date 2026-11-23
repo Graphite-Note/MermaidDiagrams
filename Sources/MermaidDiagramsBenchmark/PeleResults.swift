@@ -6,8 +6,8 @@
  *              recorded it on this Mac, and the inputs it was given, for the differential tests and the benchmark.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -46,6 +46,12 @@ struct PeleCorpusResults: Decodable {
     let inputs: [PeleRenderedInput]
 }
 
+/// What Pele drew for the random flat flowcharts its runner generates (`--random-flat`, `pele-random-flat.json`), whose
+/// sources it writes beside them (`random-flat.json`).
+struct PeleGeneratedResults: Decodable {
+    let inputs: [PeleRenderedInput]
+}
+
 /// One case of Pele's benchmark (`scripts/bench.mjs`'s cases, then each type's documentation examples), timed as it
 /// times them: the whole case per run, the median and the 99th percentile divided by its diagrams.
 struct PeleTimedCase: Decodable {
@@ -78,6 +84,16 @@ enum PeleResults {
         try JSONDecoder().decode(PeleCorpusResults.self, from: resource(named: "pele-corpus", extension: "json"))
     }
 
+    /// Pele's drawings of the random flat flowcharts (`random-flat`), for the layered layout.
+    static func randomFlat() throws -> PeleGeneratedResults {
+        try JSONDecoder().decode(PeleGeneratedResults.self, from: resource(named: "pele-random-flat", extension: "json"))
+    }
+
+    /// Every input Pele's runner drew: its corpora and the random flat flowcharts.
+    static func everyInput() throws -> [PeleRenderedInput] {
+        try corpus().inputs + randomFlat().inputs
+    }
+
     static func bench() throws -> PeleBenchResults {
         try JSONDecoder().decode(PeleBenchResults.self, from: resource(named: "pele-bench", extension: "json"))
     }
@@ -87,8 +103,8 @@ enum PeleResults {
         String(decoding: try resource(named: "PeleKnownDifferences", extension: "md"), as: UTF8.self)
     }
 
-    /// The sources of a corpus Pele's runner read: a documentation corpus, the agent flow reference's inputs, or the
-    /// generated graphs of Pele's benchmark.
+    /// The sources of a corpus Pele's runner read: a documentation corpus, the agent flow reference's inputs, the
+    /// generated graphs of Pele's benchmark, or the random flat flowcharts.
     static func sources(ofCorpus name: String) throws -> [String] {
         if name == "bench-generated" { return generatedBenchmarkInputs.map(\.source) }
         let data = try resource(named: name, extension: "json")

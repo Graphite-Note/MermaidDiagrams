@@ -6,8 +6,8 @@
  *              the scene with what Pele drew: the page within a tolerance, the texts and the shapes' subpaths by part.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -86,10 +86,10 @@ enum PeleComparison {
 
     /// Every input of `corpora` Pele's runner drew, prepared by the package.
     static func compared(corpora: Set<String>) throws -> [PeleComparedInput] {
-        let results = try PeleResults.corpus()
+        let inputs = try PeleResults.everyInput()
         let typography = typography
         var sourcesByCorpus: [String: [String]] = [:]
-        return try results.inputs.filter { pele in corpora.contains(pele.corpus) }.map { pele in
+        return try inputs.filter { pele in corpora.contains(pele.corpus) }.map { pele in
             if sourcesByCorpus[pele.corpus] == nil { sourcesByCorpus[pele.corpus] = try PeleResults.sources(ofCorpus: pele.corpus) }
             let source = sourcesByCorpus[pele.corpus]?[pele.index] ?? ""
             let outcome = Result { () throws(MermaidDiagramPreparationFailure) -> DiagramScene in

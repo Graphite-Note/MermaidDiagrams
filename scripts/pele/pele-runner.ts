@@ -7,8 +7,8 @@
  *              tests and its benchmark against Pele.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  *
  * MIT licensed, as the package is. It reads Pele's sources and corpora as data and runs none of Pele's scripts: see
  * README.md beside it for the exact command.
@@ -56,12 +56,15 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--bench]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg=<corpus>#<index>,…]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
 const runsCompat = flags.length === 0 || flags.includes('--compat');
 const runsBench = flags.length === 0 || flags.includes('--bench');
+const runsRandomFlat = flags.length === 0 || flags.includes('--random-flat');
+// --svg=<corpus>#<index>,… writes those inputs' SVGs to <output>/svg, to look at a drawing beside the package's.
+const svgInputs = flags.find((flag) => flag.startsWith('--svg='))?.slice('--svg='.length).split(',') ?? [];
 
 // Mermaid's Gantt charts are placed against "now": the package's tests and benchmark use the same instant
 // (GanttChartCorpus.now, 2014-01-15 12:00 UTC); the command runs with TZ=UTC.
@@ -169,6 +172,27 @@ function mesh(nodeCount: number, extraEdgeCount: number): string {
   return source;
 }
 
+// Random flat flowcharts for the layered layout: a seeded generator, as the mesh's, of 60 graphs of 4 to 33 nodes in
+// the four directions, with long edges (`--->`), labelled edges, edges back up the flow and parallel edges.
+function randomFlat(graphIndex: number): string {
+  let seed = 1000 + graphIndex * 7919;
+  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const directions = ['TD', 'LR', 'BT', 'RL'];
+  const nodeCount = 4 + Math.floor(random() * 30);
+  const edgeCount = nodeCount + Math.floor(random() * nodeCount);
+  let source = `flowchart ${directions[graphIndex % 4]}\n`;
+  for (let edge = 0; edge < edgeCount; edge++) {
+    const tail = Math.floor(random() * nodeCount);
+    const head = edge < nodeCount - 1 ? edge + 1 : Math.floor(random() * nodeCount);
+    const from = edge < nodeCount - 1 ? Math.floor(random() * (edge + 1)) : tail;
+    if (from === head) continue;
+    const kind = random();
+    const arrow = kind < 0.15 ? `-->|step ${edge}|` : kind < 0.25 ? '--->' : kind < 0.3 ? '-.->' : '-->';
+    source += `  n${from}[Node ${from}] ${arrow} n${head}[Node ${head}]\n`;
+  }
+  return source;
+}
+
 const generated: [string, string][] = [
   ['tree: 50 nodes', chain(50, 3)],
   ['mesh: 50 nodes, 20 extra labelled edges', mesh(50, 20)],
@@ -259,4 +283,27 @@ if (runsBench) {
   await Deno.writeTextFile(`${outputFolder}/pele-bench.json`, JSON.stringify(result, null, 1) + '\n');
   console.table(cases.map((item) => ({ case: item.name, diagrams: item.diagramCount, pele: `${item.medianMillisecondsPerCase} ms` })));
   console.table(perType.map((item) => ({ corpus: item.name, median: item.medianMicrosecondsPerDiagram, p99: item.percentile99MicrosecondsPerDiagram })));
+}
+
+if (runsRandomFlat) {
+  const sources = Array.from({ length: 60 }, (_, graphIndex) => randomFlat(graphIndex));
+  const records = sources.map((source, index) => record('random-flat', index, source));
+  await Deno.writeTextFile(`${outputFolder}/random-flat.json`, JSON.stringify(sources, null, 1) + '\n');
+  const lines = records.map((item) => JSON.stringify(item));
+  await Deno.writeTextFile(`${outputFolder}/pele-random-flat.json`, `{"inputs": [\n${lines.join(',\n')}\n]}\n`);
+  console.log(`random flat: ${records.length} inputs, ${records.filter((item) => item.error).length} refused`);
+}
+
+if (svgInputs.length > 0) {
+  await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+  const randomSources = Array.from({ length: 60 }, (_, graphIndex) => randomFlat(graphIndex));
+  for (const name of svgInputs) {
+    const [corpus, indexText] = name.split('#');
+    const sources = corpus === 'random-flat' ? randomSources : corpus === 'bench-generated' ? generated.map(([, source]) => source)
+      : allCorpora.find(([found]) => found === corpus)?.[1] ?? [];
+    const source = sources[Number(indexText)];
+    if (source === undefined) continue;
+    await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${indexText}.svg`, core.render(source, { now: ganttNow }).svg);
+  }
+  console.log(`svg: ${svgInputs.length} inputs written`);
 }

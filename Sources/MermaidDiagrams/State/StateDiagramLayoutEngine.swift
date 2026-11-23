@@ -17,10 +17,11 @@ import CoreGraphics
 /// transitions as S curves that spread along the sides of boxes; transitions to a state itself as loops beside it;
 /// notes beside their states across the flow; and the title above.
 public enum StateDiagramLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44)
+    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44, borderSeparation: 20,
+                                        routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
     /// The gaps of a diagram with composite states: a border point of a box is 20 points from the rank next to it, as in
     /// a flowchart's boxes.
-    static let clusterSpacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44, borderSeparation: 20)
+    static let clusterSpacing = spacing
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The widest a line of a state's or a transition's text is before it wraps.
@@ -61,7 +62,8 @@ public enum StateDiagramLayoutEngine {
                                      }
                                      return LayeredEdge(source: positionOfState[transition.sourceIndex], target: positionOfState[transition.targetIndex],
                                                         minimumRankSpan: 1, labelSize: labelSize)
-                                 })
+                                 },
+                                 nodeSideSpans: order.map { state in measured.sideSpan(of: state, in: diagram, flowIsVertical: flowAxes.flowIsVertical) })
         guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

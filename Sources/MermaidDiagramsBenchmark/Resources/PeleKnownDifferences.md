@@ -1,7 +1,8 @@
 # Known differences from Pele
 
 `PeleDifferentialTests` prepares every input Pele's runner drew (`pele-corpus.json`: Mermaid's documentation examples of
-every type, Pele's 239 agent flow reference inputs and the generated graphs of Pele's benchmark) with text measured in
+every type, Pele's 239 agent flow reference inputs and the generated graphs of Pele's benchmark; `pele-random-flat.json`:
+the runner's 60 random flat flowcharts, `random-flat`) with text measured in
 Arial, as Pele measures it outside a browser, and compares the scene with what Pele drew. An input differs when one side
 refuses it and the other draws it (`refused`), when its page differs in `width` or `height` by more than 2 points or 1 %
 (see `PeleComparison.isWithinTolerance`), when it holds another number of texts (`texts`: Pele's `<text>` elements and
@@ -24,10 +25,9 @@ drawings; those marked `not-traced` were not followed to their cause.
 | journey-parts | A user journey's dashed stems and score line are painted in the scene's `edge` part (`UserJourneyScene`); Pele classes them `pele-stems` and draws one `pele-edge` path. Nothing visible differs. |
 | beyond-ascii | Text outside ASCII (emoji, accented letters, ❤) is measured by Pele's table as 580 thousandths of the size (1,000 for wide scripts, text/measurer.ts `metricsMeasurer`) and by the package with Core Text and its fallback fonts. |
 | line-height | A label of more than one line (a `<br>`, or wrapped at its width) has its lines 1.5 sizes apart in the package's `DiagramTextBlock`, 1.3 sizes apart in Pele (text/label.ts `WRAPPED_LINE_HEIGHT`, used by `layoutLabel` for every label of more than one line). The plane maps, agent flows, C4 and use case diagrams already set such lines 1.3 apart (`PlaneMapLabel`, `C4TextLabel`, `UseCaseTextLabel`); the other types do not, which makes each extra line 3 to 6 points taller than Pele's. Left as it is here: changing `DiagramTextBlock` changes every multi-line layout of those types. |
+| bold-text | Text set bold by a class (`classDef … font-weight:bold`) or by Markdown's `**…**` is measured by Pele with its table's bold advances (text/measurer.ts), wider than the regular ones; the package measures these texts in the regular face (a state's or a requirement's class, a requirement's field or a note in Markdown), so the box is a few points narrower, or its text does not wrap at 200 points where Pele's does (state-docs#21: two lines, 18 points taller). |
 | icon-nodes | A flowchart node written `@{ icon: …, form: …, pos: …, h: … }` is drawn by Pele as an icon shape of that height with its label above or below; the package reads those keys and leaves them (`FlowchartNodeSyntax.readAttributes`), drawing a rectangle. |
 | icons-in-text | Pele draws `fa:fa-…` in a label as an icon one size wide (text/icons.ts); the package writes the words as text, so the labels are wider. |
-| layered-layout | The layered layout itself is Pele's, ported step for step (`LayeredFlatLayout` from layout/layered.ts, `LayeredCompoundLayout` from layout/compound.ts); these inputs still differ in what the type hands the layout (its nodes' spans, its groups' padding and order, its gaps and options), which is not yet Pele's for them. |
-| self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
 | not-traced | Not followed to its cause in this pass. |
 
 ## Inputs
@@ -35,9 +35,6 @@ drawings; those marked `not-traced` were not followed to their cause.
 | Input | Differs in | Reason | Package minus Pele (width, height) |
 |---|---|---|---|
 | agentflow-reference#131 | refused | nothing-to-draw |  |
-| agentflow-reference#134 | width, height | self-loop | -18 +4 |
-| agentflow-reference#135 | width | self-loop | -18 +2 |
-| agentflow-reference#230 | width, height | self-loop | -18 +4 |
 | block-docs#25 | texts | blank-text | +0 +0 |
 | block-docs#26 | texts | blank-text | +0 +0 |
 | er-docs#4 | width | beyond-ascii | +5 +0 |
@@ -47,8 +44,7 @@ drawings; those marked `not-traced` were not followed to their cause.
 | flowchart-docs#3 | height | not-traced | -1 +9 |
 | flowchart-docs#68 | width, height | icon-nodes | +28 -42 |
 | flowchart-docs#69 | width, height | icon-nodes | +28 -42 |
-| flowchart-docs#98 | texts | layered-layout, outlined-text | +0 +0 |
-| flowchart-docs#100 | width, height | layered-layout | -126 +96 |
+| flowchart-docs#98 | texts | outlined-text | +0 +0 |
 | flowchart-docs#102 | height | not-traced | -4 +12 |
 | flowchart-docs#111 | width, height | icons-in-text | +206 +24 |
 | flowchart-docs#112 | width, height | icons-in-text | +86 +24 |
@@ -64,28 +60,21 @@ drawings; those marked `not-traced` were not followed to their cause.
 | mindmap-docs#12 | height | beyond-ascii | +3 +9 |
 | railroad-docs#2 | width | not-traced | +4 +0 |
 | railroad-docs#12 | texts | not-traced | +0 +0 |
-| requirement-docs#3 | width | layered-layout | -5 +0 |
-| requirement-docs#8 | width | layered-layout | -27 +0 |
+| requirement-docs#3 | width | bold-text | -5 +0 |
+| requirement-docs#8 | width | bold-text | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
 | sequence-docs#23 | height | line-height | +0 +12 |
 | sequence-docs#24 | height | line-height | +0 +24 |
 | sequence-docs#29 | width | not-traced | -5 +0 |
 | sequence-docs#30 | width | not-traced | -5 +0 |
-| state-docs#2 | height | layered-layout | +0 -8 |
-| state-docs#3 | height | layered-layout | +0 -8 |
-| state-docs#10 | width, height | layered-layout | +16 -8 |
-| state-docs#11 | width, height | layered-layout | +24 -24 |
-| state-docs#12 | width, height | layered-layout | +16 -16 |
 | state-docs#15 | height | line-height | +0 +6 |
-| state-docs#16 | width, height | layered-layout | +20 -4 |
-| state-docs#17 | width | layered-layout | +8 +0 |
-| state-docs#21 | height | layered-layout | -2 -18 |
+| state-docs#21 | height | bold-text | -2 -18 |
 | timeline-docs#2 | height | line-height | +0 +9 |
 | timeline-docs#3 | height | line-height | +0 +30 |
 | timeline-docs#4 | height | line-height | +0 +12 |
 | timeline-docs#5 | height | line-height | +0 +18 |
 | treeview-docs#11 | width | beyond-ascii | +5 +0 |
-| usecase-docs#15 | width | layered-layout | -8 +0 |
+| usecase-docs#15 | width | bold-text | -8 +0 |
 | bench-generated#2 | refused | drawing-limit |  |
 | bench-generated#3 | refused | drawing-limit |  |
 

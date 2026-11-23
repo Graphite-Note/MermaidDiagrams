@@ -67,12 +67,12 @@ struct FlowchartClusterGraph {
             nodeSideSpans.append(measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: nodeLoopSides[node] == .bottom ? .left : .top))
         }
         self.layoutNodeIndices = layoutNodeIndices
-        // Pele lists the groups before the nodes, the last written first (flowchart/graph.ts), so an empty group
-        // comes before the nodes of its box.
+        // Pele lists the groups before the nodes, an outer group before those inside it (flowchart/graph.ts), so an
+        // empty group comes before the nodes of its box; a group an edge crosses runs as the box around it.
         let clusters = diagram.subgraphs.indices.map { subgraph in
-            var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: diagram.subgraphs[subgraph].direction,
+            var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: nesting.subgraphDirections[subgraph],
                                        title: measuredTitles[subgraph])
-            cluster.sequence = -CGFloat(subgraph + 1)
+            cluster.sequence = CGFloat(nesting.subgraphOrder[subgraph] - diagram.subgraphs.count)
             return cluster
         }
         let edges = Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,

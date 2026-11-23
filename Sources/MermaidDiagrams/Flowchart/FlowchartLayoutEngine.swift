@@ -79,7 +79,8 @@ public enum FlowchartLayoutEngine {
         page.placeEdges(layeredEdgeIndices: layeredEdgeIndices, placement: placement)
         page.placeSelfLoops()
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: .greatestFiniteMagnitude) }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        let extent = flowAxes.flowIsVertical ? placement.extent : CGSize(width: placement.extent.height, height: placement.extent.width)
+        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: extent)
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
@@ -100,6 +101,6 @@ public enum FlowchartLayoutEngine {
         page.placeSelfLoops()
         page.placeClusters(clustered: clustered, placement: placement)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: .greatestFiniteMagnitude) }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: placement.size)
     }
 }
