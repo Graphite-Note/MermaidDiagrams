@@ -28,33 +28,52 @@ extension DiagramTextBlock {
     /// single line is broken.
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, fittingWidth maximumWidth: CGFloat) {
         let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
-        var lines: [String] = []
-        var widths: [CGFloat] = []
-        for (line, width) in zip(wrapped.lines, wrapped.lineWidths) {
-            guard width > maximumWidth else {
-                lines.append(line)
-                widths.append(width)
+        guard wrapped.lineWidths.contains(where: { width in width > maximumWidth }) else {
+            self = wrapped
+            return
+        }
+        var measuring = DiagramStyledMeasuring(measurer)
+        var measured = DiagramMeasuredLines(keepsRuns: wrapped.lineRuns != nil)
+        for index in wrapped.lines.indices {
+            let spans = wrapped.runs(ofLine: index).map { run in DiagramMeasuredSpan(text: run.text, style: run.style, width: run.width) }
+            guard wrapped.lineWidths[index] > maximumWidth else {
+                measured.add(spans, width: wrapped.lineWidths[index])
                 continue
             }
-            var current = ""
-            var currentWidth: CGFloat = 0
-            for character in line {
-                let candidate = current + String(character)
-                let candidateWidth = measurer.width(of: candidate)
-                if !current.isEmpty, candidateWidth > maximumWidth {
-                    lines.append(current)
-                    widths.append(currentWidth)
-                    current = String(character)
-                    currentWidth = measurer.width(of: current)
-                } else {
-                    current = candidate
-                    currentWidth = candidateWidth
-                }
-            }
-            lines.append(current)
-            widths.append(currentWidth)
+            Self.breakBetweenCharacters(spans, into: &measured, measuring: &measuring, maximumWidth: maximumWidth)
         }
-        self.init(lines: lines, lineWidths: widths, fontSize: measurer.fontSize, lineHeight: wrapped.lineHeight)
+        self.init(lines: measured.lines, lineWidths: measured.widths, fontSize: measurer.fontSize, lineHeight: wrapped.lineHeight)
+        lineRuns = measured.hasEmphasis ? measured.runs : nil
+    }
+
+    /// A line's spans broken between characters where the line passes `maximumWidth`, each piece of a span measured in
+    /// its emphasis, as Pele's `fitLabel` and `breakLabel` break a span.
+    private static func breakBetweenCharacters<Measurer>(_ spans: [DiagramMeasuredSpan], into measured: inout DiagramMeasuredLines,
+                                                          measuring: inout DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
+        var current: [DiagramMeasuredSpan] = []
+        var width: CGFloat = 0
+        for span in spans {
+            for character in span.text {
+                var last = current.last.flatMap { last in last.style == span.style ? last : nil }
+                var added = measuring.width(of: (last?.text ?? "") + String(character), style: span.style) - (last?.width ?? 0)
+                if !current.isEmpty, width + added > maximumWidth {
+                    measured.add(current, width: width)
+                    current = []
+                    width = 0
+                    last = nil
+                    added = measuring.width(of: String(character), style: span.style)
+                }
+                if var joined = last {
+                    joined.text.append(character)
+                    joined.width += added
+                    current[current.count - 1] = joined
+                } else {
+                    current.append(DiagramMeasuredSpan(text: String(character), style: span.style, width: added))
+                }
+                width += added
+            }
+        }
+        measured.add(current, width: width)
     }
 
     /// Text that keeps every character but the spaces a line breaks at, as Pele's literal labels (a file's name) do:
@@ -107,8 +126,10 @@ extension DiagramTextBlock {
         lines.indices.map { index in
             let width = lineWidths[index]
             let middleAcross = left.map { left in left + width / 2 } ?? (right ?? 0) - width / 2
-            return DiagramTextBlock(lines: [lines[index]], lineWidths: [width], fontSize: fontSize, lineHeight: lineHeight,
-                                    center: CGPoint(x: middleAcross, y: top + (CGFloat(index) + 0.5) * lineHeight))
+            var line = DiagramTextBlock(lines: [lines[index]], lineWidths: [width], fontSize: fontSize, lineHeight: lineHeight,
+                                        center: CGPoint(x: middleAcross, y: top + (CGFloat(index) + 0.5) * lineHeight))
+            line.lineRuns = lineRuns.map { runs in [runs[index]] }
+            return line
         }
     }
 }

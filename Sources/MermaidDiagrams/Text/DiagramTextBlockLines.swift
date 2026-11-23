@@ -5,8 +5,8 @@
  * Description: A text block's lines as blocks of one line each, so that lines can be left aligned.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -20,8 +20,10 @@ extension DiagramTextBlock {
         let left = center.x - size.width / 2
         let top = center.y - size.height / 2
         return lines.indices.map { index in
-            DiagramTextBlock(oneLine: lines[index], width: lineWidths[index], fontSize: fontSize, lineHeight: lineHeight,
-                             center: CGPoint(x: left + lineWidths[index] / 2, y: top + (CGFloat(index) + 0.5) * lineHeight))
+            var line = DiagramTextBlock(oneLine: lines[index], width: lineWidths[index], fontSize: fontSize, lineHeight: lineHeight,
+                                        center: CGPoint(x: left + lineWidths[index] / 2, y: top + (CGFloat(index) + 0.5) * lineHeight))
+            line.lineRuns = lineRuns.map { runs in [runs[index]] }
+            return line
         }
     }
 

@@ -1,3 +1,14 @@
+/**
+ * File: ClassDiagramParserTests.swift
+ * -----------------------------------
+ * Layer: Tests
+ * Description: A class diagram read as Pele reads it: classes, members, relations, notes, namespaces and options.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.5
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -250,7 +261,9 @@ final class ClassDiagramParserTests: XCTestCase {
             let noted = try diagram("note \"This is a keyword: \(keyword). It truly is.\"\nclass Something\nnote for Something \"\(keyword)\"")
             XCTAssertEqual(noted.notes.map(\.text.spokenText), ["This is a keyword: \(keyword). It truly is.", keyword], keyword)
         }
-        XCTAssertEqual(try diagram("note \"About **it**\"").notes.first?.text, DiagramLabel("About it"), "A note's text is Markdown, as in Pele")
+        let note = try XCTUnwrap(try diagram("note \"About **it**\"").notes.first?.text)
+        XCTAssertEqual(note.lines, ["About it"], "A note's text is Markdown, as in Pele")
+        XCTAssertEqual(note.spans, [[DiagramLabelSpan(text: "About ", style: []), DiagramLabelSpan(text: "it", style: .bold)]])
     }
 
     func testNamespacesAreReadWithTheClassesDeclaredInsideThem() throws {

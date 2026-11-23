@@ -6,8 +6,8 @@
  *              text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -112,14 +112,32 @@ struct DiagramSVGBody {
         if let outline = text.outline {
             // The outline is a text of its own under the text, as Pele writes it: no fill, the stroke in the outline's paint.
             let stroke = Self.strokeAttributes(colors.text(of: outline.paint), DiagramStroke(lineWidth: outline.lineWidth, lineJoin: .round))
-            addLines(lines, attributes: head + " fill=\"none\" xml:space=\"preserve\"" + stroke + tail)
+            addLines(lines, attributes: head + " fill=\"none\" xml:space=\"preserve\"" + stroke + tail, hasRuns: text.styledRuns != nil)
         }
-        addLines(lines, attributes: head + " fill=\"\(paint.color)\" xml:space=\"preserve\"" + DiagramSVGWriter.opacity(paint.opacity, "fill-opacity") + tail)
+        addLines(lines, attributes: head + " fill=\"\(paint.color)\" xml:space=\"preserve\"" + DiagramSVGWriter.opacity(paint.opacity, "fill-opacity") + tail,
+                 hasRuns: text.styledRuns != nil)
     }
 
-    /// The `text` of `lines` with `attributes`: one `text` for one line, `tspan`s for several.
-    private mutating func addLines(_ lines: [DiagramSceneTextLine], attributes: String) {
+    /// The `text` of `lines` with `attributes`: one `text` for one line, `tspan`s for several. A text whose lines have
+    /// runs in their emphasis writes each line as Pele writes a label's spans: a `tspan` at the line's middle for its
+    /// first run and one after it for each other run, with the run's weight, slant or font.
+    private mutating func addLines(_ lines: [DiagramSceneTextLine], attributes: String, hasRuns: Bool) {
         let number = DiagramSVGSyntax.number
+        if hasRuns {
+            content += "<text\(attributes) text-anchor=\"middle\">"
+            for line in lines {
+                let position = " x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\""
+                guard !line.runs.isEmpty else {
+                    content += "<tspan\(position)></tspan>"
+                    continue
+                }
+                for (index, run) in line.runs.enumerated() {
+                    content += "<tspan\(index == 0 ? position : "")\(runAttributes(run.style))>\(DiagramSVGSyntax.escaped(run.text))</tspan>"
+                }
+            }
+            content += "</text>"
+            return
+        }
         if lines.count == 1, let line = lines.first {
             content += "<text\(attributes) x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\" text-anchor=\"middle\">"
                 + DiagramSVGSyntax.escaped(line.text) + "</text>"
@@ -130,5 +148,14 @@ struct DiagramSVGBody {
             content += "<tspan x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\">\(DiagramSVGSyntax.escaped(line.text))</tspan>"
         }
         content += "</text>"
+    }
+
+    /// The attributes of a run's emphasis, Pele's `spanStyle`.
+    private func runAttributes(_ style: DiagramTextStyle) -> String {
+        var attributes = ""
+        if style.contains(.bold) { attributes += " font-weight=\"bold\"" }
+        if style.contains(.italic) { attributes += " font-style=\"italic\"" }
+        if style.contains(.monospaced) { attributes += " font-family=\"\(monospacedFontFamily)\"" }
+        return attributes
     }
 }

@@ -6,8 +6,8 @@
  *              Text and SVG place it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -22,6 +22,9 @@ public struct DiagramSceneTextLine: Equatable, Sendable {
     public let width: CGFloat
     /// The left end of the line's baseline, Pele's `fontSize × 0.35` below the middle of its box.
     public let baselineStart: CGPoint
+    /// The line's pieces in their emphasis, from `baselineStart` on, each `width` after the one before: one run in the
+    /// text's own font for a line without emphasis, none for an empty line.
+    public let runs: [DiagramTextRun]
 }
 
 extension DiagramSceneText {
@@ -33,7 +36,14 @@ extension DiagramSceneText {
             let width = block.lineWidths[index]
             return DiagramSceneTextLine(text: block.lines[index], center: CGPoint(x: block.center.x, y: middle), width: width,
                                         baselineStart: CGPoint(x: block.center.x - width / 2,
-                                                               y: middle + block.fontSize * DiagramTextDrawing.baselineShiftRatio))
+                                                               y: middle + block.fontSize * DiagramTextDrawing.baselineShiftRatio),
+                                        runs: block.runs(ofLine: index))
         }
+    }
+
+    /// Each line's pieces in their emphasis (bold, italic or monospaced beyond `isBold`, `isItalic` and `isMonospaced`),
+    /// as Pele draws a label's spans, or nil when the whole text is in its own font.
+    public var styledRuns: [[DiagramTextRun]]? {
+        block.lineRuns
     }
 }

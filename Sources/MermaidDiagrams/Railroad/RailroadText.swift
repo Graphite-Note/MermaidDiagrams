@@ -6,8 +6,8 @@
  *              escapes written out, and a repetition's count.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 /// How a railroad diagram's text is shown.
@@ -61,8 +61,7 @@ enum RailroadText {
     private static func decoded(_ code: String) -> String {
         let isNumber = code.allSatisfy(\.isASCIIDigit)
         let entity = (isNumber ? "&#" : "&") + code + ";"
-        let decoded = DiagramLabelDecoder.decodingEntities(entity)
-        return decoded
+        return DiagramLabelEntities.htmlDecoded(entity)
     }
 }
 

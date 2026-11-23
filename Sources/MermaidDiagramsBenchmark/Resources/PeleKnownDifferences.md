@@ -18,13 +18,12 @@ drawings; those marked `not-traced` were not followed to their cause.
 | nothing-to-draw | The package refuses a diagram that declares nothing drawn (`MermaidDiagramPreparationFailure.nothingToDraw`), where Pele draws an empty page: intended. |
 | repeated-commit | A Git graph naming a commit id twice is refused (`duplicateCommitIdentifier`), where Pele, as Mermaid, warns and keeps the later commit in the earlier one's place (git/db.ts `add`), so that the graph loses a commit: intended (`GitGraphDiagramBuilder.refuseTakenIdentifier`). |
 | drawing-limit | Pele draws the 500-node mesh 22,433 points wide; the package refuses a drawing longer than `MermaidDiagramLimits.maximumDrawingSideLength` (20,000 points): intended. |
-| blank-text | A label of a space only (a block arrow's `[" "]`) is written by Pele as a `<text>` element; the scene writes no blank text. Nothing visible differs. |
+| blank-text | A label with nothing to show (a block arrow's `[" "]`, or a flowchart node's `(fa:fa-spinner)` whose icon Pele leaves out, having none to draw) is written by Pele as a `<text>` element; the scene writes no blank text. Nothing visible differs. |
 | text-per-line | Pele writes an event model's data as one `<text>` of left-aligned `<tspan>` lines; a scene text is one centred block, so each line is a text of its own. Nothing visible differs. |
 | outlined-text | Pele draws an outlined text (a Sankey diagram's `labelStyle: outlined`, a flowchart group's title over an edge) as two `<text>` elements, the halo and the text; the scene draws one text with its outline (`DiagramSceneText.outline`). Nothing visible differs. |
 | journey-parts | A user journey's dashed stems and score line are painted in the scene's `edge` part (`UserJourneyScene`); Pele classes them `pele-stems` and draws one `pele-edge` path. Nothing visible differs. |
 | beyond-ascii | Text outside ASCII (emoji, accented letters, ❤) is measured by Pele's table as 580 thousandths of the size (1,000 for wide scripts, text/measurer.ts `metricsMeasurer`) and by the package with Core Text and its fallback fonts. |
 | icon-nodes | A flowchart node written `@{ icon: …, form: …, pos: …, h: … }` is drawn by Pele as an icon shape of that height with its label above or below; the package reads those keys and leaves them (`FlowchartNodeSyntax.readAttributes`), drawing a rectangle. |
-| icons-in-text | Pele draws `fa:fa-…` in a label as an icon one size wide (text/icons.ts); the package writes the words as text, so the labels are wider. |
 | layered-layout | The layered layout places nodes differently: the package's ranking, ordering and positioning (`LayeredRanking`, `LayeredOrdering`, `LayeredPositioning`, `LayeredClusterLayout`) follow Pele's method but are not step-for-step ports of layout/layered.ts and layout/compound.ts (which, for example, balance ranks in eight passes, order with its own sweeps and straighten long edges past labels), so an edge of several ranks, a crossing or a group can end up elsewhere: in `flowchart-docs#92` the target of `---->` sits one rank lower than Pele puts it, in `requirement-docs#4` the two requirements under `test_req` are swapped and the relations cross. |
 | self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
 | not-traced | Not followed to its cause in this pass. |
@@ -57,8 +56,7 @@ drawings; those marked `not-traced` were not followed to their cause.
 | flowchart-docs#97 | width | layered-layout | -12 +0 |
 | flowchart-docs#98 | width, texts | layered-layout, outlined-text | -20 +0 |
 | flowchart-docs#100 | width, height | layered-layout | -126 +84 |
-| flowchart-docs#111 | width, height | icons-in-text | +206 +18 |
-| flowchart-docs#112 | width, height | icons-in-text | +86 +18 |
+| flowchart-docs#111 | texts | blank-text | +0 +0 |
 | gantt-docs#6 | refused | nothing-to-draw |  |
 | git-docs#12 | width, height | not-traced | +56 -12 |
 | git-docs#14 | refused | repeated-commit |  |
@@ -67,7 +65,6 @@ drawings; those marked `not-traced` were not followed to their cause.
 | journey-docs#0 | edges | journey-parts | +0 +0 |
 | railroad-docs#2 | width | not-traced | +4 +0 |
 | railroad-docs#12 | texts | not-traced | +0 +0 |
-| requirement-docs#3 | width | layered-layout | -5 +0 |
 | requirement-docs#4 | width | layered-layout | +270 +0 |
 | requirement-docs#8 | width | layered-layout | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
@@ -86,7 +83,6 @@ drawings; those marked `not-traced` were not followed to their cause.
 | usecase-docs#1 | height | layered-layout | +0 +4 |
 | usecase-docs#2 | height | layered-layout | +0 +4 |
 | usecase-docs#11 | height | layered-layout | +0 -8 |
-| usecase-docs#15 | width | layered-layout | -8 +0 |
 | usecase-docs#22 | height | layered-layout | -3 +18 |
 | bench-generated#0 | width | layered-layout | -368 +0 |
 | bench-generated#1 | width, height | layered-layout | -754 -115 |
@@ -106,7 +102,6 @@ differs is listed by its index in that file, what differs (`FlowchartSpecCompari
 | yaml-block-scalar | A node's `@{ … }` with a YAML block scalar (`label:`, a vertical bar and indented lines) is read by Pele's YAML reader; the package's attribute reader takes one line per value and refuses it. |
 | edge-identifier-and-quotes | `A id1@-->B` (an edge id after a space) and a single-quoted `shape: 'rect'` are read by Pele; the package refuses the line. |
 | markdown-text | A Markdown string's label: the package keeps its text as styled spans and the comparison strips Pele's marks, so a string with a line break or `*` inside words differs in what is compared, not in what is drawn (not traced further). |
-| spaces-in-text | `Chimpansen hoppar åäö  <br> -  ÅÄÖ`: the node's text differs in its spaces around the line break (not traced further). |
 | trailing-spaces-group | `subgraph myTitle   ` (spaces before the line's end) is a title without an identifier for Pele (`subGraph0` titled `myTitle`); the package takes `myTitle` as the identifier. |
 
 | Text | Differs in | Reason |
@@ -183,7 +178,6 @@ differs is listed by its index in that file, what differs (`FlowchartSpecCompari
 | 522 | refused | identifier-characters |
 | 523 | refused | identifier-characters |
 | 865 | refused | identifier-characters |
-| 869 | node texts | spaces-in-text |
 | 886 | refused | text-brackets |
 | 887 | refused | text-brackets |
 | 888 | refused | text-brackets |

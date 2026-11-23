@@ -19,14 +19,13 @@ import CoreGraphics
 enum C4TextLabel {
     static func block(_ text: String?, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> DiagramTextBlock? {
         guard let text, !text.isEmpty else { return nil }
-        let written = text.contains("\\n") ? text.replacingOccurrences(of: "\\n", with: "\n") : text
-        let decoded = DiagramLabelDecoder.label(from: written, form: .plain)
-        let label = DiagramLabel(lines: decoded.lines.map(C4Characters.trimmed))
+        // The decoder breaks at a written `\\n` and trims each line before reading its codes, as Pele's layoutLabel does.
+        let label = DiagramLabelDecoder.label(from: text, form: .plain)
         let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
+        guard wrapped.lines.isEmpty else { return wrapped }
         // Lines with nothing on them still take their height, as Pele lays out each part between breaks.
-        let lines = wrapped.lines.isEmpty ? (label.lines.isEmpty ? [""] : label.lines) : wrapped.lines
-        let widths = wrapped.lines.isEmpty ? lines.map { _ in CGFloat(0) } : wrapped.lineWidths
-        return DiagramTextBlock(lines: lines, lineWidths: widths, fontSize: measurer.fontSize,
+        let lines = label.lines.isEmpty ? [""] : label.lines
+        return DiagramTextBlock(lines: lines, lineWidths: lines.map { _ in CGFloat(0) }, fontSize: measurer.fontSize,
                                 lineHeight: DiagramTextBlock.lineHeight(lineCount: lines.count, measurer: measurer))
     }
 }
