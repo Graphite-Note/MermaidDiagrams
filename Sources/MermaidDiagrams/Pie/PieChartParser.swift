@@ -1,3 +1,14 @@
+/**
+ * File: PieChartParser.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Reads a pie chart's statements after its `pie` keyword, as Mermaid's grammar does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Reads a pie chart's statements after its `pie` keyword, as Mermaid's grammar does: `showData` on the keyword's
 /// line, then, each ending its line, `title …`, `accTitle: …`, `accDescr: …` or `accDescr { … }`, and slices
 /// (`"label" : value`). `%%` starts a comment, and `%%{ … }%%` is a directive, which is left.
@@ -16,7 +27,7 @@ struct PieChartParser {
     /// Reads the pie chart whose `pie` keyword ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> PieChart {
         var parser = PieChartParser(cursor: cursor, limits: limits)
-        parser.chart.options = PieChartOptions(MermaidConfigurationOptions(section: "pie", in: cursor.bytes))
+        parser.chart.options = PieChartOptions(MermaidConfigurationOptions(section: "pie", in: cursor.sourceBytes))
         parser.readShowData()
         try parser.readStatements()
         return parser.chart

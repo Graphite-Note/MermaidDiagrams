@@ -56,12 +56,13 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--bench] [--svg]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--bench] [--preprocessing] [--svg]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
 const runsCompat = flags.length === 0 || flags.includes('--compat');
 const runsBench = flags.length === 0 || flags.includes('--bench');
+const runsPreprocessing = flags.length === 0 || flags.includes('--preprocessing');
 // `--svg` (with `--corpus`) also writes each input's SVG as svg/<corpus>-<index>.svg, to look at beside the package's drawing.
 const writesDrawings = flags.includes('--svg');
 
@@ -253,6 +254,15 @@ if (runsCompat) {
   const lines = parsed.map((item) => JSON.stringify(item));
   await Deno.writeTextFile(`${outputFolder}/pele-flowchart-compat.json`, `[\n${lines.join(',\n')}\n]\n`);
   console.log(`compat: ${parsed.length} texts parsed by the flowchart specs, ${parsed.filter((item) => item.error).length} refused`);
+}
+
+if (runsPreprocessing) {
+  const { recordYaml, recordPreprocessing } = await import('./preprocessing-recorder.ts');
+  const { parseYaml } = await import(`${peleRoot}/src/util/yaml.ts`);
+  const { preprocess, encodeEntities } = await import(`${peleRoot}/src/preprocess.ts`);
+  const result = { yaml: recordYaml(parseYaml), preprocessing: recordPreprocessing(preprocess, encodeEntities) };
+  await Deno.writeTextFile(`${outputFolder}/pele-preprocessing.json`, JSON.stringify(result, null, 1) + '\n');
+  console.log(`preprocessing: ${result.yaml.length} YAML texts and ${result.preprocessing.length} diagram texts`);
 }
 
 if (runsBench) {

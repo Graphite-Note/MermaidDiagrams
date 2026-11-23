@@ -5,8 +5,8 @@
  * Description: Reading flowcharts: nodes, edges, groups, statements and errors.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -90,10 +90,12 @@ final class FlowchartParserTests: XCTestCase {
     }
 
     func testAttributesNameTheShapeAndTheText() throws {
-        let diagram = try flowchart("A@{ shape: diam, label: \"Is it, really?\" }\nB@{shape: cloud}\nC@{ icon: \"fa:user\",\n  shape: cyl }")
+        let diagram = try flowchart("A@{ shape: diam, label: \"Is it, really?\" }\nB@{shape: cloud}\nC@{\n  icon: \"fa:user\"\n  shape: cyl\n}")
         XCTAssertEqual(diagram.nodes[0], FlowchartNode(identifier: "A", label: DiagramLabel("Is it, really?"), shape: .diamond))
         XCTAssertEqual(diagram.nodes[1].shape, .cloud)
         XCTAssertEqual(diagram.nodes[2].shape, .cylinder)
+        // Over several lines the data is block YAML, where a comma after a quoted value is refused, as Pele refuses it.
+        XCTAssertThrowsError(try flowchart("C@{ icon: \"fa:user\",\n  shape: cyl }"))
     }
 
     func testClassesOnANodeNobodyDefinedLeaveTheNodeKeptAndUnstyled() throws {
@@ -180,11 +182,14 @@ final class FlowchartParserTests: XCTestCase {
         style A fill:#f9f,stroke:#333,stroke-width:4px; B --> C
         linkStyle 0 stroke:#ff3,stroke-width:4px
         click A "https://example.com" "Tooltip; with a semicolon"
-        """)
+        """.replacingOccurrences(of: "4px; B --> C", with: "4px;\nB --> C"))
         XCTAssertEqual(diagram.unappliedStatementCount, 1)
-        XCTAssertEqual(diagram.edges.count, 2, "A statement after a style's semicolon is read")
+        XCTAssertEqual(diagram.edges.count, 2)
         XCTAssertNotNil(diagram.nodes[0].style)
         XCTAssertNotNil(diagram.edges[0].style)
+        // A colored style's last semicolon goes before the text is read (Pele's dropColorSemicolons), so the statement
+        // after it on the same line becomes part of the style, which Pele's grammar refuses.
+        XCTAssertThrowsError(try flowchart("A --> B\nstyle A fill:#f9f,stroke-width:4px; B --> C"))
     }
 
     func testAccessibilityTitleAndDescriptionAreKept() throws {

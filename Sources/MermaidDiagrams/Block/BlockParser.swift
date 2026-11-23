@@ -6,8 +6,8 @@
  *              every link of a statement kept, each error with its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Reads a block diagram's text, from its keyword, as Pele's `parseBlock` reads Mermaid's grammar: a composite that
@@ -33,7 +33,7 @@ struct BlockParser {
         var hierarchy = BlockHierarchy(statements: parser.statements, generatedIdentifierCount: parser.generatedIdentifierCount)
         hierarchy.set(top)
         var diagram = hierarchy.diagram
-        if case .number(let padding) = MermaidConfigurationOptions(section: "block", in: cursor.bytes).values["padding"], padding >= 0 {
+        if case .number(let padding) = MermaidConfigurationOptions(section: "block", in: cursor.sourceBytes).values["padding"], padding >= 0 {
             diagram.padding = min(padding, BlockLayoutEngine.largestPadding)
         }
         return diagram

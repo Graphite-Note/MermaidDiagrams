@@ -5,8 +5,8 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads an XY chart's statements after its `xychart` or `xychart-beta` keyword, as Mermaid's grammar and Pele's
@@ -33,7 +33,7 @@ struct XYChartParser {
         parser.readKeywordLines()
         try parser.readStatements()
         var chart = parser.builder.chart
-        chart.options = XYChartOptions(MermaidConfigurationOptions(section: "xyChart", in: cursor.bytes))
+        chart.options = XYChartOptions(MermaidConfigurationOptions(section: "xyChart", in: cursor.sourceBytes))
         if !chart.isOrientationWritten { chart.orientation = chart.options.orientation }
         return chart
     }

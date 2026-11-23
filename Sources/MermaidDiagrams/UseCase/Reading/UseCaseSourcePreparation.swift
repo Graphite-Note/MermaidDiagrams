@@ -7,15 +7,15 @@
  *              end; the line breaks taken out are kept count of, so that an error names its line as written.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// What Pele's `parse` (`core.ts`) does to the text before its use case parser reads it: every `\r\n` and lone `\r`
 /// becomes `\n` (`normalizeLineBreaks`); a line holding only a comment, `%%` and more but not `%%{`, goes with the
-/// blank lines before it (`cleanupComments`, `/^\s*%%(?!{)[^\n]+\n?/gm`); the last semicolon of a colored `style` or
-/// `classDef` line goes (`dropColorSemicolons`); and a line break ends the text, so that text cut off at the end breaks
-/// on it and the end of the text is on the line after the last one written.
+/// blank lines before it (`cleanupComments`, `/^\s*%%(?!{)[^\n]+\n?/gm`); and a line break ends the text, so that text
+/// cut off at the end breaks on it and the end of the text is on the line after the last one written. The last semicolon
+/// of a colored `style` or `classDef` line (`dropColorSemicolons`) is dropped before, for every type.
 /// Line breaks taken out with comment lines: from `line` of the text left on, `count` of them in all went before it.
 struct UseCaseRemovedLineBreaks: Equatable {
     let line: Int
@@ -25,8 +25,8 @@ struct UseCaseRemovedLineBreaks: Equatable {
 enum UseCaseSourcePreparation {
     static func prepared(_ written: [UInt16]) -> UseCaseCharacters {
         let comments = withoutCommentLines(withLineBreaksNormalized(written))
-        // Dropping semicolons keeps every line break, so the lines where comment lines went stay where they are.
-        var units = UseCaseColorSemicolons.dropping(in: comments.units)
+        // The semicolon a colored `style` or `classDef` loses is dropped before, for every type (`MermaidPreprocessing`).
+        var units = comments.units
         units.append(UseCaseCharacters.lineFeed)
         return UseCaseCharacters(units: units, removedLineBreaks: comments.removals)
     }

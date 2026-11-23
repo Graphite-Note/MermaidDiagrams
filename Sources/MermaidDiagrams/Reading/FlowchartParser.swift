@@ -79,6 +79,9 @@ struct FlowchartParser {
         case "classDef", "class", "style", "linkStyle":
             let statementStart = cursor.position
             skipStatement()
+            guard FlowchartStyleGrammar.isReadByPele(keyword: word, in: cursor.bytes, from: statementStart, to: cursor.position) else {
+                throw .invalidSyntax(line: statementLine, problem: .unexpectedText(cursor.trimmedText(from: statementStart, to: cursor.position)))
+            }
             builder.apply(FlowchartStyleSyntax.statement(keyword: word, text: cursor.trimmedText(from: statementStart, to: cursor.position)))
         default:
             // `click`.

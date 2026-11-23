@@ -5,8 +5,8 @@
  * Description: Gantt statements read as Mermaid's grammar reads them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -224,7 +224,8 @@ final class GanttChartParserTests: XCTestCase {
     }
 
     func testWhatCannotStartAStatementIsUnexpected() {
-        XCTAssertEqual(readError("gantt\n%%{init: {}}%%"), .invalidSyntax(line: 2, problem: .unexpectedText("%%{init: {}}%%")))
+        // A directive is taken out wherever it stands before the chart is read (Pele's preprocess.ts `directives`).
+        XCTAssertNil(readError("gantt\n%%{init: {}}%%"))
         XCTAssertEqual(readError("gantt\n2014-01-01 : 1d"), .invalidSyntax(line: 2, problem: .unexpectedText("2014-01-01 : 1d")))
         XCTAssertEqual(readError("gantt\n: 1d"), .invalidSyntax(line: 2, problem: .unexpectedText(": 1d")))
         XCTAssertEqual(readError("gantt\ngantt"), .invalidSyntax(line: 2, problem: .unexpectedText("gantt")))

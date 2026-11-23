@@ -6,8 +6,8 @@
  *              the header and its direction, then the document's statements, and Jison's errors with their lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads an agent flow token by token as Pele's hand-written port of Mermaid's agentflow.jison does: blocks nest without
@@ -30,7 +30,7 @@ struct AgentFlowParser {
         let units = AgentFlowPreparedText.units(of: cursor.text(from: lineStart, to: cursor.bytes.count))
         var parser = AgentFlowParser(units: units, builder: AgentFlowDiagramBuilder(limits: limits, lineOffset: cursor.line - 1))
         try parser.readDiagram()
-        parser.builder.diagram.options = AgentFlowOptions(MermaidConfigurationOptions(section: "agentflow", in: cursor.bytes))
+        parser.builder.diagram.options = AgentFlowOptions(MermaidConfigurationOptions(section: "agentflow", in: cursor.sourceBytes))
         parser.builder.buildGraph()
         return parser.builder.diagram
     }

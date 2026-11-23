@@ -6,8 +6,8 @@
  *              each statement by its first token, its parts in order, then Mermaid's builder fills the map.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a Wardley map's statements from its tokens (`WardleyMapLexer`), each ending at a line break or the end of the
@@ -25,7 +25,7 @@ struct WardleyMapParser {
         var parser = WardleyMapParser(tokens: try WardleyMapLexer.tokens(after: cursor), bytes: cursor.bytes, limits: limits)
         try parser.readStatements()
         var map = try WardleyMapBuilder.map(of: parser.statements, bytes: cursor.bytes)
-        map.options = WardleyMapOptions(MermaidConfigurationOptions(section: "wardley-beta", in: cursor.bytes))
+        map.options = WardleyMapOptions(MermaidConfigurationOptions(section: "wardley-beta", in: cursor.sourceBytes))
         return map
     }
 

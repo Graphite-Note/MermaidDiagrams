@@ -111,17 +111,8 @@ drawings.
 recorded from Pele's ports in `tests/compat/flowchart`) and compares the flowchart with Pele's database, each of Pele's
 texts as its label layout draws it (`PeleDrawnText`: broken at `<br>`, `\n` and line breaks, trimmed, a Markdown string
 without its emphasis markers). Each text that differs is listed by its index in that file, what differs
-(`FlowchartSpecComparison`) and why.
-
-| Reason | What differs |
-|---|---|
-| yaml-block-scalar | A node's `@{ … }` with a YAML block scalar (`label:`, a vertical bar and indented lines) is read by Pele's YAML reader; the package's attribute reader takes one line per value and refuses it. |
-| edge-identifier-and-quotes | `A id1@-->B` (an edge id after a space) and a single-quoted `shape: 'rect'` are read by Pele; the package refuses the line. |
-
-| Text | Differs in | Reason |
-|---|---|---|
-| 66 | refused | edge-identifier-and-quotes |
-| 366 | refused | yaml-block-scalar |
+(`FlowchartSpecComparison`) and why, in a table of reasons and a table of texts (`| Text | Differs in | Reason |`).
+Every text is read as Pele reads it today: none is listed.
 
 ## Compat files without copied texts
 

@@ -6,8 +6,8 @@
  *              Mermaid's railroad specs as Pele ports them, and Pele's own tests of how each notation becomes one tree.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -171,13 +171,15 @@ final class RailroadParserTests: XCTestCase {
 
           %% not matched
         b") ;
-        s = terminal("%%{kept}") ;
         t = terminal("c
         %%
         d") ;
         """)
         XCTAssertEqual(diagram.accessibilityDescription, "first\nsecond")
-        XCTAssertEqual(diagram.rules.map(\.definition), [t("a\nb"), t("%%{kept}"), t("c\n%%\nd")])
+        XCTAssertEqual(diagram.rules.map(\.definition), [t("a\nb"), t("c\n%%\nd")])
+        // `%%{` and a word start a directive even inside a string, and an unclosed one runs to the end of the text,
+        // which Pele takes out with it (preprocess.ts `directives`): the string is left unclosed.
+        XCTAssertNotNil(RailroadReading.readError("railroad-beta\ns = terminal(\"%%{kept}\") ;\nt = terminal(\"c\") ;"))
         XCTAssertEqual(RailroadReading.readError("railroad-beta\n%% one\n\n  %% two\nr = terminal(\"a\") ;\n%% three\ns = x ;"),
                        .invalidSyntax(line: 7, problem: .railroad(.expectedExpression)))
         XCTAssertEqual(RailroadReading.readError("railroad-beta\r\nr = terminal(\"a\r\n%% c\r\nb\") ;\r\ns = x ;"),

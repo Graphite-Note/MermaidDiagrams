@@ -7,8 +7,8 @@
  *              their quoted items, and transitions.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A token of a Cynefin framework.
@@ -35,7 +35,7 @@ struct CynefinParser {
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> CynefinDiagram {
         var parser = CynefinParser(tokens: try CynefinLexer.tokens(after: cursor, limits: limits), bytes: cursor.bytes, limits: limits)
-        parser.diagram.options = CynefinOptions(MermaidConfigurationOptions(section: "cynefin", in: cursor.bytes))
+        parser.diagram.options = CynefinOptions(MermaidConfigurationOptions(section: "cynefin", in: cursor.sourceBytes))
         try parser.readStatements()
         return parser.diagram
     }
