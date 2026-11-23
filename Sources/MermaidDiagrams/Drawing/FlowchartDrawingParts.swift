@@ -5,8 +5,8 @@
  * Description: A laid-out flowchart's geometry grouped by how it is painted.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -126,6 +126,13 @@ public struct FlowchartDrawingParts {
                     continue
                 }
                 texts.append(node.text)
+                if let asset = node.asset {
+                    if let frame = FlowchartNodeAssetDrawing.frame(of: asset, in: node) {
+                        fills.addPath(frame)
+                        outlines.addPath(frame)
+                    }
+                    continue
+                }
                 if let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) {
                     layered.append(contentsOf: layers)
                     continue

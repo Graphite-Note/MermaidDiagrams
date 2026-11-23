@@ -56,15 +56,17 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg=<corpus>#<index>,…]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg] [--svg-of=<corpus>#<index>,…]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
 const runsCompat = flags.length === 0 || flags.includes('--compat');
 const runsBench = flags.length === 0 || flags.includes('--bench');
 const runsRandomFlat = flags.length === 0 || flags.includes('--random-flat');
-// --svg=<corpus>#<index>,… writes those inputs' SVGs to <output>/svg, to look at a drawing beside the package's.
-const svgInputs = flags.find((flag) => flag.startsWith('--svg='))?.slice('--svg='.length).split(',') ?? [];
+// --svg-of=<corpus>#<index>,… writes those inputs' SVGs to <output>/svg, to look at a drawing beside the package's.
+const svgInputs = flags.find((flag) => flag.startsWith('--svg-of='))?.slice('--svg-of='.length).split(',') ?? [];
+// --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
+const writesDrawings = flags.includes('--svg');
 
 // Mermaid's Gantt charts are placed against "now": the package's tests and benchmark use the same instant
 // (GanttChartCorpus.now, 2014-01-15 12:00 UTC); the command runs with TZ=UTC.
@@ -252,6 +254,19 @@ const allCorpora = await corpora();
 const machine = { deno: Deno.version.deno, v8: Deno.version.v8, os: Deno.build.os, arch: Deno.build.arch };
 const peleVersion = JSON.parse(await Deno.readTextFile(`${peleRoot}/package.json`)).version;
 await Deno.mkdir(outputFolder, { recursive: true });
+
+if (writesDrawings) {
+  await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+  for (const [corpus, sources] of allCorpora) {
+    for (const [index, source] of sources.entries()) {
+      try {
+        await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${index}.svg`, core.render(source, { now: ganttNow }).svg);
+      } catch {
+        // A refused input has no drawing; pele-corpus.json records its error.
+      }
+    }
+  }
+}
 
 if (runsCorpus) {
   const records: InputRecord[] = [];

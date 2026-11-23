@@ -53,9 +53,8 @@ struct FlowchartPageAssembly {
                                                side: arrivesFromUpstream ? axes.upstreamSide : axes.downstreamSide,
                                                neighborAcross: route[route.count - 2].x))
         }
-        let shapes = diagram.nodes.map(\.shape)
-        let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters, shapes: shapes,
-                                       shapeSizes: measured.shapeSizes, spreadsEnds: measured.spreadsEdgeEnds)
+        let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters, shapes: measured.layoutShapes(of: diagram),
+                                       shapeSizes: measured.shapeSizes, spreadsEnds: measured.spreadsEdgeEnds, endsAtMiddle: measured.assetNodes)
         for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
             // Each end where Pele's layout settled it, moved onto its shape's outline; the spread ends where it left none.
@@ -92,7 +91,7 @@ struct FlowchartPageAssembly {
             let isGroup = clustered?.representedSubgraphs[node] != nil
             for (loopIndex, edgeIndex) in loopEdgeIndices.enumerated() {
                 let edge = diagram.edges[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shape: diagram.nodes[node].shape, size: isGroup ? .zero : measured.shapeSizes[node],
+                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shape: measured.assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape, size: isGroup ? .zero : measured.shapeSizes[node],
                                                    loopSide: clustered?.loopSides[node] ?? axes.loopSide, loopIndex: loopIndex,
                                                    textSize: measured.edgeTexts[edgeIndex]?.size)
                 let arriving = unitVector(from: loop.control2, to: loop.back)
@@ -137,11 +136,11 @@ struct FlowchartPageAssembly {
         }
         let boxCenters = placement.clusterFrames.map { frame in CGPoint(x: frame.midX, y: frame.midY) }
         let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edges.count, nodeCenters: nodeCenters + boxCenters,
-                                       shapes: diagram.nodes.map { node in node.shape } + Array(repeating: .rectangle, count: boxCenters.count),
+                                       shapes: measured.layoutShapes(of: diagram) + Array(repeating: .rectangle, count: boxCenters.count),
                                        shapeSizes: measured.shapeSizes + placement.clusterFrames.map { frame in frame.size },
                                        keptClear: FlowchartBorderCrossings.crossings(routes: placement.edgeRoutes, frames: placement.clusterFrames,
                                                                                  firstBoxNode: diagram.nodes.count),
-                                       spreadsEnds: measured.spreadsEdgeEnds)
+                                       spreadsEnds: measured.spreadsEdgeEnds, endsAtMiddle: measured.assetNodes)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
             if placement.strayEdgeIndices.contains(layoutIndex) {
@@ -165,7 +164,8 @@ struct FlowchartPageAssembly {
     /// A route's end on the outline of `node`'s shape, from the side of its layout box the layout left it on.
     private func outlineEnd(_ end: CGPoint, node: Int, loopSide: DiagramSide) -> CGPoint? {
         FlowchartRouteEnds.outlinePoint(of: end, center: nodeCenters[node], boxSize: measured.layoutSize(of: node, loopSide: loopSide),
-                                        shape: diagram.nodes[node].shape, shapeSize: measured.shapeSizes[node])
+                                        shape: measured.assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape,
+                                        shapeSize: measured.shapeSizes[node])
     }
 
     /// A route's end through boxes on its node's outline, or on the box of the group the node stands for.
@@ -226,7 +226,7 @@ struct FlowchartPageAssembly {
             return FlowchartLayoutNode(shape: diagram.nodes[node].shape,
                                        frame: CGRect(x: nodeCenters[node].x - size.width / 2, y: nodeCenters[node].y - size.height / 2,
                                                      width: size.width, height: size.height),
-                                       text: text, style: diagram.nodes[node].style)
+                                       text: text, style: diagram.nodes[node].style, asset: diagram.nodes[node].asset)
         }
         // A node that stands for a group is its box, not a node.
         let nodes = clustered.map { clustered in

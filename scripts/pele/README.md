@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg=<corpus>#<index>,…]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg] [--svg-of=<corpus>#<index>,…]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -44,12 +44,15 @@ With no flag it does the corpus, compat, random flat and bench runs:
 - `--random-flat` generates 60 random flat flowcharts (a seeded generator, as the benchmark's mesh: 4 to 33 nodes in the
   four directions, with long, labelled, dotted and backward edges) for the layered layout, and writes their sources
   (`random-flat.json`) and what Pele drew of them, recorded as the corpus is (`pele-random-flat.json`).
-- `--svg=<corpus>#<index>,…` writes the SVGs Pele draws of those inputs to `<output>/svg`, to look at beside the
-  package's drawing; it records nothing.
+- `--svg-of=<corpus>#<index>,…` writes the SVGs Pele draws of those inputs only (a random flat flowchart or a generated
+  graph included) to `<output>/svg`; it records nothing.
 - `--bench` reproduces Pele's `scripts/bench.mjs` (its five cases: the 114 flowchart examples, a tree and a mesh of 50 and
   of 500 nodes, generated with the same seed; each case timed whole, one run not counted, then runs until 300 ms are
   spent, at least 5 and at most 2,000) and times each type's documentation examples the same way, and writes
   `pele-bench.json` with the median per case and the median and 99th percentile per diagram.
+
+- `--svg` writes the SVG Pele draws for each documentation example to `svg/<corpus>-<index>.svg` in the output folder
+  (refused inputs have none), untimed, to compare a drawing with the package's by eye; it runs only when asked for.
 
 The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
 `random-flat.json` and `pele-random-flat.json` in

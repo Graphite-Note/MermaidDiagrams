@@ -1,58 +1,121 @@
+/**
+ * File: DiagramTextBlock.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: Lines of a diagram's text measured in a font and placed around a center, wrapped at a width as Pele's
+ *              layoutLabel wraps them, a text of more than one line set 1.3 times its size apart.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lines of text placed in a diagram: each line's width in the font it was measured in, and where the block's center is.
-/// Lines are drawn centered on the block's center, one `lineHeight` apart.
+/// Lines are drawn centered on the block's center, one `lineHeight` apart: the measurer's line height (1.5 times the size)
+/// for a single line, 1.3 times the size, rounded, for a text of more than one (Pele's `WRAPPED_LINE_HEIGHT`).
 public struct DiagramTextBlock: Equatable, Sendable {
     public let lines: [String]
     public let lineWidths: [CGFloat]
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     public internal(set) var center: CGPoint
+    /// Each line's pieces in their emphasis, one after the other from the line's start, or nil when every line is in the
+    /// text's own font. A line's runs hold its characters, and their widths add up to its width.
+    public internal(set) var lineRuns: [[DiagramTextRun]]? = nil
 
     public var size: CGSize {
         CGSize(width: lineWidths.max() ?? 0, height: CGFloat(lines.count) * lineHeight)
     }
 
-    /// Measures `label` in `measurer`'s font, wrapping each line at spaces where it is wider than `maximumWidth`. A
-    /// word wider than that stays whole on its own line. An empty label has no lines.
+    /// Measures `label` in `measurer`'s font, each span in its emphasis, as Pele's `layoutLabel` measures it, and
+    /// wraps a line wider than `maximumWidth` between its pieces (`DiagramTextWrapping`). A word wider than that stays
+    /// whole on its own line. An empty label has no lines.
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) {
-        var lines: [String] = []
-        var widths: [CGFloat] = []
+        var measured = DiagramMeasuredLines(keepsRuns: label.spans != nil)
         if !label.isEmpty {
-            for line in label.lines {
-                for (wrappedLine, width) in Self.wrapped(line, measurer: measurer, maximumWidth: maximumWidth) {
-                    lines.append(wrappedLine)
-                    widths.append(width)
-                }
+            var measuring = DiagramStyledMeasuring(measurer)
+            for index in label.lines.indices {
+                measured.add(label, line: index, measuring: &measuring, maximumWidth: maximumWidth)
             }
         }
-        self.lines = lines
-        self.lineWidths = widths
+        self.lines = measured.lines
+        self.lineWidths = measured.widths
         self.fontSize = measurer.fontSize
-        self.lineHeight = measurer.lineHeight
+        self.lineHeight = Self.lineHeight(lineCount: measured.lines.count, measurer: measurer)
         self.center = .zero
+        self.lineRuns = measured.hasEmphasis ? measured.runs : nil
     }
 
-    private static func wrapped(_ line: String, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> [(String, CGFloat)] {
-        let width = measurer.width(of: line)
-        guard width > maximumWidth, line.contains(" ") else { return [(line, width)] }
-        var wrapped: [(String, CGFloat)] = []
-        var current = ""
-        var currentWidth: CGFloat = 0
-        for word in line.split(separator: " ") {
-            let candidate = current.isEmpty ? String(word) : current + " " + word
-            let candidateWidth = measurer.width(of: candidate)
-            if candidateWidth > maximumWidth, !current.isEmpty {
-                wrapped.append((current, currentWidth))
-                current = String(word)
-                currentWidth = measurer.width(of: current)
-            } else {
-                current = candidate
-                currentWidth = candidateWidth
+    /// Pele's distance between the lines of a text of more than one line, as a multiple of the size
+    /// (text/label.ts `WRAPPED_LINE_HEIGHT`), which makes the lines read as one block.
+    static let severalLinesHeightRatio: CGFloat = 1.3
+
+    /// The distance between lines of a text of `lineCount` lines, as Pele's `layoutLabel` sets it: the measurer's own for
+    /// one line or none, 1.3 times the size, rounded, for more.
+    static func lineHeight(lineCount: Int, measurer: some DiagramTextMeasuring) -> CGFloat {
+        lineCount > 1 ? (measurer.fontSize * severalLinesHeightRatio).rounded() : measurer.lineHeight
+    }
+
+    /// The runs of line `index`: its own, or the line as one run in the text's own font.
+    func runs(ofLine index: Int) -> [DiagramTextRun] {
+        if let lineRuns { return lineRuns[index] }
+        return lines[index].isEmpty ? [] : [DiagramTextRun(text: lines[index], style: [], width: lineWidths[index])]
+    }
+}
+
+/// The lines of a block as they are measured and wrapped, with their runs.
+struct DiagramMeasuredLines {
+    /// Whether the runs are kept: a label without emphasis has none to keep.
+    let keepsRuns: Bool
+    var lines: [String] = []
+    var widths: [CGFloat] = []
+    var runs: [[DiagramTextRun]] = []
+    var hasEmphasis = false
+
+    /// Measures line `index` of `label`, wrapping it where it is wider than `maximumWidth` and can break.
+    mutating func add<Measurer>(_ label: DiagramLabel, line index: Int, measuring: inout DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
+        guard label.spans != nil else {
+            let line = label.lines[index]
+            let width = measuring.measurer.width(of: line)
+            guard width > maximumWidth, Self.canBreak(line, isReadWithoutMarkup: label.isReadWithoutMarkup) else {
+                return add(line.isEmpty ? [] : [DiagramMeasuredSpan(text: line, style: [], width: width)], width: width)
             }
+            return wrap([DiagramMeasuredSpan(text: line, style: [], width: width)], measuring: &measuring, maximumWidth: maximumWidth)
         }
-        wrapped.append((current, currentWidth))
-        return wrapped
+        let spans = label.spans(ofLine: index).map { span in
+            DiagramMeasuredSpan(text: span.text, style: span.style, width: measuring.width(of: span.text, style: span.style))
+        }
+        let width = spans.reduce(0) { total, span in total + span.width }
+        guard width > maximumWidth else { return add(spans, width: width) }
+        wrap(spans, measuring: &measuring, maximumWidth: maximumWidth)
+    }
+
+    private mutating func wrap<Measurer>(_ spans: [DiagramMeasuredSpan], measuring: inout DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
+        var wrapping = DiagramTextWrapping(measuring: measuring, maximumWidth: maximumWidth)
+        wrapping.wrap(spans)
+        measuring = wrapping.finishedMeasuring
+        for line in wrapping.lines { add(line.spans, width: line.width) }
+    }
+
+    mutating func add(_ spans: [DiagramMeasuredSpan], width: CGFloat) {
+        lines.append(spans.count == 1 ? spans[0].text : spans.map(\.text).joined())
+        widths.append(width)
+        guard keepsRuns else { return }
+        runs.append(spans.map(\.run))
+        if spans.contains(where: { span in !span.style.isEmpty }) { hasEmphasis = true }
+    }
+
+    /// Whether a plain line has a place Pele's wrap can break it at: whitespace, a Chinese or Japanese character, or a
+    /// zero-width space or soft hyphen.
+    /// Whether wrapping can break `line`, as Pele's layoutLabel decides: a line read without markup only at a plain space
+    /// (`text.includes(' ')`), a Chinese or Japanese character or a break hint; a line read for its markup at any white space.
+    private static func canBreak(_ line: String, isReadWithoutMarkup: Bool) -> Bool {
+        line.unicodeScalars.contains { scalar in
+            (isReadWithoutMarkup ? scalar == " " : JavaScriptStringTrimming.isWhitespace(scalar)) || DiagramTextPieces.isCJK(scalar)
+                || DiagramTextPieces.isHint(scalar)
+        }
     }
 }
 

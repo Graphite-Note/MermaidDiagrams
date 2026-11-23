@@ -19,15 +19,12 @@ drawings; those marked `not-traced` were not followed to their cause.
 | nothing-to-draw | The package refuses a diagram that declares nothing drawn (`MermaidDiagramPreparationFailure.nothingToDraw`), where Pele draws an empty page: intended. |
 | repeated-commit | A Git graph naming a commit id twice is refused (`duplicateCommitIdentifier`), where Pele, as Mermaid, warns and keeps the later commit in the earlier one's place (git/db.ts `add`), so that the graph loses a commit: intended (`GitGraphDiagramBuilder.refuseTakenIdentifier`). |
 | drawing-limit | Pele draws the 500-node mesh 22,433 points wide; the package refuses a drawing longer than `MermaidDiagramLimits.maximumDrawingSideLength` (20,000 points): intended. |
-| blank-text | A label of a space only (a block arrow's `[" "]`) is written by Pele as a `<text>` element; the scene writes no blank text. Nothing visible differs. |
+| blank-text | A label with nothing to show (a block arrow's `[" "]`, or a flowchart node's `(fa:fa-spinner)` whose icon Pele leaves out, having none to draw) is written by Pele as a `<text>` element; the scene writes no blank text. Nothing visible differs. |
 | text-per-line | Pele writes an event model's data as one `<text>` of left-aligned `<tspan>` lines; a scene text is one centred block, so each line is a text of its own. Nothing visible differs. |
 | outlined-text | Pele draws an outlined text (a Sankey diagram's `labelStyle: outlined`, a flowchart group's title over an edge) as two `<text>` elements, the halo and the text; the scene draws one text with its outline (`DiagramSceneText.outline`). Nothing visible differs. |
 | journey-parts | A user journey's dashed stems and score line are painted in the scene's `edge` part (`UserJourneyScene`); Pele classes them `pele-stems` and draws one `pele-edge` path. Nothing visible differs. |
 | beyond-ascii | Text outside ASCII (emoji, accented letters, ❤) is measured by Pele's table as 580 thousandths of the size (1,000 for wide scripts, text/measurer.ts `metricsMeasurer`) and by the package with Core Text and its fallback fonts. |
-| line-height | A label of more than one line (a `<br>`, or wrapped at its width) has its lines 1.5 sizes apart in the package's `DiagramTextBlock`, 1.3 sizes apart in Pele (text/label.ts `WRAPPED_LINE_HEIGHT`, used by `layoutLabel` for every label of more than one line). The plane maps, agent flows, C4 and use case diagrams already set such lines 1.3 apart (`PlaneMapLabel`, `C4TextLabel`, `UseCaseTextLabel`); the other types do not, which makes each extra line 3 to 6 points taller than Pele's. Left as it is here: changing `DiagramTextBlock` changes every multi-line layout of those types. |
-| bold-text | Text set bold by a class (`classDef … font-weight:bold`) or by Markdown's `**…**` is measured by Pele with its table's bold advances (text/measurer.ts), wider than the regular ones; the package measures these texts in the regular face (a state's or a requirement's class, a requirement's field or a note in Markdown), so the box is a few points narrower, or its text does not wrap at 200 points where Pele's does (state-docs#21: two lines, 18 points taller). |
-| icon-nodes | A flowchart node written `@{ icon: …, form: …, pos: …, h: … }` is drawn by Pele as an icon shape of that height with its label above or below; the package reads those keys and leaves them (`FlowchartNodeSyntax.readAttributes`), drawing a rectangle. |
-| icons-in-text | Pele draws `fa:fa-…` in a label as an icon one size wide (text/icons.ts); the package writes the words as text, so the labels are wider. |
+| bold-text | Text a class sets bold (`classDef … font-weight:bold`) is measured by Pele with its table's bold advances (text/measurer.ts); the package measures a state's or a requirement's text a class sets bold in the regular face, so the box is narrower (requirement-docs#8, 27 points), or its name does not wrap at 200 points where Pele's does (state-docs#21: two lines, 18 points taller). |
 | not-traced | Not followed to its cause in this pass. |
 
 ## Inputs
@@ -41,40 +38,22 @@ drawings; those marked `not-traced` were not followed to their cause.
 | eventmodeling-docs#3 | texts | text-per-line | +2 +0 |
 | eventmodeling-docs#4 | texts | text-per-line | +2 +0 |
 | flowchart-docs#2 | width | beyond-ascii | +5 +0 |
-| flowchart-docs#3 | height | not-traced | -1 +9 |
-| flowchart-docs#68 | width, height | icon-nodes | +28 -42 |
-| flowchart-docs#69 | width, height | icon-nodes | +28 -42 |
 | flowchart-docs#98 | texts | outlined-text | +0 +0 |
-| flowchart-docs#102 | height | not-traced | -4 +12 |
-| flowchart-docs#111 | width, height | icons-in-text | +206 +24 |
-| flowchart-docs#112 | width, height | icons-in-text | +86 +24 |
+| flowchart-docs#111 | texts | blank-text | +0 +0 |
 | gantt-docs#6 | refused | nothing-to-draw |  |
 | git-docs#12 | width, height | not-traced | +56 -12 |
 | git-docs#14 | refused | repeated-commit |  |
 | info-docs#0 | width | info-version | +90 +0 |
 | info-docs#1 | width | info-version | +90 +0 |
 | journey-docs#0 | edges | journey-parts | +0 +0 |
-| kanban-docs#1 | height | line-height | +0 +6 |
-| kanban-docs#2 | height | line-height | +0 +12 |
-| mindmap-docs#0 | height | line-height | +0 +6 |
-| mindmap-docs#12 | height | beyond-ascii | +3 +9 |
 | railroad-docs#2 | width | not-traced | +4 +0 |
 | railroad-docs#12 | texts | not-traced | +0 +0 |
-| requirement-docs#3 | width | bold-text | -5 +0 |
 | requirement-docs#8 | width | bold-text | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
-| sequence-docs#23 | height | line-height | +0 +12 |
-| sequence-docs#24 | height | line-height | +0 +24 |
 | sequence-docs#29 | width | not-traced | -5 +0 |
 | sequence-docs#30 | width | not-traced | -5 +0 |
-| state-docs#15 | height | line-height | +0 +6 |
 | state-docs#21 | height | bold-text | -2 -18 |
-| timeline-docs#2 | height | line-height | +0 +9 |
-| timeline-docs#3 | height | line-height | +0 +30 |
-| timeline-docs#4 | height | line-height | +0 +12 |
-| timeline-docs#5 | height | line-height | +0 +18 |
 | treeview-docs#11 | width | beyond-ascii | +5 +0 |
-| usecase-docs#15 | width | bold-text | -8 +0 |
 | bench-generated#2 | refused | drawing-limit |  |
 | bench-generated#3 | refused | drawing-limit |  |
 
@@ -91,7 +70,6 @@ differs is listed by its index in that file, what differs (`FlowchartSpecCompari
 | yaml-block-scalar | A node's `@{ … }` with a YAML block scalar (`label:`, a vertical bar and indented lines) is read by Pele's YAML reader; the package's attribute reader takes one line per value and refuses it. |
 | edge-identifier-and-quotes | `A id1@-->B` (an edge id after a space) and a single-quoted `shape: 'rect'` are read by Pele; the package refuses the line. |
 | markdown-text | A Markdown string's label: the package keeps its text as styled spans and the comparison strips Pele's marks, so a string with a line break or `*` inside words differs in what is compared, not in what is drawn (not traced further). |
-| spaces-in-text | `Chimpansen hoppar åäö  <br> -  ÅÄÖ`: the node's text differs in its spaces around the line break (not traced further). |
 | trailing-spaces-group | `subgraph myTitle   ` (spaces before the line's end) is a title without an identifier for Pele (`subGraph0` titled `myTitle`); the package takes `myTitle` as the identifier. |
 
 | Text | Differs in | Reason |
@@ -168,7 +146,6 @@ differs is listed by its index in that file, what differs (`FlowchartSpecCompari
 | 522 | refused | identifier-characters |
 | 523 | refused | identifier-characters |
 | 865 | refused | identifier-characters |
-| 869 | node texts | spaces-in-text |
 | 886 | refused | text-brackets |
 | 887 | refused | text-brackets |
 | 888 | refused | text-brackets |

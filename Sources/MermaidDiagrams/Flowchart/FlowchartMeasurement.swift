@@ -24,17 +24,22 @@ struct FlowchartMeasurement {
     /// Whether the edges meeting one side of a node spread along it, as a flowchart's do; an agent flow's meet in the
     /// side's middle, as Pele gives its nodes no span.
     var spreadsEdgeEnds = true
+    /// The nodes drawn as an icon or a picture: laid out as a box whose edges all meet a side's middle and end on the box,
+    /// as Pele gives such a node no span and no outline of its own (flowchart/render.ts).
+    var assetNodes: Set<Int> = []
 
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, wrappingWidth: CGFloat) {
         var nodeTexts: [DiagramTextBlock] = []
         var shapeSizes: [CGSize] = []
         var textOffsets: [CGFloat] = []
         nodeTexts.reserveCapacity(diagram.nodes.count)
-        for node in diagram.nodes {
+        for (index, node) in diagram.nodes.enumerated() {
+            let asset = node.asset
+            if asset != nil { assetNodes.insert(index) }
             // A shape drawn without text (a start, a fork, a junction) measures none, as Pele lays out no label for it.
-            let label = node.shape.holdsText ? node.label : DiagramLabel(lines: [])
+            let label = node.shape.holdsText || asset != nil ? node.label : DiagramLabel(lines: [])
             let text = DiagramTextBlock(label: label, measurer: nodeText, maximumWidth: wrappingWidth)
-            let (size, textOffset) = FlowchartShapeGeometry.size(of: node.shape, textSize: text.size)
+            let (size, textOffset) = asset?.size(textSize: text.size) ?? FlowchartShapeGeometry.size(of: node.shape, textSize: text.size)
             nodeTexts.append(text)
             shapeSizes.append(size)
             textOffsets.append(textOffset)
@@ -56,7 +61,12 @@ struct FlowchartMeasurement {
     /// How much of the side of `node` facing `side` its edges share out between them (Pele's `shapeSpan`), or 0 where
     /// they all meet its middle.
     func sideSpan(of node: Int, shape: FlowchartNodeShape, side: DiagramSide) -> CGFloat {
-        spreadsEdgeEnds ? FlowchartShapeGeometry.span(of: shape, size: shapeSizes[node], side: side) : 0
+        spreadsEdgeEnds && !assetNodes.contains(node) ? FlowchartShapeGeometry.span(of: shape, size: shapeSizes[node], side: side) : 0
+    }
+
+    /// Each node's shape as the layout meets it: its own, or a rectangle for a node drawn as an icon or a picture.
+    func layoutShapes(of diagram: FlowchartDiagram) -> [FlowchartNodeShape] {
+        diagram.nodes.indices.map { node in assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape }
     }
 
     /// Each node's size in its rank: its shape, widened on both sides across the flow by the room its loops take.

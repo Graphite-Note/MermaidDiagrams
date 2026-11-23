@@ -1,3 +1,14 @@
+/**
+ * File: EntityRelationshipParserTests.swift
+ * -----------------------------------------
+ * Layer: Tests
+ * Description: An entity relationship diagram read as Pele reads it: entities, attributes, relationships and names.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -54,7 +65,10 @@ final class EntityRelationshipParserTests: XCTestCase {
     }
 
     func testAQuotedNameIsDrawnAsMarkdown() throws {
-        XCTAssertEqual(try diagram("\"This **is** _Markdown_\"").entities.first?.label, DiagramLabel("This is Markdown"))
+        let label = try XCTUnwrap(try diagram("\"This **is** _Markdown_\"").entities.first?.label)
+        XCTAssertEqual(label.lines, ["This is Markdown"])
+        XCTAssertEqual(label.spans, [[DiagramLabelSpan(text: "This ", style: []), DiagramLabelSpan(text: "is", style: .bold), DiagramLabelSpan(text: " ", style: []),
+                                      DiagramLabelSpan(text: "Markdown", style: .italic)]])
         XCTAssertEqual(try diagram("\"This ❤ Unicode\"").entities.first?.label, DiagramLabel("This ❤ Unicode"))
     }
 
