@@ -6,7 +6,7 @@
  *              column when it runs across, and what a screen reader says of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -21,10 +21,11 @@ extension MermaidDiagramPreparationContext {
             throw .flowchartLayout(error)
         }
         let turned: AgentFlowDiagram? = diagram.direction.runsAcross ? diagram : nil
-        let narrow = turnedNarrowScene(of: turned, regularSize: layout.size, laidOut: { turned in
-            try AgentFlowLayoutEngine.layout(turned, typography: typography, limits: limits, isTurnedToRunDown: true)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .agentFlow, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = turnedNarrowSceneIsWanted(forRegularSize: layout.size)
+            ? turnedNarrowScene(of: turned, regularSize: layout.size, laidOut: { turned in
+                try AgentFlowLayoutEngine.layout(turned, typography: typography, limits: limits, isTurnedToRunDown: true)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .agentFlow, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(agentFlow: diagram))
     }
 }
