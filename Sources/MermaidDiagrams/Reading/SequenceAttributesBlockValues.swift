@@ -6,8 +6,8 @@
  *              plain scalar continued on deeper lines), a line's key and its comment, as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 extension SequenceAttributesBlockSyntax {
@@ -19,9 +19,9 @@ extension SequenceAttributesBlockSyntax {
         var text = Self.trimmed(Self.withoutComment(rest))
         while lineIndex < lines.count {
             let line = lines[lineIndex]
-            if Self.trimmed(line).isEmpty {
+            if SequenceAttributesFlowSyntax.trimmedBounds(line).isEmpty {
                 var next = lineIndex
-                while next < lines.count, Self.trimmed(lines[next]).isEmpty { next += 1 }
+                while next < lines.count, SequenceAttributesFlowSyntax.trimmedBounds(lines[next]).isEmpty { next += 1 }
                 if next >= lines.count || Self.leadingWhitespace(of: lines[next]) <= indent { break }
                 text += Array(repeating: "\n", count: next - lineIndex)
                 lineIndex = next
@@ -43,10 +43,10 @@ extension SequenceAttributesBlockSyntax {
         var batchSize = 1
         while true {
             do throws(SequenceAttributesYAMLFailure) {
-                let (value, end) = try SequenceAttributesFlowSyntax.value(in: text, at: 0, stops: "")
+                let (value, end) = try SequenceAttributesFlowSyntax.value(in: text, at: 0, stops: [])
                 let usedLineCount = text[..<end].count { scalar in scalar == "\n" }
                 let lineEnd = text[end...].firstIndex(of: "\n") ?? text.count
-                guard Self.trimmed(Self.withoutComment(Array(text[end..<lineEnd]))).isEmpty else { throw .invalid }
+                guard Self.isBlankBeforeComment(Array(text[end..<lineEnd])) else { throw .invalid }
                 lineIndex = start + usedLineCount
                 return value
             } catch {
@@ -63,7 +63,7 @@ extension SequenceAttributesBlockSyntax {
     private static func isBlockScalarHeader(_ header: Text) -> Bool {
         var rest = header.dropFirst()
         while let scalar = rest.first, scalar == "-" || scalar == "+" || ("0"..."9").contains(scalar) { rest = rest.dropFirst() }
-        while let scalar = rest.first, scalar.properties.isWhitespace { rest = rest.dropFirst() }
+        while let scalar = rest.first, SequenceAttributesFlowSyntax.isWhitespace(scalar) { rest = rest.dropFirst() }
         return rest.isEmpty || rest.first == "#"
     }
 
@@ -145,7 +145,7 @@ extension SequenceAttributesBlockSyntax {
             while colon < line.count, isBlank(line[colon]) { colon += 1 }
             guard colon < line.count, line[colon] == ":" else { return nil }
         } else {
-            guard !first.properties.isWhitespace, !"#:,[]{}&*!|>'\"%@`".unicodeScalars.contains(first) else { return nil }
+            guard !SequenceAttributesFlowSyntax.isWhitespace(first), !"#:,[]{}&*!|>'\"%@`".unicodeScalars.contains(first) else { return nil }
             if first == "-", line.count < 2 || isBlank(line[1]) || line[1] == ":" || line[1] == "#" { return nil }
             colon = 1
             while colon < line.count, line[colon] != ":", line[colon] != "#" { colon += 1 }
@@ -160,8 +160,38 @@ extension SequenceAttributesBlockSyntax {
         return (Array(line[..<keyEnd]), valueStart)
     }
 
+    /// The text of a key written as an ASCII word, a letter or an underscore then letters, digits, underscores and
+    /// hyphens, read as the JSON schema reads a plain scalar: its own text, but for the spellings of null and the
+    /// Booleans. Nil for any other key, which is read as a flow value.
+    static func plainKeyText(_ key: Text) -> String? {
+        guard let first = key.first, isWordStart(first), key.allSatisfy(isWordScalar) else { return nil }
+        let text = UnicodeScalarText.string(key)
+        return (key.count == 4 || key.count == 5) && nullAndBooleanSpellings.contains(text) ? nil : text
+    }
+
+    private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
+        isWordStart(scalar) || scalar == "-" || ("0"..."9").contains(scalar)
+    }
+
+    private static func isWordStart(_ scalar: Unicode.Scalar) -> Bool {
+        ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar) || scalar == "_"
+    }
+
+    private static let nullAndBooleanSpellings: Set<String> = ["null", "Null", "NULL", "true", "True", "TRUE", "false", "False", "FALSE"]
+
     /// The line up to a comment: a `#` at its start or after a space or a tab, outside quotation marks.
     static func withoutComment(_ line: Text) -> Text {
+        let end = commentStart(in: line)
+        return end == line.count ? line : Array(line[..<end])
+    }
+
+    /// Whether the line holds nothing but white space before its comment, found without copying it.
+    static func isBlankBeforeComment(_ line: Text) -> Bool {
+        SequenceAttributesFlowSyntax.trimmedBounds(line[..<commentStart(in: line)]).isEmpty
+    }
+
+    /// Where the line's comment starts, its length when it has none.
+    private static func commentStart(in line: Text) -> Int {
         var quote: Unicode.Scalar?
         var index = 0
         while index < line.count {
@@ -171,11 +201,11 @@ extension SequenceAttributesBlockSyntax {
             } else if scalar == "\"" || scalar == "'" {
                 quote = scalar
             } else if scalar == "#", index == 0 || line[index - 1] == " " || line[index - 1] == "\t" {
-                return Array(line[..<index])
+                return index
             }
             index += 1
         }
-        return line
+        return line.count
     }
 
     private static func isBlank(_ scalar: Unicode.Scalar) -> Bool {
@@ -184,6 +214,6 @@ extension SequenceAttributesBlockSyntax {
 
     /// How many white-space scalars a line starts with, as JavaScript's `trimStart` counts them.
     private static func leadingWhitespace(of line: Text) -> Int {
-        line.prefix { scalar in scalar.properties.isWhitespace || scalar == "\u{FEFF}" }.count
+        line.prefix { scalar in SequenceAttributesFlowSyntax.isWhitespace(scalar) || scalar == "\u{FEFF}" }.count
     }
 }

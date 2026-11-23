@@ -6,7 +6,7 @@
  *              accessibility statements, then rules to the end of the text in the notation its keyword names.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -23,7 +23,7 @@ enum RailroadParser {
             throw .invalidSyntax(line: cursor.line, problem: .railroad(.expectedKeyword(keyword)))
         }
         let text = RailroadSourceText(bytes: cursor.bytes, keywordEnd: cursor.position)
-        let options = RailroadOptions(MermaidConfigurationOptions(section: "railroad", in: cursor.sourceBytes))
+        let options = RailroadOptions(MermaidConfigurationOptions(section: "railroad", in: cursor))
         do {
             return try parse(text.bytes, from: text.start, notation: notation, options: options, limits: limits)
         } catch {

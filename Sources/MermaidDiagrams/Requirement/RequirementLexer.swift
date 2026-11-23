@@ -6,8 +6,8 @@
  *              lexer produces it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Produces the tokens of Mermaid's requirement lexer, as Pele's `lexer.ts` does: its rules are tried in order and the
@@ -123,7 +123,7 @@ struct RequirementLexer {
     /// `title` and a whitespace character, then at least one character before `#`, a line break or `;`.
     private mutating func readTitle() -> Bool {
         guard MermaidByte.lowercased(bytes[position]) == UInt8(ascii: "t"), position + 5 <= bytes.count,
-              bytes[(position + 1)..<(position + 5)].map(MermaidByte.lowercased) == Array("itle".utf8) else { return false }
+              Self.hasLowercased(Self.titleRest, in: bytes, at: position + 1) else { return false }
         let spaceLength = JavaScriptWhitespace.length(in: bytes, at: position + 5)
         guard spaceLength > 0 else { return false }
         let textStart = position + 5 + spaceLength
@@ -143,7 +143,7 @@ struct RequirementLexer {
 
     /// `accTitle\s*:\s*`, `accDescr\s*:\s*` and `accDescr\s*{\s*`, without regard to case.
     private mutating func readAccessibilityStatement() -> Bool {
-        guard position + 3 <= bytes.count, bytes[position..<(position + 3)].map(MermaidByte.lowercased) == Array("acc".utf8) else { return false }
+        guard Self.hasLowercased(Self.accessibilityPrefix, in: bytes, at: position) else { return false }
         if let end = accessibilityKeywordEnd(Self.accessibilityTitleWord, closing: MermaidByte.colon) {
             push(.accessibilityTitle)
             emit(.accessibilityTitle, from: position, to: end)
@@ -159,9 +159,20 @@ struct RequirementLexer {
         return true
     }
 
+    /// Whether `word`, in lowercase, is written at `position` in any case: compared byte by byte, without making the bytes
+    /// lowercase in an array of their own at every token.
+    private static func hasLowercased(_ word: [UInt8], in bytes: [UInt8], at position: Int) -> Bool {
+        guard position >= 0, position + word.count <= bytes.count else { return false }
+        for (offset, byte) in word.enumerated() where MermaidByte.lowercased(bytes[position + offset]) != byte { return false }
+        return true
+    }
+
+    private static let titleRest = Array("itle".utf8)
+    private static let accessibilityPrefix = Array("acc".utf8)
+
     /// Where `word`, whitespace, `closing` and whitespace end, the word without regard to case, or nil.
     private func accessibilityKeywordEnd(_ word: [UInt8], closing: UInt8) -> Int? {
-        guard position + word.count <= bytes.count, bytes[position..<(position + word.count)].map(MermaidByte.lowercased) == word else { return nil }
+        guard Self.hasLowercased(word, in: bytes, at: position) else { return nil }
         let afterSpace = JavaScriptWhitespace.endOfRun(in: bytes, from: position + word.count)
         guard afterSpace < bytes.count, bytes[afterSpace] == closing else { return nil }
         return JavaScriptWhitespace.endOfRun(in: bytes, from: afterSpace + 1)

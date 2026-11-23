@@ -6,8 +6,8 @@
  *              them: word characters, punctuation, blanks, line breaks and keywords.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// The code units of a use case diagram's text as Pele's lexer reads them with `charCodeAt`: past the end of the text
@@ -66,7 +66,7 @@ struct UseCaseCharacters {
         let units = Array(text.utf16)
         guard let first = units.firstIndex(where: { unit in !isJavaScriptWhitespace(unit) }),
               let last = units.lastIndex(where: { unit in !isJavaScriptWhitespace(unit) }) else { return "" }
-        return String(decoding: units[first...last], as: UTF16.self)
+        return UnicodeScalarText.string(utf16: units[first...last])
     }
 
     /// Whether the text at `index` starts with `word`, exactly or, for `include` and `extend`, in any case.
@@ -82,7 +82,7 @@ struct UseCaseCharacters {
 
     /// The text between two offsets.
     func text(from start: Int, to end: Int) -> String {
-        String(decoding: units[max(0, start)..<min(units.count, max(start, end))], as: UTF16.self)
+        UnicodeScalarText.string(utf16: units[max(0, start)..<min(units.count, max(start, end))])
     }
 
     /// The first offset from `index` where the line ends, or the end of the text.

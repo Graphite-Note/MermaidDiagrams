@@ -6,7 +6,7 @@
  *              other HTML tags dropped with their text kept, and in a Markdown string the * and _ markers.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -119,7 +119,7 @@ extension DiagramLabelInlineMarkup {
         guard end < source.endIndex, isASCIILetter(source[end]) else { return nil }
         let nameStart = end
         while end < source.endIndex, DiagramLabelEntities.isWordCharacter(source[end]) || source[end] == "-" { end += 1 }
-        let name = String(String.UnicodeScalarView(source[nameStart..<end])).lowercased()
+        let name = UnicodeScalarText.string(source[nameStart..<end]).lowercased()
         if end < source.endIndex, JavaScriptStringTrimming.isWhitespace(source[end]) {
             while end < source.endIndex, source[end] != "<", source[end] != ">" { end += 1 }
         } else if end < source.endIndex, source[end] == "/" {

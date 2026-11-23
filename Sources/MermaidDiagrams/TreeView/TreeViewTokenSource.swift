@@ -6,8 +6,8 @@
  *              its tokens: an entry's name and annotations, the title and the accessibility text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -91,7 +91,7 @@ struct TreeViewTokenSource {
         }
         let name = text(of: tokens[index])
         entry.name = tokens[index].kind == .quotedName ? String(name.dropFirst().dropLast())
-            : String(name.reversed().drop { character in character == " " || character == "\t" }.reversed())
+            : Self.withoutTrailingBlanks(name)
         index += 1
         while index < tokens.count {
             let written = text(of: tokens[index]).trimmingCharacters(in: .whitespaces)
@@ -104,6 +104,13 @@ struct TreeViewTokenSource {
             index += 1
         }
         return entry
+    }
+
+    /// The name without the spaces and tabs at its end, its characters compared as the reversed name's were.
+    private static func withoutTrailingBlanks(_ name: String) -> String {
+        var end = name.endIndex
+        while end > name.startIndex, case let before = name.index(before: end), name[before] == " " || name[before] == "\t" { end = before }
+        return String(name[..<end])
     }
 
     /// Text of one line as Mermaid keeps it: trimmed, each run of blanks one space.

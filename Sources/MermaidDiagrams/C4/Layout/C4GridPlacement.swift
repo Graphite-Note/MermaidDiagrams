@@ -7,8 +7,8 @@
  *              of c4BoundaryInRow, each sized around what it holds.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -117,7 +117,7 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
         let capHeight = form == .person ? C4Metrics.personHead : form == .cylinder ? C4Metrics.cylinderCapsHeight : 0
         let inner = width - 2 * C4Metrics.shapePaddingX - capWidth
         let technology = shape.element.technology.flatMap { technology in technology.isEmpty ? nil : "[" + technology + "]" }
-        let texts = [C4TextLabel.block("«" + shape.kind.rawValue.replacingOccurrences(of: "_", with: " ") + "»", measurer: measurers.smallest, maximumWidth: inner),
+        let texts = [C4TextLabel.block(shape.kind.guillemetedName, measurer: measurers.smallest, maximumWidth: inner),
                      C4TextLabel.block(shape.element.label, measurer: measurers.name, maximumWidth: inner),
                      C4TextLabel.block(technology, measurer: measurers.small, maximumWidth: inner),
                      C4TextLabel.block(shape.element.description, measurer: measurers.small, maximumWidth: inner)]

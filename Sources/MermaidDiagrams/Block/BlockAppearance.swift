@@ -6,8 +6,8 @@
  *              its text in bold, italic or at its own size, and the text color Pele picks on a fill it sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -50,7 +50,9 @@ public struct BlockAppearance: Equatable, Sendable {
         guard let colon = declaration.firstIndex(of: ":"), colon > declaration.startIndex else { return }
         let property = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var value = String(declaration[declaration.index(after: colon)...])
-        while let important = value.range(of: "!important", options: .caseInsensitive) { value.removeSubrange(important) }
+        while value.utf8.contains(MermaidByte.exclamationMark), let important = value.range(of: "!important", options: .caseInsensitive) {
+            value.removeSubrange(important)
+        }
         value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, !Self.isUnsafe(value) else { return }
         switch property {
@@ -87,6 +89,7 @@ public struct BlockAppearance: Equatable, Sendable {
 
     /// Pele's `RE_UNSAFE`: a value that could reach outside its declaration, which it drops.
     private static func isUnsafe(_ value: String) -> Bool {
+        if let asciiUnsafe = isUnsafe(ascii: value) { return asciiUnsafe }
         let lowered = value.lowercased()
         if lowered.contains("javascript:") || lowered.contains("@import") || lowered.contains("image-set") || lowered.contains("/*") { return true }
         if value.contains(where: { character in "<>{};\\".contains(character) }) { return true }
@@ -96,4 +99,33 @@ public struct BlockAppearance: Equatable, Sendable {
         }
         return false
     }
+
+    /// `isUnsafe` read from the bytes of an ASCII value, whose lowercasing and searches are those of its bytes; nil for a
+    /// value beyond ASCII.
+    static func isUnsafe(ascii value: String) -> Bool? {
+        var lowered: [UInt8] = []
+        lowered.reserveCapacity(value.utf8.count)
+        for byte in value.utf8 {
+            guard byte < 0x80 else { return nil }
+            lowered.append(MermaidByte.lowercased(byte))
+        }
+        for word in unsafeWords where firstIndex(of: word, in: lowered) != nil { return true }
+        if lowered.contains(where: { byte in unsafeBytes.contains(byte) }) { return true }
+        // Only the first `url` and the first `expression` count, as the search for them stops at the first.
+        for function in unsafeFunctions {
+            guard var index = firstIndex(of: function, in: lowered).map({ start in start + function.count }) else { continue }
+            while index < lowered.count, lowered[index] == MermaidByte.space || lowered[index] == UInt8(ascii: "\t") { index += 1 }
+            if index < lowered.count, lowered[index] == UInt8(ascii: "(") { return true }
+        }
+        return false
+    }
+
+    private static func firstIndex(of word: [UInt8], in bytes: [UInt8]) -> Int? {
+        guard word.count <= bytes.count else { return nil }
+        return (0...(bytes.count - word.count)).first { start in bytes[start] == word[0] && bytes[start..<(start + word.count)].elementsEqual(word) }
+    }
+
+    private static let unsafeWords = ["javascript:", "@import", "image-set", "/*"].map { word in Array(word.utf8) }
+    private static let unsafeBytes = Array("<>{};\\".utf8)
+    private static let unsafeFunctions = ["url", "expression"].map { word in Array(word.utf8) }
 }

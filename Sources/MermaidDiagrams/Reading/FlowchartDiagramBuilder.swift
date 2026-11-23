@@ -5,7 +5,7 @@
  * Description: Collects a flowchart as its statements are read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -88,6 +88,8 @@ struct FlowchartDiagramBuilder {
     /// of its own shows none rather than its identifier (Pele's `addVertex`).
     private mutating func defineAsset(nodeAt index: Int, as definition: FlowchartNodeDefinition) {
         let written = definition.assetAttributes
+        // Most nodes are written without these attributes, and copying the node out and back costs more than reading it.
+        guard written != FlowchartNodeAssetAttributes() else { return }
         var node = diagram.nodes[index]
         if written.icon != nil || written.image != nil, definition.hasBlankWrittenLabel, node.label == DiagramLabel(node.identifier) {
             node.label = DiagramLabel(lines: [""])

@@ -6,8 +6,8 @@
  *              one sits in the text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A token of an agent flow, as Pele's `tokens.ts` numbers them (the order of Mermaid's agentflow.jison terminals).
@@ -57,7 +57,7 @@ struct AgentFlowTokens {
     /// The text of the token at `index` in `units`.
     func text(at index: Int, in units: [UInt16]) -> String {
         if let replaced = replacedTexts[index] { return replaced }
-        return String(decoding: units[starts[index]..<ends[index]], as: UTF16.self)
+        return UnicodeScalarText.string(utf16: units[starts[index]..<ends[index]])
     }
 
     /// The span from the start of the token at `first` to the end of the token at `last`.

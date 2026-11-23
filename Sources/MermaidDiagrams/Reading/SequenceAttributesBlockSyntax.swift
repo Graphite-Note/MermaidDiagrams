@@ -6,8 +6,8 @@
  *              reader does, for a sequence participant's attributes written over several lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 23/11/2026
  */
 
 /// YAML's block collections, line by line, as Pele's reader reads them (`src/util/yaml.ts`): a mapping's keys at one
@@ -22,20 +22,20 @@ struct SequenceAttributesBlockSyntax {
     /// The value a whole YAML text holds: a flow collection when it is one, else a block value with nothing after it
     /// but blank lines, comments or `...`.
     static func value(of source: String) throws(SequenceAttributesYAMLFailure) -> SequenceAttributeValue {
-        let text = Array(source.unicodeScalars)
-        let trimmed = SequenceAttributesFlowSyntax.trimmed(text)
-        if let first = trimmed.first, first == "{" || first == "[" {
+        // The scalars are copied only for a flow collection; a block's lines are read apart.
+        let firstShown = source.unicodeScalars.first { scalar in !SequenceAttributesFlowSyntax.isTrimmed(scalar) }
+        if let first = firstShown, first == "{" || first == "[" {
+            let trimmed = SequenceAttributesFlowSyntax.trimmed(Array(source.unicodeScalars))
             do {
-                let (value, end) = try SequenceAttributesFlowSyntax.value(in: trimmed, at: 0, stops: "")
+                let (value, end) = try SequenceAttributesFlowSyntax.value(in: trimmed, at: 0, stops: [])
                 if SequenceAttributesFlowSyntax.skipSpaceAndComments(in: trimmed, from: end) == trimmed.count { return value }
             } catch {
                 throw .invalid
             }
         }
-        let normalized = source.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        var reader = SequenceAttributesBlockSyntax(lines: normalized.split(separator: "\n", omittingEmptySubsequences: false).map { line in
-            Array(line.unicodeScalars)
-        })
+        let normalized = !source.utf8.contains(0x0D) ? source
+            : source.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        var reader = SequenceAttributesBlockSyntax(lines: MermaidByte.lines(of: normalized).map { line in Array(line.unicodeScalars) })
         let value: SequenceAttributeValue
         do { value = try reader.block(minimumIndent: 0, depth: 0) } catch { throw .invalid }
         reader.skipBlankLines()
@@ -43,11 +43,14 @@ struct SequenceAttributesBlockSyntax {
         return value
     }
 
+    private static let documentStart: Text = ["-", "-", "-"]
+
     /// Moves past empty lines, comment lines and `---`.
     mutating func skipBlankLines() {
         while lineIndex < lines.count {
-            let content = Self.trimmed(lines[lineIndex])
-            if !content.isEmpty, content[0] != "#", content != Array("---".unicodeScalars) { break }
+            let line = lines[lineIndex]
+            let content = SequenceAttributesFlowSyntax.trimmedBounds(line)
+            if !content.isEmpty, line[content.lowerBound] != "#", !line[content].elementsEqual(Self.documentStart) { break }
             lineIndex += 1
         }
     }
@@ -85,7 +88,7 @@ struct SequenceAttributesBlockSyntax {
             let current = Array(lines[lineIndex][indent...])
             guard Self.isListItem(current) else { break }
             let rest = Array(current.dropFirst())
-            let leading = rest.prefix { scalar in scalar.properties.isWhitespace }.count
+            let leading = rest.prefix { scalar in SequenceAttributesFlowSyntax.isWhitespace(scalar) }.count
             let body = Self.trimmed(Self.withoutComment(rest))
             if body.isEmpty {
                 lineIndex += 1
@@ -112,10 +115,10 @@ struct SequenceAttributesBlockSyntax {
             guard lineIndent == indent else { throw .invalid }
             let current = Array(lines[lineIndex][indent...])
             guard let (key, valueStart) = Self.splitKey(current) else { throw .invalid }
-            let keyText = try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: "").0.javaScriptText
+            let keyText = if let plain = Self.plainKeyText(key) { plain } else { try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: []).0.javaScriptText }
             let rest = Array(current[valueStart...])
             lineIndex += 1
-            if Self.trimmed(Self.withoutComment(rest)).isEmpty {
+            if Self.isBlankBeforeComment(rest) {
                 entries[keyText] = try valueBelow(keyIndent: indent, depth: depth)
             } else {
                 entries[keyText] = try inlineValue(Self.trimmed(rest), indent: indent)

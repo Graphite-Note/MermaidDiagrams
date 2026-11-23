@@ -5,7 +5,7 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -27,8 +27,14 @@ struct FlowchartNodeDefinition {
 /// Reads what follows a node's identifier: a shape in brackets around its text (`A{text}`), or attributes
 /// (`A@{ shape: diam, label: "text" }`).
 enum FlowchartNodeSyntax {
+    /// The brackets that open a shape, the texts that close each and the state its text is read in, made once.
+    private static let shapeBrackets = writtenShapeBrackets.map { brackets in
+        (opening: brackets.opening, closings: brackets.closings, closingTexts: brackets.closings.map { closing in closing.text },
+         textState: textState(after: brackets.opening))
+    }
+
     /// The brackets that open a shape, longest first so that `((` is not read as `(`, and the texts that close each.
-    private static let shapeBrackets: [(opening: [UInt8], closings: [(text: [UInt8], shape: FlowchartNodeShape)])] = [
+    private static let writtenShapeBrackets: [(opening: [UInt8], closings: [(text: [UInt8], shape: FlowchartNodeShape)])] = [
         (Array("(((".utf8), [(Array(")))".utf8), .doubleCircle)]),
         (Array("((".utf8), [(Array("))".utf8), .circle)]),
         (Array("([".utf8), [(Array("])".utf8), .stadium)]),
@@ -51,8 +57,8 @@ enum FlowchartNodeSyntax {
         guard let brackets = shapeBrackets.first(where: { brackets in cursor.hasPrefix(brackets.opening) }) else { return nil }
         let openingLine = cursor.line
         cursor.advance(by: brackets.opening.count)
-        let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closings.map(\.text),
-                                                                     state: textState(after: brackets.opening), openingLine: openingLine)
+        let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closingTexts, state: brackets.textState,
+                                                                     openingLine: openingLine)
         return FlowchartNodeDefinition(shape: brackets.closings[closingIndex].shape, label: label)
     }
 

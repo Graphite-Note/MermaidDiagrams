@@ -5,7 +5,7 @@
  * Description: Moves the ends of edges along their sides once the nodes have places, so that edges run straight.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -131,6 +131,8 @@ struct LayeredFlatEndSettling {
     private mutating func fit(_ side: Side, first: Int, size: Int, low: Double, high: Double, isAgain: Bool) -> Bool {
         var sum: [Double] = []
         var count: [Int] = []
+        sum.reserveCapacity(size)
+        count.reserveCapacity(size)
         var before: Double = 0
         for index in 0..<size {
             if index > 0 { before += side.room[first + index] }

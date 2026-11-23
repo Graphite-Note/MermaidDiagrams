@@ -7,7 +7,7 @@
  *              dropped, a line break added.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -40,21 +40,25 @@ enum RequirementSourcePreparation {
         let prefix = withLineBreaksNormalized(bytes[..<start])
         let body = Array(String(decoding: withLineBreaksNormalized(bytes[start...]), as: UTF8.self).unicodeScalars)
         let comments = withoutCommentLines(body)
-        var text = String.UnicodeScalarView()
+        // The text kept is written to UTF-8 a scalar at a time, as appending scalars to a string costs more.
+        var text = prefix
+        text.reserveCapacity(prefix.count + comments.text.count + 1)
         var removals: [(position: Int, count: Int)] = []
-        var byteCount = prefix.count
         var removalIndex = 0
         for (index, scalar) in comments.text.enumerated() {
             while removalIndex < comments.removals.count, comments.removals[removalIndex].index == index {
-                removals.append((byteCount, comments.removals[removalIndex].count))
+                removals.append((text.count, comments.removals[removalIndex].count))
                 removalIndex += 1
             }
-            text.append(scalar)
-            byteCount += UTF8.width(scalar)
+            if scalar.value < 0x80 {
+                text.append(UInt8(truncatingIfNeeded: scalar.value))
+            } else if let encoded = UTF8.encode(scalar) {
+                text.append(contentsOf: encoded)
+            }
         }
-        for removal in comments.removals[removalIndex...] { removals.append((byteCount, removal.count)) }
-        text.append("\n")
-        return RequirementPreparedSource(bytes: prefix + Array(String(text).utf8), start: prefix.count, removedLineBreaks: removals)
+        for removal in comments.removals[removalIndex...] { removals.append((text.count, removal.count)) }
+        text.append(MermaidByte.newline)
+        return RequirementPreparedSource(bytes: text, start: prefix.count, removedLineBreaks: removals)
     }
 
     /// Pele's `cleanupComments`, `/^\s*%%(?!{)[^\n]+\n?/gm` taken out: from the start of a line, whitespace and line

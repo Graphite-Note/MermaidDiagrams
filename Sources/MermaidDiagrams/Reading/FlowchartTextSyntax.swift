@@ -6,7 +6,7 @@
  *              a Markdown string or plain text, which may hold no bracket.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -66,7 +66,7 @@ enum FlowchartTextSyntax {
         // Pele's `text` takes at least one token: a closing right after the opening, or after an empty string, is refused.
         guard hasToken else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         cursor.advance(by: closings[closingIndex].count)
-        let trimmed = written.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = MermaidByte.startsAndEndsWithPrintableASCII(written) ? written : written.trimmingCharacters(in: .whitespacesAndNewlines)
         return (DiagramLabelDecoder.label(from: trimmed, form: form), closingIndex)
     }
 

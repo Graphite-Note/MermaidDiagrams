@@ -6,8 +6,8 @@
  *              drawn, printable ASCII from a table of the font's advances.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.6
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -15,25 +15,25 @@ import CoreText
 import Foundation
 
 /// Measures text with Core Text, as it is drawn. Printable ASCII, most of a diagram's text, is measured from a table
-/// of the font's advances read once; any other text goes through a Core Text line, which finds fallback fonts for
-/// scripts and emoji the font lacks. The table leaves out kerning, which the shapes' padding absorbs.
+/// of the font's advances read once per process (`CoreTextFontFaces`); any other text goes through a Core Text line,
+/// which finds fallback fonts for scripts and emoji the font lacks, laid out once per font and text. The table leaves
+/// out kerning, which the shapes' padding absorbs.
 public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
-    private let font: CTFont
+    /// The font and the advances of its printable ASCII, behind one reference, so that copying a measurer, as every layout
+    /// and every text block does, retains one thing.
+    private let face: CoreTextFontFace
     /// The font it was made from, and whether it measures its bold, its italic or the system's monospaced font, so that it
     /// can be made again at another size.
     let diagramFont: DiagramFont
     let isBold: Bool
     let isItalic: Bool
     let isMonospaced: Bool
-    /// Advances of the characters from space (32) to tilde (126).
-    private let printableASCIIAdvances: [CGFloat]
-
     /// Line height as a multiple of the font size, Pele's.
     static let lineHeightRatio: CGFloat = 1.5
-    private static let firstPrintableASCII: UInt8 = 32
-    private static let lastPrintableASCII: UInt8 = 126
+    private static let firstPrintableASCII = CoreTextFontFaces.firstPrintableASCII
+    private static let lastPrintableASCII = CoreTextFontFaces.lastPrintableASCII
 
     public init(font diagramFont: DiagramFont) {
         self.init(font: diagramFont, isBold: false)
@@ -42,27 +42,19 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, in its italic when `isItalic`,
     /// and in the system's monospaced font at its size when `isMonospaced` (a railroad diagram's terminals).
     init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false, isMonospaced: Bool = false) {
-        let regular = isMonospaced ? diagramFont.makeMonospacedCoreTextFont() : diagramFont.makeCoreTextFont()
-        var traits: CTFontSymbolicTraits = []
-        if isBold { traits.insert(.traitBold) }
-        if isItalic { traits.insert(.traitItalic) }
-        font = traits.isEmpty ? regular : CTFontCreateCopyWithSymbolicTraits(regular, diagramFont.size, nil, traits, traits) ?? regular
+        face = CoreTextFontFaces.shared.face(CoreTextFontFaceKey(postScriptName: diagramFont.postScriptName, size: diagramFont.size, isBold: isBold,
+                                                                isItalic: isItalic, isMonospaced: isMonospaced))
         self.diagramFont = diagramFont
         self.isBold = isBold
         self.isItalic = isItalic
         self.isMonospaced = isMonospaced
         fontSize = diagramFont.size
         lineHeight = (diagramFont.size * Self.lineHeightRatio).rounded()
-        let characters = (Self.firstPrintableASCII...Self.lastPrintableASCII).map { byte in UniChar(byte) }
-        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
-        var advances = [CGSize](repeating: .zero, count: characters.count)
-        CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
-        CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
-        printableASCIIAdvances = advances.map(\.width)
     }
 
     public func width(of text: String) -> CGFloat {
         var width: CGFloat = 0
+        let printableASCIIAdvances = face.printableASCIIAdvances
         for byte in text.utf8 {
             guard byte >= Self.firstPrintableASCII, byte <= Self.lastPrintableASCII else { return lineWidth(of: text) }
             width += printableASCIIAdvances[Int(byte - Self.firstPrintableASCII)]
@@ -71,8 +63,6 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     }
 
     private func lineWidth(of text: String) -> CGFloat {
-        let attributes = [kCTFontAttributeName as NSAttributedString.Key: font]
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
-        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        CoreTextFontFaces.shared.lineWidth(of: text, in: face)
     }
 }

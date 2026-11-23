@@ -6,8 +6,8 @@
  *              `alias` gives, read as Mermaid reads them, as YAML.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// `participant API@{ "type": "boundary", "alias": "Public API" }`: the text between the braces, up to the first
@@ -22,7 +22,7 @@ struct SequenceParticipantAttributes: Equatable {
     /// Reads the attributes' text; nil when it is not YAML, as Mermaid refuses it. Text that holds no mapping (a list, a
     /// scalar) gives neither a type nor an alias.
     init?(text: String) {
-        let content = String(String.UnicodeScalarView(SequenceAttributesFlowSyntax.trimmed(text.unicodeScalars)))
+        let content = UnicodeScalarText.string(SequenceAttributesFlowSyntax.trimmed(text.unicodeScalars))
         let document = content.contains("\n") ? content + "\n" : "{\n" + content + "\n}"
         guard let value = try? SequenceAttributesBlockSyntax.value(of: document) else { return nil }
         guard case .mapping(let entries) = value else {

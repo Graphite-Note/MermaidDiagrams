@@ -5,7 +5,7 @@
  * Description: Reads a radar chart's statements after its `radar-beta` keyword: axes, curves, options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -38,7 +38,7 @@ struct RadarChartParser {
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RadarChart {
         var parser = RadarChartParser(cursor: cursor, limits: limits)
-        parser.chart.appearance = RadarAppearance(MermaidConfigurationOptions(section: "radar", in: cursor.sourceBytes))
+        parser.chart.appearance = RadarAppearance(MermaidConfigurationOptions(section: "radar", in: cursor))
         parser.skipOptionalColon()
         try parser.readStatements()
         try parser.finish()

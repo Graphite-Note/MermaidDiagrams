@@ -7,7 +7,7 @@
  *              text of one emphasis joined into one span.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -40,7 +40,7 @@ struct DiagramLabelIcons {
     /// Pele's `pushPlain`: the text's codes read, joined to the span before when it has the same emphasis.
     private mutating func appendText(_ text: ArraySlice<Unicode.Scalar>, style: DiagramTextStyle) {
         guard !text.isEmpty else { return }
-        let decoded = DiagramLabelEntities.decoded(String(String.UnicodeScalarView(text)))
+        let decoded = DiagramLabelEntities.decoded(UnicodeScalarText.string(text))
         if var last = spans.popLast() {
             if last.style == style {
                 last.text += decoded

@@ -6,7 +6,7 @@
  *              every link of a statement kept, each error with its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -33,7 +33,7 @@ struct BlockParser {
         var hierarchy = BlockHierarchy(statements: parser.statements, generatedIdentifierCount: parser.generatedIdentifierCount)
         hierarchy.set(top)
         var diagram = hierarchy.diagram
-        if case .number(let padding) = MermaidConfigurationOptions(section: "block", in: cursor.sourceBytes).values["padding"], padding >= 0 {
+        if case .number(let padding) = MermaidConfigurationOptions(section: "block", in: cursor).values["padding"], padding >= 0 {
             diagram.padding = min(padding, BlockLayoutEngine.largestPadding)
         }
         return diagram

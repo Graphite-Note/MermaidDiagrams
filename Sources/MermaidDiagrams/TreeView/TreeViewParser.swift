@@ -6,7 +6,7 @@
  *              from their indentation, as Mermaid's tree view grammar and database do.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -33,7 +33,7 @@ enum TreeViewParser {
         case .failure(let failure): throw .invalidSyntax(line: source.writtenLine(at: failure.offset), problem: .unexpectedText(source.excerpt(at: failure.offset)))
         }
         var diagram = TreeViewDiagram()
-        diagram.options = TreeViewOptions(MermaidConfigurationOptions(section: "treeView", in: cursor.sourceBytes))
+        diagram.options = TreeViewOptions(MermaidConfigurationOptions(section: "treeView", in: cursor))
         diagram.options.iconMaps = TreeViewIconMaps(frontMatterOf: cursor.sourceBytes)
         var index = 0
         while index < tokens.count, let statement = source.headerStatement(tokens[index]) {

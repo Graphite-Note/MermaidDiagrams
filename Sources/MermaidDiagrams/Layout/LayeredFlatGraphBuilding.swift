@@ -5,7 +5,7 @@
  * Description: Cuts the edges of Pele's layered layout into segments and gives every rank its first order.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -18,6 +18,16 @@ private struct LayeredSegmentList {
     var fromEnd: [LayeredSegmentEnd] = []
     var toEnd: [LayeredSegmentEnd] = []
     var hasOffsets = false
+
+    /// Room for `count` segments in each list.
+    mutating func reserve(_ count: Int) {
+        from.reserveCapacity(count)
+        to.reserveCapacity(count)
+        fromOffset.reserveCapacity(count)
+        toOffset.reserveCapacity(count)
+        fromEnd.reserveCapacity(count)
+        toEnd.reserveCapacity(count)
+    }
 
     mutating func append(from upper: Int, to lower: Int, fromOffset: Double, toOffset: Double,
                          fromEnd: LayeredSegmentEnd = .held, toEnd: LayeredSegmentEnd = .held) {
@@ -85,6 +95,8 @@ extension LayeredFlatLayout {
         firstSegment = [Int](repeating: -1, count: edges.count)
         lastSegment = [Int](repeating: -1, count: edges.count)
         var segments = LayeredSegmentList()
+        // An edge cut into n bends makes n + 1 segments: the bends are the vertices past the nodes.
+        segments.reserve(max(0, widths.count - nodes.count) + edges.count)
         var nextVertex = nodes.count
         for edgeIndex in edges.indices where !isDirect[edgeIndex] {
             cutEdge(edgeIndex, into: &segments, nextVertex: &nextVertex, widths: &widths, kinds: &kinds, ranks: &ranks)

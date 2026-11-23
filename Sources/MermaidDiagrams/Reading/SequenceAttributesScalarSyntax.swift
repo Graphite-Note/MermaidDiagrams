@@ -6,8 +6,8 @@
  *              scalar's escapes, as Pele's small YAML reader does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -20,7 +20,10 @@ enum SequenceAttributesScalarSyntax {
     /// Booleans, decimal, hexadecimal (`0x`), octal (`0o`) and binary (`0b`) numbers, `.inf` and `.nan` numbers, and
     /// anything else text.
     static func scalar(_ raw: String) -> SequenceAttributeValue {
-        let text = SequenceAttributesFlowSyntax.string(SequenceAttributesFlowSyntax.trimmed(raw.unicodeScalars))
+        let scalars = raw.unicodeScalars
+        let isTrimmed = scalars.first.map { first in !SequenceAttributesFlowSyntax.isTrimmed(first) } ?? true
+            && scalars.last.map { last in !SequenceAttributesFlowSyntax.isTrimmed(last) } ?? true
+        let text = isTrimmed ? raw : SequenceAttributesFlowSyntax.string(SequenceAttributesFlowSyntax.trimmed(scalars))
         switch text {
         case "", "~", "null", "Null", "NULL": return .null
         case "true", "True", "TRUE": return .boolean(true)
@@ -95,7 +98,7 @@ enum SequenceAttributesScalarSyntax {
         }
         if let hexadecimalLength {
             let digits = text[(index + 1)..<min(text.count, index + 1 + hexadecimalLength)].prefix { scalar in scalar.properties.isASCIIHexDigit }
-            guard !digits.isEmpty, let value = UInt32(String(String.UnicodeScalarView(digits)), radix: 16), value <= 0x10FFFF else { throw .invalid }
+            guard !digits.isEmpty, let value = UInt32(UnicodeScalarText.string(digits), radix: 16), value <= 0x10FFFF else { throw .invalid }
             return ([Unicode.Scalar(value) ?? "\u{FFFD}"], 1 + hexadecimalLength)
         }
         guard let replacement = escapes[letter] else { throw .invalid }

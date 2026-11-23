@@ -6,8 +6,8 @@
  *              as Pele checks it without a browser.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -86,7 +86,7 @@ enum SequenceBoxColorFunctionSyntax {
             let exponentDigits = exponent.prefix(while: isDigit).count
             if exponentDigits > 0 { scalars = exponent.dropFirst(exponentDigits) }
         }
-        switch String(String.UnicodeScalarView(scalars)) {
+        switch UnicodeScalarText.string(scalars) {
         case "": return .number
         case "%": return .percentage
         case "deg", "grad", "rad", "turn": return .angle

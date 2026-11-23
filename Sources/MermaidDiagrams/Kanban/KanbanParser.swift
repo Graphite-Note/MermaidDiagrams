@@ -5,7 +5,7 @@
  * Description: Reads a kanban board's outline into its columns and cards, as Mermaid's kanban database builds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -16,7 +16,7 @@ enum KanbanParser {
     /// Reads the board whose keyword ends at the cursor. A board without a node is an error, as in Mermaid.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> KanbanBoard {
         var builder = KanbanBoardBuilder(limits: limits)
-        builder.board.options = KanbanOptions(MermaidConfigurationOptions(section: "kanban", in: cursor.sourceBytes))
+        builder.board.options = KanbanOptions(MermaidConfigurationOptions(section: "kanban", in: cursor))
         try MermaidOutlineReader.read(cursor, grammar: .kanban, into: &builder)
         guard !builder.board.columns.isEmpty else {
             var end = cursor

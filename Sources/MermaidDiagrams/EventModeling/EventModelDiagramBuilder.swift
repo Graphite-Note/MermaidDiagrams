@@ -6,8 +6,8 @@
  *              namespace, each frame's data, and the relations its sources name or the frame before it implies.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Builds an `EventModelDiagram` from what `EventModelParser` read, as Pele's `buildEventModel` does after Mermaid's
@@ -92,9 +92,7 @@ enum EventModelDiagramBuilder {
         return lines.map { line in
             var kept = line.dropFirst(min(indent, line.count))
             while let last = kept.last, isWhitespace(last) { kept = kept.dropLast() }
-            var text = ""
-            text.unicodeScalars.append(contentsOf: kept)
-            return text
+            return UnicodeScalarText.string(kept)
         }.joined(separator: "\n")
     }
 
@@ -111,13 +109,20 @@ enum EventModelDiagramBuilder {
 /// each with Mermaid's ordering key.
 struct EventModelLaneAssignment {
     private var lanes: [EventModelLane] = []
-    private var indexByKey: [String: Int] = [:]
+    private var indexByKey: [LaneKey: Int] = [:]
+
+    /// A lane's group and namespace, as Mermaid keys a lane by `group namespace` (a group's name holds no space, so the
+    /// two keys are told apart alike).
+    private struct LaneKey: Hashable {
+        let group: EventModelLaneGroup
+        let namespace: String?
+    }
     private var nextOrderKeyByGroup: [EventModelLaneGroup: Int] = [:]
 
     /// The index, in the order lanes were met, of the lane of a frame of `kind` in `namespace`.
     mutating func laneIndex(of kind: EventModelEntityKind, namespace: String?) -> Int {
         let group = kind.laneGroup
-        let key = namespace.map { namespace in "\(group) \(namespace)" } ?? "\(group)"
+        let key = LaneKey(group: group, namespace: namespace)
         if let index = indexByKey[key] { return index }
         let (firstKey, label, prefix) = Self.groupNaming(group)
         var orderKey = firstKey

@@ -7,8 +7,8 @@
  *              a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -84,7 +84,7 @@ public struct UseCaseLook: Equatable, Sendable {
 
     /// The value Pele's `resolveStyle` keeps: `!important` taken out and trimmed, nil when empty or unsafe.
     private static func value(of declaration: VennStyleDeclaration) -> String? {
-        let value = UseCaseCharacters.trimmed(declaration.value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive))
+        let value = UseCaseCharacters.trimmed(MermaidByte.withoutImportance(declaration.value))
         return value.isEmpty || VennAppearance.isUnsafe(value) ? nil : value
     }
 

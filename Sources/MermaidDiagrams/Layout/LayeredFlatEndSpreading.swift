@@ -5,7 +5,7 @@
  * Description: Gives the ends of edges on one side of a node places of their own, and lines border ports up with ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -25,6 +25,7 @@ extension LayeredFlatGraph {
         let list = side == 0 ? predecessorSegments : successorSegments
         let other = side == 0 ? segmentFrom : segmentTo
         var ends = LayeredSideEnds()
+        ends.segments.reserveCapacity(starts[vertex + 1] - starts[vertex])
         for position in starts[vertex]..<starts[vertex + 1] where kinds[list[position]] != .held { ends.segments.append(list[position]) }
         if ends.segments.count < 2 { return ends }
         let positions = position
@@ -34,6 +35,7 @@ extension LayeredFlatGraph {
         func fill(_ share: (_ leaves: Bool, _ same: Bool) -> Double) -> Double {
             var total: Double = 0
             ends.room = [0]
+            ends.room.reserveCapacity(ends.segments.count)
             for index in 1..<ends.segments.count {
                 let same = kinds[ends.segments[index]] == kinds[ends.segments[index - 1]]
                 ends.room.append(share(same && kinds[ends.segments[index]] == .leaves, same))

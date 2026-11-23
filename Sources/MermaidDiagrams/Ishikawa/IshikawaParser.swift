@@ -6,8 +6,8 @@
  *              its causes by their indentation as Mermaid's database does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -54,7 +54,7 @@ enum IshikawaParser {
             let excerpt = String(decoding: units[token.start..<min(token.end, token.start + 24)], as: UTF16.self)
             return .invalidSyntax(line: line(at: index), problem: token.kind == .endOfFile ? .expectedNode : .unexpectedText(excerpt))
         }
-        func isStop(_ index: Int) -> Bool { [.blankLine, .newLine, .endOfFile].contains(tokens[index].kind) }
+        func isStop(_ index: Int) -> Bool { Self.isStop(tokens[index].kind) }
         var builder = IshikawaTreeBuilder(limits: limits)
         // The first token is the keyword, as the text starts with it.
         var index = tokens[1].kind == .newLine ? 2 : 1
@@ -64,7 +64,7 @@ enum IshikawaParser {
                 let textIndex = token.kind == .text ? index : index + 1
                 index = textIndex + 1
                 guard isStop(index) else { throw failure(at: index) }
-                let text = String(decoding: units[tokens[textIndex].start..<tokens[textIndex].end], as: UTF16.self)
+                let text = UnicodeScalarText.string(utf16: units[tokens[textIndex].start..<tokens[textIndex].end])
                 try builder.add(text.trimmingCharacters(in: .whitespacesAndNewlines), indentation: token.kind == .text ? 0 : token.end - token.start)
             } else if token.kind == .blankLine || token.kind == .indentation {
                 index += 1
@@ -114,9 +114,16 @@ enum IshikawaParser {
         return tokens + [Token(kind: .endOfFile, start: units.count, end: units.count), Token(kind: .endOfInput, start: units.count, end: units.count)]
     }
 
+    private static let keywordUnits = Array("ishikawa-beta".utf16)
+
+    /// Whether a token of `kind` ends an entry's line: a blank line, a line break or the end of the file.
+    private static func isStop(_ kind: TokenKind) -> Bool {
+        kind == .blankLine || kind == .newLine || kind == .endOfFile
+    }
+
     /// `ishikawa-beta`, or failing that `ishikawa`, in any case and ending at a word's end: its length, else nil.
     private static func keywordLength(in units: [UInt16], at start: Int) -> Int? {
-        let word = Array("ishikawa-beta".utf16)
+        let word = keywordUnits
         var matched = 0
         while matched < word.count, start + matched < units.count, lowercased(units[start + matched]) == word[matched] { matched += 1 }
         let endsWord = { (end: Int) in end >= units.count || !isWordUnit(units[end]) }

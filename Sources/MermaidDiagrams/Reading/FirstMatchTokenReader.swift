@@ -6,8 +6,8 @@
  *              line of each failure, and the values of the title and accessibility statements those grammars share.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The tokens of a text and the one being read. A failure is placed on the line of the token where reading stopped, or
@@ -132,7 +132,7 @@ enum FirstMatchStatementValues {
 
     /// Each run of two or more spaces and tabs as one space.
     private static func collapsingBlanks(_ text: String) -> String {
-        guard text.contains("  ") || text.contains("\t") else { return text }
+        guard MermaidByte.hasBlankRun(text), text.contains("  ") || text.contains("\t") else { return text }
         var result = ""
         var blankRun = ""
         for character in text {

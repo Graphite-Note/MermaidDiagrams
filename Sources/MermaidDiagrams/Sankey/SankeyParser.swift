@@ -5,7 +5,7 @@
  * Description: Reads a Sankey diagram's rows after its keyword, as Mermaid's grammar and Pele's parser do.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -31,7 +31,7 @@ struct SankeyParser {
         try parser.expect(.newline)
         try parser.readRows()
         var diagram = parser.builder.diagram
-        diagram.options = SankeyOptions(MermaidConfigurationOptions(section: "sankey", in: cursor.sourceBytes))
+        diagram.options = SankeyOptions(MermaidConfigurationOptions(section: "sankey", in: cursor))
         return diagram
     }
 

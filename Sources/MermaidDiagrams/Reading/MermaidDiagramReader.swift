@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.21
+ * Version: 0.24
  * Date: 23/11/2026
  */
 
@@ -88,6 +88,12 @@ public enum MermaidDiagramReader {
         }
     }
 
+    /// Whether the keyword, which is ASCII letters, digits and `-`, starts with `letter` in either case: tested before the
+    /// keyword is lowered to look for a type that starts with that letter in any case.
+    private static func startsWithLetter(_ letter: Unicode.Scalar, _ keyword: String) -> Bool {
+        keyword.utf8.first.map(MermaidByte.lowercased) == UInt8(ascii: letter)
+    }
+
     /// The diagram of one of the types this package reads since its first fourteen, from the kanban board on, most of them
     /// written `-beta` in Mermaid.
     private static func newerDiagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
@@ -96,7 +102,7 @@ public enum MermaidDiagramReader {
         case "kanban": return .kanban(titled(try KanbanParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "treeView-beta": return .treeView(titled(try TreeViewParser.parse(cursor, limits: limits), frontMatterTitle: title))
         // Pele reads `ishikawa` and `ishikawa-beta` in any case, and what follows them on their line as text.
-        case _ where keyword.lowercased().hasPrefix("ishikawa"):
+        case _ where Self.startsWithLetter("i", keyword) && keyword.lowercased().hasPrefix("ishikawa"):
             return .ishikawa(titled(try IshikawaParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         case "info": return .info(titled(try InfoDiagramParser.parse(cursor), frontMatterTitle: title))
         case "packet", "packet-beta": return .packet(titled(try PacketDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
@@ -107,7 +113,7 @@ public enum MermaidDiagramReader {
         case "wardley-beta": return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case _ where keyword.hasPrefix("eventmodeling"):
             return .eventModel(titled(try EventModelParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
-        case _ where RailroadNotation(typeKeyword: keyword) != nil:
+        case _ where Self.startsWithLetter("r", keyword) && RailroadNotation(typeKeyword: keyword) != nil:
             return .railroad(titled(try RailroadParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         case _ where C4DiagramLevel(rawValue: keyword) != nil:
             return .c4(titled(try C4Parser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
@@ -138,9 +144,10 @@ public enum MermaidDiagramReader {
         var written = Array(source.utf8)
         if written.starts(with: byteOrderMark) { written.removeFirst(byteOrderMark.count) }
         let sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(MermaidPreprocessing.normalizedLineBreaks(written))
-        let (title, start) = try readFrontMatter(sourceBytes)
+        let readFrontMatter = MermaidReadFrontMatter(in: sourceBytes)
+        let (title, start) = try frontMatterTitleAndEnd(readFrontMatter, in: sourceBytes)
         let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
-        var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes)
+        var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes, readFrontMatter: readFrontMatter)
         cursor.advance(by: start)
         return (title, cursor)
     }
@@ -148,14 +155,15 @@ public enum MermaidDiagramReader {
     /// The front matter's title and where the text after it starts (0 without front matter), found and read as Pele's
     /// `preprocess` does (`MermaidFrontMatter`). Front matter that is not YAML is refused, as Pele refuses it; a first
     /// line that is `---` alone with no closing fence is reported as unclosed front matter, where Pele finds no diagram.
-    private static func readFrontMatter(_ bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
-        guard let frontMatter = MermaidFrontMatter.find(in: bytes) else {
+    private static func frontMatterTitleAndEnd(_ read: MermaidReadFrontMatter,
+                                               in bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
+        guard let frontMatter = read.frontMatter else {
             var opening = MermaidTextCursor(bytes: bytes)
             opening.skipSpaces()
             if opening.hasPrefix(fence), opening.readRestOfLine() == "---" { throw .invalidSyntax(line: 1, problem: .unclosedFrontMatter) }
             return (nil, 0)
         }
-        guard let value = frontMatter.value() else {
+        guard let value = read.value else {
             let firstLine = frontMatter.body.split(separator: "\n").first { line in !line.allSatisfy(\.isWhitespace) } ?? ""
             throw .invalidSyntax(line: 2, problem: .unexpectedText(String(firstLine.trimmingCharacters(in: .whitespaces).prefix(24))))
         }

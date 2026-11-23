@@ -6,8 +6,8 @@
  *              Pele's YAML reader reads them with the JSON schema.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -219,7 +219,7 @@ struct KanbanFlowReader {
             guard scalar == "\\" else { scalars.append(scalar); continue }
             guard let escape = characters.popFirst() else { throw .notYAML }
             if let length = ["x": 2, "u": 4, "U": 8][Character(escape)] {
-                let digits = String(String.UnicodeScalarView(characters.prefix(length)))
+                let digits = UnicodeScalarText.string(characters.prefix(length))
                 characters = characters.dropFirst(length)
                 guard digits.count == length, let code = UInt32(digits, radix: 16), let decoded = Unicode.Scalar(code) else { throw .notYAML }
                 scalars.append(decoded)

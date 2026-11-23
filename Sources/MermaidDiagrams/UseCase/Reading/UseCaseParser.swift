@@ -7,7 +7,7 @@
  *              then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -43,7 +43,7 @@ struct UseCaseParser {
         try parser.readJSON()
         do {
             var diagram = try UseCaseDiagramBuilder.diagram(from: parser.drafts, limits: limits)
-            let options = MermaidConfigurationOptions(section: "usecase", in: cursor.sourceBytes)
+            let options = MermaidConfigurationOptions(section: "usecase", in: cursor)
             diagram.nodeSpacing = Self.spacing(options.values["nodeSpacing"])
             diagram.rankSpacing = Self.spacing(options.values["rankSpacing"])
             return diagram

@@ -5,7 +5,7 @@
  * Description: Reads the configuration a diagram's `%%{init: …}%%` directives give, as Pele reads it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -148,13 +148,16 @@ enum MermaidDirectiveConfiguration {
     }
 
     private static func contains(_ literal: [UInt8], in bytes: [UInt8], from start: Int) -> Bool {
-        guard start < bytes.count else { return false }
-        var index = start
-        while index + literal.count <= bytes.count {
-            if bytes[index] == literal[0], bytes[(index + 1)..<(index + literal.count)].elementsEqual(literal.dropFirst()) { return true }
-            index += 1
+        guard start >= 0, start < bytes.count, let first = literal.first else { return false }
+        // Read through the buffer, without the array's bounds checks at every byte: most texts hold no directive.
+        return bytes.withUnsafeBufferPointer { buffer in
+            var index = start
+            while index + literal.count <= buffer.count {
+                if buffer[index] == first, buffer[index..<(index + literal.count)].elementsEqual(literal) { return true }
+                index += 1
+            }
+            return false
         }
-        return false
     }
 
     private static let directiveStart = Array("%%{".utf8)

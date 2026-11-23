@@ -5,7 +5,7 @@
  * Description: Compacts the blocks of one of Brandes and Köpf's alignments and balances the four (layered.ts position).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -21,6 +21,10 @@ private struct LayeredBlockGraph {
     init(_ graph: LayeredFlatGraph, root: [Int], shift: [Double], gap: [Double], isRightward: Bool) {
         let vertexCount = graph.vertexCount
         var edgeFrom: [Int] = []
+        // A rank of n vertices gives n - 1 edges: at most one edge per vertex.
+        edgeFrom.reserveCapacity(vertexCount)
+        edgeTo.reserveCapacity(vertexCount)
+        edgeWidth.reserveCapacity(vertexCount)
         remainingIn = [Int](repeating: 0, count: vertexCount)
         outStart = [Int](repeating: 0, count: vertexCount + 1)
         for rank in 0...graph.maximumRank {
@@ -53,6 +57,7 @@ extension LayeredFlatPositioning {
         var blocks = LayeredBlockGraph(graph, root: root, shift: shift, gap: gap, isRightward: isRightward)
         var across = [Double](repeating: 0, count: graph.vertexCount)
         var topological = (0..<graph.vertexCount).filter { vertex in root[vertex] == vertex && blocks.remainingIn[vertex] == 0 }
+        topological.reserveCapacity(graph.vertexCount)
         var queueIndex = 0
         while queueIndex < topological.count {
             let block = topological[queueIndex]
