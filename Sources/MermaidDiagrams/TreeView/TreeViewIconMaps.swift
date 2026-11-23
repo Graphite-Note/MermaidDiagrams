@@ -6,8 +6,8 @@
  *              matter, and the icon they give a file, as Pele's detectIcon finds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The icons a tree view's options give files by name and by extension, as Pele's `iconConfig` keeps them: only the
@@ -28,7 +28,10 @@ public struct TreeViewIconMaps: Equatable, Sendable {
     /// The maps in the front matter at the start of `bytes`, none without one.
     init(frontMatterOf bytes: [UInt8]) {
         var keys: [(indentation: Int, key: String)] = []
-        for line in Self.frontMatterLines(of: bytes) {
+        let lines = Self.frontMatterLines(of: bytes)
+        // The two maps' keys can only be written with `Icons` in them, or with an escape, which takes a backslash.
+        guard lines.contains(where: Self.mayNameAnIconMap) else { return }
+        for line in lines {
             let indentation = line.prefix { character in character == " " }.count
             let content = line.trimmingCharacters(in: .whitespaces)
             guard !content.isEmpty, !content.hasPrefix("#"), let (key, value) = Self.keyAndValue(content) else { continue }
@@ -42,6 +45,17 @@ public struct TreeViewIconMaps: Equatable, Sendable {
             }
         }
     }
+
+    /// Whether a line holds `Icons` or a backslash, without which no key of it is `filenameIcons` or `extensionIcons`.
+    private static func mayNameAnIconMap(_ line: String) -> Bool {
+        let bytes = Array(line.utf8)
+        guard !bytes.contains(UInt8(ascii: "\\")) else { return true }
+        return bytes.count >= iconsWord.count && (0...(bytes.count - iconsWord.count)).contains { start in
+            bytes[start..<(start + iconsWord.count)].elementsEqual(iconsWord)
+        }
+    }
+
+    private static let iconsWord = Array("Icons".utf8)
 
     /// The icon a file is mapped to, or nil: by its whole name first, else by its last extension in lower case, with or
     /// without its dot. A name starting with its only dot (`.env`) has no extension. An empty icon is none found.

@@ -6,7 +6,7 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -43,14 +43,14 @@ enum TreeViewBoxDrawingReader {
             if let column = branchColumn(in: normalized) {
                 let depth = Int((Double(column) / Double(segmentWidth)).rounded()) + 1
                 var start = column + 1
-                while start < normalized.count, dashes.contains(normalized[start]) { start += 1 }
+                while start < normalized.count, isDash(normalized[start]) { start += 1 }
                 while start < normalized.count, normalized[start] == space { start += 1 }
                 let name = withoutTrailingWhitespace(UnicodeScalarText.string(utf16: normalized[start...]))
                 guard !name.isEmpty else { throw .invalidSyntax(line: line.writtenLine, problem: .treeViewEntryWithoutName) }
                 converted.append(TreeViewSourceLine(text: String(repeating: "    ", count: depth) + name, writtenLine: line.writtenLine))
-            } else if normalized.allSatisfy({ unit in boxCharacters.contains(unit) || isWhitespace(unit) }) {
+            } else if normalized.allSatisfy({ unit in isBoxCharacter(unit) || isWhitespace(unit) }) {
                 continue
-            } else if normalized.contains(where: boxCharacters.contains) {
+            } else if normalized.contains(where: isBoxCharacter) {
                 converted.append(line)
             } else if let first = normalized.first, isWhitespace(first) {
                 throw .invalidSyntax(line: line.writtenLine, problem: .treeViewIndentationWithoutBoxDrawing)
@@ -113,12 +113,12 @@ enum TreeViewBoxDrawingReader {
     }
 
     private static func containsBoxCharacter(_ line: String) -> Bool {
-        line.utf16.contains(where: boxCharacters.contains)
+        line.utf16.contains(where: isBoxCharacter)
     }
 
     /// The column of the line's first branch character, `├`, `└` or their heavy forms, in UTF-16 units as JavaScript counts.
     private static func branchColumn(in units: [UInt16]) -> Int? {
-        units.firstIndex(where: branches.contains)
+        units.firstIndex(where: isBranch)
     }
 
     private static func withoutTrailingWhitespace(_ text: String) -> String {
@@ -141,7 +141,18 @@ enum TreeViewBoxDrawingReader {
     private static let space: UInt16 = 0x20
     private static let lightVertical: UInt16 = 0x2502
     private static let heavyVertical: UInt16 = 0x2503
-    private static let dashes: Set<UInt16> = [0x2500, 0x2501]
-    private static let branches: Set<UInt16> = [0x2514, 0x2517, 0x251C, 0x2523]
-    private static let boxCharacters: Set<UInt16> = dashes.union(branches).union([lightVertical, heavyVertical])
+    /// `─` and `━`.
+    private static func isDash(_ unit: UInt16) -> Bool {
+        unit == 0x2500 || unit == 0x2501
+    }
+
+    /// `└`, `┗`, `├` and `┣`.
+    private static func isBranch(_ unit: UInt16) -> Bool {
+        unit == 0x2514 || unit == 0x2517 || unit == 0x251C || unit == 0x2523
+    }
+
+    /// The dashes, the branches and the vertical bars, light and heavy.
+    private static func isBoxCharacter(_ unit: UInt16) -> Bool {
+        isDash(unit) || isBranch(unit) || unit == lightVertical || unit == heavyVertical
+    }
 }
