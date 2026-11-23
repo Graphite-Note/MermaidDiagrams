@@ -5,8 +5,8 @@
  * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -64,7 +64,7 @@ public enum EntityRelationshipLayoutEngine {
     }
 
     /// A diagram with groups: each a box laid out on its own and placed in the box around it, as Pele's renderer does
-    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`). Groups inside each other fail with `subgraphsNotLaidOut`.
+    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer,
                                                                       font: DiagramFont,
                                                                       limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
@@ -82,10 +82,8 @@ public enum EntityRelationshipLayoutEngine {
         do {
             placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: clusterSpacing,
                                                        maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .subgraphsNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = EntityRelationshipPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
         page.placeBoxes(clustered: clustered, placement: placement)

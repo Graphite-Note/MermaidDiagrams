@@ -7,13 +7,14 @@
  *              with more edges.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
-extension LayeredRanking {
+/// The ranking the lane layout uses; the layered layout itself ranks with `LayeredFlatRanking`.
+enum LayeredRanking {
     /// The edges to turn around, as Pele's `orient` finds them: a depth-first walk from every node in turn, in the order of
-    /// the nodes, turns each edge that reaches a node still on its path. Unlike `cycleClosingEdges`, the walk does not start
+    /// the nodes, turns each edge that reaches a node still on its path. The walk does not start
     /// from the nodes no edge enters first.
     static func declarationOrderCycleClosingEdges(nodeCount: Int, edges: [(source: Int, target: Int)]) -> [Bool] {
         var outgoingEdgeIndices = [[Int]](repeating: [], count: nodeCount)

@@ -5,8 +5,8 @@
  * Description: Graphs in nested boxes laid out as Pele's compound layout does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -75,8 +75,9 @@ final class LayeredClusterLayoutTests: XCTestCase {
     func testAnEdgeIntoABoxCrossesTheBorderFacingItsSource() throws {
         let placement = try place(nodeClusters: [nil, 0], clusters: [cluster()], edges: [edge(.node(0), .node(1))])
         let route = placement.edgeRoutes[0]
-        XCTAssertEqual(route.points.first, placement.nodeCenters[0])
-        XCTAssertEqual(route.points.last, placement.nodeCenters[1])
+        // As Pele routes it, from the bottom of the node above to the top of the node in the box.
+        XCTAssertEqual(route.points.first, CGPoint(x: placement.nodeCenters[0].x, y: frame(of: 0, in: placement).maxY))
+        XCTAssertEqual(route.points.last, CGPoint(x: placement.nodeCenters[1].x, y: frame(of: 1, in: placement).minY))
         let box = placement.clusterFrames[0]
         XCTAssertTrue(route.points.contains { point in abs(point.y - box.minY) < accuracy && point.x > box.minX && point.x < box.maxX })
         XCTAssertEqual(route.segmentsRunVertically.count, route.points.count - 1)
@@ -101,10 +102,12 @@ final class LayeredClusterLayoutTests: XCTestCase {
         XCTAssertGreaterThan(placement.clusterFrames[0].minY, placement.nodeCenters[0].y)
     }
 
-    func testAnEdgeToABoxItselfEndsAtTheBoxsCenter() throws {
+    func testAnEdgeToABoxItselfEndsOnTheBoxsSideFacingItsSource() throws {
         let placement = try place(nodeClusters: [nil, 0], clusters: [cluster()], edges: [edge(.node(0), .cluster(0))])
         let box = placement.clusterFrames[0]
-        XCTAssertEqual(placement.edgeRoutes[0].points.last, CGPoint(x: box.midX, y: box.midY))
+        let end = try XCTUnwrap(placement.edgeRoutes[0].points.last)
+        XCTAssertEqual(end.y, box.minY, accuracy: accuracy)
+        XCTAssertTrue(end.x > box.minX && end.x < box.maxX)
     }
 
     func testAnEdgeLeavingAcrossTheBoxsFlowPinsItsNodeFirstAndRunsStraightToTheBorder() throws {
@@ -151,10 +154,12 @@ final class LayeredClusterLayoutTests: XCTestCase {
         }
     }
 
-    func testABoxInsideItselfIsRefused() {
-        XCTAssertThrowsError(try place(nodeClusters: [0], clusters: [cluster(in: 1), cluster(in: 0)], edges: [])) { error in
-            XCTAssertEqual(error as? LayeredClusterLayoutError, .clusterInsideItself)
-        }
+    func testBoxesInsideEachOtherAreLiftedToTheTopLevelAsPelesAre() throws {
+        // Nothing is reachable from the top level; Pele's compound layout lifts out, in order, the node and then the
+        // first box, which keeps the second inside it.
+        let placement = try place(nodeClusters: [0], clusters: [cluster(in: 1), cluster(in: 0)], edges: [])
+        XCTAssertTrue(placement.clusterFrames[0].insetBy(dx: -accuracy, dy: -accuracy).contains(placement.clusterFrames[1]))
+        XCTAssertFalse(placement.clusterFrames[0].intersects(frame(of: 0, in: placement)))
     }
 
     func testAnEmptyBoxTakesItsPaddingAndItsMinimumWidth() throws {
@@ -182,7 +187,7 @@ final class LayeredClusterLayoutTests: XCTestCase {
                                                                      }),
                                                         spacing: spacing, maximumPointCount: 1_000))
         XCTAssertEqual(placement.nodeCenters, layered.nodeCenters)
-        XCTAssertEqual(placement.edgeRoutes.map(\.points), layered.edgeRoutes)
+        XCTAssertEqual(placement.edgeRoutes.map(\.points), layered.edgePaths)
         XCTAssertEqual(placement.size, layered.extent)
     }
 

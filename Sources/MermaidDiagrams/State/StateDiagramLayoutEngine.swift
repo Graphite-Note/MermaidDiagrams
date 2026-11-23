@@ -5,8 +5,8 @@
  * Description: Lays a state diagram out in Pele's style, its composite states as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -86,10 +86,8 @@ public enum StateDiagramLayoutEngine {
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .compositeStatesNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = StateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings, axes: axes)
         page.placeStates(clustered: clustered, placement: placement)

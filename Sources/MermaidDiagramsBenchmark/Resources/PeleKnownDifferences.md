@@ -26,7 +26,7 @@ drawings; those marked `not-traced` were not followed to their cause.
 | line-height | A label of more than one line (a `<br>`, or wrapped at its width) has its lines 1.5 sizes apart in the package's `DiagramTextBlock`, 1.3 sizes apart in Pele (text/label.ts `WRAPPED_LINE_HEIGHT`, used by `layoutLabel` for every label of more than one line). The plane maps, agent flows, C4 and use case diagrams already set such lines 1.3 apart (`PlaneMapLabel`, `C4TextLabel`, `UseCaseTextLabel`); the other types do not, which makes each extra line 3 to 6 points taller than Pele's. Left as it is here: changing `DiagramTextBlock` changes every multi-line layout of those types. |
 | icon-nodes | A flowchart node written `@{ icon: …, form: …, pos: …, h: … }` is drawn by Pele as an icon shape of that height with its label above or below; the package reads those keys and leaves them (`FlowchartNodeSyntax.readAttributes`), drawing a rectangle. |
 | icons-in-text | Pele draws `fa:fa-…` in a label as an icon one size wide (text/icons.ts); the package writes the words as text, so the labels are wider. |
-| layered-layout | The layered layout places nodes differently: the package's ranking, ordering and positioning (`LayeredRanking`, `LayeredOrdering`, `LayeredPositioning`, `LayeredClusterLayout`) follow Pele's method but are not step-for-step ports of layout/layered.ts and layout/compound.ts (which, for example, balance ranks in eight passes, order with its own sweeps and straighten long edges past labels), so an edge of several ranks, a crossing or a group can end up elsewhere: in `flowchart-docs#92` the target of `---->` sits one rank lower than Pele puts it, in `requirement-docs#4` the two requirements under `test_req` are swapped and the relations cross. |
+| layered-layout | The layered layout itself is Pele's, ported step for step (`LayeredFlatLayout` from layout/layered.ts, `LayeredCompoundLayout` from layout/compound.ts); these inputs still differ in what the type hands the layout (its nodes' spans, its groups' padding and order, its gaps and options), which is not yet Pele's for them. |
 | self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
 | not-traced | Not followed to its cause in this pass. |
 
@@ -34,31 +34,21 @@ drawings; those marked `not-traced` were not followed to their cause.
 
 | Input | Differs in | Reason | Package minus Pele (width, height) |
 |---|---|---|---|
-| agentflow-reference#57 | width | layered-layout | +3 +0 |
 | agentflow-reference#131 | refused | nothing-to-draw |  |
 | agentflow-reference#134 | width, height | self-loop | -18 +4 |
 | agentflow-reference#135 | width | self-loop | -18 +2 |
 | agentflow-reference#230 | width, height | self-loop | -18 +4 |
 | block-docs#25 | texts | blank-text | +0 +0 |
 | block-docs#26 | texts | blank-text | +0 +0 |
-| class-docs#0 | width | layered-layout | +24 +0 |
-| class-docs#21 | height | layered-layout | +0 -5 |
 | er-docs#4 | width | beyond-ascii | +5 +0 |
-| er-docs#18 | width | layered-layout | -9 -4 |
 | eventmodeling-docs#3 | texts | text-per-line | +2 +0 |
 | eventmodeling-docs#4 | texts | text-per-line | +2 +0 |
 | flowchart-docs#2 | width | beyond-ascii | +5 +0 |
 | flowchart-docs#3 | height | not-traced | -1 +9 |
-| flowchart-docs#6 | height | layered-layout | +0 -5 |
-| flowchart-docs#7 | height | layered-layout | +0 -5 |
 | flowchart-docs#68 | width, height | icon-nodes | +28 -42 |
 | flowchart-docs#69 | width, height | icon-nodes | +28 -42 |
-| flowchart-docs#92 | width, height | layered-layout | -29 +25 |
-| flowchart-docs#93 | width, height | layered-layout | -29 +25 |
-| flowchart-docs#96 | width | layered-layout | +6 +0 |
-| flowchart-docs#97 | width | layered-layout | -12 +0 |
-| flowchart-docs#98 | width, texts | layered-layout, outlined-text | -20 +0 |
-| flowchart-docs#100 | width, height | layered-layout | -126 +84 |
+| flowchart-docs#98 | texts | layered-layout, outlined-text | +0 +0 |
+| flowchart-docs#100 | width, height | layered-layout | -126 +96 |
 | flowchart-docs#102 | height | not-traced | -4 +12 |
 | flowchart-docs#111 | width, height | icons-in-text | +206 +24 |
 | flowchart-docs#112 | width, height | icons-in-text | +86 +24 |
@@ -75,16 +65,14 @@ drawings; those marked `not-traced` were not followed to their cause.
 | railroad-docs#2 | width | not-traced | +4 +0 |
 | railroad-docs#12 | texts | not-traced | +0 +0 |
 | requirement-docs#3 | width | layered-layout | -5 +0 |
-| requirement-docs#4 | width | layered-layout | +270 +0 |
 | requirement-docs#8 | width | layered-layout | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
 | sequence-docs#23 | height | line-height | +0 +12 |
 | sequence-docs#24 | height | line-height | +0 +24 |
 | sequence-docs#29 | width | not-traced | -5 +0 |
 | sequence-docs#30 | width | not-traced | -5 +0 |
-| state-docs#0 | width | layered-layout | -3 +0 |
-| state-docs#2 | width, height | layered-layout | -12 -8 |
-| state-docs#3 | width, height | layered-layout | -12 -8 |
+| state-docs#2 | height | layered-layout | +0 -8 |
+| state-docs#3 | height | layered-layout | +0 -8 |
 | state-docs#10 | width, height | layered-layout | +16 -8 |
 | state-docs#11 | width, height | layered-layout | +24 -24 |
 | state-docs#12 | width, height | layered-layout | +16 -16 |
@@ -97,15 +85,9 @@ drawings; those marked `not-traced` were not followed to their cause.
 | timeline-docs#4 | height | line-height | +0 +12 |
 | timeline-docs#5 | height | line-height | +0 +18 |
 | treeview-docs#11 | width | beyond-ascii | +5 +0 |
-| usecase-docs#1 | height | layered-layout | +0 +4 |
-| usecase-docs#2 | height | layered-layout | +0 +4 |
-| usecase-docs#11 | height | layered-layout | +0 -8 |
 | usecase-docs#15 | width | layered-layout | -8 +0 |
-| usecase-docs#22 | height | layered-layout | -3 +18 |
-| bench-generated#0 | width | layered-layout | -368 +0 |
-| bench-generated#1 | width, height | layered-layout | -754 -115 |
 | bench-generated#2 | refused | drawing-limit |  |
-| bench-generated#3 | width, height | layered-layout | -18156 -2556 |
+| bench-generated#3 | refused | drawing-limit |  |
 
 ## Mermaid's flowchart specs
 

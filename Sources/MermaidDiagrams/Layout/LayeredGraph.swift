@@ -1,3 +1,14 @@
+/**
+ * File: LayeredGraph.swift
+ * ------------------------
+ * Layer: Core
+ * Description: A graph to lay out in ranks, the gaps and routing its layout keeps, and where the layout put everything.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A graph to lay out in ranks, in flow space: `across` is the axis the nodes of one rank are spread along, `along`
@@ -5,26 +16,9 @@ import CoreGraphics
 struct LayeredGraph {
     var nodeSizes: [LayeredSize]
     var edges: [LayeredEdge]
-    /// Where each node must go beyond what its edges ask, by node; empty when every node is free, as in a graph that is
-    /// not a box of a cluster layout (`LayeredClusterLayout`).
-    var nodePlacements: [LayeredNodePlacement] = []
-}
-
-/// Where a node must go beyond what its edges ask: what a box laid out as its own graph needs, where an edge that
-/// crosses the box's border passes through a point of it.
-enum LayeredNodePlacement: Equatable {
-    case free
-    /// A point of the border the flow starts from: ranked before every other node, the border separation before the
-    /// first rank. Its edges run from it, whichever way they are written, and close no cycle.
-    case startBorder
-    /// A point of the border the flow ends at: ranked after every other node; its edges run to it.
-    case endBorder
-    /// First across its rank, so that an edge can leave it straight across the flow to the border on that side.
-    case firstInRank
-    /// Last across its rank.
-    case lastInRank
-
-    var isBorder: Bool { self == .startBorder || self == .endBorder }
+    /// How much of the sides edges meet each node shares out between them, across the flow (Pele's `span`); empty, or
+    /// 0 for a node, keeps every end at the middle of its side.
+    var nodeSideSpans: [CGFloat] = []
 }
 
 /// An extent in flow space.
@@ -58,6 +52,19 @@ struct LayeredSpacing: Equatable {
     var rankSeparation: CGFloat
     /// Between a rank of border points and the rank next to it, or nil for the rank separation.
     var borderSeparation: CGFloat?
+    var routing = LayeredRouting()
+}
+
+/// How the layout routes edges across the gaps between ranks (Pele's `tracks`, `straight`, `apart` and `headRoom`).
+struct LayeredRouting: Equatable {
+    /// At right angles, each on a track of its own across a gap.
+    var runsOnTracks = false
+    /// Straight from point to point.
+    var isStraight = false
+    /// The caller sets the ends of edges on one side of a node apart itself, so twin edges need no bend.
+    var keepsTwinsApart = false
+    /// The room the marker at an edge's head takes.
+    var headRoom: CGFloat = 0
 }
 
 /// Where the layout put everything, in flow space, with the smallest `across` and `along` at 0.
@@ -68,6 +75,9 @@ struct LayeredPlacement: Equatable {
     var edgeRoutes: [[CGPoint]]
     /// For each edge, the center of its text's place, or nil.
     var edgeLabelCenters: [CGPoint?]
+    /// For each edge, the route as Pele draws it, from the side of its source, where its end was spread or settled, to
+    /// the side of its target, in the edge's own direction.
+    var edgePaths: [[CGPoint]] = []
     /// `x` is the extent across, `y` along.
     var extent: CGSize
 }

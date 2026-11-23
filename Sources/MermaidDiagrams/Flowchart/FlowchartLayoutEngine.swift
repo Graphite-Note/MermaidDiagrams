@@ -5,8 +5,8 @@
  * Description: Lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single nodes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,9 +16,11 @@ import CoreGraphics
 /// that spread along the sides they meet; edges to a node itself as loops beside it; and the title above.
 public enum FlowchartLayoutEngine {
     /// Pele's gaps; a border point of a box is 20 points from the rank next to it.
-    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 48, borderSeparation: 20)
+    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 48, borderSeparation: 20,
+                                        routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
     /// The tighter gaps of a flowchart laid out for a narrow column (`DiagramSpacing.compact`), about two thirds of Pele's.
-    static let compactSpacing = LayeredSpacing(nodeSeparation: 24, edgeSeparation: 10, rankSeparation: 32, borderSeparation: 14)
+    static let compactSpacing = LayeredSpacing(nodeSeparation: 24, edgeSeparation: 10, rankSeparation: 32, borderSeparation: 14,
+                                               routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The widest a line of text is before it wraps.
@@ -56,6 +58,7 @@ public enum FlowchartLayoutEngine {
         }
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let layeredEdgeIndices = diagram.edges.indices.filter { edgeIndex in diagram.edges[edgeIndex].sourceIndex != diagram.edges[edgeIndex].targetIndex }
+        let spanSide: DiagramSide = diagram.direction.layeredDirection.runsVertically ? .top : .left
         let graph = LayeredGraph(nodeSizes: measured.layoutSizes(loopSide: flowAxes.loopSide).map(flowAxes.flowSize(of:)),
                                  edges: layeredEdgeIndices.map { edgeIndex in
                                      let edge = diagram.edges[edgeIndex]
@@ -65,7 +68,8 @@ public enum FlowchartLayoutEngine {
                                      }
                                      return LayeredEdge(source: edge.sourceIndex, target: edge.targetIndex, minimumRankSpan: edge.minimumRankSpan,
                                                         labelSize: labelSize)
-                                 })
+                                 },
+                                 nodeSideSpans: diagram.nodes.indices.map { node in measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: spanSide) })
         guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
@@ -79,7 +83,7 @@ public enum FlowchartLayoutEngine {
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
-    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`). Only groups inside each other fail, with `subgraphsNotLaidOut`.
+    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
                                                                       font: DiagramFont, limits: MermaidDiagramLimits,
                                                                       spacing: LayeredSpacing) throws(FlowchartLayoutError) -> FlowchartLayout {
@@ -87,10 +91,8 @@ public enum FlowchartLayoutEngine {
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .subgraphsNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = FlowchartPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
         page.placeNodes(clustered: clustered, placement: placement)

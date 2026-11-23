@@ -5,8 +5,8 @@
  * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 20/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -51,6 +51,12 @@ struct FlowchartMeasurement {
             selfLoopEdgeIndices[edge.sourceIndex].append(edgeIndex)
         }
         self.selfLoopEdgeIndices = selfLoopEdgeIndices
+    }
+
+    /// How much of the side of `node` facing `side` its edges share out between them (Pele's `shapeSpan`), or 0 where
+    /// they all meet its middle.
+    func sideSpan(of node: Int, shape: FlowchartNodeShape, side: DiagramSide) -> CGFloat {
+        spreadsEdgeEnds ? FlowchartShapeGeometry.span(of: shape, size: shapeSizes[node], side: side) : 0
     }
 
     /// Each node's size in its rank: its shape, widened on both sides across the flow by the room its loops take.

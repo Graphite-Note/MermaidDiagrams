@@ -5,8 +5,8 @@
  * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -54,6 +54,7 @@ struct FlowchartClusterGraph {
         var layoutNodeIndices: [Int?] = []
         var nodeSizes: [CGSize] = []
         var nodeClusters: [Int?] = []
+        var nodeSideSpans: [CGFloat] = []
         for node in diagram.nodes.indices {
             guard nesting.representedSubgraphs[node] == nil else {
                 layoutNodeIndices.append(nil)
@@ -62,16 +63,23 @@ struct FlowchartClusterGraph {
             layoutNodeIndices.append(nodeSizes.count)
             nodeSizes.append(measured.layoutSize(of: node, loopSide: nodeLoopSides[node]))
             nodeClusters.append(nesting.nodeSubgraphs[node])
+            // A node whose loops go out below runs across, and spreads its edges along its height.
+            nodeSideSpans.append(measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: nodeLoopSides[node] == .bottom ? .left : .top))
         }
         self.layoutNodeIndices = layoutNodeIndices
+        // Pele lists the groups before the nodes, the last written first (flowchart/graph.ts), so an empty group
+        // comes before the nodes of its box.
         let clusters = diagram.subgraphs.indices.map { subgraph in
-            Self.cluster(parent: nesting.subgraphParents[subgraph], direction: diagram.subgraphs[subgraph].direction, title: measuredTitles[subgraph])
+            var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: diagram.subgraphs[subgraph].direction,
+                                       title: measuredTitles[subgraph])
+            cluster.sequence = -CGFloat(subgraph + 1)
+            return cluster
         }
         let edges = Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,
                                    representedSubgraphs: nesting.representedSubgraphs)
         layoutEdgeIndices = edges.diagramIndices
-        graph = LayeredClusterGraph(nodeSizes: nodeSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges.layout,
-                                    direction: diagram.direction.layeredDirection)
+        graph = LayeredClusterGraph(nodeSizes: nodeSizes, nodeSideSpans: nodeSideSpans, nodeClusters: nodeClusters, clusters: clusters,
+                                    edges: edges.layout, direction: diagram.direction.layeredDirection)
     }
 
     /// A group's box: Pele's padding, the title's band along the top, at least as wide as the title.
@@ -80,7 +88,7 @@ struct FlowchartClusterGraph {
         let top = title == nil ? clusterPadding : titleSize.height + 2 * titleMargin
         return LayeredCluster(parent: parent, direction: direction?.layeredDirection,
                               padding: LayeredClusterPadding(side: clusterPadding, top: top, bottom: clusterPadding),
-                              minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance)
+                              minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance, sideSpan: .infinity)
     }
 
     /// The edges between two different ends, with their texts' room; an edge from a node or a group to itself loops
