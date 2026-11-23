@@ -3,11 +3,12 @@
  * ---------------------------------
  * Layer: Tests
  * Description: Every sample's scene written as SVG is well-formed XML of its size and view box with a path per shape and
- *              a text per text, in either color mode; hostile text is escaped; numbers are compact.
+ *              a text per text, in either color mode; hostile text is escaped; numbers are compact; text beyond ASCII
+ *              and gradients are written whole, each without copying the document.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -106,5 +107,63 @@ final class DiagramSVGWriterTests: XCTestCase {
                                                           typography: DiagramSceneSamples.typography)
         let turned = DiagramSVGWriter().document(of: chart.scene, diagramType: "xychart")
         XCTAssertTrue(turned.contains("transform=\"rotate(-90 "))
+    }
+
+    func testTextBeyondASCIIIsWrittenWholeAndReadBackAsItWasGiven() throws {
+        let source = """
+            flowchart LR
+                A["Café ﬁ 日本語 🧭"] --> B["e\u{301} — naïve"]
+            """
+        let prepared = try MermaidDiagramPreparation.prepare(source: source, typography: DiagramSceneSamples.typography)
+        for colors in [DiagramSVGColors.peleVariables, .palette(DiagramScenePaletteSamples.light)] {
+            let document = DiagramSVGWriter(colors: colors, paintsBackground: true)
+                .document(of: prepared.scene, diagramType: "flowchart", title: "Überblick 🧭", description: "naïve\u{FFFE} résumé")
+            let reading = try XCTUnwrap(DiagramSVGDocumentReading.read(document))
+            XCTAssertTrue(document.contains("<title id=\"pele-title\">Überblick 🧭</title><desc id=\"pele-desc\">naïve résumé</desc>"),
+                          "U+FFFE left out")
+            XCTAssertEqual(reading.elements(named: "text").map(\.text).joined(separator: " "), "Café ﬁ 日本語 🧭 e\u{301} — naïve")
+            XCTAssertEqual(reading.elements(named: "rect").count, 1, "the background")
+        }
+    }
+
+    func testGradientsAreDefinedBeforeTheBodyAndNumberedInTheOrderTheyAreUsed() throws {
+        let sankey = try MermaidDiagramPreparation.prepare(source: try DiagramSceneSamples.sankeyEnergy(), typography: DiagramSceneSamples.typography)
+        let document = DiagramSVGWriter(colors: .palette(DiagramScenePaletteSamples.light), identifierPrefix: "note-9", paintsBackground: true)
+            .document(of: sankey.scene, diagramType: "sankey", title: "Energy")
+        let definitions = try XCTUnwrap(document.range(of: "<defs>"))
+        let title = try XCTUnwrap(document.range(of: "</title>"))
+        let background = try XCTUnwrap(document.range(of: "<rect "))
+        XCTAssertEqual(title.upperBound, definitions.lowerBound, "the definitions come right after the title")
+        XCTAssertLessThan(definitions.lowerBound, background.lowerBound, "and before the background and the body")
+        let gradientCount = document.components(separatedBy: "<linearGradient ").count - 1
+        XCTAssertGreaterThan(gradientCount, 1)
+        for index in 1...gradientCount {
+            XCTAssertTrue(document.contains("<linearGradient id=\"note-9-gradient-\(index)\""), "gradient \(index) defined")
+            XCTAssertTrue(document.contains("fill=\"url(#note-9-gradient-\(index))\""), "gradient \(index) used")
+        }
+        XCTAssertNotNil(DiagramSVGDocumentReading.read(document), "Well-formed XML")
+    }
+
+    /// Each gradient writes its id into both buffers; a buffer passed `inout` beside a copy of the body (a method of the
+    /// body's own) was copied whole for each, so a Sankey of many bands copied its document once per band.
+    func testGradientsAreWrittenWithoutCopyingTheDocument() {
+        let reserved = 1 << 20
+        var body = DiagramSVGBody(colors: .palette(DiagramScenePaletteSamples.light), identifierPrefix: "pele",
+                                  content: DiagramSVGBuffer(reservingCapacity: reserved))
+        body.definitions = DiagramSVGBuffer(reservingCapacity: reserved)
+        let gradient = DiagramLinearGradient(startPaint: .accent, endPaint: .series(2), startPoint: .zero, endPoint: CGPoint(x: 40, y: 0))
+        let shape = DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 40, height: 10), transform: nil),
+                                      painting: .gradientFill(gradient), part: DiagramScenePart.allCases[0])
+        func storage(_ buffer: DiagramSVGBuffer) -> UnsafePointer<UInt8>? {
+            buffer.bytes.withUnsafeBufferPointer { bytes in bytes.baseAddress }
+        }
+        let content = storage(body.content)
+        let definitions = storage(body.definitions)
+        for _ in 0..<200 { body.add(.shape(shape)) }
+        XCTAssertLessThan(body.content.count, reserved)
+        XCTAssertEqual(storage(body.content), content, "the document's buffer is written in place")
+        XCTAssertEqual(storage(body.definitions), definitions, "the definitions' buffer is written in place")
+        XCTAssertTrue(body.content.text.contains("fill=\"url(#pele-gradient-200)\""))
+        XCTAssertTrue(body.definitions.text.contains("<linearGradient id=\"pele-gradient-200\""))
     }
 }

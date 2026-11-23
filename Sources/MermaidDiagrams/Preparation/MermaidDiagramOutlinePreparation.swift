@@ -6,8 +6,8 @@
  *              says what a screen reader hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,30 +16,33 @@ extension MermaidDiagramPreparationContext {
     /// A kanban board, and for a narrow column the board folded into rows of columns that fit it.
     func prepared(_ board: KanbanBoard) -> PreparedMermaidDiagram {
         let layout = KanbanLayoutEngine.layout(board, typography: typography)
-        let narrow = narrowScene(of: board, regularSize: layout.size, laidOut: { board in
-            KanbanLayoutEngine.layout(board, typography: typography, maximumWidth: narrowestColumnWidth)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .kanban, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: board, regularSize: layout.size, laidOut: { board in
+                KanbanLayoutEngine.layout(board, typography: typography, maximumWidth: narrowestColumnWidth)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .kanban, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(kanban: board))
     }
 
     /// A tree view, and for a narrow column the tree laid out tight.
     func prepared(_ tree: TreeViewDiagram) -> PreparedMermaidDiagram {
         let layout = TreeViewLayoutEngine.layout(tree, typography: typography)
-        let narrow = narrowScene(of: tree, regularSize: layout.size, laidOut: { tree in
-            TreeViewLayoutEngine.layout(tree, typography: typography, maximumWidth: narrowestColumnWidth)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .treeView, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: tree, regularSize: layout.size, laidOut: { tree in
+                TreeViewLayoutEngine.layout(tree, typography: typography, maximumWidth: narrowestColumnWidth)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .treeView, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(treeView: tree))
     }
 
     /// An Ishikawa diagram, and for a narrow column the diagram running down as an indented list.
     func prepared(_ diagram: IshikawaDiagram) -> PreparedMermaidDiagram {
         let layout = IshikawaLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: diagram, regularSize: layout.size, laidOut: { diagram in
-            IshikawaLayoutEngine.layout(diagram, typography: typography, maximumWidth: narrowestColumnWidth)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .ishikawa, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: diagram, regularSize: layout.size, laidOut: { diagram in
+                IshikawaLayoutEngine.layout(diagram, typography: typography, maximumWidth: narrowestColumnWidth)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .ishikawa, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(ishikawa: diagram))
     }
 }

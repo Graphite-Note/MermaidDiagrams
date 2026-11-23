@@ -6,8 +6,8 @@
  *              their tight scenes for a narrow column, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -23,10 +23,11 @@ extension MermaidDiagramPreparationContext {
         } catch {
             throw .blockLayout(error)
         }
-        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-            try BlockLayoutEngine.narrowLayout(diagram, typography: typography, width: width)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .block, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+                try BlockLayoutEngine.narrowLayout(diagram, typography: typography, width: width)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .block, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(block: diagram))
     }
 }
@@ -35,10 +36,11 @@ extension MermaidDiagramPreparationContext {
     /// An architecture diagram, and for a narrow column the diagram drawn tight, as Pele's `tighten` draws it.
     func prepared(_ diagram: ArchitectureDiagram) -> PreparedMermaidDiagram {
         let layout = ArchitectureLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-            ArchitectureLayoutEngine.layout(diagram, typography: typography, availableWidth: width, isTight: true)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .architecture, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
+                ArchitectureLayoutEngine.layout(diagram, typography: typography, availableWidth: width, isTight: true)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .architecture, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(architecture: diagram))
     }
 }

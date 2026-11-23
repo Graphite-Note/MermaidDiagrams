@@ -2,36 +2,41 @@
  * File: DiagramSVGBody.swift
  * --------------------------
  * Layer: Core
- * Description: Writes a scene's items as SVG elements: a path per shape (one for a fill and its stroke), a text per placed
- *              text, and the gradients they name.
+ * Description: Writes a scene's items as SVG elements into the document's buffer: a path per shape (one for a fill and
+ *              its stroke), a text per placed text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
 import CoreGraphics
 
-/// The elements of an SVG document's body, written item by item, and the gradients they name.
+/// The elements of an SVG document's body, written item by item into `content`, and the gradients they name, into
+/// `definitions`.
 struct DiagramSVGBody {
-    let colors: DiagramSVGColors
+    private var paints: DiagramSVGPaintTexts
     let identifierPrefix: String
-    var content = ""
-    var definitions = ""
+    var content: DiagramSVGBuffer
+    var definitions = DiagramSVGBuffer()
     private var gradientCount = 0
 
-    init(colors: DiagramSVGColors, identifierPrefix: String) {
-        self.colors = colors
+    init(colors: DiagramSVGColors, identifierPrefix: String, content: DiagramSVGBuffer) {
+        paints = DiagramSVGPaintTexts(colors: colors)
         self.identifierPrefix = identifierPrefix
+        self.content = content
     }
 
     /// The system's monospaced fonts, behind Pele's `--pele-font-mono` when the colors are Pele's variables.
-    private var monospacedFontFamily: String {
-        let family = "ui-monospace,SFMono-Regular,Menlo,monospace"
-        switch colors {
-        case .palette: return family
-        case .peleVariables: return "var(--pele-font-mono,\(family))"
+    private var monospacedFontFamily: StaticString {
+        switch paints.colors {
+        case .palette: "ui-monospace,SFMono-Regular,Menlo,monospace"
+        case .peleVariables: "var(--pele-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace)"
         }
+    }
+
+    mutating func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
+        paints.text(of: paint)
     }
 
     mutating func add(_ item: DiagramSceneItem) {
@@ -42,120 +47,206 @@ struct DiagramSVGBody {
     }
 
     private mutating func add(_ shape: DiagramSceneShape) {
-        let data = DiagramSVGSyntax.pathData(shape.path)
-        let painting: String
+        content.append("<path class=\"pele-")
+        content.append(shape.part.rawValue)
+        content.append("\" d=\"")
+        content.appendPathData(shape.path)
+        content.append("\"")
         switch shape.painting {
         case .fill(let paint):
-            let fill = colors.text(of: paint)
-            painting = " fill=\"\(fill.color)\"" + DiagramSVGWriter.opacity(fill.opacity, "fill-opacity")
+            appendFill(paints.text(of: paint))
         case .stroke(let paint, let stroke):
-            painting = " fill=\"none\"" + Self.strokeAttributes(colors.text(of: paint), stroke)
+            content.append(" fill=\"none\"")
+            appendStrokeAttributes(paints.text(of: paint), stroke)
         case .fillAndStroke(let fillPaint, let strokePaint, let stroke):
-            let fill = colors.text(of: fillPaint)
-            painting = " fill=\"\(fill.color)\"" + DiagramSVGWriter.opacity(fill.opacity, "fill-opacity")
-                + Self.strokeAttributes(colors.text(of: strokePaint), stroke)
+            appendFill(paints.text(of: fillPaint))
+            appendStrokeAttributes(paints.text(of: strokePaint), stroke)
         case .gradientFill(let gradient):
             gradientCount += 1
-            let identifier = "\(identifierPrefix)-gradient-\(gradientCount)"
-            definitions += gradientDefinition(gradient, identifier: identifier)
-            painting = " fill=\"url(#\(identifier))\"" + DiagramSVGWriter.opacity(gradient.opacity, "fill-opacity")
+            addGradientDefinition(gradient)
+            content.append(" fill=\"url(#")
+            Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &content)
+            content.append(")\"")
+            content.appendOpacity(gradient.opacity, attribute: "fill-opacity")
         }
-        content += "<path class=\"pele-\(shape.part.rawValue)\" d=\"\(data)\"\(painting)/>"
+        content.append("/>")
     }
 
-    private static func strokeAttributes(_ paint: DiagramSVGPaintText, _ stroke: DiagramStroke) -> String {
-        var attributes = " stroke=\"\(paint.color)\"" + DiagramSVGWriter.opacity(paint.opacity, "stroke-opacity")
-        attributes += " stroke-width=\"\(DiagramSVGSyntax.number(stroke.lineWidth))\""
+    /// ` fill="…"` and its opacity.
+    private mutating func appendFill(_ paint: DiagramSVGPaintText) {
+        content.append(" fill=\"")
+        content.append(paint.color)
+        content.append("\"")
+        content.appendOpacity(paint.opacity, attribute: "fill-opacity")
+    }
+
+    private mutating func appendStrokeAttributes(_ paint: DiagramSVGPaintText, _ stroke: DiagramStroke) {
+        content.append(" stroke=\"")
+        content.append(paint.color)
+        content.append("\"")
+        content.appendOpacity(paint.opacity, attribute: "stroke-opacity")
+        content.append(" stroke-width=\"")
+        content.appendNumber(stroke.lineWidth)
+        content.append("\"")
         switch stroke.lineCap {
-        case .round: attributes += " stroke-linecap=\"round\""
-        case .square: attributes += " stroke-linecap=\"square\""
+        case .round: content.append(" stroke-linecap=\"round\"")
+        case .square: content.append(" stroke-linecap=\"square\"")
         default: break
         }
         switch stroke.lineJoin {
-        case .round: attributes += " stroke-linejoin=\"round\""
-        case .bevel: attributes += " stroke-linejoin=\"bevel\""
+        case .round: content.append(" stroke-linejoin=\"round\"")
+        case .bevel: content.append(" stroke-linejoin=\"bevel\"")
         default: break
         }
         if !stroke.dashLengths.isEmpty {
-            attributes += " stroke-dasharray=\"\(stroke.dashLengths.map(DiagramSVGSyntax.number).joined(separator: " "))\""
+            content.append(" stroke-dasharray=\"")
+            content.appendNumbers(stroke.dashLengths)
+            content.append("\"")
         }
-        return attributes
+    }
+
+    /// `<prefix>-gradient-<n>`, the latest gradient's id. Static, as `self` passed to a method of its own while one of its
+    /// buffers is passed `inout` is copied, buffers and all, which made each gradient copy the whole document.
+    private static func appendGradientIdentifier(prefix: String, number: Int, into buffer: inout DiagramSVGBuffer) {
+        buffer.append(prefix)
+        buffer.append("-gradient-")
+        buffer.appendNumber(CGFloat(number))
     }
 
     /// A gradient across the page between its two points, the end colors carried on beyond them (SVG's `pad`).
-    private func gradientDefinition(_ gradient: DiagramLinearGradient, identifier: String) -> String {
-        let start = colors.text(of: gradient.startPaint)
-        let end = colors.text(of: gradient.endPaint)
-        let number = DiagramSVGSyntax.number
-        return "<linearGradient id=\"\(identifier)\" gradientUnits=\"userSpaceOnUse\" x1=\"\(number(gradient.startPoint.x))\" "
-            + "y1=\"\(number(gradient.startPoint.y))\" x2=\"\(number(gradient.endPoint.x))\" y2=\"\(number(gradient.endPoint.y))\">"
-            + "<stop offset=\"0\" stop-color=\"\(start.color)\"\(DiagramSVGWriter.opacity(start.opacity, "stop-opacity"))/>"
-            + "<stop offset=\"1\" stop-color=\"\(end.color)\"\(DiagramSVGWriter.opacity(end.opacity, "stop-opacity"))/></linearGradient>"
+    private mutating func addGradientDefinition(_ gradient: DiagramLinearGradient) {
+        let start = paints.text(of: gradient.startPaint)
+        let end = paints.text(of: gradient.endPaint)
+        definitions.append("<linearGradient id=\"")
+        Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &definitions)
+        definitions.append("\" gradientUnits=\"userSpaceOnUse\" x1=\"")
+        definitions.appendNumber(gradient.startPoint.x)
+        definitions.append("\" y1=\"")
+        definitions.appendNumber(gradient.startPoint.y)
+        definitions.append("\" x2=\"")
+        definitions.appendNumber(gradient.endPoint.x)
+        definitions.append("\" y2=\"")
+        definitions.appendNumber(gradient.endPoint.y)
+        definitions.append("\"><stop offset=\"0\" stop-color=\"")
+        definitions.append(start.color)
+        definitions.append("\"")
+        definitions.appendOpacity(start.opacity, attribute: "stop-opacity")
+        definitions.append("/><stop offset=\"1\" stop-color=\"")
+        definitions.append(end.color)
+        definitions.append("\"")
+        definitions.appendOpacity(end.opacity, attribute: "stop-opacity")
+        definitions.append("/></linearGradient>")
     }
 
     /// One `text` per placed text, centered on each line's middle; several lines in `tspan`s. Each keeps its spaces
     /// (`xml:space="preserve"`), as Core Text measured and drew them: SVG would otherwise run several into one and drop
     /// those at a line's ends, which moves centered text.
     private mutating func add(_ text: DiagramSceneText) {
-        let paint = colors.text(of: text.paint)
-        let number = DiagramSVGSyntax.number
-        let head = " class=\"pele-\(text.part.rawValue)\" font-size=\"\(number(text.block.fontSize))\""
-        var tail = ""
-        if text.isBold { tail += " font-weight=\"bold\"" }
-        if text.isItalic { tail += " font-style=\"italic\"" }
-        if text.isMonospaced { tail += " font-family=\"\(monospacedFontFamily)\"" }
-        if let rotation = text.rotation {
-            let center = text.block.center
-            tail += " transform=\"rotate(\(number(rotation * 180 / .pi)) \(number(center.x)) \(number(center.y)))\""
-        }
-        let lines = text.lines
+        let paint = paints.text(of: text.paint)
+        let hasRuns = text.styledRuns != nil
         if let outline = text.outline {
             // The outline is a text of its own under the text, as Pele writes it: no fill, the stroke in the outline's paint.
-            let stroke = Self.strokeAttributes(colors.text(of: outline.paint), DiagramStroke(lineWidth: outline.lineWidth, lineJoin: .round))
-            addLines(lines, attributes: head + " fill=\"none\" xml:space=\"preserve\"" + stroke + tail, hasRuns: text.styledRuns != nil)
+            let outlinePaint = paints.text(of: outline.paint)
+            appendTextOpening(text) { body in
+                body.content.append(" fill=\"none\" xml:space=\"preserve\"")
+                body.appendStrokeAttributes(outlinePaint, DiagramStroke(lineWidth: outline.lineWidth, lineJoin: .round))
+            }
+            addLines(text.lines, hasRuns: hasRuns)
         }
-        addLines(lines, attributes: head + " fill=\"\(paint.color)\" xml:space=\"preserve\"" + DiagramSVGWriter.opacity(paint.opacity, "fill-opacity") + tail,
-                 hasRuns: text.styledRuns != nil)
+        appendTextOpening(text) { body in
+            body.content.append(" fill=\"")
+            body.content.append(paint.color)
+            body.content.append("\" xml:space=\"preserve\"")
+            body.content.appendOpacity(paint.opacity, attribute: "fill-opacity")
+        }
+        addLines(text.lines, hasRuns: hasRuns)
     }
 
-    /// The `text` of `lines` with `attributes`: one `text` for one line, `tspan`s for several. A text whose lines have
-    /// runs in their emphasis writes each line as Pele writes a label's spans: a `tspan` at the line's middle for its
-    /// first run and one after it for each other run, with the run's weight, slant or font.
-    private mutating func addLines(_ lines: [DiagramSceneTextLine], attributes: String, hasRuns: Bool) {
-        let number = DiagramSVGSyntax.number
+    /// `<text` and its attributes: its class and size, its painting, then its emphasis and rotation.
+    private mutating func appendTextOpening(_ text: DiagramSceneText, painting: (inout DiagramSVGBody) -> Void) {
+        content.append("<text class=\"pele-")
+        content.append(text.part.rawValue)
+        content.append("\" font-size=\"")
+        content.appendNumber(text.block.fontSize)
+        content.append("\"")
+        painting(&self)
+        if text.isBold { content.append(" font-weight=\"bold\"") }
+        if text.isItalic { content.append(" font-style=\"italic\"") }
+        if text.isMonospaced { appendFontFamily() }
+        if let rotation = text.rotation {
+            let center = text.block.center
+            content.append(" transform=\"rotate(")
+            content.appendNumber(rotation * 180 / .pi)
+            content.append(byte: UInt8(ascii: " "))
+            content.appendNumber(center.x)
+            content.append(byte: UInt8(ascii: " "))
+            content.appendNumber(center.y)
+            content.append(")\"")
+        }
+    }
+
+    private mutating func appendFontFamily() {
+        content.append(" font-family=\"")
+        content.append(monospacedFontFamily)
+        content.append("\"")
+    }
+
+    /// ` x="…" y="…"`: a line's middle and its baseline.
+    private mutating func appendPosition(_ line: DiagramSceneTextLine) {
+        content.append(" x=\"")
+        content.appendNumber(line.center.x)
+        content.append("\" y=\"")
+        content.appendNumber(line.baselineStart.y)
+        content.append("\"")
+    }
+
+    /// The rest of a `text` whose opening is written: one line in the `text` itself, several in `tspan`s. A text whose
+    /// lines have runs in their emphasis writes each line as Pele writes a label's spans: a `tspan` at the line's middle
+    /// for its first run and one after it for each other run, with the run's weight, slant or font.
+    private mutating func addLines(_ lines: [DiagramSceneTextLine], hasRuns: Bool) {
         if hasRuns {
-            content += "<text\(attributes) text-anchor=\"middle\">"
+            content.append(" text-anchor=\"middle\">")
             for line in lines {
-                let position = " x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\""
                 guard !line.runs.isEmpty else {
-                    content += "<tspan\(position)></tspan>"
+                    content.append("<tspan")
+                    appendPosition(line)
+                    content.append("></tspan>")
                     continue
                 }
                 for (index, run) in line.runs.enumerated() {
-                    content += "<tspan\(index == 0 ? position : "")\(runAttributes(run.style))>\(DiagramSVGSyntax.escaped(run.text))</tspan>"
+                    content.append("<tspan")
+                    if index == 0 { appendPosition(line) }
+                    appendRunAttributes(run.style)
+                    content.append(">")
+                    content.appendEscaped(run.text)
+                    content.append("</tspan>")
                 }
             }
-            content += "</text>"
+            content.append("</text>")
             return
         }
         if lines.count == 1, let line = lines.first {
-            content += "<text\(attributes) x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\" text-anchor=\"middle\">"
-                + DiagramSVGSyntax.escaped(line.text) + "</text>"
+            appendPosition(line)
+            content.append(" text-anchor=\"middle\">")
+            content.appendEscaped(line.text)
+            content.append("</text>")
             return
         }
-        content += "<text\(attributes) text-anchor=\"middle\">"
+        content.append(" text-anchor=\"middle\">")
         for line in lines {
-            content += "<tspan x=\"\(number(line.center.x))\" y=\"\(number(line.baselineStart.y))\">\(DiagramSVGSyntax.escaped(line.text))</tspan>"
+            content.append("<tspan")
+            appendPosition(line)
+            content.append(">")
+            content.appendEscaped(line.text)
+            content.append("</tspan>")
         }
-        content += "</text>"
+        content.append("</text>")
     }
 
     /// The attributes of a run's emphasis, Pele's `spanStyle`.
-    private func runAttributes(_ style: DiagramTextStyle) -> String {
-        var attributes = ""
-        if style.contains(.bold) { attributes += " font-weight=\"bold\"" }
-        if style.contains(.italic) { attributes += " font-style=\"italic\"" }
-        if style.contains(.monospaced) { attributes += " font-family=\"\(monospacedFontFamily)\"" }
-        return attributes
+    private mutating func appendRunAttributes(_ style: DiagramTextStyle) {
+        if style.contains(.bold) { content.append(" font-weight=\"bold\"") }
+        if style.contains(.italic) { content.append(" font-style=\"italic\"") }
+        if style.contains(.monospaced) { appendFontFamily() }
     }
 }

@@ -3,10 +3,10 @@
  * ----------------------------
  * Layer: Core
  * Description: Writes any diagram's scene as a standalone SVG document in Pele's structure: escaped text, no script and
- *              no external reference.
+ *              no external reference, written as UTF-8 into one buffer.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -41,32 +41,94 @@ public struct DiagramSVGWriter: Sendable {
     /// The document. `diagramType` is Pele's name of the type (`flowchart`, `er`, `gitGraph`), given to the root's class
     /// and role description; `title` and `description` are what a screen reader reads (`accTitle`, `accDescr`).
     public func document(of scene: DiagramScene, diagramType: String, title: String? = nil, description: String? = nil) -> String {
-        let width = DiagramSVGSyntax.number(scene.size.width)
-        let height = DiagramSVGSyntax.number(scene.size.height)
-        let type = DiagramSVGSyntax.escaped(diagramType)
-        var head = ""
-        var labelling = ""
-        if let title, !title.isEmpty {
-            head += "<title id=\"\(identifierPrefix)-title\">\(DiagramSVGSyntax.escaped(title))</title>"
-            labelling += " aria-labelledby=\"\(identifierPrefix)-title\""
-        }
-        if let description, !description.isEmpty {
-            head += "<desc id=\"\(identifierPrefix)-desc\">\(DiagramSVGSyntax.escaped(description))</desc>"
-            labelling += " aria-describedby=\"\(identifierPrefix)-desc\""
-        }
         let colors = colors.overSeriesColors(of: scene)
-        var body = DiagramSVGBody(colors: colors, identifierPrefix: identifierPrefix)
+        var body = DiagramSVGBody(colors: colors, identifierPrefix: identifierPrefix,
+                                  content: DiagramSVGBuffer(reservingCapacity: Self.estimatedByteCount(of: scene)))
+        let title = title.flatMap { title in title.isEmpty ? nil : title }
+        let description = description.flatMap { description in description.isEmpty ? nil : description }
+        appendRootOpening(of: scene, diagramType: diagramType, colors: colors, isLabelled: (title != nil, description != nil), into: &body.content)
+        if let title { appendHeadElement("title", suffix: "-title", text: title, into: &body.content) }
+        if let description { appendHeadElement("desc", suffix: "-desc", text: description, into: &body.content) }
+        let definitionsOffset = body.content.count
         if paintsBackground {
-            let background = colors.text(of: .background)
-            body.content += "<rect width=\"\(width)\" height=\"\(height)\" fill=\"\(background.color)\"\(Self.opacity(background.opacity, "fill-opacity"))/>"
+            let background = body.text(of: .background)
+            body.content.append("<rect width=\"")
+            appendSize(of: scene, separator: "\" height=\"", into: &body.content)
+            body.content.append("\" fill=\"")
+            body.content.append(background.color)
+            body.content.append("\"")
+            body.content.appendOpacity(background.opacity, attribute: "fill-opacity")
+            body.content.append("/>")
         }
         for item in scene.items { body.add(item) }
-        let definitions = body.definitions.isEmpty ? "" : "<defs>" + body.definitions + "</defs>"
+        body.content.append("</svg>")
+        if !body.definitions.isEmpty {
+            var definitions = DiagramSVGBuffer(reservingCapacity: body.definitions.count + 13)
+            definitions.append("<defs>")
+            definitions.append(body.definitions)
+            definitions.append("</defs>")
+            body.content.insert(definitions, at: definitionsOffset)
+        }
+        return body.content.text
+    }
+
+    /// The root `svg` element's opening tag: Pele's classes, the view box and size, the style with the font and the
+    /// colors' declarations, the roles, and the ids of the title and description when there are any.
+    private func appendRootOpening(of scene: DiagramScene, diagramType: String, colors: DiagramSVGColors,
+                                   isLabelled: (byTitle: Bool, byDescription: Bool), into document: inout DiagramSVGBuffer) {
         let style = colors.rootStyle + "font-family:" + fontFamily(scene.font) + ";font-size:" + DiagramSVGSyntax.number(scene.font.size) + "px"
             + colors.seriesStyle(of: scene)
-        return "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" class=\"pele pele-\(type)\" viewBox=\"0 0 \(width) \(height)\" "
-            + "width=\"\(width)\" height=\"\(height)\" style=\"\(DiagramSVGSyntax.escaped(style))\" role=\"graphics-document document\" "
-            + "aria-roledescription=\"\(type)\"\(labelling)>" + head + definitions + body.content + "</svg>"
+        document.append("<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" class=\"pele pele-")
+        document.appendEscaped(diagramType)
+        document.append("\" viewBox=\"0 0 ")
+        appendSize(of: scene, separator: " ", into: &document)
+        document.append("\" width=\"")
+        appendSize(of: scene, separator: "\" height=\"", into: &document)
+        document.append("\" style=\"")
+        document.appendEscaped(style)
+        document.append("\" role=\"graphics-document document\" aria-roledescription=\"")
+        document.appendEscaped(diagramType)
+        document.append("\"")
+        if isLabelled.byTitle { appendIdentifierAttribute("aria-labelledby", suffix: "-title", into: &document) }
+        if isLabelled.byDescription { appendIdentifierAttribute("aria-describedby", suffix: "-desc", into: &document) }
+        document.append(">")
+    }
+
+    /// About how many bytes a scene's SVG takes, so that its buffer seldom grows: a few hundred for the root, and for each
+    /// item about what the documentation examples average.
+    private static func estimatedByteCount(of scene: DiagramScene) -> Int {
+        1_024 + scene.items.count * 160
+    }
+
+    /// The page's width, `separator`, then its height.
+    private func appendSize(of scene: DiagramScene, separator: StaticString, into document: inout DiagramSVGBuffer) {
+        document.appendNumber(scene.size.width)
+        document.append(separator)
+        document.appendNumber(scene.size.height)
+    }
+
+    /// ` aria-labelledby="<prefix>-title"` and the like.
+    private func appendIdentifierAttribute(_ attribute: StaticString, suffix: StaticString, into document: inout DiagramSVGBuffer) {
+        document.append(" ")
+        document.append(attribute)
+        document.append("=\"")
+        document.append(identifierPrefix)
+        document.append(suffix)
+        document.append("\"")
+    }
+
+    /// `<title id="<prefix>-title">…</title>` and the like.
+    private func appendHeadElement(_ name: StaticString, suffix: StaticString, text: String, into document: inout DiagramSVGBuffer) {
+        document.append("<")
+        document.append(name)
+        document.append(" id=\"")
+        document.append(identifierPrefix)
+        document.append(suffix)
+        document.append("\">")
+        document.appendEscaped(text)
+        document.append("</")
+        document.append(name)
+        document.append(">")
     }
 
     /// The font the text was measured in: by its PostScript name, else the system's, behind Pele's `--pele-font` when the
@@ -92,10 +154,4 @@ public struct DiagramSVGWriter: Sendable {
         default: false
         }
     }
-
-    /// An opacity attribute, or nothing for full opacity.
-    static func opacity(_ opacity: CGFloat, _ attribute: String) -> String {
-        opacity >= 1 ? "" : " \(attribute)=\"\(DiagramSVGSyntax.number(max(0, opacity)))\""
-    }
 }
-

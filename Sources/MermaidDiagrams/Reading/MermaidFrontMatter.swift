@@ -6,7 +6,7 @@
  *              configuration, and whether it is YAML at all.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -15,54 +15,50 @@
 /// up to a line break; the closing fence is the first line, after the opening one, that is the same indent and `---`
 /// followed by white space up to a line break. The body loses the indent on each line that has it.
 struct MermaidFrontMatter {
-    /// The YAML between the fences.
-    let body: String
+    /// The UTF-8 bytes of the YAML between the fences.
+    let bodyBytes: [UInt8]
     /// Where the text after the front matter starts, after the line break that ends the closing fence.
     let end: Int
+
+    /// The YAML between the fences.
+    var body: String { String(decoding: bodyBytes, as: UTF8.self) }
 
     /// The front matter at the start of `bytes`, whose line breaks are line feeds; nil when there is none.
     static func find(in bytes: [UInt8]) -> MermaidFrontMatter? {
         var indentEnd = 0
         while indentEnd < bytes.count, !isLineBreak(bytes[indentEnd]), case let length = JavaScriptWhitespace.length(in: bytes, at: indentEnd),
               length > 0 { indentEnd += length }
-        let fence = Array(bytes[..<indentEnd]) + dashes
-        guard hasText(dashes, in: bytes, at: indentEnd) else { return nil }
+        guard hasDashes(in: bytes, at: indentEnd) else { return nil }
         var openingEnds: [Int] = []
         var index = indentEnd + dashes.count
         while index < bytes.count, case let length = JavaScriptWhitespace.length(in: bytes, at: index), length > 0 {
             if isLineBreak(bytes[index]) { openingEnds.append(index) }
             index += length
         }
-        guard let firstOpeningEnd = openingEnds.first else { return nil }
-        // The last closing fence after the opening line bounds the search, as Pele's backward scan does.
-        var lastFence: Int?
-        var candidate = bytes.count - 1
-        while candidate > firstOpeningEnd {
-            if bytes[candidate] == MermaidByte.newline, closingEnd(of: fence, in: bytes, at: candidate) != nil {
-                lastFence = candidate
-                break
+        guard let firstOpeningEnd = openingEnds.first, let lastOpeningEnd = openingEnds.last else { return nil }
+        // Pele bounds its search by the last closing fence, found scanning back from the end, and takes the body from
+        // the last line break of the opening line before that fence. A fence after the opening line's last line break
+        // makes that line break the body's start, and the first such fence is the one Pele finds: it is looked for
+        // forward, from there. Without one, the opening line's own last line break, followed by a fence, is the only
+        // other fence (any earlier one would start in the white space that ends there), and the body then starts after
+        // the line break before it.
+        var lineBreak = lastOpeningEnd + 1
+        while let candidate = MermaidPreprocessing.firstIndex(of: MermaidByte.newline, in: bytes, from: lineBreak) {
+            if let end = closingEnd(indentEnd: indentEnd, in: bytes, at: candidate) {
+                return MermaidFrontMatter(bodyBytes: body(bytes[(lastOpeningEnd + 1)..<candidate], indent: bytes[..<indentEnd]), end: end + 1)
             }
-            candidate -= 1
+            lineBreak = candidate + 1
         }
-        guard let lastFence else { return nil }
-        let openingEnd = openingEnds.last { end in end < lastFence } ?? firstOpeningEnd
-        let bodyStart = openingEnd + 1
-        var fenceStart = max(bodyStart - 1, 0)
-        while fenceStart <= lastFence {
-            if fenceStart >= bodyStart, bytes[fenceStart] == MermaidByte.newline, let end = closingEnd(of: fence, in: bytes, at: fenceStart) {
-                let indent = String(decoding: bytes[..<indentEnd], as: UTF8.self)
-                return MermaidFrontMatter(body: withoutIndent(String(decoding: bytes[bodyStart..<fenceStart], as: UTF8.self), indent: indent),
-                                          end: end + 1)
-            }
-            fenceStart += 1
-        }
-        return nil
+        guard lastOpeningEnd > firstOpeningEnd, bytes[lastOpeningEnd] == MermaidByte.newline,
+              let end = closingEnd(indentEnd: indentEnd, in: bytes, at: lastOpeningEnd) else { return nil }
+        let bodyStart = openingEnds[openingEnds.count - 2] + 1
+        return MermaidFrontMatter(bodyBytes: body(bytes[bodyStart..<lastOpeningEnd], indent: bytes[..<indentEnd]), end: end + 1)
     }
 
     /// What the YAML holds, or nil when Pele's reader refuses it (Pele then refuses the diagram: `Front matter is not
     /// valid YAML`).
     func value() -> DirectiveValue? {
-        MermaidYAMLDocument.value(of: body)
+        MermaidYAMLDocument.value(of: bodyBytes)
     }
 
     /// The front matter's `title`, as Pele takes it: `String(title)` when it is truthy.
@@ -72,11 +68,15 @@ struct MermaidFrontMatter {
     }
 
     /// The position of the line break that ends the closing fence starting after the line break at `position`: the
-    /// last line break in the white space after `fence`; nil when `fence` does not stand there or no line break ends it.
-    private static func closingEnd(of fence: [UInt8], in bytes: [UInt8], at position: Int) -> Int? {
-        guard hasText(fence, in: bytes, at: position + 1) else { return nil }
+    /// last line break in the white space after the fence (the opening fence's indent, the first `indentEnd` bytes, and
+    /// `---`); nil when the fence does not stand there or no line break ends it.
+    private static func closingEnd(indentEnd: Int, in bytes: [UInt8], at position: Int) -> Int? {
+        let fenceStart = position + 1
+        guard fenceStart + indentEnd <= bytes.count else { return nil }
+        for offset in 0..<indentEnd where bytes[fenceStart + offset] != bytes[offset] { return nil }
+        guard hasDashes(in: bytes, at: fenceStart + indentEnd) else { return nil }
         var lastBreak: Int?
-        var index = position + 1 + fence.count
+        var index = fenceStart + indentEnd + dashes.count
         while index < bytes.count, case let length = JavaScriptWhitespace.length(in: bytes, at: index), length > 0 {
             if isLineBreak(bytes[index]) { lastBreak = index }
             index += length
@@ -84,18 +84,23 @@ struct MermaidFrontMatter {
         return lastBreak
     }
 
-    private static func withoutIndent(_ body: String, indent: String) -> String {
-        guard !indent.isEmpty else { return body }
-        return body.split(separator: "\n", omittingEmptySubsequences: false)
-            .map { line in line.hasPrefix(indent) ? String(line.dropFirst(indent.count)) : String(line) }.joined(separator: "\n")
+    /// The body's bytes, each line without the indent when it starts with it. The lines are compared as Swift's
+    /// characters, as `hasPrefix` compares them, so that a combining mark after the indent keeps a line as it is.
+    private static func body(_ written: ArraySlice<UInt8>, indent: ArraySlice<UInt8>) -> [UInt8] {
+        guard !indent.isEmpty else { return Array(written) }
+        let indentText = String(decoding: indent, as: UTF8.self)
+        let lines = String(decoding: written, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line in line.hasPrefix(indentText) ? String(line.dropFirst(indentText.count)) : String(line) }
+        return Array(lines.joined(separator: "\n").utf8)
     }
 
     private static func isLineBreak(_ byte: UInt8) -> Bool {
         byte == MermaidByte.newline || byte == MermaidByte.carriageReturn
     }
 
-    private static func hasText(_ literal: [UInt8], in bytes: [UInt8], at position: Int) -> Bool {
-        position >= 0 && position + literal.count <= bytes.count && bytes[position..<position + literal.count].elementsEqual(literal)
+    private static func hasDashes(in bytes: [UInt8], at position: Int) -> Bool {
+        position + 3 <= bytes.count && bytes[position] == MermaidByte.hyphen && bytes[position + 1] == MermaidByte.hyphen
+            && bytes[position + 2] == MermaidByte.hyphen
     }
 
     private static let dashes = Array("---".utf8)

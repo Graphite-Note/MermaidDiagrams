@@ -6,7 +6,7 @@
  *              character, and a block's lines placed from their left or right end, as Pele writes text by its start.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -89,22 +89,40 @@ extension DiagramTextBlock {
         var lines: [String] = []
         if !text.isEmpty {
             for written in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                lines += Self.literalLines(Array(written), measurer: measurer, room: room)
+                lines += Self.literalLines(written, measurer: measurer, room: room)
             }
         }
         self.init(lines: lines, lineWidths: lines.map { line in measurer.width(of: line) }, fontSize: measurer.fontSize,
                   lineHeight: measurer.lineHeight)
     }
 
-    private static func literalLines(_ characters: [Character], measurer: some DiagramTextMeasuring, room: CGFloat) -> [String] {
-        guard !characters.isEmpty else { return [""] }
+    /// One written line's lines. Each probe measures a String made from a slice of `written` between two of its
+    /// characters' boundaries, the same text as the characters it holds, so the widths are those of the characters joined.
+    private static func literalLines(_ written: Substring, measurer: some DiagramTextMeasuring, room: CGFloat) -> [String] {
+        guard !written.isEmpty else { return [""] }
+        // Where each character starts, and the end, then whether each is white space: read once, so that no probe walks
+        // the characters again. A character is white space by its first scalar, as `Character.isWhitespace` decides, and
+        // one that starts with an ASCII byte is decided from that byte.
+        let bytes = written.utf8
+        var boundaries: [String.Index] = []
+        var isWhitespace: [Bool] = []
+        boundaries.reserveCapacity(bytes.count + 1)
+        isWhitespace.reserveCapacity(bytes.count)
+        for index in written.indices {
+            boundaries.append(index)
+            let firstByte = bytes[index]
+            isWhitespace.append(firstByte < 0x80 ? Self.isASCIIWhitespace(firstByte) : written[index].isWhitespace)
+        }
+        boundaries.append(written.endIndex)
+        let characterCount = isWhitespace.count
+        func text(_ start: Int, _ end: Int) -> String { String(written[boundaries[start]..<boundaries[end]]) }
         var lines: [String] = []
         var start = 0
-        while start < characters.count {
+        while start < characterCount {
             // The most characters that fit, found by doubling and then halving, so that a long line is measured a few
             // dozen times rather than once per character.
-            let remaining = characters.count - start
-            func fits(_ length: Int) -> Bool { measurer.width(of: String(characters[start..<(start + length)])) <= room }
+            let remaining = characterCount - start
+            func fits(_ length: Int) -> Bool { measurer.width(of: text(start, start + length)) <= room }
             var upper = 1
             while upper < remaining, fits(upper) { upper = min(remaining, upper * 2) }
             var taken = 1
@@ -112,18 +130,23 @@ extension DiagramTextBlock {
                 let middle = (taken + upper + 1) / 2
                 if fits(middle) { taken = middle } else { upper = middle - 1 }
             }
-            let wraps = start + taken < characters.count
-            if wraps, !characters[start + taken].isWhitespace,
-               let lastSpace = (1..<taken).last(where: { offset in characters[start + offset].isWhitespace }) {
+            let wraps = start + taken < characterCount
+            if wraps, !isWhitespace[start + taken], let lastSpace = (1..<taken).last(where: { offset in isWhitespace[start + offset] }) {
                 taken = lastSpace + 1
             }
-            let line = String(characters[start..<(start + taken)])
-            let trimmed = String(line.reversed().drop { character in character.isWhitespace }.reversed())
-            lines.append(wraps && !trimmed.isEmpty ? trimmed : line)
+            var trimmedEnd = start + taken
+            while trimmedEnd > start, isWhitespace[trimmedEnd - 1] { trimmedEnd -= 1 }
+            lines.append(wraps && trimmedEnd > start ? text(start, trimmedEnd) : text(start, start + taken))
             start += taken
-            while wraps, start < characters.count, characters[start].isWhitespace { start += 1 }
+            while wraps, start < characterCount, isWhitespace[start] { start += 1 }
         }
         return lines
+    }
+
+    /// Whether an ASCII byte is Unicode white space: a tab, a line feed, a line tabulation, a form feed, a carriage return
+    /// or a space.
+    private static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || (0x09...0x0D).contains(byte)
     }
 
     /// Each line as a block of its own, its left end at `left` (or its right end at `right`), the first line's box
