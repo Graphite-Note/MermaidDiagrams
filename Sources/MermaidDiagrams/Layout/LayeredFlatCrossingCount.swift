@@ -40,7 +40,7 @@ struct LayeredFlatCrossingReduction {
     init(graph: LayeredFlatGraph, nodes: [LayeredFlatNode]) {
         self.graph = graph
         pins = nodes.map(\.pin)
-        widest = (0...graph.maximumRank).map { rank in graph.rankStart[rank + 1] - graph.rankStart[rank] }.max() ?? 0
+        widest = Self.widestRank(of: graph)
         let segmentCount = graph.segmentCount
         usesPlaces = graph.hasOffsets
         place = [Int](repeating: 0, count: graph.hasOffsets ? segmentCount : 0)
@@ -54,6 +54,13 @@ struct LayeredFlatCrossingReduction {
         targets = [Int](repeating: 0, count: segmentCount)
         barycenter = [Double](repeating: 0, count: graph.vertexCount)
         if graph.hasOffsets { orderPlacesByOffset() }
+    }
+
+    /// How many vertices the graph's widest rank holds.
+    static func widestRank(of graph: LayeredFlatGraph) -> Int {
+        var widest = 0
+        for rank in 0...graph.maximumRank { widest = max(widest, graph.rankStart[rank + 1] - graph.rankStart[rank]) }
+        return widest
     }
 
     /// Sorts `list[start..<end]` by `offsets` when they differ there; whether they did.

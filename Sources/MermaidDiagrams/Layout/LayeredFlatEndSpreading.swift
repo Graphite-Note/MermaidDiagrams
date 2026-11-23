@@ -5,7 +5,7 @@
  * Description: Gives the ends of edges on one side of a node places of their own, and lines border ports up with ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -20,22 +20,24 @@ extension LayeredFlatGraph {
     /// The ends of edges that may move along one side of `vertex` (0 the side its edges arrive at, 1 the other), ordered
     /// by their other ends, and their least gaps: a full pitch where there is room, else edges that leave side by side
     /// closer together, else neighbours that run the same way sharing a place (Pele's `sideEnds`).
-    func sideEnds(of vertex: Int, side: Int, span: Double, kinds: [LayeredSegmentEnd]) -> LayeredSideEnds {
+    /// Written into `ends`, whose lists are refilled in place so that one value serves every side.
+    func fillSideEnds(of vertex: Int, side: Int, span: Double, kinds: [LayeredSegmentEnd], into ends: inout LayeredSideEnds) {
         let starts = side == 0 ? predecessorStart : successorStart
         let list = side == 0 ? predecessorSegments : successorSegments
         let other = side == 0 ? segmentFrom : segmentTo
-        var ends = LayeredSideEnds()
-        ends.segments.reserveCapacity(starts[vertex + 1] - starts[vertex])
+        ends.segments.removeAll(keepingCapacity: true)
+        ends.room.removeAll(keepingCapacity: true)
+        ends.total = 0
         for position in starts[vertex]..<starts[vertex + 1] where kinds[list[position]] != .held { ends.segments.append(list[position]) }
-        if ends.segments.count < 2 { return ends }
+        if ends.segments.count < 2 { return }
         let positions = position
         ends.segments.sortStably { first, second in
             positions[other[first]] != positions[other[second]] ? Double(positions[other[first]] - positions[other[second]]) : Double(first - second)
         }
         func fill(_ share: (_ leaves: Bool, _ same: Bool) -> Double) -> Double {
             var total: Double = 0
-            ends.room = [0]
-            ends.room.reserveCapacity(ends.segments.count)
+            ends.room.removeAll(keepingCapacity: true)
+            ends.room.append(0)
             for index in 1..<ends.segments.count {
                 let same = kinds[ends.segments[index]] == kinds[ends.segments[index - 1]]
                 ends.room.append(share(same && kinds[ends.segments[index]] == .leaves, same))
@@ -46,20 +48,20 @@ extension LayeredFlatGraph {
         var total = fill { _, _ in 1 }
         if span / total < LayeredFlatConstants.minimumPitch { total = fill { leaves, _ in leaves ? 0.5 : 1 } }
         if span / total < LayeredFlatConstants.minimumPitch { total = fill { _, same in same ? 0 : 1 } }
-        if total == 0 { return ends }
+        if total == 0 { return }
         let pitch = min(LayeredFlatConstants.portPitch, span / total)
         for index in 1..<ends.room.count { ends.room[index] *= pitch }
         ends.total = total * pitch
-        return ends
     }
 
     /// Gives the ends that meet one side of a node places of their own along it, around its middle (Pele's `spread`).
     mutating func spreadEnds(nodes: [LayeredFlatNode], fromEnds: [LayeredSegmentEnd], toEnds: [LayeredSegmentEnd]) {
+        var ends = LayeredSideEnds()
         for vertex in 0..<nodeCount {
             let span = min(nodes[vertex].sideSpan, vertexWidth[vertex])
             if span <= 0 || nodes[vertex].kind != .node { continue }
             for side in 0..<2 {
-                let ends = sideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds)
+                fillSideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds, into: &ends)
                 if ends.total == 0 { continue }
                 var at = -ends.total / 2
                 for index in ends.segments.indices {

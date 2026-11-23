@@ -5,7 +5,7 @@
  * Description: The first two steps of Pele's layered layout: edges that close cycles turned around, then ranks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -27,10 +27,12 @@ enum LayeredFlatRanking {
             outgoing[fill[edges[index].tail]] = index
             fill[edges[index].tail] += 1
         }
-        // 0 unvisited, 1 on the walk, 2 done.
+        // 0 unvisited, 1 on the walk, 2 done. The fill's list becomes each node's cursor over its edges out.
         var state = [UInt8](repeating: 0, count: nodeCount)
-        var cursor = Array(start[0..<nodeCount])
+        var cursor = consume fill
+        for node in 0..<nodeCount { cursor[node] = start[node] }
         var stack: [Int] = []
+        stack.reserveCapacity(nodeCount)
         for root in 0..<nodeCount where state[root] == 0 {
             stack.append(root)
             state[root] = 1
@@ -99,7 +101,9 @@ enum LayeredFlatRanking {
         // Start ports go above every node later, so they don't push their targets down a rank.
         for node in 0..<nodeCount where nodes[node].kind == .startPort { ranks[node] = -step }
         var remainingIn = (0..<nodeCount).map { node in oriented.inStart[node + 1] - oriented.inStart[node] }
-        var topological: [Int] = (0..<nodeCount).filter { node in remainingIn[node] == 0 }
+        var topological: [Int] = []
+        topological.reserveCapacity(nodeCount)
+        for node in 0..<nodeCount where remainingIn[node] == 0 { topological.append(node) }
         var queueIndex = 0
         while queueIndex < topological.count {
             let node = topological[queueIndex]
@@ -113,7 +117,7 @@ enum LayeredFlatRanking {
             }
         }
         balance(&ranks, topological: topological, oriented: oriented)
-        normalize(&nodes, ranks: ranks, step: step)
+        normalize(&nodes, ranks: &ranks, step: step)
     }
 
     /// Longest-path ranking leaves loosely attached nodes far from their neighbours: each node moves toward the side
@@ -147,7 +151,7 @@ enum LayeredFlatRanking {
     }
 
     /// Puts start ports a step above the highest node and end ports a step below the lowest, and the ranks from 0.
-    private static func normalize(_ nodes: inout [LayeredFlatNode], ranks: [Int], step: Int) {
+    private static func normalize(_ nodes: inout [LayeredFlatNode], ranks: inout [Int], step: Int) {
         var lowest = Int.max
         var highest = Int.min
         var hasStartPorts = false
@@ -161,7 +165,6 @@ enum LayeredFlatRanking {
             lowest = 0
             highest = 0
         }
-        var ranks = ranks
         for node in nodes.indices {
             if nodes[node].kind == .startPort { ranks[node] = lowest - step } else if nodes[node].kind == .endPort { ranks[node] = highest + step }
         }

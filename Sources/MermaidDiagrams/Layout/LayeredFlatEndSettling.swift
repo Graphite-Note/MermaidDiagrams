@@ -23,6 +23,10 @@ struct LayeredFlatEndSettling {
     /// The pooled sums and counts of a run being fitted, kept between runs so that every fit reuses one pair.
     private var poolSum: [Double] = []
     private var poolCount: [Int] = []
+    /// The free ends of every side in order, with their least gaps, and all their ends in order, one side after another.
+    private var sideSegments: [Int] = []
+    private var sideRoom: [Double] = []
+    private var sideAll: [Int] = []
 
     init(graph: consuming LayeredFlatGraph, nodes: [LayeredFlatNode], across: [Double], fromEnds: [LayeredSegmentEnd],
          toEnds: [LayeredSegmentEnd], free: [[Int]], emptyRanks: [Bool]?) {
@@ -35,14 +39,15 @@ struct LayeredFlatEndSettling {
         self.emptyRanks = emptyRanks
     }
 
-    /// One side of a node whose ends may move: its free ends in order with their least gaps, and all its ends in order.
+    /// One side of a node whose ends may move: where its free ends and their least gaps start in `sideSegments` and
+    /// `sideRoom`, and where all its ends start in `sideAll`, and how many.
     private struct Side {
         var vertex: Int
         var side: Int
         var span: Double
-        var segments: [Int]
-        var room: [Double]
-        var all: [Int]
+        var segmentStart: Int
+        var allStart: Int
+        var allCount: Int
     }
 
     /// Where the end of `segment` on `vertex` should be, from the middle of its side, following the edge up (side 0)
@@ -76,8 +81,12 @@ struct LayeredFlatEndSettling {
         return max(low, min(high, place)) - across[vertex]
     }
 
-    private func sides() -> [Side] {
+    /// The sides whose ends may move, their ends written to `sideSegments`, `sideRoom` and `sideAll`.
+    private mutating func sides() -> [Side] {
         var found: [Side] = []
+        var ends = LayeredSideEnds()
+        var all: [Int] = []
+        let position = graph.position
         for vertex in 0..<graph.nodeCount {
             let span = min(nodes[vertex].sideSpan, graph.vertexWidth[vertex])
             if span <= 0 || nodes[vertex].kind != .node { continue }
@@ -85,15 +94,19 @@ struct LayeredFlatEndSettling {
                 let other = side == 0 ? graph.segmentFrom : graph.segmentTo
                 let starts = side == 0 ? graph.predecessorStart : graph.successorStart
                 let list = side == 0 ? graph.predecessorSegments : graph.successorSegments
-                var ends = graph.sideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds)
+                graph.fillSideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds, into: &ends)
                 if ends.segments.isEmpty { continue }
-                if ends.segments.count == 1 { ends.room = [0] }
-                var all = Array(list[starts[vertex]..<starts[vertex + 1]])
-                let position = graph.position
+                if ends.segments.count == 1 { ends.room.append(0) }
+                all.removeAll(keepingCapacity: true)
+                all.append(contentsOf: list[starts[vertex]..<starts[vertex + 1]])
                 all.sortStably { first, second in
                     position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]]) : Double(first - second)
                 }
-                found.append(Side(vertex: vertex, side: side, span: span, segments: ends.segments, room: ends.room, all: all))
+                found.append(Side(vertex: vertex, side: side, span: span, segmentStart: sideSegments.count, allStart: sideAll.count,
+                                  allCount: all.count))
+                sideSegments.append(contentsOf: ends.segments)
+                sideRoom.append(contentsOf: ends.room)
+                sideAll.append(contentsOf: all)
             }
         }
         return found
@@ -117,19 +130,19 @@ struct LayeredFlatEndSettling {
         var moved = false
         var first = 0
         var low = -side.span / 2
-        for index in 0...side.all.count {
-            let isHeld = index < side.all.count && kinds[side.all[index]] == .held
-            if index < side.all.count && !isHeld { continue }
+        for index in 0...side.allCount {
+            let isHeld = index < side.allCount && kinds[sideAll[side.allStart + index]] == .held
+            if index < side.allCount && !isHeld { continue }
             // Free ends since the last held end occupy segments[first..<first + size].
             var size = 0
             var back = index - 1
-            while back >= 0 && kinds[side.all[back]] != .held { size += 1; back -= 1 }
-            let high = isHeld ? offset(side.all[index], side: side.side) - LayeredFlatConstants.portPitch : side.span / 2
+            while back >= 0 && kinds[sideAll[side.allStart + back]] != .held { size += 1; back -= 1 }
+            let high = isHeld ? offset(sideAll[side.allStart + index], side: side.side) - LayeredFlatConstants.portPitch : side.span / 2
             if size > 0 {
                 if fit(side, first: first, size: size, low: low, high: high, isAgain: isAgain) { moved = true }
                 first += size
             }
-            if isHeld { low = offset(side.all[index], side: side.side) + LayeredFlatConstants.portPitch }
+            if isHeld { low = offset(sideAll[side.allStart + index], side: side.side) + LayeredFlatConstants.portPitch }
         }
         return moved
     }
@@ -158,8 +171,8 @@ struct LayeredFlatEndSettling {
         for block in sum.indices {
             let level = high - total < low ? (low + high - total) / 2 : max(low, min(high - total, sum[block] / Double(count[block])))
             for _ in 0..<count[block] {
-                if placed > 0 { before += side.room[first + placed] }
-                let segment = side.segments[first + placed]
+                if placed > 0 { before += sideRoom[side.segmentStart + first + placed] }
+                let segment = sideSegments[side.segmentStart + first + placed]
                 if abs(offset(segment, side: side.side) - level - before) > 0.01 { moved = true }
                 setOffset(segment, side: side.side, to: level + before)
                 placed += 1
@@ -175,11 +188,12 @@ struct LayeredFlatEndSettling {
         count.removeAll(keepingCapacity: true)
         var before: Double = 0
         for index in 0..<size {
-            if index > 0 { before += side.room[first + index] }
-            sum.append(wanted(side.segments[first + index], side: side.side, vertex: side.vertex, span: side.span, isAgain: isAgain) - before)
+            let at = side.segmentStart + first + index
+            if index > 0 { before += sideRoom[at] }
+            sum.append(wanted(sideSegments[at], side: side.side, vertex: side.vertex, span: side.span, isAgain: isAgain) - before)
             count.append(1)
             // Keep ends together when spacing forced them to share a place.
-            var together = index > 0 && side.room[first + index] == 0
+            var together = index > 0 && sideRoom[at] == 0
             while sum.count > 1 && (together || sum[sum.count - 2] / Double(count[count.count - 2]) > sum[sum.count - 1] / Double(count[count.count - 1])) {
                 together = false
                 let top = sum.removeLast()

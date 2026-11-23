@@ -88,10 +88,8 @@ enum LayeredFlatPositioning {
     private static func balanced(_ results: inout [Double], vertexCount: Int, widths: [Double]) -> [Double] {
         var narrowest = 0
         var bestWidth = Double.infinity
-        var lows: [Double] = []
-        var highs: [Double] = []
-        lows.reserveCapacity(4)
-        highs.reserveCapacity(4)
+        var lows = SIMD4<Double>()
+        var highs = SIMD4<Double>()
         for variant in 0..<4 {
             let base = variant * vertexCount
             var low = Double.infinity
@@ -100,8 +98,8 @@ enum LayeredFlatPositioning {
                 low = min(low, results[base + vertex] - widths[vertex] / 2)
                 high = max(high, results[base + vertex] + widths[vertex] / 2)
             }
-            lows.append(low)
-            highs.append(high)
+            lows[variant] = low
+            highs[variant] = high
             if high - low < bestWidth {
                 bestWidth = high - low
                 narrowest = variant

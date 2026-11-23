@@ -39,7 +39,7 @@ struct LayeredFlatLayout {
     var segmentToEnd: [LayeredSegmentEnd]?
 
     /// Lays `nodes` and `edges` out in place, or returns nil when the nodes and bends would be more than
-    /// `maximumVertexCount`.
+    /// `maximumVertexCount` (the nodes then ranked and the edges oriented, but neither placed).
     static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
                        maximumVertexCount: Int = .max) -> LayeredFlatResult? {
         if nodes.isEmpty { return LayeredFlatResult(width: 0, height: 0) }
@@ -49,23 +49,27 @@ struct LayeredFlatLayout {
             nodes[0].y = nodes[0].height / 2
             return LayeredFlatResult(width: nodes[0].width, height: nodes[0].height)
         }
-        var layout = LayeredFlatLayout(nodes: nodes, edges: edges, options: options, step: stepOf(nodeCount: nodes.count, edges: edges))
+        var layout = LayeredFlatLayout(nodes: [], edges: [], options: options, step: stepOf(nodeCount: nodes.count, edges: edges))
+        // The lists move into the layout and back, so that ranking and routing change them in place, never copied.
+        swap(&layout.nodes, &nodes)
+        swap(&layout.edges, &edges)
         LayeredFlatRanking.orient(nodes: layout.nodes, edges: &layout.edges)
         LayeredFlatRanking.rank(nodes: &layout.nodes, edges: layout.edges, step: layout.step)
-        guard let result = layout.run(maximumVertexCount: maximumVertexCount) else { return nil }
-        nodes = layout.nodes
-        edges = layout.edges
+        let result = layout.run(maximumVertexCount: maximumVertexCount)
+        swap(&layout.nodes, &nodes)
+        swap(&layout.edges, &edges)
         return result
     }
 
     /// Every edge gets a middle rank of its own when an edge has a label or two edges join the same two nodes.
     private static func stepOf(nodeCount: Int, edges: [LayeredFlatEdge]) -> Int {
-        var seen = Set<Int>()
-        for edge in edges {
-            let key = min(edge.tail, edge.head) * nodeCount + max(edge.tail, edge.head)
-            if edge.labelWidth > 0 || seen.contains(key) { return 2 }
-            seen.insert(key)
-        }
+        if edges.contains(where: { edge in edge.labelWidth > 0 }) { return 2 }
+        // Two edges join the same two nodes when their pairs, sorted, have two alike side by side.
+        var pairs: [Int] = []
+        pairs.reserveCapacity(edges.count)
+        for edge in edges { pairs.append(min(edge.tail, edge.head) * nodeCount + max(edge.tail, edge.head)) }
+        pairs.sort()
+        for index in pairs.indices.dropFirst() where pairs[index] == pairs[index - 1] { return 2 }
         return 1
     }
 
@@ -75,7 +79,8 @@ struct LayeredFlatLayout {
         guard vertexCount <= maximumVertexCount else { return nil }
         var graph = buildGraph(vertexCount: vertexCount)
         var result = LayeredFlatResult(width: 0, height: 0)
-        if graph.segmentCount > 0 && graph.maximumRank > 0 {
+        // A graph with no rank of two vertices has one order: its reduction would find no crossing and change nothing.
+        if graph.segmentCount > 0 && graph.maximumRank > 0 && LayeredFlatCrossingReduction.widestRank(of: graph) >= 2 {
             // The graph moves into the reduction and back, so that its order is changed in place and never copied.
             var reduction = LayeredFlatCrossingReduction(graph: consume graph, nodes: nodes)
             (result.crossings, result.declaredCrossings) = reduction.reduce()

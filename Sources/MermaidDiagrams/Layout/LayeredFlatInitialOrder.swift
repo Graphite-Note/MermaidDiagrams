@@ -47,9 +47,10 @@ extension LayeredFlatLayout {
             byRank[fill[graph.vertexRank[vertex]]] = vertex
             fill[graph.vertexRank[vertex]] += 1
         }
-        fill = Array(graph.rankStart[0...graph.maximumRank])
+        for rank in 0...graph.maximumRank { fill[rank] = graph.rankStart[rank] }
         var visited = [Bool](repeating: false, count: vertexCount)
         var stack: [Int] = []
+        stack.reserveCapacity(vertexCount)
         for start in byRank where !visited[start] {
             stack.append(start)
             while let vertex = stack.popLast() {

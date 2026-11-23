@@ -54,6 +54,8 @@ extension LayeredFlatLayout {
     /// bend to stay clear of its twin, or has a bend left out in a rank of labels, is drawn through its bends as it is.
     private func cutPieces(graph: LayeredFlatGraph, across: [Double], emptyRanks: [Bool]?, isOnLine: [Bool]) -> (LayeredEdgePieces, [Int]) {
         var pieces = LayeredEdgePieces()
+        // Each piece crosses one gap or more: no more pieces than segments.
+        pieces.reserve(graph.segmentCount)
         var pieceStart = [Int](repeating: 0, count: edges.count + 1)
         for edgeIndex in edges.indices {
             pieceStart[edgeIndex] = pieces.count
@@ -79,6 +81,13 @@ extension LayeredFlatLayout {
 }
 
 extension LayeredEdgePieces {
+    mutating func reserve(_ count: Int) {
+        from.reserveCapacity(count)
+        to.reserveCapacity(count)
+        rank.reserveCapacity(count)
+        lower.reserveCapacity(count)
+    }
+
     mutating func append(from: Double, to: Double, rank: Int, lower: Int) {
         self.from.append(from)
         self.to.append(to)
