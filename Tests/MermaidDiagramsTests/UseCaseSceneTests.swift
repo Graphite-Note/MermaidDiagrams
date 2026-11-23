@@ -7,8 +7,8 @@
  *              worst cases are drawn or refused quickly.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -111,7 +111,8 @@ final class UseCaseSceneTests: XCTestCase {
         for source in cases {
             XCTAssertLessThanOrEqual(source.utf8.count, size, String(source.prefix(40)))
             let started = Date()
-            _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography)
+            // The narrow scene is laid out when it is read: read it, so that its layout is bounded in time too.
+            _ = (try? MermaidDiagramPreparation.prepare(source: source, typography: typography))?.narrowScene
             XCTAssertLessThan(Date().timeIntervalSince(started), 10, String(source.prefix(40)))
         }
     }
