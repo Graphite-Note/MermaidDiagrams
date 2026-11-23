@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.24
+ * Version: 0.25
  * Date: 23/11/2026
  */
 
@@ -140,13 +140,20 @@ public enum MermaidDiagramReader {
     /// The front matter's title, and a cursor after the front matter on the text preprocessed as Pele does: line breaks
     /// made line feeds, tags' attributes single-quoted, directives removed, a colour's last semicolon dropped. A line
     /// the cursor counts is a line of that text: lines a directive spans count as one.
+    /// The text is copied once, from the string; a pass that would find none of its bytes is not run, and one that runs
+    /// and changes nothing gives back its input.
     static func preprocessed(_ source: String) throws(MermaidDiagramReadError) -> (title: String?, cursor: MermaidTextCursor) {
-        var written = Array(source.utf8)
-        if written.starts(with: byteOrderMark) { written.removeFirst(byteOrderMark.count) }
-        let sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(MermaidPreprocessing.normalizedLineBreaks(written))
+        let utf8 = source.utf8
+        let written = utf8.starts(with: byteOrderMark) ? Array(utf8.dropFirst(byteOrderMark.count)) : Array(utf8)
+        let found = MermaidPreprocessing.bytesFound(in: written)
+        var sourceBytes = written
+        if found.contains(.carriageReturn) { sourceBytes = MermaidPreprocessing.normalizedLineBreaks(sourceBytes) }
+        if found.contains([.lessThan, .greaterThan]) { sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(sourceBytes) }
         let readFrontMatter = MermaidReadFrontMatter(in: sourceBytes)
         let (title, start) = try frontMatterTitleAndEnd(readFrontMatter, in: sourceBytes)
-        let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
+        var bytes = sourceBytes
+        if found.contains(.percent) { bytes = MermaidPreprocessing.removingDirectives(from: bytes, from: start) }
+        if found.contains(.hash) { bytes = MermaidPreprocessing.droppingColorSemicolons(bytes, from: start) }
         var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes, readFrontMatter: readFrontMatter)
         cursor.advance(by: start)
         return (title, cursor)
