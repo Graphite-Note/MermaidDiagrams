@@ -122,7 +122,7 @@ enum LayeredFlatPositioning {
 
     /// The second and third of four values sorted as `Array.sorted()` sorts four: by insertion, each value swapped
     /// before the one ahead of it while it is less, so that equal values (zeros of either sign too) end where they would.
-    private static func middleTwo(_ first: Double, _ second: Double, _ third: Double, _ fourth: Double)
+    static func middleTwo(_ first: Double, _ second: Double, _ third: Double, _ fourth: Double)
         -> (second: Double, third: Double) {
         var first = first, second = second, third = third, fourth = fourth
         if second < first { swap(&first, &second) }
