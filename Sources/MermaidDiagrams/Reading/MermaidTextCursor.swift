@@ -1,12 +1,32 @@
+/**
+ * File: MermaidTextCursor.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A position in a diagram's UTF-8 bytes, with the line it is on. Readers move it forward only; a lookahead copies it.
 struct MermaidTextCursor {
+    /// The text the diagram's statements are read from, preprocessed as Pele does (`MermaidPreprocessing`).
     let bytes: [UInt8]
+    /// The text as written, line breaks made line feeds, with its front matter and directives, which a type's options
+    /// are read from (`MermaidConfigurationOptions`).
+    let sourceBytes: [UInt8]
     private(set) var position: Int
     /// The 1-based line of `position` in the diagram's text.
     private(set) var line: Int
 
     init(bytes: [UInt8]) {
+        self.init(bytes: bytes, sourceBytes: bytes)
+    }
+
+    init(bytes: [UInt8], sourceBytes: [UInt8]) {
         self.bytes = bytes
+        self.sourceBytes = sourceBytes
         self.position = 0
         self.line = 1
     }

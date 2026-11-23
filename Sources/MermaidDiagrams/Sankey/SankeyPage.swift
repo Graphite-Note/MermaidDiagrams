@@ -5,8 +5,8 @@
  * Description: The page around a Sankey chart and its labels, as Pele sizes it.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -40,9 +40,12 @@ struct SankeyPage {
     }
 
     /// A node's bar, at least a point tall.
-    func node(_ node: SankeyPlacement.Node, seriesIndex: Int, color: DiagramColor?) -> SankeyLayoutNode {
-        SankeyLayoutNode(seriesIndex: seriesIndex, frame: CGRect(x: CGFloat(node.x) + offset.dx, y: CGFloat(node.y) + offset.dy,
-                                                                 width: CGFloat(nodeWidth), height: max(CGFloat(node.height), 1)), color: color)
+    func node(_ node: SankeyPlacement.Node, seriesIndex: Int, paint: DiagramPaint?) -> SankeyLayoutNode {
+        var color: DiagramColor?
+        if case .color(let written)? = paint?.source { color = written }
+        return SankeyLayoutNode(seriesIndex: seriesIndex, frame: CGRect(x: CGFloat(node.x) + offset.dx, y: CGFloat(node.y) + offset.dy,
+                                                                        width: CGFloat(nodeWidth), height: max(CGFloat(node.height), 1)),
+                                color: color, paint: paint)
     }
 
     /// A band from its source bar's right side to its target bar's left side, at least a point thick.

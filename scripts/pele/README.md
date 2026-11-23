@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg] [--svg-of=<corpus>#<index>,…]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -30,7 +30,7 @@ TZ=UTC deno run --unstable-sloppy-imports --no-prompt --import-map="data:applica
   --allow-read="<pele>,<this folder>" --allow-write="<output>" scripts/pele/pele-runner.ts <pele> <output> [flags]
 ```
 
-With no flag it does the corpus, compat, random flat and bench runs:
+With no flag it does the corpus, compat, random flat, bench and preprocessing runs:
 
 - `--corpus` renders every input of Pele's `tests/corpus` (Mermaid's documentation examples of every type, the same files
   as the package's benchmark resources, and the agent flow reference's 239 inputs) and the generated graphs of Pele's
@@ -50,11 +50,15 @@ With no flag it does the corpus, compat, random flat and bench runs:
   of 500 nodes, generated with the same seed; each case timed whole, one run not counted, then runs until 300 ms are
   spent, at least 5 and at most 2,000) and times each type's documentation examples the same way, and writes
   `pele-bench.json` with the median per case and the median and 99th percentile per diagram.
-
+- `--preprocessing` writes `pele-preprocessing.json` (`preprocessing-recorder.ts`): what Pele's own YAML reader
+  (`src/util/yaml.ts`) makes of 52 texts (its own tests' texts, then front matter and node data written in the ways those
+  leave out), what its preprocessing (`src/preprocess.ts`, then `encodeEntities`) makes of 33 diagram texts
+  (directives, tags' attributes, line breaks, front matter, colour semicolons): the text left, the title and the configuration, or the error; and the
+  moment JavaScript's `new Date(text)` reads for 48 texts a Gantt chart's start may fall back to.
 - `--svg` writes the SVG Pele draws for each documentation example to `svg/<corpus>-<index>.svg` in the output folder
   (refused inputs have none), untimed, to compare a drawing with the package's by eye; it runs only when asked for.
 
 The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
-`random-flat.json` and `pele-random-flat.json` in
+`random-flat.json`, `pele-random-flat.json` and `pele-preprocessing.json` in
 `Sources/MermaidDiagramsBenchmark/Resources`; run the benchmark part on a quiet machine, then
 `swift run -c release MermaidDiagramsBenchmark --pele-comparison` on the same machine.

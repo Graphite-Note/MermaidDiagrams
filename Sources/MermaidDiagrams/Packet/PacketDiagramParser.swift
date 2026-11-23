@@ -5,8 +5,8 @@
  * Description: Reads a packet diagram's statements after its `packet` keyword: its fields and its titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads the statements after the `packet` or `packet-beta` keyword as Mermaid's grammar does, each ending its line: a
@@ -31,7 +31,7 @@ struct PacketDiagramParser {
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> PacketDiagram {
         var parser = PacketDiagramParser(cursor: cursor, limits: limits)
-        parser.diagram.options = PacketOptions(MermaidConfigurationOptions(section: "packet", in: cursor.bytes))
+        parser.diagram.options = PacketOptions(MermaidConfigurationOptions(section: "packet", in: cursor.sourceBytes))
         try parser.readStatements()
         parser.diagram.title = parser.statements.title
         parser.diagram.accessibilityTitle = parser.statements.accessibilityTitle

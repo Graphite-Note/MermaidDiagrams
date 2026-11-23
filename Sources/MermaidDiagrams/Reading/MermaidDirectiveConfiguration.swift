@@ -5,8 +5,8 @@
  * Description: Reads the configuration a diagram's `%%{init: …}%%` directives give, as Pele reads it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -53,7 +53,7 @@ enum MermaidDirectiveConfiguration {
 
     /// A directive found as Mermaid's pattern finds it: its name, its content (nil when it is a single word or nothing)
     /// and where the match ends.
-    private struct DirectiveMatch {
+    struct DirectiveMatch {
         let start: Int
         let name: String
         let content: Range<Int>?
@@ -61,7 +61,7 @@ enum MermaidDirectiveConfiguration {
     }
 
     /// The pattern `%%{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%%).|\r?\n)*))?\s*(?:}%%)?` from `position` on.
-    private static func nextDirective(in text: [UInt8], from position: Int) -> DirectiveMatch? {
+    static func nextDirective(in text: [UInt8], from position: Int) -> DirectiveMatch? {
         var start = position
         while start + directiveStart.count <= text.count {
             guard text[start] == MermaidByte.percent, text[start + 1] == MermaidByte.percent, text[start + 2] == MermaidByte.openingBrace else {

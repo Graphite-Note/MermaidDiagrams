@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphRoom.swift
+ * ------------------------
+ * Layer: Core
+ * Description: The room each commit and lane of a Git graph needs, along the history and across it, as Pele works it out.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A Git graph's text measured, and the room each commit and lane needs, as Pele works it out: along the history on
@@ -76,9 +87,11 @@ struct GitGraphRoom {
         }
         let labelAcross = label.map { label in
             let levelAcross = isVertical ? label.size.width : label.size.height
-            return GitGraphGeometry.labelOffset + (isLabelTurned ? GitGraphGeometry.eighthTurnCosine * (label.size.width + label.size.height) : levelAcross)
+            return isLabelTurned ? GitGraphGeometry.labelOffset + GitGraphGeometry.eighthTurnCosine * (label.size.width + label.size.height)
+                : GitGraphGeometry.levelLabelOffset + levelAcross
         } ?? 0
-        let levelLabelAlong = isLabelTurned ? 0 : label.map { label in (isVertical ? label.size.height : label.size.width) + GitGraphGeometry.gap } ?? 0
+        // The gap between two commits' ids is the spacing's own (`GitGraphPositions`), as in git/render.ts's `space`.
+        let levelLabelAlong = isLabelTurned ? 0 : label.map { label in isVertical ? label.size.height : label.size.width } ?? 0
         let dot = GitGraphGeometry.dotRadius
         return (max(dot, tagsAlong / 2, levelLabelAlong / 2), tagsAlong / 2, dot + (tags.isEmpty ? 0 : GitGraphGeometry.tagGap + tagsAcross), dot + labelAcross)
     }

@@ -1,0 +1,788 @@
+{
+ "yaml": [
+  {
+   "source": "{\n shape: rounded \n}",
+   "value": {
+    "shape": "rounded"
+   }
+  },
+  {
+   "source": "{\nshape: rounded , label: \"DD\"\n}",
+   "value": {
+    "shape": "rounded",
+    "label": "DD"
+   }
+  },
+  {
+   "source": "{\n label: \"This is }\", other: \"clock\"\n}",
+   "value": {
+    "label": "This is }",
+    "other": "clock"
+   }
+  },
+  {
+   "source": "{\n animate: true, animation: fast, w: 100, h: 50.5, x: null, y: ~\n}",
+   "value": {
+    "animate": true,
+    "animation": "fast",
+    "w": 100,
+    "h": 50.5,
+    "x": null,
+    "y": null
+   }
+  },
+  {
+   "source": "{\n label: 'single quoted', icon: \"fa:fa-user\", form: circle, pos: t \n}",
+   "value": {
+    "label": "single quoted",
+    "icon": "fa:fa-user",
+    "form": "circle",
+    "pos": "t"
+   }
+  },
+  {
+   "source": "{\n a: [1, 2, three], b: {c: d, e: [f]}\n}",
+   "value": {
+    "a": [
+     1,
+     2,
+     "three"
+    ],
+    "b": {
+     "c": "d",
+     "e": [
+      "f"
+     ]
+    }
+   }
+  },
+  {
+   "source": "{\n}",
+   "value": {}
+  },
+  {
+   "source": "\n        shape: circle\n        other: \"clock\"\n     \n",
+   "value": {
+    "shape": "circle",
+    "other": "clock"
+   }
+  },
+  {
+   "source": "\n        label: |\n          This is a\n          multiline string\n        other: \"clock\"\n     \n",
+   "value": {
+    "label": "This is a\nmultiline string\n",
+    "other": "clock"
+   }
+  },
+  {
+   "source": "\n        label: >\n          folded\n          text\n\n          second paragraph\n        other: 1\n",
+   "value": {
+    "label": "folded text\nsecond paragraph\n",
+    "other": 1
+   }
+  },
+  {
+   "source": "\n        label: \"This is a<br/>multiline string\"\n        other: \"clock\"\n",
+   "value": {
+    "label": "This is a<br/>multiline string",
+    "other": "clock"
+   }
+  },
+  {
+   "source": "title: Hello world\nconfig:\n  theme: dark\n  flowchart:\n    curve: linear\n    htmlLabels: false\n",
+   "value": {
+    "title": "Hello world",
+    "config": {
+     "theme": "dark",
+     "flowchart": {
+      "curve": "linear",
+      "htmlLabels": false
+     }
+    }
+   }
+  },
+  {
+   "source": "title: \"Quoted: title\"\ndisplayMode: compact\n",
+   "value": {
+    "title": "Quoted: title",
+    "displayMode": "compact"
+   }
+  },
+  {
+   "source": "config:\n  themeVariables:\n    primaryColor: \"#ff0000\"\n    fontSize: 16px\n  look: handDrawn # trailing comment\n",
+   "value": {
+    "config": {
+     "themeVariables": {
+      "primaryColor": "#ff0000",
+      "fontSize": "16px"
+     },
+     "look": "handDrawn"
+    }
+   }
+  },
+  {
+   "source": "list:\n  - a\n  - b: 1\n    c: 2\n  - [x, y]\nempty:\n",
+   "value": {
+    "list": [
+     "a",
+     {
+      "b": 1,
+      "c": 2
+     },
+     [
+      "x",
+      "y"
+     ]
+    ],
+    "empty": null
+   }
+  },
+  {
+   "source": "a: 0x1f\nb: -12\nc: 1e3\nd: .5\ne: \"12\"\nf: True\ng: FALSE\nh: Null\n",
+   "value": {
+    "a": 31,
+    "b": -12,
+    "c": 1000,
+    "d": 0.5,
+    "e": "12",
+    "f": true,
+    "g": false,
+    "h": null
+   }
+  },
+  {
+   "source": "key with spaces: plain value\nurl: http://example.com/a#b\n",
+   "value": {
+    "key with spaces": "plain value",
+    "url": "http://example.com/a#b"
+   }
+  },
+  {
+   "source": "multi: this is\n  continued on the next line\nnext: 1\n",
+   "value": {
+    "multi": "this is continued on the next line",
+    "next": 1
+   }
+  },
+  {
+   "source": "# only a comment\n",
+   "value": null
+  },
+  {
+   "source": "",
+   "value": null
+  },
+  {
+   "source": "just a scalar",
+   "value": "just a scalar"
+  },
+  {
+   "source": "- 1\n- 2\n",
+   "value": [
+    1,
+    2
+   ]
+  },
+  {
+   "source": "a: {\n  b: 1,\n  c: [2,\n    3]\n}\nd: \"two\n  lines\"\ne: 5\n",
+   "value": {
+    "a": {
+     "b": 1,
+     "c": [
+      2,
+      3
+     ]
+    },
+    "d": "two lines",
+    "e": 5
+   }
+  },
+  {
+   "source": "{\n a: 1, # comment\n b: 2\n}",
+   "value": {
+    "a": 1,
+    "b": 2
+   }
+  },
+  {
+   "source": "title: \"first\n  second\n\n  third\"\n",
+   "value": {
+    "title": "first second\nthird"
+   }
+  },
+  {
+   "source": "title: 'it''s\n  folded'\n",
+   "value": {
+    "title": "it's folded"
+   }
+  },
+  {
+   "source": "title: \"joined \\\n   here\"\n",
+   "value": {
+    "title": "joined here"
+   }
+  },
+  {
+   "source": "title: \"tab\\tand \\x41\\u00e9 and \\\"quoted\\\"\"\n",
+   "value": {
+    "title": "tab\tand Aé and \"quoted\""
+   }
+  },
+  {
+   "source": "title:\nconfig:\n  theme:\n",
+   "value": {
+    "title": null,
+    "config": {
+     "theme": null
+    }
+   }
+  },
+  {
+   "source": "title: \"bad \\q escape\"\n",
+   "error": "YAML: unknown escape sequence"
+  },
+  {
+   "source": "a: 1\n  b: 2\n",
+   "value": {
+    "a": "1 b: 2"
+   }
+  },
+  {
+   "source": "a:\n\tb: 1\n",
+   "error": "YAML: tabs are not allowed for indentation"
+  },
+  {
+   "source": "title: \"never closed\n",
+   "error": "YAML: unexpected end of the stream within a double quoted scalar"
+  },
+  {
+   "source": "a: [1, 2\nb: 3\n",
+   "error": "YAML: unexpected end of the stream within a flow collection"
+  },
+  {
+   "source": "a: |-\n  kept\n\n",
+   "value": {
+    "a": "kept"
+   }
+  },
+  {
+   "source": "a: |+\n  kept\n\n",
+   "value": {
+    "a": "kept\n\n\n"
+   }
+  },
+  {
+   "source": "a: >2\n    indented\n   less\n",
+   "value": {
+    "a": "  indented\n less\n"
+   }
+  },
+  {
+   "source": "title: -12.5e+3\nwidth: +.5\nhex: -0x10\noctal: 0o17\nbinary: 0b101\nnot: 08\nalso: 1.\n",
+   "value": {
+    "title": -12500,
+    "width": 0.5,
+    "hex": -16,
+    "octal": 15,
+    "binary": 5,
+    "not": 8,
+    "also": 1
+   }
+  },
+  {
+   "source": "\"quoted key\": 1\n'single key': 2\n",
+   "value": {
+    "quoted key": 1,
+    "single key": 2
+   }
+  },
+  {
+   "source": "seq:\n- a\n- b\n",
+   "value": {
+    "seq": [
+     "a",
+     "b"
+    ]
+   }
+  },
+  {
+   "source": "{ a: 1 } trailing",
+   "error": "YAML: unexpected content after a value"
+  },
+  {
+   "source": "{ a: 1, , b: 2 }",
+   "error": "YAML: expected the node content, but found ','"
+  },
+  {
+   "source": "{ a: 1 b: 2 }",
+   "value": {
+    "a": "1 b: 2"
+   }
+  },
+  {
+   "source": "...\n",
+   "value": "..."
+  },
+  {
+   "source": "a: 1\n...\n",
+   "error": "YAML: can not read a block mapping entry"
+  },
+  {
+   "source": "a: 1\n---\nb: 2\n",
+   "value": {
+    "a": 1,
+    "b": 2
+   }
+  },
+  {
+   "source": "url: a:b\nport: :8080\n",
+   "value": {
+    "url": "a:b",
+    "port": ":8080"
+   }
+  },
+  {
+   "source": "- - nested\n  - again\n- last\n",
+   "value": [
+    "- nested - again",
+    "last"
+   ]
+  },
+  {
+   "source": "a: \"x\" # comment\nb: \"y\" extra\n",
+   "error": "YAML: unexpected content after a value"
+  },
+  {
+   "source": " icon: \"fa:user\",\n  shape: cyl \n",
+   "error": "YAML: unexpected content after a value"
+  },
+  {
+   "source": "{\n shape: 'rect' \n}",
+   "value": {
+    "shape": "rect"
+   }
+  },
+  {
+   "source": "{\n shape: diam, label: \"Is it, really?\" \n}",
+   "value": {
+    "shape": "diam",
+    "label": "Is it, really?"
+   }
+  }
+ ],
+ "preprocessing": [
+  {
+   "source": "%%{init: {\"theme\":\"dark\"}}%%\nflowchart LR\nA-->B",
+   "text": "flowchart LR\nA-->B",
+   "title": null,
+   "config": {
+    "theme": "dark"
+   }
+  },
+  {
+   "source": "flowchart LR\nA-->B %%{init: {\"flowchart\": {\"curve\": \"basis\"}}}%% \nB-->C",
+   "text": "flowchart LR\nA-->B  \nB-->C",
+   "title": null,
+   "config": {
+    "flowchart": {
+     "curve": "basis"
+    }
+   }
+  },
+  {
+   "source": "flowchart LR\n  %%{\n    init: {\"theme\": \"forest\"}\n  }%%\nA-->B",
+   "text": "flowchart LR\n  \nA-->B",
+   "title": null,
+   "config": {
+    "theme": "forest"
+   }
+  },
+  {
+   "source": "%%{init: {\"a\": 1} \nflowchart LR\nA",
+   "text": "",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "%%{wrap}%%\nsequenceDiagram\nA->>B: hi",
+   "text": "sequenceDiagram\nA->>B: hi",
+   "title": null,
+   "config": {
+    "wrap": true
+   }
+  },
+  {
+   "source": "%%{ }%%\nflowchart LR\nA",
+   "text": "%%{ }%%\nflowchart LR\nA",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "%%{init: {'theme': 'dark'}}%%\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": null,
+   "config": {
+    "theme": "dark"
+   }
+  },
+  {
+   "source": "flowchart LR\r\nA-->B\rB-->C\r\n",
+   "text": "flowchart LR\nA-->B\nB-->C\n",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nstyle A fill:#f00;B-->C",
+   "text": "flowchart LR\nstyle A fill:#f00B-->C",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nclassDef c fill:#fff,stroke:#000;\nA-->B;",
+   "text": "flowchart LR\nclassDef c fill:#fff,stroke:#000\nA-->B;",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nA-->B; style A fill:#f00; B-->C;",
+   "text": "flowchart LR\nA-->B; style A fill:ﬂ°f00¶ß B-->C",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nstyle A fill: #f00;B-->C",
+   "text": "flowchart LR\nstyle A fill: ﬂ°f00¶ßB-->C",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "---\ntitle: a\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": "a",
+   "config": {}
+  },
+  {
+   "source": "---\ntitle: [unclosed\n---\nflowchart LR\nA",
+   "error": "Front matter is not valid YAML. YAML: unexpected end of the stream within a flow collection"
+  },
+  {
+   "source": "---\ntitle: \"multi\n  line\"\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": "multi line",
+   "config": {}
+  },
+  {
+   "source": "---\ntitle: 12\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": "12",
+   "config": {}
+  },
+  {
+   "source": "---\ntitle:\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "---\ntitle\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "  ---\n  title: indented\n  ---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": "indented",
+   "config": {}
+  },
+  {
+   "source": "\n---\ntitle: after a blank line\n---\nflowchart LR\nA",
+   "text": "---\ntitle: after a blank line\n---\nflowchart LR\nA",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "---\ntitle: x\n---",
+   "text": "---\ntitle: x\n---",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "---\ndisplayMode: compact\n---\ngantt\ntask: a, 1d",
+   "text": "gantt\ntask: a, 1d",
+   "title": null,
+   "config": {
+    "gantt": {
+     "displayMode": "compact"
+    }
+   }
+  },
+  {
+   "source": "---\nconfig:\n  flowchart:\n    curve: linear\n---\n%%{init: {\"flowchart\": {\"htmlLabels\": false}}}%%\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": null,
+   "config": {
+    "flowchart": {
+     "curve": "linear",
+     "htmlLabels": false
+    }
+   }
+  },
+  {
+   "source": "---\na: 1\n  b: 2\n---\nflowchart LR\nA",
+   "text": "flowchart LR\nA",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\n%% a comment\nA-->B\n%%\n%%{not a directive\nB",
+   "text": "flowchart LR\nA-->B\n%%\ndirective\nB",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "---\r\ntitle: crlf\r\n---\r\nflowchart LR\r\nA",
+   "text": "flowchart LR\nA",
+   "title": "crlf",
+   "config": {}
+  },
+  {
+   "source": "railroad-beta\ns = terminal(\"%%{kept}\") ;\nt = terminal(\"c\") ;",
+   "text": "railroad-beta\ns = terminal(\"",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "venn-beta\ntitle A\rset B",
+   "text": "venn-beta\ntitle A\nset B",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "gantt\n%%{init: {}}%%",
+   "text": "gantt\n",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nfoo%%{init: {}}%%bar-->B",
+   "text": "flowchart LR\nfoobar-->B",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nA-->%%{init:\n{\"a\": 1}}%%B",
+   "text": "flowchart LR\nA-->B",
+   "title": null,
+   "config": {
+    "a": 1
+   }
+  },
+  {
+   "source": "flowchart LR\nA[<span style=\"color:red\">x</span>]-->B[\"<a href=\"u\" title=\"t\">y</a>\"]",
+   "text": "flowchart LR\nA[<span style='color:red'>x</span>]-->B[\"<a href='u' title='t'>y</a>\"]",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "sequenceDiagram\nA->>B: <b class=\"x\">hi</b> and \"q\" <i id=\"z>",
+   "text": "sequenceDiagram\nA->>B: <b class='x'>hi</b> and \"q\" <i id=\"z>",
+   "title": null,
+   "config": {}
+  }
+ ],
+ "dates": [
+  {
+   "text": "March 7, 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 10:30",
+   "milliseconds": 1394188200000
+  },
+  {
+   "text": "7 March 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "7 Mar 2014 10:30 PM",
+   "milliseconds": 1394231400000
+  },
+  {
+   "text": "Fri, 07 Mar 2014 10:00:00 GMT",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "Friday, March 7, 2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "3/7/2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "3/7/14",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014/3/7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-3-7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-03-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-03-07T10:00",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "2014-03-07T10:00Z",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "2014-03-07 10:00",
+   "milliseconds": 1394186400000
+  },
+  {
+   "text": "March 2014",
+   "milliseconds": 1393632000000
+  },
+  {
+   "text": "2014",
+   "milliseconds": 1388534400000
+  },
+  {
+   "text": "Mar 7",
+   "milliseconds": 983923200000
+  },
+  {
+   "text": "7 Mar",
+   "milliseconds": 983923200000
+  },
+  {
+   "text": "March 7, 2014 10:30:15.250",
+   "milliseconds": 1394188215250
+  },
+  {
+   "text": "Mar 7, 2014 GMT+0100",
+   "milliseconds": 1394146800000
+  },
+  {
+   "text": "Mar 7, 2014 UTC-5",
+   "milliseconds": 1394168400000
+  },
+  {
+   "text": "Mar 7, 2014 (CET)",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 EST",
+   "milliseconds": 1394168400000
+  },
+  {
+   "text": "Sept 7 2014",
+   "milliseconds": 1410048000000
+  },
+  {
+   "text": "Septem 7 2014",
+   "milliseconds": 1410048000000
+  },
+  {
+   "text": "7.3.2014",
+   "milliseconds": 1404345600000
+  },
+  {
+   "text": "2014 Mar 7",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 32 2014",
+   "milliseconds": null
+  },
+  {
+   "text": "Feb 30, 2014",
+   "milliseconds": 1393718400000
+  },
+  {
+   "text": "12 noon",
+   "milliseconds": null
+  },
+  {
+   "text": "tomorrow",
+   "milliseconds": null
+  },
+  {
+   "text": "",
+   "milliseconds": null
+  },
+  {
+   "text": "  March 7, 2014  ",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7,2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March,7,2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "07-Mar-2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar-07-2014",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "2014-Mar-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "10:30 March 7 2014",
+   "milliseconds": 1394188200000
+  },
+  {
+   "text": "March 7 2014 12:00 AM",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "March 7 2014 12:00 PM",
+   "milliseconds": 1394193600000
+  },
+  {
+   "text": "99",
+   "milliseconds": 915148800000
+  },
+  {
+   "text": "1 2 3",
+   "milliseconds": 1041465600000
+  },
+  {
+   "text": "50/1/1",
+   "milliseconds": -631152000000
+  },
+  {
+   "text": "1/1/50",
+   "milliseconds": -631152000000
+  },
+  {
+   "text": "+002014-03-07",
+   "milliseconds": 1394150400000
+  },
+  {
+   "text": "Mar 7, 2014 10:30 +01:00",
+   "milliseconds": 1394184600000
+  }
+ ]
+}

@@ -5,8 +5,8 @@
  * Description: Reads a class diagram's statements after its keyword.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 /// Reads a class diagram's statements after its `classDiagram` or `classDiagram-v2` keyword: classes with their
@@ -24,7 +24,7 @@ struct ClassDiagramParser {
         try parser.expectStatementEnd()
         try parser.readStatements()
         var diagram = parser.builder.finished()
-        let options = MermaidConfigurationOptions(section: "class", in: cursor.bytes).values
+        let options = MermaidConfigurationOptions(section: "class", in: cursor.sourceBytes).values
         if case .boolean(false) = options["hierarchicalNamespaces"] { diagram.hierarchicalNamespaces = false }
         if case .boolean(true) = options["hideEmptyMembersBox"] { diagram.hidesEmptyMemberBoxes = true }
         return diagram

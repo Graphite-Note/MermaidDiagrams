@@ -5,8 +5,8 @@
  * Description: A color a diagram's own statements give.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -38,7 +38,7 @@ public struct DiagramColor: Hashable, Sendable {
             self = color
         } else if text == "none" || text == "transparent" {
             self = DiagramColor(red: 0, green: 0, blue: 0, alpha: 0)
-        } else if let value = Self.namedColors[text] {
+        } else if let value = Self.cssColorNames[text] {
             self = DiagramColor(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
         } else {
             return nil
@@ -85,24 +85,4 @@ public struct DiagramColor: Hashable, Sendable {
         if text.hasSuffix("%") { return Double(text.dropLast()).map { percentage in percentage / 100 } }
         return Double(text).map { value in value / fullScale }
     }
-
-    /// The CSS color names a diagram is likely to use, as 0xRRGGBB.
-    private static let namedColors: [String: UInt32] = [
-        "black": 0x000000, "white": 0xFFFFFF, "red": 0xFF0000, "green": 0x008000, "blue": 0x0000FF, "yellow": 0xFFFF00,
-        "orange": 0xFFA500, "purple": 0x800080, "pink": 0xFFC0CB, "gray": 0x808080, "grey": 0x808080, "brown": 0xA52A2A,
-        "cyan": 0x00FFFF, "aqua": 0x00FFFF, "magenta": 0xFF00FF, "fuchsia": 0xFF00FF, "lime": 0x00FF00, "navy": 0x000080,
-        "teal": 0x008080, "maroon": 0x800000, "olive": 0x808000, "silver": 0xC0C0C0, "gold": 0xFFD700, "indigo": 0x4B0082,
-        "violet": 0xEE82EE, "coral": 0xFF7F50, "salmon": 0xFA8072, "khaki": 0xF0E68C, "tan": 0xD2B48C, "beige": 0xF5F5DC,
-        "ivory": 0xFFFFF0, "lavender": 0xE6E6FA, "plum": 0xDDA0DD, "orchid": 0xDA70D6, "crimson": 0xDC143C, "tomato": 0xFF6347,
-        "turquoise": 0x40E0D0, "skyblue": 0x87CEEB, "lightblue": 0xADD8E6, "lightgreen": 0x90EE90, "lightgray": 0xD3D3D3,
-        "lightgrey": 0xD3D3D3, "lightyellow": 0xFFFFE0, "lightpink": 0xFFB6C1, "lightcoral": 0xF08080, "lightsalmon": 0xFFA07A,
-        "lightcyan": 0xE0FFFF, "darkblue": 0x00008B, "darkgreen": 0x006400, "darkred": 0x8B0000, "darkgray": 0xA9A9A9,
-        "darkgrey": 0xA9A9A9, "darkorange": 0xFF8C00, "darkcyan": 0x008B8B, "darkviolet": 0x9400D3, "darkmagenta": 0x8B008B,
-        "royalblue": 0x4169E1, "steelblue": 0x4682B4, "dodgerblue": 0x1E90FF, "cornflowerblue": 0x6495ED, "slateblue": 0x6A5ACD,
-        "seagreen": 0x2E8B57, "forestgreen": 0x228B22, "limegreen": 0x32CD32, "springgreen": 0x00FF7F, "chartreuse": 0x7FFF00,
-        "firebrick": 0xB22222, "hotpink": 0xFF69B4, "deeppink": 0xFF1493, "gainsboro": 0xDCDCDC, "whitesmoke": 0xF5F5F5,
-        "wheat": 0xF5DEB3, "peachpuff": 0xFFDAB9, "mistyrose": 0xFFE4E1, "aliceblue": 0xF0F8FF, "honeydew": 0xF0FFF0,
-        "lemonchiffon": 0xFFFACD, "dimgray": 0x696969, "dimgrey": 0x696969, "slategray": 0x708090, "slategrey": 0x708090,
-        "midnightblue": 0x191970, "sienna": 0xA0522D, "chocolate": 0xD2691E, "peru": 0xCD853F, "goldenrod": 0xDAA520,
-    ]
 }

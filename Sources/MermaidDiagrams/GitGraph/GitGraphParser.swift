@@ -5,8 +5,8 @@
  * Description: Reads a Git graph's statements as Mermaid's grammar does and plays them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a Git graph's statements after its `gitGraph` keyword as Mermaid's grammar does (Pele's port of it): an
@@ -22,7 +22,7 @@ struct GitGraphParser {
 
     /// `cursor` is just past the `gitGraph` keyword, as `MermaidDiagramReader` leaves it.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> GitGraphDiagram {
-        let options = GitGraphOptions(MermaidConfigurationOptions(section: "gitGraph", in: cursor.bytes))
+        let options = GitGraphOptions(MermaidConfigurationOptions(section: "gitGraph", in: cursor.sourceBytes))
         var parser = try GitGraphParser(cursor: cursor)
         try parser.readStatements()
         parser.diagram.options = options

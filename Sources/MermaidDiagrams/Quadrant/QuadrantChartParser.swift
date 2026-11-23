@@ -5,8 +5,8 @@
  * Description: Reads a quadrant chart's statements from their tokens, as Mermaid's quadrant grammar does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a quadrant chart's statements after its `quadrantChart` keyword from their tokens (`QuadrantChartLexer`), as
@@ -26,7 +26,7 @@ struct QuadrantChartParser {
                                          builder: QuadrantChartBuilder(limits: limits))
         try parser.readStatements()
         var chart = parser.builder.chart
-        chart.options = QuadrantChartOptions(MermaidConfigurationOptions(section: "quadrantChart", in: cursor.bytes))
+        chart.options = QuadrantChartOptions(MermaidConfigurationOptions(section: "quadrantChart", in: cursor.sourceBytes))
         return chart
     }
 

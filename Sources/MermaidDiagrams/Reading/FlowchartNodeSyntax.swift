@@ -52,11 +52,21 @@ enum FlowchartNodeSyntax {
         let openingLine = cursor.line
         cursor.advance(by: brackets.opening.count)
         let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closings.map(\.text),
-                                                                     openingLine: openingLine)
+                                                                     state: textState(after: brackets.opening), openingLine: openingLine)
         return FlowchartNodeDefinition(shape: brackets.closings[closingIndex].shape, label: label)
     }
 
     private static let propertyOpening = Array("[|".utf8)
+
+    /// The lexer state Pele reads the text after `opening` in: a trapezoid's after `[/` and `[\`, an ellipse's after
+    /// `(-`, plain text's after every other bracket.
+    private static func textState(after opening: [UInt8]) -> FlowchartTextState {
+        switch String(decoding: opening, as: UTF8.self) {
+        case "[/", "[\\": .trapezoid
+        case "(-": .ellipse
+        default: .text
+        }
+    }
 
     /// `[|borders:lt|text]`, a rectangle with a property written before its text, as Pele's parser reads it
     /// (`VERTEX_WITH_PROPS_START`, a word, `:`, a word, `|`, then the text up to `]`): the property is read and left, as
@@ -75,94 +85,5 @@ enum FlowchartNodeSyntax {
         }
         let (label, _) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: [Array("]".utf8)], openingLine: openingLine)
         return FlowchartNodeDefinition(shape: .rectangle, label: label)
-    }
-
-    /// Whether `@{` follows, which opens a node's (or an edge's) attributes.
-    static func isAtAttributes(_ cursor: MermaidTextCursor) -> Bool {
-        cursor.peek() == MermaidByte.atSign && cursor.peek(1) == MermaidByte.openingBrace
-    }
-
-    /// Reads `@{ key: value, … }`. `shape`, `label` and `view: collapsed` are kept, a shape Mermaid does not know refused
-    /// (`FlowchartNodeShape.named`); other keys (`icon`, `img`, `pos`, …) are read and left.
-    static func readAttributes(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartNodeDefinition {
-        let openingLine = cursor.line
-        cursor.advance(by: 2)
-        var definition = FlowchartNodeDefinition()
-        while true {
-            while let byte = cursor.peek(), byte == MermaidByte.comma || MermaidByte.isSpace(byte) || byte == MermaidByte.newline
-                    || byte == MermaidByte.carriageReturn { cursor.advance() }
-            guard let byte = cursor.peek() else { throw .invalidSyntax(line: openingLine, problem: .unclosedAttributes) }
-            if byte == MermaidByte.closingBrace {
-                cursor.advance()
-                return definition
-            }
-            let attributeLine = cursor.line
-            let (key, value) = try readAttribute(&cursor, openingLine: openingLine)
-            switch key.lowercased() {
-            case "shape":
-                // An empty name, as Pele reads `shape:` with nothing after it, changes nothing.
-                let name = FlowchartTextSyntax.unquoted(value).text
-                if !name.isEmpty { definition.shape = try FlowchartNodeShape.named(name, line: attributeLine) }
-            case "label":
-                let written = FlowchartTextSyntax.unquoted(value)
-                definition.label = DiagramLabelDecoder.label(from: written.text, form: written.form)
-                definition.hasBlankWrittenLabel = JavaScriptStringTrimming.trimmed(written.text).isEmpty
-            case "view": definition.asksForCollapsedView = FlowchartTextSyntax.unquoted(value).text == "collapsed"
-            // Pele's database reads these keys as written: `Icon:` is no icon.
-            default: readAssetAttribute(key, writtenValue: value, into: &definition.assetAttributes)
-            }
-        }
-    }
-
-    /// An icon's or a picture's attribute, as Pele's database keeps one whose YAML value is truthy (`if (doc.icon)`): not
-    /// empty, and not an unquoted `null`, `~`, `false` or number zero (`w: 0` leaves the width written before); `w` and
-    /// `h` are read as JavaScript's `Number` reads them.
-    private static func readAssetAttribute(_ key: String, writtenValue: String, into attributes: inout FlowchartNodeAssetAttributes) {
-        let value = FlowchartTextSyntax.unquoted(writtenValue).text
-        guard !value.isEmpty, writtenValue.hasPrefix("\"") || !isFalsyYAMLScalar(value) else { return }
-        switch key {
-        case "icon": attributes.icon = value
-        case "img": attributes.image = value
-        case "form": attributes.form = value
-        case "pos": attributes.position = value
-        case "constraint": attributes.constraint = value
-        // A number that is no side (zero, words) still replaces the one before, and the standard side is used.
-        case "w": attributes.width = JavaScriptNumber.value(of: Substring(value)) ?? .nan
-        case "h": attributes.height = JavaScriptNumber.value(of: Substring(value)) ?? .nan
-        default: break
-        }
-    }
-
-    /// Whether Pele's YAML reader reads an unquoted `text` as a value JavaScript takes for false (util/yaml.ts `scalar`):
-    /// null, false, or a number that is zero or not a number.
-    private static func isFalsyYAMLScalar(_ text: String) -> Bool {
-        if ["~", "null", "Null", "NULL", "false", "False", "FALSE", ".nan", ".NaN", ".NAN"].contains(text) { return true }
-        guard let first = text.unicodeScalars.first, first == "-" || first == "+" || first == "." || ("0"..."9").contains(first) else { return false }
-        // A sign before a hexadecimal, octal or binary number is YAML's, which JavaScript's Number does not read.
-        let unsigned = first == "-" || first == "+" ? text.dropFirst() : Substring(text)
-        return JavaScriptNumber.value(of: unsigned) == 0
-    }
-
-    /// One `key: value` of an attribute list; the value is quoted text or runs to a comma, a line break or the brace.
-    private static func readAttribute(_ cursor: inout MermaidTextCursor, openingLine: Int) throws(MermaidDiagramReadError) -> (String, String) {
-        let keyStart = cursor.position
-        while let byte = cursor.peek(), MermaidByte.isIdentifierByte(byte) || byte == MermaidByte.hyphen { cursor.advance() }
-        let key = cursor.text(from: keyStart, to: cursor.position)
-        cursor.skipSpaces()
-        guard !key.isEmpty, cursor.peek() == MermaidByte.colon else {
-            throw .invalidSyntax(line: cursor.line, problem: cursor.isAtEnd ? .unclosedAttributes : .unexpectedText(cursor.excerpt()))
-        }
-        cursor.advance()
-        cursor.skipSpaces()
-        let valueStart = cursor.position
-        if cursor.peek() == MermaidByte.quotationMark {
-            cursor.advance()
-            while let byte = cursor.peek(), byte != MermaidByte.quotationMark { cursor.advance() }
-            guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedQuotation) }
-            cursor.advance()
-            return (key, cursor.text(from: valueStart, to: cursor.position))
-        }
-        while let byte = cursor.peek(), byte != MermaidByte.comma, byte != MermaidByte.newline, byte != MermaidByte.closingBrace { cursor.advance() }
-        return (key, cursor.text(from: valueStart, to: cursor.position).trimmingCharacters(in: .whitespaces))
     }
 }

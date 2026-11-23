@@ -56,7 +56,7 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg] [--svg-of=<corpus>#<index>,…]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
@@ -65,6 +65,7 @@ const runsBench = flags.length === 0 || flags.includes('--bench');
 const runsRandomFlat = flags.length === 0 || flags.includes('--random-flat');
 // --svg-of=<corpus>#<index>,… writes those inputs' SVGs to <output>/svg, to look at a drawing beside the package's.
 const svgInputs = flags.find((flag) => flag.startsWith('--svg-of='))?.slice('--svg-of='.length).split(',') ?? [];
+const runsPreprocessing = flags.length === 0 || flags.includes('--preprocessing');
 // --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
 const writesDrawings = flags.includes('--svg');
 
@@ -288,6 +289,15 @@ if (runsCompat) {
   const lines = parsed.map((item) => JSON.stringify(item));
   await Deno.writeTextFile(`${outputFolder}/pele-flowchart-compat.json`, `[\n${lines.join(',\n')}\n]\n`);
   console.log(`compat: ${parsed.length} texts parsed by the flowchart specs, ${parsed.filter((item) => item.error).length} refused`);
+}
+
+if (runsPreprocessing) {
+  const { recordYaml, recordPreprocessing, recordDates } = await import('./preprocessing-recorder.ts');
+  const { parseYaml } = await import(`${peleRoot}/src/util/yaml.ts`);
+  const { preprocess, encodeEntities } = await import(`${peleRoot}/src/preprocess.ts`);
+  const result = { yaml: recordYaml(parseYaml), preprocessing: recordPreprocessing(preprocess, encodeEntities), dates: recordDates() };
+  await Deno.writeTextFile(`${outputFolder}/pele-preprocessing.json`, JSON.stringify(result, null, 1) + '\n');
+  console.log(`preprocessing: ${result.yaml.length} YAML texts and ${result.preprocessing.length} diagram texts`);
 }
 
 if (runsBench) {

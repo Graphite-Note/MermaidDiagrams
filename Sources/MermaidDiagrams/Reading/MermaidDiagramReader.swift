@@ -5,8 +5,8 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.20
- * Date: 19/11/2026
+ * Version: 0.21
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -49,22 +49,19 @@ public enum MermaidDiagram: Equatable, Sendable {
     case agentFlow(AgentFlowDiagram)
 }
 
-/// Reads Mermaid text: optional front matter (`---` … `---`, whose `title:` is kept), comments and directives
-/// (`%%`, `%%{init: …}%%`), the keyword that names the diagram's type, and the diagram itself.
+/// Reads Mermaid text as Pele does (preprocess.ts): line breaks made line feeds, the front matter (`---` … `---`),
+/// whose `title:` is kept and which is refused when it is not YAML, tags' attributes put in single quotation marks,
+/// directives (`%%{init: …}%%`) taken out wherever they
+/// stand, a colour's last semicolon dropped (`MermaidPreprocessing`), comments, then the keyword that names the
+/// diagram's type and the diagram itself.
 public enum MermaidDiagramReader {
     public static func read(_ source: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> MermaidDiagram {
         guard source.utf8.count <= limits.maximumSourceBytes else { throw .sourceTooLarge(limitBytes: limits.maximumSourceBytes) }
-        var cursor = MermaidTextCursor(bytes: Array(source.utf8))
-        if cursor.hasPrefix(byteOrderMark) { cursor.advance(by: byteOrderMark.count) }
-        cursor.skipWhitespace()
-        let title = try readFrontMatterTitle(&cursor)
+        var (title, cursor) = try preprocessed(source)
         skipCommentsAndBlankLines(&cursor)
         guard let keyword = readTypeKeyword(&cursor) else {
             throw cursor.isAtEnd ? .noDiagram : .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
         }
-        // A Git graph's lexer skips directives of several lines itself, and its options are found in them; the others are
-        // given the text without them.
-        if keyword != "gitGraph" { cursor = withoutMultiLineDirectives(cursor) }
         return try diagram(named: keyword, at: cursor, limits: limits, frontMatterTitle: title)
     }
 
@@ -134,46 +131,44 @@ public enum MermaidDiagramReader {
         return titledDiagram
     }
 
-    /// Reads `---` … `---` at the cursor, and returns its top-level `title:` (without quotation marks), or nil.
-    private static func readFrontMatterTitle(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String? {
-        var lookahead = cursor
-        guard lookahead.readRestOfLine() == "---" else { return nil }
-        let openingLine = cursor.line
-        var title: String?
-        while true {
-            guard !lookahead.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedFrontMatter) }
-            lookahead.advance()
-            let line = lookahead.readRestOfLine()
-            if line == "---" { break }
-            if line.hasPrefix("title:") {
-                let value = line.dropFirst("title:".count).trimmingCharacters(in: .whitespaces)
-                title = FlowchartTextSyntax.unquoted(value).text
-            }
-        }
-        cursor = lookahead
-        return title
+    /// The front matter's title, and a cursor after the front matter on the text preprocessed as Pele does: line breaks
+    /// made line feeds, tags' attributes single-quoted, directives removed, a colour's last semicolon dropped. A line
+    /// the cursor counts is a line of that text: lines a directive spans count as one.
+    static func preprocessed(_ source: String) throws(MermaidDiagramReadError) -> (title: String?, cursor: MermaidTextCursor) {
+        var written = Array(source.utf8)
+        if written.starts(with: byteOrderMark) { written.removeFirst(byteOrderMark.count) }
+        let sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(MermaidPreprocessing.normalizedLineBreaks(written))
+        let (title, start) = try readFrontMatter(sourceBytes)
+        let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
+        var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes)
+        cursor.advance(by: start)
+        return (title, cursor)
     }
 
-    /// Skips what comes before the diagram's keyword: comments, and directives, those of several lines to their end.
+    /// The front matter's title and where the text after it starts (0 without front matter), found and read as Pele's
+    /// `preprocess` does (`MermaidFrontMatter`). Front matter that is not YAML is refused, as Pele refuses it; a first
+    /// line that is `---` alone with no closing fence is reported as unclosed front matter, where Pele finds no diagram.
+    private static func readFrontMatter(_ bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
+        guard let frontMatter = MermaidFrontMatter.find(in: bytes) else {
+            var opening = MermaidTextCursor(bytes: bytes)
+            opening.skipSpaces()
+            if opening.hasPrefix(fence), opening.readRestOfLine() == "---" { throw .invalidSyntax(line: 1, problem: .unclosedFrontMatter) }
+            return (nil, 0)
+        }
+        guard let value = frontMatter.value() else {
+            let firstLine = frontMatter.body.split(separator: "\n").first { line in !line.allSatisfy(\.isWhitespace) } ?? ""
+            throw .invalidSyntax(line: 2, problem: .unexpectedText(String(firstLine.trimmingCharacters(in: .whitespaces).prefix(24))))
+        }
+        return (MermaidFrontMatter.title(in: value), frontMatter.end)
+    }
+
+    /// Skips what comes before the diagram's keyword: blank space, and comments, each to the end of its line.
     private static func skipCommentsAndBlankLines(_ cursor: inout MermaidTextCursor) {
         while true {
             cursor.skipWhitespace()
             guard cursor.hasPrefix(commentStart) else { return }
-            if let end = MermaidDirectives.endOfMultiLineDirective(in: cursor.bytes, at: cursor.position) {
-                cursor.advance(by: end - cursor.position)
-            } else {
-                cursor.skipToEndOfLine()
-            }
+            cursor.skipToEndOfLine()
         }
-    }
-
-    /// `cursor` at the same place in the text with its directives of several lines turned into blanks, which the
-    /// readers of a diagram's statements skip; the cursor itself when there are none.
-    private static func withoutMultiLineDirectives(_ cursor: MermaidTextCursor) -> MermaidTextCursor {
-        guard let bytes = MermaidDirectives.blankingMultiLineDirectives(in: cursor.bytes, from: cursor.position) else { return cursor }
-        var blanked = MermaidTextCursor(bytes: bytes)
-        blanked.advance(by: cursor.position)
-        return blanked
     }
 
     /// The keyword that names the type: a letter, then letters, digits and `-` (`stateDiagram-v2`).
@@ -186,4 +181,5 @@ public enum MermaidDiagramReader {
 
     private static let byteOrderMark: [UInt8] = [0xEF, 0xBB, 0xBF]
     private static let commentStart = Array("%%".utf8)
+    private static let fence = Array("---".utf8)
 }

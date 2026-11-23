@@ -5,8 +5,8 @@
  * Description: Flowchart colors: classDef, class, style and linkStyle read, resolved, laid out and drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -138,10 +138,15 @@ final class FlowchartStyleTests: XCTestCase {
         XCTAssertEqual(diagram.unappliedStatementCount, 1, "A group's box is not styled yet")
     }
 
-    func testAMalformedStyleStatementIsCountedAndTheRestIsRead() throws {
-        let diagram = try flowchart("A --> B\nclassDef\nclass A\nlinkStyle first stroke:#f00\nB --> C")
-        XCTAssertEqual(diagram.edges.count, 2)
-        XCTAssertEqual(diagram.unappliedStatementCount, 3)
+    /// Pele's parser refuses a style statement its grammar does not take (flowchart/parser.ts): `classDef` with no name
+    /// or styles, `class` with no class, `linkStyle` with a word for an edge, a parenthesis in a style, a style left
+    /// empty after a comma.
+    func testAMalformedStyleStatementIsRefusedAsPeleRefusesIt() {
+        for statement in ["classDef", "class A", "linkStyle first stroke:#f00", "style A fill:rgb(1,2,3)", "style A fill:red,", "style A  ",
+                          "linkStyle 0 interpolate basis  "] {
+            XCTAssertThrowsError(try flowchart("A --> B\n\(statement)\nB --> C"), statement)
+        }
+        XCTAssertNoThrow(try flowchart("A --> B\nlinkStyle 0,1 interpolate basis stroke:#f00\nlinkStyle default stroke-width:2px\nclass A,B warm"))
     }
 
     // MARK: Layout and drawing

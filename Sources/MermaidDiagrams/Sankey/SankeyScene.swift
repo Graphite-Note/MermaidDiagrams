@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -27,8 +27,12 @@ extension DiagramScene {
 extension SankeyDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         for band in bands {
-            let sourcePaint = band.sourceColor.map(DiagramPaint.color) ?? .series(band.sourceSeriesIndex)
-            let targetPaint = band.targetColor.map(DiagramPaint.color) ?? .series(band.targetSeriesIndex)
+            let sourcePaint = band.sourcePaint
+            let targetPaint = band.targetPaint
+            if let fixedLinkPaint {
+                builder.fill(band.outline, fixedLinkPaint.atOpacity(Self.bandOpacity), part: .edge)
+                continue
+            }
             switch linkColor {
             case .gradient:
                 let gradient = DiagramLinearGradient(startPaint: sourcePaint, endPaint: targetPaint, startPoint: CGPoint(x: band.startX, y: 0),
@@ -41,6 +45,7 @@ extension SankeyDrawingParts {
         }
         for (index, nodeFill) in nodeFills.enumerated() { builder.fill(nodeFill, .series(index), part: .node) }
         for colored in coloredNodeFills { builder.fill(colored.path, .color(colored.color), part: .node) }
+        for painted in paintedNodeFills { builder.fill(painted.path, painted.paint, part: .node) }
         let outline = hasOutlinedLabels ? DiagramTextOutline(paint: .background, lineWidth: Self.labelOutlineWidth) : nil
         builder.texts(names, .foreground, outline: outline, part: .label)
         builder.texts(values, .muted, outline: outline, part: .label)

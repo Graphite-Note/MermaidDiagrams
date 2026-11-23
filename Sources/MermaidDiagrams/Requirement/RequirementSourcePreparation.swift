@@ -7,8 +7,8 @@
  *              dropped, a line break added.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A requirement diagram's text as its lexer reads it, and the line breaks taken out with comment lines, by where they
@@ -29,21 +29,16 @@ struct RequirementPreparedSource {
 
 /// What Pele's `parse` (`core.ts`) does to a diagram's text before its parser reads it, for a requirement diagram: every
 /// `\r\n` and every lone `\r` becomes `\n` (`normalizeLineBreaks`); a line that holds only a comment, `%%` and more, goes
-/// with the blank lines before it (`cleanupComments`); on a line where `style` or `classDef` is followed by a colon and
-/// then a `#`, the line's last semicolon after that `#` goes, as Mermaid's `text.replace(/keyword.*:\S*#.*;/g)` drops it
-/// (`dropColorSemicolons`); and a line break ends the text, so that a statement on the last line ends as one on any other.
-/// Mermaid's entity codes (`#name;`) stay, the lexer reading them as Pele reads the placeholders it hides them behind;
-/// directives (`%%{…}%%`) after the keyword stay too.
+/// with the blank lines before it (`cleanupComments`); and a line break ends the text, so that a statement on the last
+/// line ends as one on any other. The semicolon a colored `style` or `classDef` loses (`dropColorSemicolons`) and the
+/// directives are dealt with before, for every type (`MermaidPreprocessing`). Mermaid's entity codes (`#name;`) stay,
+/// the lexer reading them as Pele reads the placeholders it hides them behind.
 enum RequirementSourcePreparation {
     /// The text with the keyword at `start`, prepared from `start` on; what comes before only has its line breaks made
     /// `\n`, so that lines are counted as Pele counts them.
     static func prepared(_ bytes: [UInt8], from start: Int) -> RequirementPreparedSource {
         let prefix = withLineBreaksNormalized(bytes[..<start])
-        var body = Array(String(decoding: withLineBreaksNormalized(bytes[start...]), as: UTF8.self).unicodeScalars)
-        if body.contains("#") {
-            body = withoutColorSemicolons(body, keyword: Array("style".unicodeScalars))
-            body = withoutColorSemicolons(body, keyword: Array("classDef".unicodeScalars))
-        }
+        let body = Array(String(decoding: withLineBreaksNormalized(bytes[start...]), as: UTF8.self).unicodeScalars)
         let comments = withoutCommentLines(body)
         var text = String.UnicodeScalarView()
         var removals: [(position: Int, count: Int)] = []
@@ -122,50 +117,6 @@ enum RequirementSourcePreparation {
         return normalized
     }
 
-    /// Pele's `dropColorSemicolons`, in one pass: for the first `keyword` on each line, when a colon comes after it and then
-    /// a `#` with no whitespace between them, the line's last semicolon goes if it comes after that `#`.
-    static func withoutColorSemicolons(_ text: [Unicode.Scalar], keyword: [Unicode.Scalar]) -> [Unicode.Scalar] {
-        var dropped: [Int] = []
-        var from = firstIndex(of: keyword, in: text, from: 0)
-        while let keywordStart = from {
-            let lineEnd = text[keywordStart...].firstIndex(where: isLineBreak) ?? text.count
-            var isAfterColon = false
-            var hash: Int?
-            var index = keywordStart + keyword.count
-            while index < lineEnd {
-                let scalar = text[index]
-                if scalar == ":" {
-                    isAfterColon = true
-                } else if scalar == "#" {
-                    if isAfterColon {
-                        hash = index
-                        break
-                    }
-                } else if isWhitespace(scalar) {
-                    isAfterColon = false
-                }
-                index += 1
-            }
-            if let hash, let semicolon = text[(hash + 1)..<lineEnd].lastIndex(of: ";") { dropped.append(semicolon) }
-            from = lineEnd >= text.count ? nil : firstIndex(of: keyword, in: text, from: lineEnd + 1)
-        }
-        guard !dropped.isEmpty else { return text }
-        var kept = text
-        for index in dropped.reversed() { kept.remove(at: index) }
-        return kept
-    }
-
-    private static func firstIndex(of keyword: [Unicode.Scalar], in text: [Unicode.Scalar], from start: Int) -> Int? {
-        guard keyword.count <= text.count, start <= text.count - keyword.count else { return nil }
-        var index = start
-        while index <= text.count - keyword.count {
-            if text[index] == keyword[0], text[index..<(index + keyword.count)].elementsEqual(keyword) { return index }
-            index += 1
-        }
-        return nil
-    }
-
-    /// The line breaks of JavaScript's regular expressions, as Pele's `RE_LINE_BREAK` holds them.
     private static func isLineBreak(_ scalar: Unicode.Scalar) -> Bool {
         scalar == "\n" || scalar == "\r" || scalar == "\u{2028}" || scalar == "\u{2029}"
     }

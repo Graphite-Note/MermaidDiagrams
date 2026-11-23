@@ -6,8 +6,8 @@
  *              accessibility statements, then rules to the end of the text in the notation its keyword names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads a railroad diagram over the tokens of its notation's lexer (`RailroadLexers`): titles and accessibility
@@ -23,15 +23,16 @@ enum RailroadParser {
             throw .invalidSyntax(line: cursor.line, problem: .railroad(.expectedKeyword(keyword)))
         }
         let text = RailroadSourceText(bytes: cursor.bytes, keywordEnd: cursor.position)
+        let options = RailroadOptions(MermaidConfigurationOptions(section: "railroad", in: cursor.sourceBytes))
         do {
-            return try parse(text.bytes, from: text.start, notation: notation, limits: limits)
+            return try parse(text.bytes, from: text.start, notation: notation, options: options, limits: limits)
         } catch {
             throw text.inSource(error)
         }
     }
 
     /// Reads the rules of `bytes`, Pele's text of the diagram, from the end of its keyword at `start`.
-    private static func parse(_ bytes: [UInt8], from start: Int, notation: RailroadNotation,
+    private static func parse(_ bytes: [UInt8], from start: Int, notation: RailroadNotation, options: RailroadOptions,
                               limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RailroadDiagram {
         let tokens: [FirstMatchToken<RailroadTokenKind>]
         do {
@@ -40,7 +41,7 @@ enum RailroadParser {
             throw .invalidSyntax(line: Reader.line(of: error.position, in: bytes), problem: .unexpectedText(Reader.excerpt(at: error.position, in: bytes)))
         }
         var reader = Reader(bytes: bytes, tokens: tokens, start: start)
-        var diagram = RailroadDiagram(notation: notation, options: RailroadOptions(MermaidConfigurationOptions(section: "railroad", in: bytes)))
+        var diagram = RailroadDiagram(notation: notation, options: options)
         readStatements(&reader, into: &diagram)
         var budget = RailroadExpressionBudget(limits: limits)
         while !reader.isAtEnd {

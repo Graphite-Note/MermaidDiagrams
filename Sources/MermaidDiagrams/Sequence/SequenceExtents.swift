@@ -6,8 +6,8 @@
  *              the rows are placed, as Pele does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -139,7 +139,7 @@ struct SequenceExtents {
             frame.right = centers.last.map { last in last + SequenceSpacing.framePadding } ?? emptyDiagramWidth
         }
         if let keyword = frame.kind.keyword {
-            let keywordBlock = measurers.smallestBlock(keyword)
+            let keywordBlock = measurers.keywordBlock(keyword)
             frame.keyword = keywordBlock
             frame.tabWidth = keywordBlock.size.width + SequenceSpacing.tabExtraWidth
             for (labelIndex, label) in frame.labels.enumerated() {

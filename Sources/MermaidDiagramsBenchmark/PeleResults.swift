@@ -140,6 +140,8 @@ struct PeleParsedFlowchart: Decodable {
         let id: String
         let text: String
         let type: String
+        /// `markdown` for a Markdown string, whose backticks Pele's lexer left out of `text`; `text` or `string` else.
+        let labelType: String
     }
 
     struct Edge: Decodable {
@@ -151,6 +153,8 @@ struct PeleParsedFlowchart: Decodable {
         let stroke: String
         let length: Int
         let text: String
+        /// As a node's.
+        let labelType: String
     }
 
     struct Group: Decodable {

@@ -7,8 +7,8 @@
  *              then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Reads a use case diagram from its keyword on. Each statement is one line; a system boundary's lines run to its
@@ -43,7 +43,7 @@ struct UseCaseParser {
         try parser.readJSON()
         do {
             var diagram = try UseCaseDiagramBuilder.diagram(from: parser.drafts, limits: limits)
-            let options = MermaidConfigurationOptions(section: "usecase", in: cursor.bytes)
+            let options = MermaidConfigurationOptions(section: "usecase", in: cursor.sourceBytes)
             diagram.nodeSpacing = Self.spacing(options.values["nodeSpacing"])
             diagram.rankSpacing = Self.spacing(options.values["rankSpacing"])
             return diagram

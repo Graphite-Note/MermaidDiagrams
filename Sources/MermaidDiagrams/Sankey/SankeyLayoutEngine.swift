@@ -5,8 +5,8 @@
  * Description: Lays a Sankey diagram out as Pele does, with its options and for a narrow column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -87,12 +87,13 @@ public enum SankeyLayoutEngine {
         let page = SankeyPage(labels: labels, title: title, nodeWidth: nodeWidth)
         return SankeyLayout(size: page.size, font: font, title: page.placedTitle,
                             nodes: placement.nodes.enumerated().map { index, node in
-                                page.node(node, seriesIndex: index, color: options.nodeColors[diagram.nodes[index].name])
+                                page.node(node, seriesIndex: index, paint: options.nodePaints[diagram.nodes[index].name])
                             },
                             links: placement.links.map { link in page.link(link, nodes: placement.nodes) },
                             labels: zip(texts, labels.labels).map { text, label in
                                 page.label(name: text.name, value: text.value, label: label, measurer: measurer)
-                            }, linkColor: options.linkColor, hasOutlinedLabels: options.isOutlined)
+                            }, linkColor: options.linkColor, fixedLinkPaint: options.fixedLinkPaint,
+                            hasOutlinedLabels: options.isOutlined)
     }
 
     /// The column of the first node with the most flow through it: outlined labels stand after the bars from there on.

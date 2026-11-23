@@ -1,3 +1,14 @@
+/**
+ * File: SankeyParser.swift
+ * ------------------------
+ * Layer: Core
+ * Description: Reads a Sankey diagram's rows after its keyword, as Mermaid's grammar and Pele's parser do.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Reads a Sankey diagram's rows after its `sankey` or `sankey-beta` keyword, as Mermaid's grammar and Pele's parser do,
 /// over the tokens of `SankeyLexer` on the text as Mermaid prepares it (`SankeyPreparedText`): a line break after the
 /// keyword, then rows of three fields, `source,target,value`, each plain or between quotation marks (where a doubled
@@ -20,7 +31,7 @@ struct SankeyParser {
         try parser.expect(.newline)
         try parser.readRows()
         var diagram = parser.builder.diagram
-        diagram.options = SankeyOptions(MermaidConfigurationOptions(section: "sankey", in: cursor.bytes))
+        diagram.options = SankeyOptions(MermaidConfigurationOptions(section: "sankey", in: cursor.sourceBytes))
         return diagram
     }
 

@@ -7,8 +7,8 @@
  *              accessibility statements, each error with its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The statements of an architecture diagram as Pele's AST holds them, each with where it starts.
@@ -60,7 +60,7 @@ struct ArchitectureParser {
         try parser.readStatements()
         var builder = ArchitectureDiagramBuilder(bytes: cursor.bytes, limits: limits)
         var diagram = try builder.diagram(of: parser.statements)
-        diagram.options = ArchitectureOptions(MermaidConfigurationOptions(section: "architecture", in: cursor.bytes))
+        diagram.options = ArchitectureOptions(MermaidConfigurationOptions(section: "architecture", in: cursor.sourceBytes))
         return diagram
     }
 

@@ -5,8 +5,8 @@
  * Description: A Sankey diagram's options from its front matter and directives, as Pele applies them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Sankey diagram's options from its front matter (`config:` then `sankey:`) and its `%%{init: …}%%` directives, a
@@ -15,8 +15,9 @@
 /// how nodes are put in columns. A number below its least is left at Pele's default, and one above its most is cut
 /// to it. Labels outlined in the page's color (`labelStyle: outlined`), a band color other than the gradient
 /// (`linkColor`: `source`, `target` or a color) and nodes' own colors (`nodeColors`, by node name) are drawn as Pele
-/// draws them; a color written in a form `DiagramColor` does not read (a CSS variable, a color name it does not know) sets
-/// nothing, as in a style Pele refuses.
+/// draws them: a color, a CSS color name, or a CSS variable of Pele's palette (`var(--pele-accent)`, `var(--pele-series-3)`,
+/// or any variable's fallback), which the page resolves (`DiagramPaint(cssColor:)`); anything else sets nothing, as a
+/// browser leaves a style it cannot read.
 public struct SankeyOptions: Equatable, Sendable {
     public internal(set) var chartWidth: Double = 600
     public internal(set) var chartHeight: Double = 400
@@ -33,8 +34,14 @@ public struct SankeyOptions: Equatable, Sendable {
     public internal(set) var isOutlined = false
     /// `linkColor`: how the bands are colored.
     public internal(set) var linkColor = SankeyLinkColor.gradient
-    /// `nodeColors`: the colors the nodes take instead of their series colors, by the node's name.
+    /// `nodeColors`: the colors the nodes take instead of their series colors, by the node's name; those written as a
+    /// palette's variable are in `nodePaints` only.
     public internal(set) var nodeColors: [String: DiagramColor] = [:]
+    /// `nodeColors`: what the nodes are painted in instead of their series colors, colors and palette roles alike.
+    public internal(set) var nodePaints: [String: DiagramPaint] = [:]
+    /// `linkColor` written as a color or a palette's variable: what every band is painted in; nil for `gradient`,
+    /// `source`, `target` and what does not read. `linkColor` is `.fixed` for a color and `.source` for a variable.
+    public internal(set) var fixedLinkPaint: DiagramPaint?
 
     /// The most a chart's side, a node's width and the padding may be: Pele's.
     static let largestChartSide = 10_000.0
@@ -53,17 +60,24 @@ public struct SankeyOptions: Equatable, Sendable {
         valueSuffix = Self.text(options.values["suffix"])
         if case .text(let written) = options.values["nodeAlignment"], let alignment = SankeyNodeAlignment(rawValue: written) { self.alignment = alignment }
         isOutlined = options.values["labelStyle"] == .text("outlined")
-        if case .text(let written) = options.values["linkColor"] { linkColor = SankeyLinkColor(written) }
-        nodeColors = Self.nodeColors(options.nestedValues)
+        if case .text(let written) = options.values["linkColor"] {
+            linkColor = SankeyLinkColor(written)
+            if !["gradient", "source", "target"].contains(written) { fixedLinkPaint = DiagramPaint(cssColor: written) }
+        }
+        nodePaints = Self.nodePaints(options.nestedValues)
+        nodeColors = nodePaints.compactMapValues { paint in
+            if case .color(let color) = paint.source { return color }
+            return nil
+        }
     }
 
-    /// The colors under `nodeColors`, by the name written there: a text that reads as a color; not an entry that is itself a
-    /// mapping or has one above it.
-    private static func nodeColors(_ nestedValues: [String: MermaidConfigurationOptions.Value]) -> [String: DiagramColor] {
+    /// The paints under `nodeColors`, by the name written there: a text that reads as a color or a palette's variable; not
+    /// an entry that is itself a mapping or has one above it.
+    private static func nodePaints(_ nestedValues: [String: MermaidConfigurationOptions.Value]) -> [String: DiagramPaint] {
         let prefix = "nodeColors."
-        var colors: [String: DiagramColor] = [:]
+        var colors: [String: DiagramPaint] = [:]
         for (path, value) in nestedValues where path.hasPrefix(prefix) {
-            guard case .text(let written) = value, let color = DiagramColor(cssText: written) else { continue }
+            guard case .text(let written) = value, let color = DiagramPaint(cssColor: written) else { continue }
             let name = String(path.dropFirst(prefix.count))
             let isInsideMapping = name.indices.contains { index in
                 name[index] == "." && nestedValues[prefix + String(name[..<index])] == .collection
@@ -106,7 +120,8 @@ public enum SankeyLinkColor: Equatable, Sendable {
         case "gradient": self = .gradient
         case "source": self = .source
         case "target": self = .target
-        default: self = DiagramColor(cssText: written).map(SankeyLinkColor.fixed) ?? .source
+        default:
+            if case .color(let color)? = DiagramPaint(cssColor: written)?.source { self = .fixed(color) } else { self = .source }
         }
     }
 }

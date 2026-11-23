@@ -6,8 +6,8 @@
  *              their lifelines, rows of events, the title and the padding.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -20,13 +20,15 @@ public enum SequenceLayoutEngine {
     /// Lays the diagram out. It throws nothing any more (every statement read is laid out); the error type is kept for
     /// callers that handle it.
     public static func layout(_ diagram: SequenceDiagram, typography: DiagramTypography) throws(SequenceLayoutError) -> SequenceLayout {
-        try layout(diagram, participantText: typography.nodeText, messageText: typography.edgeText, font: typography.font)
+        let keywordSize = SequenceTextMeasurers.smallestTextSize(participantText: typography.nodeText)
+        return try layout(diagram, participantText: typography.nodeText, messageText: typography.edgeText,
+                          boldSmallestText: typography.measurer(size: keywordSize, isBold: true), font: typography.font)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: SequenceDiagram, participantText: Measurer, messageText: Measurer,
-                                                       font: DiagramFont) throws(SequenceLayoutError) -> SequenceLayout {
+                                                       boldSmallestText: Measurer? = nil, font: DiagramFont) throws(SequenceLayoutError) -> SequenceLayout {
         guard diagram.statementsNotLaidOut.isEmpty else { throw .statementsNotLaidOut(diagram.statementsNotLaidOut) }
-        let measurers = SequenceTextMeasurers(participantText: participantText, messageText: messageText)
+        let measurers = SequenceTextMeasurers(participantText: participantText, messageText: messageText, boldSmallestText: boldSmallestText)
         let columns = SequenceColumns(diagram: diagram, measurers: measurers)
         let extents = SequenceExtents(diagram: diagram, columns: columns, measurers: measurers)
         var rows = SequenceRows(diagram: diagram, columns: columns, extents: extents, measurers: measurers)

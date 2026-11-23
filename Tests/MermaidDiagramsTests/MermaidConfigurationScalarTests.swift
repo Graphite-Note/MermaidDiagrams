@@ -6,8 +6,8 @@
  *              collections read in full.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -74,11 +74,12 @@ final class MermaidConfigurationScalarTests: XCTestCase {
         XCTAssertEqual(options.nestedValues["option40.value"], .number(40))
     }
 
-    func testCollectionsThatNeverCloseStillCostNoMoreThanTheBudget() {
+    func testCollectionsThatNeverCloseAreRefusedQuickly() {
         let unclosed = (1...4_000).map { index in "    option\(index): {value: \(index)," }.joined(separator: "\n")
         let started = Date()
         let options = read("---\nconfig:\n  xyChart:\n\(unclosed)\n---\nxychart\n", section: "xyChart")
         XCTAssertLessThan(Date().timeIntervalSince(started), 2)
-        XCTAssertEqual(options.values["option1"], .collection)
+        // Pele's YAML reader refuses the unclosed collection, so the front matter gives no option (and the diagram is refused).
+        XCTAssertTrue(options.values.isEmpty)
     }
 }

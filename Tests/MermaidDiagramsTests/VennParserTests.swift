@@ -6,8 +6,8 @@
  *              the seeds of Pele's differential test of its lexer and parser, and the errors with their lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -139,9 +139,10 @@ final class VennParserTests: XCTestCase {
         XCTAssertEqual(try venn("venn-beta\ntitle\u{00A0}Hello\nset A").title, "Hello")
         XCTAssertEqual(try venn("venn-beta\ntitle\u{3000}Wide space\nset A").title, "Wide space")
         XCTAssertEqual(try venn("venn-beta\nset A\nstyle A fill:rgb(1,\u{00A0}2, 3)").styles.first?.declarations.first?.value, "rgb(1,\u{00A0}2, 3)")
+        // Pele makes a carriage return alone a line break before any type reads the text (`normalizeLineBreaks`).
         let returned = try venn("venn-beta\ntitle A\rset B")
-        XCTAssertEqual(returned.title, "A\rset B", "A carriage return alone does not end the title")
-        XCTAssertTrue(returned.subsets.isEmpty)
+        XCTAssertEqual(returned.title, "A")
+        XCTAssertEqual(returned.subsets.count, 1)
         XCTAssertEqual(try venn("venn-beta\nset A\ntitle\u{00A0}\n  text kept\n").texts.map(\.sets), [["A"]])
         XCTAssertEqual(try venn("venn-beta\nset A[\u{00A0}Alpha\u{2003}]").subsets[0].label, "Alpha")
     }

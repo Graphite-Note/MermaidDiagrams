@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphGeometry.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: Pele's measurements of a Git graph, in points, and how its two axes lie on the page.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Pele's measurements of a Git graph, in points, and how its two axes lie on the page: the history runs along one,
@@ -30,6 +41,8 @@ struct GitGraphGeometry {
     static let rowTagGap: CGFloat = 4
     /// Between a commit's dot and the corner of its turned id.
     static let labelOffset: CGFloat = 3
+    /// Between a commit's dot and its level id (`rotateCommitLabel: false`), git/render.ts's `DOT + 6`.
+    static let levelLabelOffset: CGFloat = 6
     /// The cosine and sine of an eighth of a turn, which a commit's id is turned by.
     static let eighthTurnCosine = CGFloat(0.5).squareRoot()
     /// Across a branch's name and down it, inside its box.
