@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.21
+ * Version: 0.22
  * Date: 23/11/2026
  */
 
@@ -138,9 +138,11 @@ public enum MermaidDiagramReader {
         var written = Array(source.utf8)
         if written.starts(with: byteOrderMark) { written.removeFirst(byteOrderMark.count) }
         let sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(MermaidPreprocessing.normalizedLineBreaks(written))
-        let (title, start) = try readFrontMatter(sourceBytes)
+        let readFrontMatter = MermaidReadFrontMatter(in: sourceBytes)
+        let (title, start) = try frontMatterTitleAndEnd(readFrontMatter, in: sourceBytes)
         let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
         var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes)
+        cursor.readFrontMatter = readFrontMatter
         cursor.advance(by: start)
         return (title, cursor)
     }
@@ -148,14 +150,15 @@ public enum MermaidDiagramReader {
     /// The front matter's title and where the text after it starts (0 without front matter), found and read as Pele's
     /// `preprocess` does (`MermaidFrontMatter`). Front matter that is not YAML is refused, as Pele refuses it; a first
     /// line that is `---` alone with no closing fence is reported as unclosed front matter, where Pele finds no diagram.
-    private static func readFrontMatter(_ bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
-        guard let frontMatter = MermaidFrontMatter.find(in: bytes) else {
+    private static func frontMatterTitleAndEnd(_ read: MermaidReadFrontMatter,
+                                               in bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
+        guard let frontMatter = read.frontMatter else {
             var opening = MermaidTextCursor(bytes: bytes)
             opening.skipSpaces()
             if opening.hasPrefix(fence), opening.readRestOfLine() == "---" { throw .invalidSyntax(line: 1, problem: .unclosedFrontMatter) }
             return (nil, 0)
         }
-        guard let value = frontMatter.value() else {
+        guard let value = read.value else {
             let firstLine = frontMatter.body.split(separator: "\n").first { line in !line.allSatisfy(\.isWhitespace) } ?? ""
             throw .invalidSyntax(line: 2, problem: .unexpectedText(String(firstLine.trimmingCharacters(in: .whitespaces).prefix(24))))
         }

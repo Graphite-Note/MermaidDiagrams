@@ -6,7 +6,7 @@
  *              its emphasis, into a context whose y runs down.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -88,15 +88,8 @@ struct DiagramTextDrawing {
     /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.
     private mutating func coreTextFont(_ key: FontKey) -> CTFont {
         if let made = fontsByKey[key] { return made }
-        let regularKey = FontKey(size: key.size, isBold: false, isItalic: false, isMonospaced: key.isMonospaced)
-        let resized = font.resized(to: key.size)
-        let regular = fontsByKey[regularKey] ?? (key.isMonospaced ? resized.makeMonospacedCoreTextFont() : resized.makeCoreTextFont())
-        fontsByKey[regularKey] = regular
-        var traits: CTFontSymbolicTraits = []
-        if key.isBold { traits.insert(.traitBold) }
-        if key.isItalic { traits.insert(.traitItalic) }
-        guard !traits.isEmpty else { return regular }
-        let made = CTFontCreateCopyWithSymbolicTraits(regular, key.size, nil, traits, traits) ?? regular
+        let made = CoreTextFontFaces.shared.face(CoreTextFontFaceKey(postScriptName: font.postScriptName, size: key.size, isBold: key.isBold,
+                                                                     isItalic: key.isItalic, isMonospaced: key.isMonospaced)).font
         fontsByKey[key] = made
         return made
     }

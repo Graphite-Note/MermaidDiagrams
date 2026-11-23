@@ -5,7 +5,7 @@
  * Description: Reads a Gantt chart's statements after its keyword as Mermaid's Gantt grammar does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -28,7 +28,7 @@ struct GanttChartParser {
     /// Reads the Gantt chart whose `gantt` keyword ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> GanttChart {
         var parser = GanttChartParser(cursor: cursor, limits: limits)
-        let options = MermaidConfigurationOptions(section: "gantt", in: cursor.sourceBytes)
+        let options = MermaidConfigurationOptions(section: "gantt", in: cursor)
         // Pele compares the mode and looks the weekday up as written: `Compact` is not compact, `Monday` starts no week.
         if case .text(let mode) = options.values["displayMode"] { parser.chart.isCompact = mode == "compact" }
         parser.chart.options = GanttOptions(options)

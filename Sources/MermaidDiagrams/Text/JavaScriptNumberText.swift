@@ -1,3 +1,15 @@
+/**
+ * File: JavaScriptNumberText.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Writes a number as JavaScript's String(number) does, and gives the shortest digits that read back as a
+ *              double with the place of their decimal point.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Writes a number as JavaScript's `String(number)` does, as Pele writes a chart's numbers: the fewest digits that
 /// read back as the same double, without a fraction for a whole number (`100`, not `100.0`), in plain digits from
 /// 10⁻⁶ up to 10²¹ and with an exponent outside them (`1e-7`, `1.5e+21`).
@@ -31,7 +43,7 @@ enum JavaScriptNumberText {
 
     /// The shortest digits of a positive double that read back as it, without leading or trailing zeros, and where
     /// the decimal point goes among them: `0.00125` is `125` with the point at -2, `1500` is `15` at 4.
-    private static func shortestDigits(of magnitude: Double) -> (digits: String, pointPosition: Int) {
+    static func shortestDigits(of magnitude: Double) -> (digits: String, pointPosition: Int) {
         // Swift's description is the shortest form that reads back as the same double, as JavaScript's is.
         let written = magnitude.description
         let parts = written.split(separator: "e", maxSplits: 1)

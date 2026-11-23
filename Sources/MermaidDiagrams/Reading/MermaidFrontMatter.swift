@@ -6,7 +6,7 @@
  *              configuration, and whether it is YAML at all.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -99,4 +99,22 @@ struct MermaidFrontMatter {
     }
 
     private static let dashes = Array("---".utf8)
+}
+
+/// A diagram's front matter as the reader found it, its YAML read once: no front matter, or the front matter and what
+/// it holds (nil when it is not YAML). The reader keeps it on its cursor, so that a type's options do not read the YAML
+/// again (`MermaidConfigurationOptions`).
+struct MermaidReadFrontMatter {
+    let frontMatter: MermaidFrontMatter?
+    let value: DirectiveValue?
+
+    /// The front matter at the start of `bytes`, found and read.
+    init(in bytes: [UInt8]) {
+        self.init(frontMatter: MermaidFrontMatter.find(in: bytes))
+    }
+
+    init(frontMatter: MermaidFrontMatter?) {
+        self.frontMatter = frontMatter
+        value = frontMatter?.value()
+    }
 }

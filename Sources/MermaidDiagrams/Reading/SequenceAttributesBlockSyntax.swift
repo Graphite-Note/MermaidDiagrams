@@ -6,8 +6,8 @@
  *              reader does, for a sequence participant's attributes written over several lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// YAML's block collections, line by line, as Pele's reader reads them (`src/util/yaml.ts`): a mapping's keys at one
@@ -43,11 +43,14 @@ struct SequenceAttributesBlockSyntax {
         return value
     }
 
+    private static let documentStart: Text = ["-", "-", "-"]
+
     /// Moves past empty lines, comment lines and `---`.
     mutating func skipBlankLines() {
         while lineIndex < lines.count {
-            let content = Self.trimmed(lines[lineIndex])
-            if !content.isEmpty, content[0] != "#", content != Array("---".unicodeScalars) { break }
+            let line = lines[lineIndex]
+            let content = SequenceAttributesFlowSyntax.trimmedBounds(line)
+            if !content.isEmpty, line[content.lowerBound] != "#", !line[content].elementsEqual(Self.documentStart) { break }
             lineIndex += 1
         }
     }
@@ -85,7 +88,7 @@ struct SequenceAttributesBlockSyntax {
             let current = Array(lines[lineIndex][indent...])
             guard Self.isListItem(current) else { break }
             let rest = Array(current.dropFirst())
-            let leading = rest.prefix { scalar in scalar.properties.isWhitespace }.count
+            let leading = rest.prefix { scalar in SequenceAttributesFlowSyntax.isWhitespace(scalar) }.count
             let body = Self.trimmed(Self.withoutComment(rest))
             if body.isEmpty {
                 lineIndex += 1

@@ -6,8 +6,8 @@
  *              double half up.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -66,6 +66,12 @@ enum TreemapNumberText {
     static func fixed(_ magnitude: Double, digits fractionDigits: Int) -> String {
         guard magnitude.isFinite else { return magnitude.isNaN ? "NaN" : "Infinity" }
         guard magnitude < 1e21 else { return JavaScriptNumberText.text(magnitude) }
+        if magnitude > 0, let shortFixed = shortestFixed(magnitude, digits: fractionDigits) { return shortFixed }
+        return exactlyRoundedFixed(magnitude, digits: fractionDigits)
+    }
+
+    /// `toFixed` from the double's exact decimal value, for a finite `magnitude` from zero to 10²¹.
+    static func exactlyRoundedFixed(_ magnitude: Double, digits fractionDigits: Int) -> String {
         var whole = "0"
         var fraction = Array(repeating: UInt8(0), count: fractionDigits)
         if magnitude > 0 {
@@ -83,6 +89,32 @@ enum TreemapNumberText {
         return whole + "." + String(decoding: fraction.map { digit in UInt8(ascii: "0") + digit }, as: UTF8.self)
     }
 
+    /// `toFixed` from the shortest digits that read back as the double, when they are the exact value's rounding: they have
+    /// at most `fractionDigits` decimals and lie within half the double's spacing of it, so when that spacing is under a
+    /// tenth of the last decimal's place no other decimal of that many places is nearer. Nil when that does not hold.
+    private static func shortestFixed(_ magnitude: Double, digits fractionDigits: Int) -> String? {
+        guard magnitude.ulp * 10 <= pow(10, -Double(fractionDigits)) else { return nil }
+        let (digits, pointPosition) = JavaScriptNumberText.shortestDigits(of: magnitude)
+        let digitBytes = Array(digits.utf8)
+        guard digitBytes.count - pointPosition <= fractionDigits else { return nil }
+        let zero = UInt8(ascii: "0")
+        var written: [UInt8] = []
+        written.reserveCapacity(max(pointPosition, 1) + fractionDigits + 1)
+        if pointPosition <= 0 {
+            written.append(zero)
+        } else {
+            for index in 0..<pointPosition { written.append(index < digitBytes.count ? digitBytes[index] : zero) }
+        }
+        if fractionDigits > 0 {
+            written.append(UInt8(ascii: "."))
+            for place in 1...fractionDigits {
+                let index = pointPosition + place - 1
+                written.append(index >= 0 && index < digitBytes.count ? digitBytes[index] : zero)
+            }
+        }
+        return String(decoding: written, as: UTF8.self)
+    }
+
     /// JavaScript's `toExponential(digits)` of `magnitude`, at least zero: `1.5e+3`.
     static func exponential(_ magnitude: Double, digits fractionDigits: Int) -> String {
         guard magnitude.isFinite else { return magnitude.isNaN ? "NaN" : "Infinity" }
@@ -96,6 +128,15 @@ enum TreemapNumberText {
     /// `magnitude` rounded to `digits` significant digits, as `Number(magnitude.toPrecision(digits))` reads it back.
     static func significant(_ magnitude: Double, digits count: Int) -> Double {
         guard magnitude.isFinite, magnitude > 0 else { return magnitude }
+        // The shortest digits that read back as the double are a decimal of at most `count` digits within half the double's
+        // spacing of it; the exact value rounded to `count` digits is no farther from it, so it reads back as the same double
+        // where the doubles around it are evenly spaced (not at a power of two, whose lower neighbour is nearer).
+        if magnitude.significandBitPattern != 0, JavaScriptNumberText.shortestDigits(of: magnitude).digits.utf8.count <= count { return magnitude }
+        return exactlyRoundedSignificant(magnitude, digits: count)
+    }
+
+    /// `significant` from the double's exact decimal value, for a finite positive `magnitude`.
+    static func exactlyRoundedSignificant(_ magnitude: Double, digits count: Int) -> Double {
         let rounded = ExactDecimal(magnitude).rounded(toDigits: count)
         let digits = String(decoding: rounded.digits.map { digit in UInt8(ascii: "0") + digit }, as: UTF8.self)
         return Double(digits.prefix(1) + "." + digits.dropFirst() + "e" + String(rounded.exponent)) ?? magnitude

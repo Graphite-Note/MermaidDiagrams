@@ -6,8 +6,8 @@
  *              small YAML reader does, for a sequence participant's attributes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// YAML's flow values, read from Unicode scalars as Pele's reader reads them (`src/util/yaml.ts`): entries of a flow
@@ -40,7 +40,7 @@ enum SequenceAttributesFlowSyntax {
             let scalar = text[position]
             if scalar == " " || scalar == "\n" || scalar == "\t" || scalar == "\r" {
                 position += 1
-            } else if scalar == "#", position == 0 || text[position - 1].properties.isWhitespace {
+            } else if scalar == "#", position == 0 || isWhitespace(text[position - 1]) {
                 position = text[position...].firstIndex(of: "\n") ?? text.count
             } else {
                 break
@@ -102,11 +102,12 @@ enum SequenceAttributesFlowSyntax {
 
     /// A plain scalar up to a stop or a comment, its line breaks folded, read as the JSON schema reads it.
     private static func plainScalar(in text: Text, from start: Int, stops: String) -> (value: SequenceAttributeValue, end: Int) {
+        let stopScalars = Array(stops.unicodeScalars)
         var end = start
         while end < text.count {
             let scalar = text[end]
-            if stops.unicodeScalars.contains(scalar), scalar != ":" || end + 1 >= text.count || endsPlainKey(text[end + 1]) { break }
-            if scalar == "#", end > start, text[end - 1].properties.isWhitespace {
+            if stopScalars.contains(scalar), scalar != ":" || end + 1 >= text.count || endsPlainKey(text[end + 1]) { break }
+            if scalar == "#", end > start, isWhitespace(text[end - 1]) {
                 let lineEnd = text[end...].firstIndex(of: "\n") ?? text.count
                 return (SequenceAttributesScalarSyntax.scalar(string(folding(trimmed(text[start..<end])))), lineEnd)
             }
@@ -117,7 +118,7 @@ enum SequenceAttributesFlowSyntax {
 
     /// After a colon, what makes it end a plain key: white space, a comma or a bracket.
     private static func endsPlainKey(_ scalar: Unicode.Scalar) -> Bool {
-        scalar.properties.isWhitespace || ",[]{}".unicodeScalars.contains(scalar)
+        isWhitespace(scalar) || scalar == "," || scalar == "[" || scalar == "]" || scalar == "{" || scalar == "}"
     }
 
     /// A double-quoted scalar's body with its escapes replaced; an escaped line break and the blanks after it go first.
@@ -167,16 +168,43 @@ enum SequenceAttributesFlowSyntax {
     }
 
     /// The text without white space at either end, as JavaScript's `trim` takes it.
-    static func trimmed<Scalars: Collection>(_ text: Scalars) -> Text where Scalars.Element == Unicode.Scalar {
-        var slice = Array(text)[...]
-        while let first = slice.first, first.properties.isWhitespace || first == "\u{FEFF}" { slice = slice.dropFirst() }
-        while let last = slice.last, last.properties.isWhitespace || last == "\u{FEFF}" { slice = slice.dropLast() }
-        return Array(slice)
+    static func trimmed<Scalars: BidirectionalCollection>(_ text: Scalars) -> Text where Scalars.Element == Unicode.Scalar {
+        Array(text[trimmedBounds(text)])
     }
 
-    static func string(_ text: Text) -> String {
-        var scalars = String.UnicodeScalarView()
-        scalars.append(contentsOf: text)
-        return String(scalars)
+    /// Where the text is once trimmed, without copying it.
+    static func trimmedBounds<Scalars: BidirectionalCollection>(_ text: Scalars) -> Range<Scalars.Index> where Scalars.Element == Unicode.Scalar {
+        var start = text.startIndex
+        var end = text.endIndex
+        while start < end, isTrimmed(text[start]) { text.formIndex(after: &start) }
+        while start < end, case let before = text.index(before: end), isTrimmed(text[before]) { end = before }
+        return start..<end
+    }
+
+    /// What JavaScript's `trim` takes off: white space and the byte order mark.
+    @inline(__always)
+    static func isTrimmed(_ scalar: Unicode.Scalar) -> Bool {
+        isWhitespace(scalar) || scalar == "\u{FEFF}"
+    }
+
+    /// Unicode's White_Space property, read without the property tables for ASCII, which is most of a YAML text.
+    @inline(__always)
+    static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value < 0x80 ? scalar.value == 0x20 || (0x09...0x0D).contains(scalar.value) : scalar.properties.isWhitespace
+    }
+
+    /// The scalars as a string, encoded to UTF-8 at once (appending scalars to a string one by one goes through the
+    /// standard library's generic path, slower than reading the YAML).
+    static func string<Scalars: Sequence>(_ text: Scalars) -> String where Scalars.Element == Unicode.Scalar {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(text.underestimatedCount)
+        for scalar in text {
+            if scalar.value < 0x80 {
+                bytes.append(UInt8(truncatingIfNeeded: scalar.value))
+            } else if let encoded = UTF8.encode(scalar) {
+                bytes.append(contentsOf: encoded)
+            }
+        }
+        return String(decoding: bytes, as: UTF8.self)
     }
 }

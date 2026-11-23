@@ -1,0 +1,74 @@
+/**
+ * File: CoreTextFontFaces.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Makes each Core Text font a diagram measures or draws in, with the advances of its printable ASCII, once
+ *              per process, so that a layout or a painting that asks for a size again does not read the font again.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
+import CoreGraphics
+import CoreText
+import Foundation
+
+/// A font a diagram's text is measured or drawn in: the diagram's font, its size, its bold or italic, or the system's
+/// monospaced font at that size.
+struct CoreTextFontFaceKey: Hashable {
+    let postScriptName: String?
+    let size: CGFloat
+    let isBold: Bool
+    let isItalic: Bool
+    let isMonospaced: Bool
+}
+
+/// A Core Text font and the advances of the characters from space (32) to tilde (126) in it.
+struct CoreTextFontFace {
+    let font: CTFont
+    let printableASCIIAdvances: [CGFloat]
+}
+
+/// The fonts made so far in this process. Making a Core Text font and reading its advances costs more than laying out a
+/// small diagram (a treemap that measured each leaf's value at its fitted size made a font per text), and a font for one
+/// key is always the same, so each is made once. Past `largestKeptFaceCount` keys (a diagram's classes may set any size)
+/// a font is made without being kept.
+final class CoreTextFontFaces: @unchecked Sendable {
+    static let shared = CoreTextFontFaces()
+
+    static let firstPrintableASCII: UInt8 = 32
+    static let lastPrintableASCII: UInt8 = 126
+    private static let largestKeptFaceCount = 256
+
+    private let lock = NSLock()
+    private var facesByKey: [CoreTextFontFaceKey: CoreTextFontFace] = [:]
+
+    /// The face of `key`, made the first time it is asked for.
+    func face(_ key: CoreTextFontFaceKey) -> CoreTextFontFace {
+        lock.lock()
+        let known = facesByKey[key]
+        lock.unlock()
+        if let known { return known }
+        let made = Self.makeFace(key)
+        lock.lock()
+        if facesByKey.count < Self.largestKeptFaceCount { facesByKey[key] = made }
+        lock.unlock()
+        return made
+    }
+
+    private static func makeFace(_ key: CoreTextFontFaceKey) -> CoreTextFontFace {
+        let diagramFont = DiagramFont(postScriptName: key.postScriptName, size: key.size)
+        let regular = key.isMonospaced ? diagramFont.makeMonospacedCoreTextFont() : diagramFont.makeCoreTextFont()
+        var traits: CTFontSymbolicTraits = []
+        if key.isBold { traits.insert(.traitBold) }
+        if key.isItalic { traits.insert(.traitItalic) }
+        let font = traits.isEmpty ? regular : CTFontCreateCopyWithSymbolicTraits(regular, key.size, nil, traits, traits) ?? regular
+        let characters = (firstPrintableASCII...lastPrintableASCII).map { byte in UniChar(byte) }
+        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+        var advances = [CGSize](repeating: .zero, count: characters.count)
+        CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
+        CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
+        return CoreTextFontFace(font: font, printableASCIIAdvances: advances.map(\.width))
+    }
+}

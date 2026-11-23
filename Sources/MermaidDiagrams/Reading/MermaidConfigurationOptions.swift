@@ -5,7 +5,7 @@
  * Description: The options a diagram's front matter and its `%%{init: …}%%` directives give its type.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -34,8 +34,16 @@ struct MermaidConfigurationOptions {
     /// directives after it set under `section` over them; none without either. A section that is not a mapping gives
     /// no option, as a directive's does.
     init(section: String, in bytes: [UInt8]) {
-        let frontMatter = MermaidFrontMatter.find(in: bytes)
-        if let frontMatter, case .object(let document)? = frontMatter.value() {
+        self.init(section: section, in: bytes, frontMatter: MermaidReadFrontMatter(in: bytes))
+    }
+
+    /// The options of the cursor's text, from the front matter the reader already read when it has.
+    init(section: String, in cursor: MermaidTextCursor) {
+        self.init(section: section, in: cursor.sourceBytes, frontMatter: cursor.readFrontMatter ?? MermaidReadFrontMatter(in: cursor.sourceBytes))
+    }
+
+    private init(section: String, in bytes: [UInt8], frontMatter read: MermaidReadFrontMatter) {
+        if read.frontMatter != nil, case .object(let document)? = read.value {
             if case .object(let configuration)? = document["config"], case .object(let options)? = configuration[section] {
                 for (name, value) in options { record(value, named: name) }
             }
@@ -45,7 +53,7 @@ struct MermaidConfigurationOptions {
                 record(.text(MermaidYAMLDocument.javaScriptText(displayMode)), named: "displayMode")
             }
         }
-        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: frontMatter?.end ?? 0, to: &self)
+        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: read.frontMatter?.end ?? 0, to: &self)
     }
 
     /// The section whose options take the front matter's own `displayMode`.

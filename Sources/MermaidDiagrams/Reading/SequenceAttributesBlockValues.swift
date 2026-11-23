@@ -6,8 +6,8 @@
  *              plain scalar continued on deeper lines), a line's key and its comment, as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension SequenceAttributesBlockSyntax {
@@ -63,7 +63,7 @@ extension SequenceAttributesBlockSyntax {
     private static func isBlockScalarHeader(_ header: Text) -> Bool {
         var rest = header.dropFirst()
         while let scalar = rest.first, scalar == "-" || scalar == "+" || ("0"..."9").contains(scalar) { rest = rest.dropFirst() }
-        while let scalar = rest.first, scalar.properties.isWhitespace { rest = rest.dropFirst() }
+        while let scalar = rest.first, SequenceAttributesFlowSyntax.isWhitespace(scalar) { rest = rest.dropFirst() }
         return rest.isEmpty || rest.first == "#"
     }
 
@@ -145,7 +145,7 @@ extension SequenceAttributesBlockSyntax {
             while colon < line.count, isBlank(line[colon]) { colon += 1 }
             guard colon < line.count, line[colon] == ":" else { return nil }
         } else {
-            guard !first.properties.isWhitespace, !"#:,[]{}&*!|>'\"%@`".unicodeScalars.contains(first) else { return nil }
+            guard !SequenceAttributesFlowSyntax.isWhitespace(first), !"#:,[]{}&*!|>'\"%@`".unicodeScalars.contains(first) else { return nil }
             if first == "-", line.count < 2 || isBlank(line[1]) || line[1] == ":" || line[1] == "#" { return nil }
             colon = 1
             while colon < line.count, line[colon] != ":", line[colon] != "#" { colon += 1 }
@@ -184,6 +184,6 @@ extension SequenceAttributesBlockSyntax {
 
     /// How many white-space scalars a line starts with, as JavaScript's `trimStart` counts them.
     private static func leadingWhitespace(of line: Text) -> Int {
-        line.prefix { scalar in scalar.properties.isWhitespace || scalar == "\u{FEFF}" }.count
+        line.prefix { scalar in SequenceAttributesFlowSyntax.isWhitespace(scalar) || scalar == "\u{FEFF}" }.count
     }
 }

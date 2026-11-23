@@ -5,7 +5,7 @@
  * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -16,6 +16,8 @@ struct MermaidTextCursor {
     /// The text as written, line breaks made line feeds, with its front matter and directives, which a type's options
     /// are read from (`MermaidConfigurationOptions`).
     let sourceBytes: [UInt8]
+    /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
+    var readFrontMatter: MermaidReadFrontMatter?
     private(set) var position: Int
     /// The 1-based line of `position` in the diagram's text.
     private(set) var line: Int

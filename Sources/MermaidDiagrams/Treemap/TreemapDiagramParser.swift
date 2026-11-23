@@ -5,7 +5,7 @@
  * Description: Reads a treemap's rows after its `treemap` keyword and builds its hierarchy and its classes' styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -29,7 +29,7 @@ struct TreemapDiagramParser {
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> TreemapDiagram {
         var parser = TreemapDiagramParser(cursor: cursor, limits: limits)
-        parser.diagram.options = TreemapOptions(MermaidConfigurationOptions(section: "treemap", in: cursor.sourceBytes))
+        parser.diagram.options = TreemapOptions(MermaidConfigurationOptions(section: "treemap", in: cursor))
         try parser.readRows()
         parser.finish()
         return parser.diagram
