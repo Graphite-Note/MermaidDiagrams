@@ -5,7 +5,7 @@
  * Description: An XY chart read as Pele reads it: its axes, categories, ranges, series and title.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

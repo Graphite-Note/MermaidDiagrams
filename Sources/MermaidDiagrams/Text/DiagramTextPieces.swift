@@ -6,7 +6,7 @@
  *              or Japanese character with its punctuation, and the places a zero-width space or a soft hyphen allows.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

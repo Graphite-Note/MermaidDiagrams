@@ -5,7 +5,7 @@
  * Description: A class diagram read as Pele reads it: classes, members, relations, notes, namespaces and options.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

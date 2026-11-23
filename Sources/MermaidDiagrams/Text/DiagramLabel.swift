@@ -5,7 +5,7 @@
  * Description: The text of a node, an edge or a group as lines already read, and the emphasis of their pieces.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

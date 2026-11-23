@@ -5,8 +5,8 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -15,8 +15,13 @@ import Foundation
 struct FlowchartNodeDefinition {
     var shape: FlowchartNodeShape?
     var label: DiagramLabel?
+    /// Whether `label:` was written with nothing but spaces in it, or not at all: such a node drawn as an icon or a picture
+    /// loses the identifier it would otherwise show, as in Pele.
+    var hasBlankWrittenLabel = true
     /// `view: collapsed`, which a group's identifier takes to be drawn as one node.
     var asksForCollapsedView = false
+    /// The icon and picture attributes written (`icon`, `img`, `form`, `pos`, `w`, `h`, `constraint`); nil for one not written.
+    var assetAttributes = FlowchartNodeAssetAttributes()
 }
 
 /// Reads what follows a node's identifier: a shape in brackets around its text (`A{text}`), or attributes
@@ -101,9 +106,27 @@ enum FlowchartNodeSyntax {
             case "label":
                 let written = FlowchartTextSyntax.unquoted(value)
                 definition.label = DiagramLabelDecoder.label(from: written.text, form: written.form)
+                definition.hasBlankWrittenLabel = JavaScriptStringTrimming.trimmed(written.text).isEmpty
             case "view": definition.asksForCollapsedView = FlowchartTextSyntax.unquoted(value).text == "collapsed"
-            default: break
+            default: readAssetAttribute(key.lowercased(), value: FlowchartTextSyntax.unquoted(value).text, into: &definition.assetAttributes)
             }
+        }
+    }
+
+    /// An icon's or a picture's attribute, as Pele's database keeps one that is not empty (`if (doc.icon)`); `w` and `h`
+    /// are read as JavaScript's `Number` reads them.
+    private static func readAssetAttribute(_ key: String, value: String, into attributes: inout FlowchartNodeAssetAttributes) {
+        guard !value.isEmpty else { return }
+        switch key {
+        case "icon": attributes.icon = value
+        case "img": attributes.image = value
+        case "form": attributes.form = value
+        case "pos": attributes.position = value
+        case "constraint": attributes.constraint = value
+        // A number that is no side (zero, words) still replaces the one before, and the standard side is used.
+        case "w": attributes.width = JavaScriptNumber.value(of: Substring(value)) ?? .nan
+        case "h": attributes.height = JavaScriptNumber.value(of: Substring(value)) ?? .nan
+        default: break
         }
     }
 

@@ -6,7 +6,7 @@
  *              trimStart and trimEnd leave it, as Pele trims a label's lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

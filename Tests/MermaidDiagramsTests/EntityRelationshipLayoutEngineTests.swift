@@ -5,7 +5,7 @@
  * Description: Entity relationship diagrams laid out in Pele's measurements.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.4
  * Date: 23/11/2026
  */
 

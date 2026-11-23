@@ -5,7 +5,7 @@
  * Description: A state diagram's notes and what surrounds its states: where notes sit, how they are sized and joined.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

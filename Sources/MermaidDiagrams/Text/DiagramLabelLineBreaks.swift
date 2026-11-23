@@ -6,7 +6,7 @@
  *              Pele reads without markup, a Markdown string's indentation, and the literal text of journeys and timelines.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

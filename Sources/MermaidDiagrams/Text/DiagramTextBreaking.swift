@@ -6,7 +6,7 @@
  *              character, and a block's lines placed from their left or right end, as Pele writes text by its start.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.2
  * Date: 23/11/2026
  */
 

@@ -6,7 +6,7 @@
  *              named, decimal and hexadecimal codes into their characters, a code that names none left as HTML's.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

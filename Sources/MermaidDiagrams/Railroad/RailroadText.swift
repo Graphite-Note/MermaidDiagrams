@@ -6,7 +6,7 @@
  *              escapes written out, and a repetition's count.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.2
  * Date: 23/11/2026
  */
 

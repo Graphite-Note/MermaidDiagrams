@@ -5,7 +5,7 @@
  * Description: The names of HTML's entity codes Pele reads (text/entities.ts NAMED), with the characters they stand for.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

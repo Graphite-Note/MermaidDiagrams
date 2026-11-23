@@ -23,7 +23,6 @@ drawings; those marked `not-traced` were not followed to their cause.
 | outlined-text | Pele draws an outlined text (a Sankey diagram's `labelStyle: outlined`, a flowchart group's title over an edge) as two `<text>` elements, the halo and the text; the scene draws one text with its outline (`DiagramSceneText.outline`). Nothing visible differs. |
 | journey-parts | A user journey's dashed stems and score line are painted in the scene's `edge` part (`UserJourneyScene`); Pele classes them `pele-stems` and draws one `pele-edge` path. Nothing visible differs. |
 | beyond-ascii | Text outside ASCII (emoji, accented letters, ❤) is measured by Pele's table as 580 thousandths of the size (1,000 for wide scripts, text/measurer.ts `metricsMeasurer`) and by the package with Core Text and its fallback fonts. |
-| icon-nodes | A flowchart node written `@{ icon: …, form: …, pos: …, h: … }` is drawn by Pele as an icon shape of that height with its label above or below; the package reads those keys and leaves them (`FlowchartNodeSyntax.readAttributes`), drawing a rectangle. |
 | layered-layout | The layered layout places nodes differently: the package's ranking, ordering and positioning (`LayeredRanking`, `LayeredOrdering`, `LayeredPositioning`, `LayeredClusterLayout`) follow Pele's method but are not step-for-step ports of layout/layered.ts and layout/compound.ts (which, for example, balance ranks in eight passes, order with its own sweeps and straighten long edges past labels), so an edge of several ranks, a crossing or a group can end up elsewhere: in `flowchart-docs#92` the target of `---->` sits one rank lower than Pele puts it, in `requirement-docs#4` the two requirements under `test_req` are swapped and the relations cross. |
 | self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
 | not-traced | Not followed to its cause in this pass. |
@@ -48,8 +47,6 @@ drawings; those marked `not-traced` were not followed to their cause.
 | flowchart-docs#2 | width | beyond-ascii | +5 +0 |
 | flowchart-docs#6 | height | layered-layout | +0 -5 |
 | flowchart-docs#7 | height | layered-layout | +0 -5 |
-| flowchart-docs#68 | width, height | icon-nodes | +28 -42 |
-| flowchart-docs#69 | width, height | icon-nodes | +28 -42 |
 | flowchart-docs#92 | width, height | layered-layout | -29 +25 |
 | flowchart-docs#93 | width, height | layered-layout | -29 +25 |
 | flowchart-docs#96 | width | layered-layout | +6 +0 |

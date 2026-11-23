@@ -6,7 +6,7 @@
  *              dropped, a soft hyphen shown as a hyphen where a line breaks after it.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

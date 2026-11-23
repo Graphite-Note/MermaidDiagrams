@@ -5,7 +5,7 @@
  * Description: An entity relationship diagram read as Pele reads it: entities, attributes, relationships and names.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

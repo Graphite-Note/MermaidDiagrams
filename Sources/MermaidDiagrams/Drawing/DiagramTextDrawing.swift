@@ -6,7 +6,7 @@
  *              its emphasis, into a context whose y runs down.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.4
  * Date: 23/11/2026
  */
 

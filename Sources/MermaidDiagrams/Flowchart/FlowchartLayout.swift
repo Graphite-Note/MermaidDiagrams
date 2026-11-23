@@ -4,9 +4,9 @@
  * Layer: Core
  * Description: A flowchart laid out on a page.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -49,6 +49,8 @@ public struct FlowchartLayoutNode: Equatable, Sendable {
     public let text: DiagramTextBlock
     /// The colors the diagram's statements give the node, or nil for the usual look.
     public let style: DiagramElementStyle?
+    /// The icon or picture the node shows instead of its shape, or nil.
+    public internal(set) var asset: FlowchartNodeAsset? = nil
 }
 
 public struct FlowchartLayoutEdge: Equatable, Sendable {
@@ -65,7 +67,7 @@ public struct FlowchartLayoutEdge: Equatable, Sendable {
 
 extension FlowchartLayoutNode {
     func translated(by offset: CGVector) -> FlowchartLayoutNode {
-        FlowchartLayoutNode(shape: shape, frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset), style: style)
+        FlowchartLayoutNode(shape: shape, frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset), style: style, asset: asset)
     }
 }
 

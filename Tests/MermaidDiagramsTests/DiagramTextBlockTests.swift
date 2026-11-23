@@ -5,7 +5,7 @@
  * Description: Lines of text measured, wrapped at spaces and placed as a diagram's text blocks are.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

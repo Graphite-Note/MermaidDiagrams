@@ -2,11 +2,11 @@
  * File: FlowchartNode.swift
  * -------------------------
  * Layer: Core
- * Description: A node of a flowchart and the shapes it is drawn in.
+ * Description: A node of a flowchart, the shapes it is drawn in, and the icon or picture it may show instead.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 /// A node of a flowchart: the identifier edges name it by, the text drawn in it and its shape.
@@ -17,6 +17,9 @@ public struct FlowchartNode: Equatable, Sendable {
     public internal(set) var shape: FlowchartNodeShape
     /// What `classDef`, `class`, `:::` and `style` set for the node's colors, or nil when they set none.
     public internal(set) var style: DiagramElementStyle?
+    /// What the node shows when it is written as an icon or a picture (`@{ icon: … }`, `@{ img: … }`), or nil.
+    public var asset: FlowchartNodeAsset? { assetAttributes.asset }
+    var assetAttributes = FlowchartNodeAssetAttributes()
 
     init(identifier: String, label: DiagramLabel, shape: FlowchartNodeShape = .rectangle, style: DiagramElementStyle? = nil) {
         self.identifier = identifier

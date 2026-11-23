@@ -5,7 +5,7 @@
  * Description: A text block's lines as blocks of one line each, so that lines can be left aligned.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.2
  * Date: 23/11/2026
  */
 

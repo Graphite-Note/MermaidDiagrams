@@ -7,7 +7,7 @@
  *              text of one emphasis joined into one span.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

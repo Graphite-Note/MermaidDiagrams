@@ -5,7 +5,7 @@
  * Description: How the text written for a node, an edge or a group becomes the lines drawn.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.4
  * Date: 23/11/2026
  */
 

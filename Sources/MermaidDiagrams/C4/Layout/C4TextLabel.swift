@@ -7,7 +7,7 @@
  *              technology in italic.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.2
  * Date: 23/11/2026
  */
 

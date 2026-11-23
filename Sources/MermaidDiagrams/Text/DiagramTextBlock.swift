@@ -6,7 +6,7 @@
  *              layoutLabel wraps them, a text of more than one line set 1.3 times its size apart.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

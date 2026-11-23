@@ -5,7 +5,7 @@
  * Description: A timeline's periods, events, sections and title placed as Pele places them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

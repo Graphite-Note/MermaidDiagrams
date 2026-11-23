@@ -6,7 +6,7 @@
  *              line in one emphasis with its measured width.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 

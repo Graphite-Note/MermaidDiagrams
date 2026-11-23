@@ -6,7 +6,7 @@
  *              other HTML tags dropped with their text kept, and in a Markdown string the * and _ markers.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.1
  * Date: 23/11/2026
  */
 
