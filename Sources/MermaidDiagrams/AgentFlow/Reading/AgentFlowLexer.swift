@@ -6,8 +6,8 @@
  *              agentflow.jison: its start conditions, its stack of them, and Jison's way of counting lines and columns.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Reads an agent flow's tokens on UTF-16 code units, as Pele reads them with `charCodeAt`. Each step consumes text or
@@ -72,14 +72,20 @@ struct AgentFlowLexer {
                 tokens.kinds.append(.error)
                 tokens.starts.append(position)
                 tokens.ends.append(position)
-                tokens.locations.append(contentsOf: [line, column, line, column])
+                tokens.locations.append(line)
+                tokens.locations.append(column)
+                tokens.locations.append(line)
+                tokens.locations.append(column)
                 return
             }
         }
         tokens.kinds.append(.end)
         tokens.starts.append(count)
         tokens.ends.append(count)
-        tokens.locations.append(contentsOf: [line, column, line, column])
+        tokens.locations.append(line)
+        tokens.locations.append(column)
+        tokens.locations.append(line)
+        tokens.locations.append(column)
     }
 
     /// What Jison returns when the text runs out in each start condition.
@@ -151,7 +157,8 @@ struct AgentFlowLexer {
     mutating func emit(_ kind: AgentFlowTokenKind, to end: Int) {
         appendStart(kind, end: end)
         advance(to: end)
-        tokens.locations.append(contentsOf: [line, column])
+        tokens.locations.append(line)
+        tokens.locations.append(column)
     }
 
     /// A token that cannot hold a line break.
@@ -159,7 +166,8 @@ struct AgentFlowLexer {
         appendStart(kind, end: end)
         column += end - position
         position = end
-        tokens.locations.append(contentsOf: [line, column])
+        tokens.locations.append(line)
+        tokens.locations.append(column)
     }
 
     /// A run Jison matches one character at a time, where `\r\n` counts as two line breaks.
@@ -174,7 +182,8 @@ struct AgentFlowLexer {
             }
         }
         position = end
-        tokens.locations.append(contentsOf: [line, column])
+        tokens.locations.append(line)
+        tokens.locations.append(column)
     }
 
     /// A token whose text is not the text it covers.
@@ -187,7 +196,8 @@ struct AgentFlowLexer {
         tokens.kinds.append(kind)
         tokens.starts.append(position)
         tokens.ends.append(end)
-        tokens.locations.append(contentsOf: [line, column])
+        tokens.locations.append(line)
+        tokens.locations.append(column)
     }
 
     mutating func push(_ next: StartCondition) {

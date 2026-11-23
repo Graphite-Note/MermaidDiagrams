@@ -6,8 +6,8 @@
  *              text, its shape's or arrow's size around it, a composite's title and the room around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -88,7 +88,7 @@ struct BlockViews {
             cell.isSpace = true
             return (cell, BlockView(blockIndex: blockIndex, kind: .space, text: nil, appearance: BlockAppearance(), textOffset: .zero))
         }
-        let appearance = BlockAppearance(classNames: block.classNames, styles: block.styles, classes: diagram.classes)
+        let appearance = cache.appearance(classNames: block.classNames, styles: block.styles, classes: diagram.classes)
         let measurer = cache.measurer(for: appearance)
         switch block.kind {
         case .composite:
@@ -123,6 +123,13 @@ struct BlockViews {
 struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
     let measurers: BlockMeasurers<Measurer>
     private var restyled: [BlockTextLook: Measurer] = [:]
+    /// The appearance of each pair of class names and styles met, read once: blocks of one class share theirs.
+    private var appearances: [BlockStyling: BlockAppearance] = [:]
+
+    private struct BlockStyling: Hashable {
+        let classNames: [String]?
+        let styles: [String]?
+    }
 
     private struct BlockTextLook: Hashable {
         let fontSize: CGFloat
@@ -132,6 +139,15 @@ struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
 
     init(measurers: BlockMeasurers<Measurer>) {
         self.measurers = measurers
+    }
+
+    /// The appearance of a block of `classNames` with `styles`, the diagram's classes being `classes` for every call.
+    mutating func appearance(classNames: [String]?, styles: [String]?, classes: [String: BlockClassDefinition]) -> BlockAppearance {
+        let styling = BlockStyling(classNames: classNames, styles: styles)
+        if let known = appearances[styling] { return known }
+        let made = BlockAppearance(classNames: classNames, styles: styles, classes: classes)
+        appearances[styling] = made
+        return made
     }
 
     mutating func measurer(for appearance: BlockAppearance) -> Measurer {

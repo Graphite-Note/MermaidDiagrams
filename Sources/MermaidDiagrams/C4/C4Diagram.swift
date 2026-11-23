@@ -6,8 +6,8 @@
  *              model holds it: its shapes, its boundaries nested in one another, its relations and its row counts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A Mermaid C4 diagram as Pele's `C4Db` holds it once read. Shapes and boundaries are listed in the order first
@@ -162,7 +162,19 @@ public enum C4ShapeKind: String, CaseIterable, Sendable {
     public var isExternal: Bool { rawValue.hasPrefix("external") }
 
     /// Whether its macro takes a technology before the description: a container's or a component's.
-    var takesTechnology: Bool { rawValue.contains("container") || rawValue.contains("component") }
+    var takesTechnology: Bool { Self.kindsTakingTechnology.contains(self) }
+
+    /// The kinds whose name holds `container` or `component`, found once rather than searched for at every shape.
+    private static let kindsTakingTechnology = Set(allCases.filter { kind in
+        kind.rawValue.contains("container") || kind.rawValue.contains("component")
+    })
+
+    /// The kind's name as a shape's first line writes it between guillemets: `«external system»`.
+    var guillemetedName: String { Self.guillemetedNames[self] ?? "" }
+
+    private static let guillemetedNames = Dictionary(uniqueKeysWithValues: allCases.map { kind in
+        (kind, "«" + kind.rawValue.replacingOccurrences(of: "_", with: " ") + "»")
+    })
 }
 
 /// Mermaid's `nodeType` of a deployment node.

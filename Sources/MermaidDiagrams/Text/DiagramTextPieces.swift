@@ -6,7 +6,7 @@
  *              or Japanese character with its punctuation, and the places a zero-width space or a soft hyphen allows.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -16,6 +16,11 @@
 /// soft hyphen.
 enum DiagramTextPieces {
     static func pieces(of text: String) -> [String] {
+        pieces(ofASCII: text) ?? pieces(ofScalars: text)
+    }
+
+    /// The pieces of any text, read scalar by scalar.
+    static func pieces(ofScalars text: String) -> [String] {
         let scalars = Array(text.unicodeScalars)
         var pieces: [String] = []
         var start = 0
@@ -25,6 +30,32 @@ enum DiagramTextPieces {
             start = end
         }
         return pieces
+    }
+
+    /// The pieces of an ASCII text, cut at its bytes; nil for text beyond ASCII. ASCII holds no CJK character and no
+    /// hint, and its closing punctuation is not white space, so a piece is the white space before a run of other
+    /// characters, the run and the white space after it, or white space alone at the end.
+    static func pieces(ofASCII text: String) -> [String]? {
+        var text = text
+        return text.withUTF8 { bytes -> [String]? in
+            guard !bytes.contains(where: { byte in byte >= 0x80 }) else { return nil }
+            var pieces: [String] = []
+            var start = 0
+            while start < bytes.count {
+                var end = start
+                while end < bytes.count, isASCIIWhitespace(bytes[end]) { end += 1 }
+                while end < bytes.count, !isASCIIWhitespace(bytes[end]) { end += 1 }
+                while end < bytes.count, isASCIIWhitespace(bytes[end]) { end += 1 }
+                pieces.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self))
+                start = end
+            }
+            return pieces
+        }
+    }
+
+    /// JavaScript's white space among ASCII bytes: tab to carriage return, and space.
+    private static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || (0x09...0x0D).contains(byte)
     }
 
     /// Where the piece that starts at `start` ends.
