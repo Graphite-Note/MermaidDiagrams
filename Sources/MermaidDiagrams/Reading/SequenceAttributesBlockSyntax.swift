@@ -6,7 +6,7 @@
  *              reader does, for a sequence participant's attributes written over several lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -115,7 +115,7 @@ struct SequenceAttributesBlockSyntax {
             guard lineIndent == indent else { throw .invalid }
             let current = Array(lines[lineIndex][indent...])
             guard let (key, valueStart) = Self.splitKey(current) else { throw .invalid }
-            let keyText = try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: []).0.javaScriptText
+            let keyText = if let plain = Self.plainKeyText(key) { plain } else { try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: []).0.javaScriptText }
             let rest = Array(current[valueStart...])
             lineIndex += 1
             if Self.isBlankBeforeComment(rest) {

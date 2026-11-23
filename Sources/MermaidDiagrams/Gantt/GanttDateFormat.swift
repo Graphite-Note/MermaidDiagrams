@@ -6,7 +6,7 @@
  *              literal text, writes a time in it and reads a date strictly in it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -38,6 +38,11 @@ struct GanttDateFormat {
     private static func pieces(of template: String) -> [Piece] {
         // In ASCII without a carriage return every byte is a character of its own, so the bytes are split instead.
         if template.utf8.allSatisfy({ byte in byte < 0x80 && byte != 0x0D }) { return pieces(ofASCII: Array(template.utf8)) }
+        return pieces(ofCharacters: template)
+    }
+
+    /// `pieces(of:)` read character by character, for any template.
+    static func pieces(ofCharacters template: String) -> [Piece] {
         var pieces: [Piece] = []
         var rest = Substring(template)
         while let first = rest.first {
@@ -56,7 +61,7 @@ struct GanttDateFormat {
     }
 
     /// `pieces(of:)` on the bytes of an ASCII template.
-    private static func pieces(ofASCII bytes: [UInt8]) -> [Piece] {
+    static func pieces(ofASCII bytes: [UInt8]) -> [Piece] {
         var pieces: [Piece] = []
         var index = 0
         while index < bytes.count {

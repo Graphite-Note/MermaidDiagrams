@@ -6,7 +6,7 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -80,11 +80,16 @@ enum TreeViewBoxDrawingReader {
         return kept
     }
 
-    private static func passesUnchanged(_ line: String) -> Bool {
+    static func passesUnchanged(_ line: String) -> Bool {
         // A line led by a character that starts none of the lines that pass: told from its first scalar after the blanks.
         if let first = firstScalarAfterBlanks(line), isOwnCharacter(first), first != "%", first != "t", first != "a" {
             return false
         }
+        return passesUnchangedReadingCharacters(line)
+    }
+
+    /// `passesUnchanged` read from the line's characters, for any line.
+    static func passesUnchangedReadingCharacters(_ line: String) -> Bool {
         let content = line.drop { character in character == " " || character == "\t" }
         if content.isEmpty || content.allSatisfy(\.isWhitespace) || content.hasPrefix("%%") { return true }
         if content.hasPrefix("title ") || content.hasPrefix("title\t") { return true }
@@ -95,7 +100,6 @@ enum TreeViewBoxDrawingReader {
         return false
     }
 
-    /// A line of blanks and vertical bars only, which carries no entry.
     /// The first scalar after the spaces and tabs a line starts with, nil when there is none.
     private static func firstScalarAfterBlanks(_ line: String) -> Unicode.Scalar? {
         line.unicodeScalars.first { scalar in scalar != " " && scalar != "\t" }
@@ -108,6 +112,7 @@ enum TreeViewBoxDrawingReader {
         (0x21...0x7E).contains(scalar.value) || (0x2500...0x257F).contains(scalar.value)
     }
 
+    /// A line of blanks and vertical bars only, which carries no entry.
     private static func isDecorationOnly(_ line: String) -> Bool {
         !line.isEmpty && line.utf16.allSatisfy { unit in isWhitespace(unit) || unit == lightVertical || unit == heavyVertical }
     }

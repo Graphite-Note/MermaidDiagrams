@@ -6,7 +6,7 @@
  *              plain scalar continued on deeper lines), a line's key and its comment, as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -159,6 +159,25 @@ extension SequenceAttributesBlockSyntax {
         while valueStart < line.count, isBlank(line[valueStart]) { valueStart += 1 }
         return (Array(line[..<keyEnd]), valueStart)
     }
+
+    /// The text of a key written as an ASCII word, a letter or an underscore then letters, digits, underscores and
+    /// hyphens, read as the JSON schema reads a plain scalar: its own text, but for the spellings of null and the
+    /// Booleans. Nil for any other key, which is read as a flow value.
+    static func plainKeyText(_ key: Text) -> String? {
+        guard let first = key.first, isWordStart(first), key.allSatisfy(isWordScalar) else { return nil }
+        let text = UnicodeScalarText.string(key)
+        return (key.count == 4 || key.count == 5) && nullAndBooleanSpellings.contains(text) ? nil : text
+    }
+
+    private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
+        isWordStart(scalar) || scalar == "-" || ("0"..."9").contains(scalar)
+    }
+
+    private static func isWordStart(_ scalar: Unicode.Scalar) -> Bool {
+        ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar) || scalar == "_"
+    }
+
+    private static let nullAndBooleanSpellings: Set<String> = ["null", "Null", "NULL", "true", "True", "TRUE", "false", "False", "FALSE"]
 
     /// The line up to a comment: a `#` at its start or after a space or a tab, outside quotation marks.
     static func withoutComment(_ line: Text) -> Text {

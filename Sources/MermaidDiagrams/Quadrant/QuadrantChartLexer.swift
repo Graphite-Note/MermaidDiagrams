@@ -186,10 +186,10 @@ struct QuadrantChartLexer {
         MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.underscore
     }
 
-    /// The characters that make a token alone, and the token each makes.
     /// `singleCharacters` by byte, read without hashing at every token.
     private static let singleCharacterKinds: [QuadrantChartTokenKind?] = (0...255).map { byte in singleCharacters[UInt8(byte)] }
 
+    /// The characters that make a token alone, and the token each makes.
     private static let singleCharacters: [UInt8: QuadrantChartTokenKind] = {
         var kinds: [UInt8: QuadrantChartTokenKind] = [
             MermaidByte.colon: .colon, MermaidByte.comma: .comma, MermaidByte.hyphen: .hyphen, numberSign: .numberSign,
