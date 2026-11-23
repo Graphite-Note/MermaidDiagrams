@@ -1,9 +1,23 @@
+/**
+ * File: GitGraphLayout.swift
+ * --------------------------
+ * Layer: Core
+ * Description: A Git graph laid out on a page: its lanes, connectors, commits and title, and the series colors its
+ *              theme variables set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A Git graph laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing it
 /// needs only colors: every position, path and text measurement is here. Lane `k` and what is on it take the series
 /// color `k`.
 public struct GitGraphLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the title was measured in; branch names, commit ids and tags are measured in it at their own sizes.
     public let font: DiagramFont

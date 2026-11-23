@@ -1,3 +1,14 @@
+/**
+ * File: TimelineLayoutEngine.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Lays a timeline out in Pele's style, across or down.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Lays a timeline out in Pele's style: across, its periods in columns along an axis with their events below; down
@@ -34,7 +45,9 @@ public enum TimelineLayoutEngine {
         let size = CGSize(width: (width + 2 * padding).rounded(.up), height: max(body.bottom + padding, 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        return TimelineLayout(size: size, font: font, direction: diagram.direction, sections: body.sections, periods: body.periods, axis: body.axis,
-                              axisArrow: body.axisArrow, title: placedTitle)
+        var layout = TimelineLayout(size: size, font: font, direction: diagram.direction, sections: body.sections, periods: body.periods, axis: body.axis,
+                                    axisArrow: body.axisArrow, title: placedTitle)
+        layout.seriesColors = diagram.seriesColors
+        return layout
     }
 }

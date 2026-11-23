@@ -1,6 +1,21 @@
+/**
+ * File: TimelineDiagram.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: A Mermaid timeline as its text describes it: periods, events and sections, and the series colors its
+ *              theme variables set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A Mermaid timeline (`timeline`) as its text describes it: time periods in the order they are written, each with
 /// its events, grouped under the sections written before them.
 public struct TimelineDiagram: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public internal(set) var direction: TimelineDirection
     /// `title …` in the diagram, else `title:` in the front matter, else nil.
     public internal(set) var title: String?

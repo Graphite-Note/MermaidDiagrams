@@ -2,10 +2,11 @@
  * File: TreemapClassTextStyle.swift
  * ---------------------------------
  * Layer: Core
- * Description: What a treemap's `classDef` sets of its nodes' text, as Pele reads it: a font size, a weight and a slant.
+ * Description: What a treemap's `classDef` sets of its nodes' text, as Pele reads it: a font size, a weight and a slant,
+ *              and whether the text takes the ink of a fill the class sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -19,6 +20,10 @@ public struct TreemapClassTextStyle: Equatable, Sendable {
     public internal(set) var fontSize: CGFloat?
     public internal(set) var isBold: Bool?
     public internal(set) var isItalic: Bool?
+    /// Whether the class sets its boxes' fill with a declaration Pele keeps (`fill:none`, `fill:#ff0`), whether or not
+    /// this package reads its color: Pele's ink on that fill then colors the text, never its ink on a series color
+    /// (`setsFill` in its treemap renderer). Nil where no class sets a fill.
+    var setsFill: Bool?
 
     /// A style that sets nothing.
     public init() {}
@@ -38,6 +43,7 @@ public struct TreemapClassTextStyle: Equatable, Sendable {
         style.fontSize = later.fontSize ?? fontSize
         style.isBold = later.isBold ?? isBold
         style.isItalic = later.isItalic ?? isItalic
+        style.setsFill = later.setsFill ?? setsFill
         return style
     }
 
@@ -66,6 +72,21 @@ public struct TreemapClassTextStyle: Equatable, Sendable {
         guard !digits.isEmpty, digits.allSatisfy({ character in character.isASCII && (character.isNumber || character == ".") }),
               let size = JavaScriptNumberReading.parseFloat(Array(digits.utf8)[...]), size > 0, CGFloat(size) <= largestFontSize else { return nil }
         return CGFloat(size)
+    }
+
+    /// Notes a `fill` declaration as Pele's `resolveStyle` keeps it: a value that is not empty once `!important` is taken
+    /// out, nothing unsafe in it and no character XML refuses.
+    mutating func readFill(value written: String) {
+        let value = MermaidByte.withoutImportance(written).trimmingCharacters(in: .whitespaces)
+        guard !value.isEmpty, !Self.isUnsafe(value), !value.unicodeScalars.contains(where: Self.isRefusedByXML) else { return }
+        setsFill = true
+    }
+
+    /// Pele's `RE_INVALID_XML`: the control characters other than tab, line feed and carriage return, and U+FFFE and
+    /// U+FFFF (a Swift string holds no lone surrogate).
+    private static func isRefusedByXML(_ scalar: Unicode.Scalar) -> Bool {
+        let value = scalar.value
+        return value <= 0x08 || value == 0x0B || value == 0x0C || (0x0E...0x1F).contains(value) || value == 0x7F || value == 0xFFFE || value == 0xFFFF
     }
 
     /// What Pele refuses in a style's value: a resource, a script, markup or the end of a declaration.

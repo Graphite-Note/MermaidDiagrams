@@ -6,8 +6,8 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 19/11/2026
+ * Version: 0.6
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -24,11 +24,22 @@ public struct DiagramScene: Sendable {
     public let font: DiagramFont
     /// What is painted, back to front.
     public let items: [DiagramSceneItem]
+    /// The series colors the diagram's own theme variables set (`pie1`, `cScale0`, `xyChart.plotColorPalette` …), which
+    /// its series are painted in over any palette's (`DiagramSeriesColors.palette(over:)`), as Pele's SVG sets them over
+    /// the page's; none for most diagrams. The label inks on them are already the paints of the texts they color.
+    public let seriesColors: DiagramSeriesColors
 
-    public init(size: CGSize, font: DiagramFont, items: [DiagramSceneItem]) {
+    public init(size: CGSize, font: DiagramFont, items: [DiagramSceneItem], seriesColors: DiagramSeriesColors = .none) {
         self.size = size
         self.font = font
         self.items = items
+        self.seriesColors = seriesColors
+    }
+
+    /// The palette the scene is painted in where a host's is `palette`: the host's, with the series the diagram's theme
+    /// variables set in their colors.
+    public func palette(over palette: DiagramPalette) -> DiagramPalette {
+        seriesColors.palette(over: palette)
     }
 
     /// The shapes, back to front, without the text.

@@ -5,7 +5,7 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -35,6 +35,7 @@ struct XYChartParser {
         var chart = parser.builder.chart
         chart.options = XYChartOptions(MermaidConfigurationOptions(section: "xyChart", in: cursor))
         if !chart.isOrientationWritten { chart.orientation = chart.options.orientation }
+        chart.seriesColors = MermaidThemeSeriesPalette.xyChart.seriesColors(in: cursor)
         return chart
     }
 

@@ -6,8 +6,8 @@
  *              colors as their fallbacks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -47,6 +47,24 @@ extension DiagramSVGColors {
             case .color(let written):
                 return DiagramSVGPaintText(color: Self.hexadecimal(written.cgColor), opacity: CGFloat(written.alpha) * paint.opacity)
             }
+        }
+    }
+
+    /// The colors a scene is written in: a palette with the series the diagram's theme variables set in their colors, or
+    /// Pele's variables, which `seriesStyle(of:)` sets.
+    func overSeriesColors(of scene: DiagramScene) -> DiagramSVGColors {
+        switch self {
+        case .palette(let palette): .palette(scene.palette(over: palette))
+        case .peleVariables: .peleVariables
+        }
+    }
+
+    /// The declarations of the series the diagram's theme variables set, as Pele ends its root's style with them
+    /// (`;--pele-series-1:#ffeb3b`), with Pele's variables; nothing when every color is written out.
+    func seriesStyle(of scene: DiagramScene) -> String {
+        switch self {
+        case .palette: ""
+        case .peleVariables: scene.seriesColors.styleDeclarations
         }
     }
 

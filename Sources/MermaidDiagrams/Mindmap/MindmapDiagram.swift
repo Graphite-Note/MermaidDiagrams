@@ -1,7 +1,22 @@
+/**
+ * File: MindmapDiagram.swift
+ * --------------------------
+ * Layer: Core
+ * Description: A Mermaid mindmap as its text describes it: one tree of nodes, and the series colors its theme variables
+ *              set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A Mermaid mindmap (`mindmap`) as its text describes it: one tree, whose hierarchy comes from each line's
 /// indentation, with its nodes in the order they are written. That order is depth first, so the root comes first
 /// and every node comes before its children.
 public struct MindmapDiagram: Equatable, Sendable {
+    /// The series colors its theme variables set, which its series are painted in over a palette's; none unless it
+    /// sets them.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     /// The nodes in the order they are written; the first is the root.
     public internal(set) var nodes: [MindmapNode]
     /// The diagram's title, from `title:` in the front matter, or nil.

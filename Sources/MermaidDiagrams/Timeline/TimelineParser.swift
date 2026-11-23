@@ -1,3 +1,15 @@
+/**
+ * File: TimelineParser.swift
+ * --------------------------
+ * Layer: Core
+ * Description: Reads a timeline's statements after its keyword, as Mermaid's timeline grammar does, and its theme's
+ *              series colors.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// Reads a timeline's statements after its `timeline` keyword, as Mermaid's timeline grammar does: an optional
@@ -14,7 +26,9 @@ struct TimelineParser {
         var parser = TimelineParser(cursor: cursor, builder: TimelineDiagramBuilder(limits: limits))
         parser.readDirection()
         try parser.readStatements()
-        return parser.builder.diagram
+        var diagram = parser.builder.diagram
+        diagram.seriesColors = MermaidThemeSeriesPalette.timeline.seriesColors(in: cursor)
+        return diagram
     }
 
     /// `LR` or `TD` after at least one space on the keyword's line. Anything else there is read as the statements are.

@@ -5,8 +5,8 @@
  * Description: Reads a mindmap's outline into its tree.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Reads a mindmap's lines after its `mindmap` keyword, the rest of the keyword's own line included, as the outline Mermaid's
@@ -20,7 +20,9 @@ enum MindmapParser {
         var builder = MindmapTreeBuilder(limits: limits)
         try MermaidOutlineReader.read(cursor, grammar: .mindmap, into: &builder)
         guard !builder.diagram.nodes.isEmpty else { throw .invalidSyntax(line: lastLine(of: cursor), problem: .expectedNode) }
-        return builder.diagram
+        var diagram = builder.diagram
+        diagram.seriesColors = MermaidThemeSeriesPalette.mindmap.seriesColors(in: cursor)
+        return diagram
     }
 
     /// The line the text ends on, where a mindmap without a node is missing its root.

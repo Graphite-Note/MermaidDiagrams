@@ -6,8 +6,8 @@
  *              fifth of their opacity, the overlaps a style outlines, then each region's text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -42,7 +42,7 @@ extension DiagramScene {
                 builder.text(line.text, paint, isBold: line.isBold, isItalic: line.isItalic, part: line.isRegionText ? .vennText : .label)
             }
         }
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
     }
 }
 

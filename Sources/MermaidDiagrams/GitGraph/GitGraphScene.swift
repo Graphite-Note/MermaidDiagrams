@@ -5,8 +5,8 @@
  * Description: A laid-out Git graph's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ extension DiagramScene {
     public init(layout: GitGraphLayout) {
         var builder = DiagramSceneBuilder()
         GitGraphDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
     }
 }
 
@@ -29,7 +29,7 @@ extension GitGraphDrawingParts {
             builder.stroke(group.laneLines, paint, DiagramStroke(lineWidth: Self.laneLineWidth, dashLengths: Self.laneDashLengths), part: .cluster)
             builder.fill(group.nameBoxes, paint, part: .cluster)
         }
-        builder.texts(names, .background, part: .clusterLabel)
+        for (name, paint) in zip(names, namePaints) { builder.text(name, paint, part: .clusterLabel) }
         let connector = DiagramStroke(lineWidth: Self.connectorLineWidth, lineCap: .round)
         for group in colorGroups { builder.stroke(group.curves, .series(group.seriesIndex), connector, part: .edge) }
         for group in colorGroups {

@@ -1,8 +1,22 @@
+/**
+ * File: TimelineLayout.swift
+ * --------------------------
+ * Layer: Core
+ * Description: A timeline laid out on a page: sections, periods, events and axis, and the series colors its theme
+ *              variables set.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A timeline laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing it
 /// needs only colors: every position, path and text measurement is here.
 public struct TimelineLayout: Equatable, Sendable {
+    /// The series colors the diagram's theme variables set, which its scene carries.
+    public internal(set) var seriesColors = DiagramSeriesColors.none
     public let size: CGSize
     /// The font the periods' and sections' text was measured in; events' text is in the same font at its own size.
     public let font: DiagramFont
