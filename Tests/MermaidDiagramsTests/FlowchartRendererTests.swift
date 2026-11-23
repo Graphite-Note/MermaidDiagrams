@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartRendererTests.swift
+ * ----------------------------------
+ * Layer: Tests
+ * Description: Draws laid-out flowcharts and checks their pixels: nodes, edges, texts on their patches, colors.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -48,7 +59,7 @@ final class FlowchartRendererTests: XCTestCase {
                                             line: DiagramPalette.peleLight.line, surface: DiagramPalette.peleLight.surface, border: DiagramPalette.peleLight.border)
         let bitmap = try drawn(layout, palette: darkBackground)
         let text = try XCTUnwrap(layout.edges[0].text)
-        XCTAssertEqual(bitmap.color(at: CGPoint(x: text.frame.minX - 2, y: text.frame.minY + 1)), [0, 0, 0xFF])
+        XCTAssertEqual(bitmap.color(at: CGPoint(x: text.frame.minX - 1, y: text.frame.minY + 1)), [0, 0, 0xFF])
     }
 
     func testDrawingTheSameLayoutInOtherColorsChangesOnlyTheColors() throws {

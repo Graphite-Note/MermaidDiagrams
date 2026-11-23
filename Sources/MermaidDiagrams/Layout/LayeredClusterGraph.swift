@@ -5,8 +5,8 @@
  * Description: A graph whose nodes sit in nested boxes, its edges and where a cluster layout puts them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -50,6 +50,9 @@ enum LayeredDirection: Equatable, Sendable {
 struct LayeredClusterGraph {
     /// Each node's size on the page.
     var nodeSizes: [CGSize]
+    /// How much of the sides edges meet each node shares out between them, across the flow; empty, or 0 for a node,
+    /// keeps every end at the middle of its side.
+    var nodeSideSpans: [CGFloat] = []
     /// The cluster each node sits directly in, or nil for the top level.
     var nodeClusters: [Int?]
     var clusters: [LayeredCluster]
@@ -68,6 +71,21 @@ struct LayeredCluster: Equatable {
     var padding: LayeredClusterPadding
     /// The narrowest the box is, so that its title fits.
     var minimumWidth: CGFloat
+    /// The cluster's place in the declaration order among the nodes, whose places are their indices; nil for after
+    /// every node. A cluster with members takes its first member's.
+    var sequence: CGFloat?
+    /// How much of the box's sides its edges share out, beyond its padding; 0 keeps them at its middles.
+    var sideSpan: CGFloat = 0
+
+    init(parent: Int?, direction: LayeredDirection?, padding: LayeredClusterPadding, minimumWidth: CGFloat,
+         sequence: CGFloat? = nil, sideSpan: CGFloat = 0) {
+        self.parent = parent
+        self.direction = direction
+        self.padding = padding
+        self.minimumWidth = minimumWidth
+        self.sequence = sequence
+        self.sideSpan = sideSpan
+    }
 }
 
 /// The room inside a box around what it holds, on the page.
@@ -110,9 +128,10 @@ struct LayeredClusterPlacement: Equatable {
     var strayEdgeIndices: Set<Int> = []
 }
 
-/// An edge's way across the page, in the edge's own direction: from its source's center (a node's, or a box's where
-/// the edge starts at the box itself) to its target's, through every point it passes, where it crosses a box's border
-/// included.
+/// An edge's way across the page, in the edge's own direction, as Pele's compound layout routes it: from the side of
+/// its source (a node's, or a box's where the edge starts at the box itself) to the side of its target, through every
+/// point it passes, where it crosses a box's border included; between a box and what it holds, from one center to the
+/// other.
 struct LayeredClusterRoute: Equatable {
     var points: [CGPoint]
     /// For each segment between two points, whether the flow it follows runs vertically: the way its S curve leaves
@@ -126,6 +145,4 @@ struct LayeredClusterRoute: Equatable {
 enum LayeredClusterLayoutError: Error, Equatable {
     /// The nodes and passing points of the boxes would be more than the limit.
     case tooManyPoints
-    /// A cluster sits inside itself through its parents.
-    case clusterInsideItself
 }

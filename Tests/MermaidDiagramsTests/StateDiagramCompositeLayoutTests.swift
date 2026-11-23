@@ -6,8 +6,8 @@
  *              their concurrent regions side by side between dashed lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 12/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -110,6 +110,20 @@ final class StateDiagramCompositeLayoutTests: XCTestCase {
         XCTAssertFalse(parts.composites.outlines.isEmpty)
         XCTAssertEqual(parts.composites.titles.count + parts.composites.crossedTitles.count, 1)
         XCTAssertFalse(parts.regionDividers.isEmpty)
+    }
+
+    func testACompositesNameIsCentredInItsBandWithALineUnderTheBandAsPeleDrawsIt() throws {
+        // state-docs#16: Pele's titleX keeps a name no transition bends against at the box's middle, halfway down the
+        // band of the name's height and 12 points, and draws a line across the box under the band.
+        let laidOut = try layout("stateDiagram-v2\nstate Active {\n  a --> b\n  --\n  c --> d\n}")
+        let box = try XCTUnwrap(laidOut.composites.first)
+        let title = try XCTUnwrap(box.title)
+        let band = title.size.height + StateDiagramClusterGraph.titleRoom
+        XCTAssertEqual(title.center.x, box.frame.midX, accuracy: 0.001)
+        XCTAssertEqual(title.center.y, box.frame.minY + band / 2, accuracy: 0.001)
+        XCTAssertFalse(box.isTitleCrossed, "Pele draws a composite's name with its box, under the transitions.")
+        let rules = StateDiagramDrawingParts(layout: laidOut).compositeTitleRules
+        XCTAssertEqual(rules.boundingBox, CGRect(x: box.frame.minX, y: box.frame.minY + band, width: box.frame.width, height: 0))
     }
 
     func testTurnedToRunDownTurnsTheDiagramAndItsComposites() throws {

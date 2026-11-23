@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--bench] [--svg]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--svg] [--svg-of=<corpus>#<index>,…]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -30,7 +30,7 @@ TZ=UTC deno run --unstable-sloppy-imports --no-prompt --import-map="data:applica
   --allow-read="<pele>,<this folder>" --allow-write="<output>" scripts/pele/pele-runner.ts <pele> <output> [flags]
 ```
 
-With no flag it does the first three:
+With no flag it does the corpus, compat, random flat and bench runs:
 
 - `--corpus` renders every input of Pele's `tests/corpus` (Mermaid's documentation examples of every type, the same files
   as the package's benchmark resources, and the agent flow reference's 239 inputs) and the generated graphs of Pele's
@@ -41,6 +41,11 @@ With no flag it does the first three:
 - `--compat` writes `pele-compat-inputs.json`, every string of `tests/compat`'s spec and test files that is a diagram text,
   and `pele-flowchart-compat.json`, every text Pele's ports of Mermaid's flowchart specs parse with what Pele's flowchart
   database made of it (the specs run with stand-ins for `describe`, `it` and `expect` that check nothing).
+- `--random-flat` generates 60 random flat flowcharts (a seeded generator, as the benchmark's mesh: 4 to 33 nodes in the
+  four directions, with long, labelled, dotted and backward edges) for the layered layout, and writes their sources
+  (`random-flat.json`) and what Pele drew of them, recorded as the corpus is (`pele-random-flat.json`).
+- `--svg-of=<corpus>#<index>,…` writes the SVGs Pele draws of those inputs only (a random flat flowchart or a generated
+  graph included) to `<output>/svg`; it records nothing.
 - `--bench` reproduces Pele's `scripts/bench.mjs` (its five cases: the 114 flowchart examples, a tree and a mesh of 50 and
   of 500 nodes, generated with the same seed; each case timed whole, one run not counted, then runs until 300 ms are
   spent, at least 5 and at most 2,000) and times each type's documentation examples the same way, and writes
@@ -49,6 +54,7 @@ With no flag it does the first three:
 - `--svg` writes the SVG Pele draws for each documentation example to `svg/<corpus>-<index>.svg` in the output folder
   (refused inputs have none), untimed, to compare a drawing with the package's by eye; it runs only when asked for.
 
-The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json` and `pele-flowchart-compat.json` in
+The package keeps `pele-corpus.json`, `pele-bench.json`, `pele-compat-inputs.json`, `pele-flowchart-compat.json`,
+`random-flat.json` and `pele-random-flat.json` in
 `Sources/MermaidDiagramsBenchmark/Resources`; run the benchmark part on a quiet machine, then
 `swift run -c release MermaidDiagramsBenchmark --pele-comparison` on the same machine.

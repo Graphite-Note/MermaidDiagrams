@@ -5,8 +5,8 @@
  * Description: Puts an entity relationship diagram laid out in its groups' boxes on the page: boxes, relationships, groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -100,8 +100,9 @@ extension EntityRelationshipPageAssembly {
     /// The groups' boxes, each title along its box's top where the relationships leave it room; Pele's titles are never
     /// struck through.
     mutating func placeSubgraphs(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
+        let crossings = FlowchartRoutePointIndex(relationshipPoints)
         subgraphBoxes = placement.clusterFrames.enumerated().map { index, frame in
-            let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: relationshipPoints).title }
+            let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings).title }
             return FlowchartLayoutCluster(frame: frame, title: title, depth: clustered.depths[index], isTitleCrossed: false)
         }
     }

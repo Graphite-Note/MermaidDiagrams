@@ -5,21 +5,26 @@
  * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
 
 /// A state diagram with composite states as a graph of nested boxes to lay out (`LayeredClusterLayout`), as a flowchart's
-/// subgraphs are: each composite state a box with a flowchart group's room inside it and its name in a band along its
+/// subgraphs are: each composite state a box with Pele's 16 points of room inside it and its name in a band along its
 /// top, running in its own direction or in that of the box around it; each concurrent region of a body that has several
 /// a box of its own inside it, without a title; every other state in the box of the composite or region it was last
 /// named in; and each transition between two different states or boxes, a transition to or from a composite state
 /// meeting its box.
 struct StateDiagramClusterGraph {
-    /// The room inside a region's box around its states: less than a composite's, as the region's box is not drawn.
-    static let regionPadding: CGFloat = 12
+    /// The room inside a region's box around its states: less than a composite's, as the region's box is not drawn
+    /// (Pele's `REGION_PAD`).
+    static let regionPadding: CGFloat = 10
+    /// The room inside a composite's box on its sides and below, and above below its title (Pele's `GROUP_PAD`).
+    static let compositePadding: CGFloat = 16
+    /// The room a composite's title takes beyond its line, half above it and half below (Pele's `titleH`).
+    static let titleRoom: CGFloat = 12
 
     let graph: LayeredClusterGraph
     /// For each state, its node in `graph`, or nil for a composite state, which is its box.
@@ -50,10 +55,7 @@ struct StateDiagramClusterGraph {
         var compositeOfState = [Int?](repeating: nil, count: diagram.states.count)
         for (compositeIndex, composite) in diagram.composites.enumerated() { compositeOfState[composite.stateIndex] = compositeIndex }
         self.compositeOfState = compositeOfState
-        let measuredTitles = diagram.composites.map { composite in
-            let title = DiagramTextBlock(label: diagram.states[composite.stateIndex].name, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
-        }
+        let measuredTitles = Self.titles(of: diagram, titleText: titleText)
         titles = measuredTitles
         var clusters = diagram.composites.indices.map { compositeIndex in
             Self.compositeCluster(direction: diagram.composites[compositeIndex].direction, title: measuredTitles[compositeIndex])
@@ -81,9 +83,33 @@ struct StateDiagramClusterGraph {
                                                directions: compositeDirections, clusters: &clusters, firstNode: nodes.sizes.count)
         compositeSurroundings = surroundings
         layoutTransitionIndices = edges.transitionIndices
-        graph = LayeredClusterGraph(nodeSizes: nodes.sizes + surroundings.nodeSizes, nodeClusters: nodes.clusters + surroundings.nodeClusters,
+        let nodeSideSpans = Self.sideSpans(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, directions: compositeDirections,
+                                           nodeCount: nodes.sizes.count + surroundings.nodeSizes.count)
+        graph = LayeredClusterGraph(nodeSizes: nodes.sizes + surroundings.nodeSizes, nodeSideSpans: nodeSideSpans,
+                                    nodeClusters: nodes.clusters + surroundings.nodeClusters,
                                     clusters: clusters, edges: edges.layout + surroundings.edges,
                                     direction: diagram.direction.layeredDirection)
+    }
+
+    /// Each composite's name, measured, or nil for an empty one.
+    private static func titles<Measurer: DiagramTextMeasuring>(of diagram: StateDiagram, titleText: Measurer) -> [DiagramTextBlock?] {
+        diagram.composites.map { composite in
+            let title = DiagramTextBlock(label: diagram.states[composite.stateIndex].name, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
+            return title.lines.isEmpty ? nil : title
+        }
+    }
+
+    /// How much of its box's sides each state shares out between its transitions, across the flow of the box it sits in;
+    /// 0 for the other nodes.
+    private static func sideSpans(of diagram: StateDiagram, measured: StateDiagramMeasurement, layoutNodeIndices: [Int?],
+                                  directions: [FlowchartDirection], nodeCount: Int) -> [CGFloat] {
+        var spans = [CGFloat](repeating: 0, count: nodeCount)
+        for (state, node) in layoutNodeIndices.enumerated() {
+            guard let node else { continue }
+            let direction = diagram.states[state].compositeIndex.map { composite in directions[composite] } ?? diagram.direction
+            spans[node] = measured.sideSpan(of: state, in: diagram, flowIsVertical: !direction.runsAcross)
+        }
+        return spans
     }
 
     /// Puts each composite with notes or loops in an unseen box of its own, which runs across while the composite keeps
@@ -137,13 +163,14 @@ struct StateDiagramClusterGraph {
         return (layoutNodeIndices, sizes, clusters, placedAnchors)
     }
 
-    /// A composite's box: a flowchart group's padding, its name's band along the top, at least as wide as its name.
+    /// A composite's box, as Pele's state diagrams have it: 16 points of room, its name's band along the top (the name
+    /// and 12 points), at least as wide as its name and the room on both sides.
     private static func compositeCluster(direction: FlowchartDirection?, title: DiagramTextBlock?) -> LayeredCluster {
-        let padding = FlowchartClusterGraph.clusterPadding
+        let padding = compositePadding
         let titleSize = title?.size ?? .zero
-        let top = title == nil ? padding : titleSize.height + 2 * FlowchartClusterGraph.titleMargin
+        let top = (title == nil ? 0 : titleSize.height + titleRoom) + padding
         return LayeredCluster(parent: nil, direction: direction?.layeredDirection, padding: LayeredClusterPadding(side: padding, top: top, bottom: padding),
-                              minimumWidth: titleSize.width + 2 * padding - FlowchartClusterGraph.titleWidthAllowance)
+                              minimumWidth: titleSize.width + 2 * padding)
     }
 
     /// The regions' boxes: for each composite whose states (composite ones included) sit in more than one region, one box per

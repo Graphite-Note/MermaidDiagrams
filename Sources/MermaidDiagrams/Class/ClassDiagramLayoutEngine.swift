@@ -5,8 +5,8 @@
  * Description: Lays a class diagram out in Pele's style, its namespaces as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,9 @@ import CoreGraphics
 /// sides they meet, with their marks, text and cardinalities; relations from a class to itself as loops beside it;
 /// and the title above.
 public enum ClassDiagramLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 56)
+    /// Pele's gaps; the class diagram sets the ends of relations on one side of a box apart itself, so two relations between
+    /// the same boxes need no bend (class/render.ts `apart`).
+    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 56, routing: LayeredRouting(keepsTwinsApart: true))
     /// Between ranks when any relation has a cardinality, which needs room at both ends.
     static let rankSeparationWithCardinalities: CGFloat = 72
     /// Around the whole diagram.
@@ -80,10 +82,8 @@ public enum ClassDiagramLayoutEngine {
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .namespacesNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = ClassDiagramPageAssembly(measured: measured, markRowHeight: measurers.markRowHeight,
                                             axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))

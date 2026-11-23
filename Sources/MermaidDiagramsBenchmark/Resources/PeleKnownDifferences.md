@@ -1,7 +1,8 @@
 # Known differences from Pele
 
 `PeleDifferentialTests` prepares every input Pele's runner drew (`pele-corpus.json`: Mermaid's documentation examples of
-every type, Pele's 239 agent flow reference inputs and the generated graphs of Pele's benchmark) with text measured in
+every type, Pele's 239 agent flow reference inputs and the generated graphs of Pele's benchmark; `pele-random-flat.json`:
+the runner's 60 random flat flowcharts, `random-flat`) with text measured in
 Arial, as Pele measures it outside a browser, and compares the scene with what Pele drew. An input differs when one side
 refuses it and the other draws it (`refused`), when its page differs in `width` or `height` by more than 2 points or 1 %
 (see `PeleComparison.isWithinTolerance`), when it holds another number of texts (`texts`: Pele's `<text>` elements and
@@ -23,36 +24,21 @@ drawings; those marked `not-traced` were not followed to their cause.
 | outlined-text | Pele draws an outlined text (a Sankey diagram's `labelStyle: outlined`, a flowchart group's title over an edge) as two `<text>` elements, the halo and the text; the scene draws one text with its outline (`DiagramSceneText.outline`). Nothing visible differs. |
 | journey-parts | A user journey's dashed stems and score line are painted in the scene's `edge` part (`UserJourneyScene`); Pele classes them `pele-stems` and draws one `pele-edge` path. Nothing visible differs. |
 | beyond-ascii | Text outside ASCII (emoji, accented letters, ❤) is measured by Pele's table as 580 thousandths of the size (1,000 for wide scripts, text/measurer.ts `metricsMeasurer`) and by the package with Core Text and its fallback fonts. |
-| layered-layout | The layered layout places nodes differently: the package's ranking, ordering and positioning (`LayeredRanking`, `LayeredOrdering`, `LayeredPositioning`, `LayeredClusterLayout`) follow Pele's method but are not step-for-step ports of layout/layered.ts and layout/compound.ts (which, for example, balance ranks in eight passes, order with its own sweeps and straighten long edges past labels), so an edge of several ranks, a crossing or a group can end up elsewhere: in `flowchart-docs#92` the target of `---->` sits one rank lower than Pele puts it, in `requirement-docs#4` the two requirements under `test_req` are swapped and the relations cross. |
-| self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
+| bold-text | Text a class sets bold (`classDef … font-weight:bold`) is measured by Pele with its table's bold advances (text/measurer.ts); the package measures a state's or a requirement's text a class sets bold in the regular face, so the box is narrower (requirement-docs#8, 27 points), or its name does not wrap at 200 points where Pele's does (state-docs#21: two lines, 18 points taller). |
 | not-traced | Not followed to its cause in this pass. |
 
 ## Inputs
 
 | Input | Differs in | Reason | Package minus Pele (width, height) |
 |---|---|---|---|
-| agentflow-reference#57 | width | layered-layout | +3 +0 |
 | agentflow-reference#131 | refused | nothing-to-draw |  |
-| agentflow-reference#134 | width, height | self-loop | -18 +4 |
-| agentflow-reference#135 | width | self-loop | -18 +2 |
-| agentflow-reference#230 | width, height | self-loop | -18 +4 |
 | block-docs#25 | texts | blank-text | +0 +0 |
 | block-docs#26 | texts | blank-text | +0 +0 |
-| class-docs#0 | width | layered-layout | +24 +0 |
-| class-docs#21 | height | layered-layout | +0 -5 |
 | er-docs#4 | width | beyond-ascii | +5 +0 |
-| er-docs#18 | width | layered-layout | -9 -4 |
 | eventmodeling-docs#3 | texts | text-per-line | +2 +0 |
 | eventmodeling-docs#4 | texts | text-per-line | +2 +0 |
 | flowchart-docs#2 | width | beyond-ascii | +5 +0 |
-| flowchart-docs#6 | height | layered-layout | +0 -5 |
-| flowchart-docs#7 | height | layered-layout | +0 -5 |
-| flowchart-docs#92 | width, height | layered-layout | -29 +25 |
-| flowchart-docs#93 | width, height | layered-layout | -29 +25 |
-| flowchart-docs#96 | width | layered-layout | +6 +0 |
-| flowchart-docs#97 | width | layered-layout | -12 +0 |
-| flowchart-docs#98 | width, texts | layered-layout, outlined-text | -20 +0 |
-| flowchart-docs#100 | width, height | layered-layout | -126 +84 |
+| flowchart-docs#98 | texts | outlined-text | +0 +0 |
 | flowchart-docs#111 | texts | blank-text | +0 +0 |
 | gantt-docs#6 | refused | nothing-to-draw |  |
 | git-docs#12 | width, height | not-traced | +56 -12 |
@@ -62,29 +48,14 @@ drawings; those marked `not-traced` were not followed to their cause.
 | journey-docs#0 | edges | journey-parts | +0 +0 |
 | railroad-docs#2 | width | not-traced | +4 +0 |
 | railroad-docs#12 | texts | not-traced | +0 +0 |
-| requirement-docs#4 | width | layered-layout | +270 +0 |
-| requirement-docs#8 | width | layered-layout | -27 +0 |
+| requirement-docs#8 | width | bold-text | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
 | sequence-docs#29 | width | not-traced | -5 +0 |
 | sequence-docs#30 | width | not-traced | -5 +0 |
-| state-docs#0 | width | layered-layout | -3 +0 |
-| state-docs#2 | width, height | layered-layout | -12 -8 |
-| state-docs#3 | width, height | layered-layout | -12 -8 |
-| state-docs#10 | width, height | layered-layout | +16 -8 |
-| state-docs#11 | width, height | layered-layout | +24 -24 |
-| state-docs#12 | width, height | layered-layout | +16 -16 |
-| state-docs#16 | width, height | layered-layout | +20 -4 |
-| state-docs#17 | width | layered-layout | +8 +0 |
-| state-docs#21 | height | layered-layout | -2 -18 |
+| state-docs#21 | height | bold-text | -2 -18 |
 | treeview-docs#11 | width | beyond-ascii | +5 +0 |
-| usecase-docs#1 | height | layered-layout | +0 +4 |
-| usecase-docs#2 | height | layered-layout | +0 +4 |
-| usecase-docs#11 | height | layered-layout | +0 -8 |
-| usecase-docs#22 | height | layered-layout | -1 +18 |
-| bench-generated#0 | width | layered-layout | -368 +0 |
-| bench-generated#1 | width, height | layered-layout | -754 -115 |
 | bench-generated#2 | refused | drawing-limit |  |
-| bench-generated#3 | width, height | layered-layout | -18156 -2556 |
+| bench-generated#3 | refused | drawing-limit |  |
 
 ## Mermaid's flowchart specs
 

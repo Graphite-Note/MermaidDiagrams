@@ -1,3 +1,15 @@
+/**
+ * File: StateDiagramEdgePortsTests.swift
+ * --------------------------------------
+ * Layer: Tests
+ * Description: Where transitions meet their states: the layout's spread and settled ends on a box's side, a bar's
+ *              ends facing their lines, a start's and a choice's middle.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -23,8 +35,9 @@ final class StateDiagramEdgePortsTests: XCTestCase {
         let laidOut = try layout("stateDiagram-v2\nLongStateName --> B\nLongStateName --> C\nLongStateName --> D")
         let source = laidOut.states[0].frame
         let starts = laidOut.transitions.map(\.path.start.x).sorted()
-        XCTAssertEqual(starts[1] - starts[0], 20, accuracy: 0.01)
-        XCTAssertEqual(starts[2] - starts[1], 20, accuracy: 0.01)
+        // Where Pele's layout spreads them (layout/layered.ts `spread`, PORT_PITCH), as Pele's state diagram keeps them.
+        XCTAssertEqual(starts[1] - starts[0], LayeredFlatConstants.portPitch, accuracy: 0.01)
+        XCTAssertEqual(starts[2] - starts[1], LayeredFlatConstants.portPitch, accuracy: 0.01)
         XCTAssertEqual(starts[1], source.midX, accuracy: 0.01)
     }
 

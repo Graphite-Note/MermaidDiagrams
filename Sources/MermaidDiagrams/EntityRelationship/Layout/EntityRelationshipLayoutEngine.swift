@@ -5,8 +5,8 @@
  * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,8 @@ import CoreGraphics
 /// and meet the boxes straight and curve between, spread along the sides they meet, with a label wrapped at 200
 /// points on its own rank; relationships of an entity with itself as loops beside it; and the title above.
 public enum EntityRelationshipLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 48, edgeSeparation: 20, rankSeparation: 64)
+    /// Pele's gaps; a border point of a group's box is 24 points from the rank next to it (er/render.ts `portSep`).
+    static let spacing = LayeredSpacing(nodeSeparation: 48, edgeSeparation: 20, rankSeparation: 64, borderSeparation: 24)
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The room a label takes beyond its lines, for the patch drawn behind it.
@@ -64,7 +65,7 @@ public enum EntityRelationshipLayoutEngine {
     }
 
     /// A diagram with groups: each a box laid out on its own and placed in the box around it, as Pele's renderer does
-    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`). Groups inside each other fail with `subgraphsNotLaidOut`.
+    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer,
                                                                       font: DiagramFont,
                                                                       limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
@@ -76,16 +77,12 @@ public enum EntityRelationshipLayoutEngine {
         let labelSizes = measured.labels.map { label in
             label.map { label in CGSize(width: label.size.width + labelRoom.width, height: label.size.height + labelRoom.height) }
         }
-        var clusterSpacing = spacing
-        clusterSpacing.borderSeparation = EntityRelationshipClusterGraph.padding
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: clusterSpacing,
+            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: spacing,
                                                        maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .subgraphsNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = EntityRelationshipPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
         page.placeBoxes(clustered: clustered, placement: placement)

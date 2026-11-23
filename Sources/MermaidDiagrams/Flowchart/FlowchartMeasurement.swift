@@ -58,6 +58,12 @@ struct FlowchartMeasurement {
         self.selfLoopEdgeIndices = selfLoopEdgeIndices
     }
 
+    /// How much of the side of `node` facing `side` its edges share out between them (Pele's `shapeSpan`), or 0 where
+    /// they all meet its middle.
+    func sideSpan(of node: Int, shape: FlowchartNodeShape, side: DiagramSide) -> CGFloat {
+        spreadsEdgeEnds && !assetNodes.contains(node) ? FlowchartShapeGeometry.span(of: shape, size: shapeSizes[node], side: side) : 0
+    }
+
     /// Each node's shape as the layout meets it: its own, or a rectangle for a node drawn as an icon or a picture.
     func layoutShapes(of diagram: FlowchartDiagram) -> [FlowchartNodeShape] {
         diagram.nodes.indices.map { node in assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape }

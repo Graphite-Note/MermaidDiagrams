@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramDrawingParts.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: A laid-out state diagram's geometry grouped by how it is painted, back to front as Pele draws it.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out state diagram's geometry grouped by how it is painted, so that drawing it in any colors is a handful of
@@ -8,6 +19,9 @@ import CoreGraphics
 public struct StateDiagramDrawingParts {
     /// The composite states' boxes, painted as a flowchart's groups are (`FlowchartClusterDrawingParts`).
     public let composites: FlowchartClusterDrawingParts
+    /// The line under each named composite's title band, across its box, stroked one point wide in the border color
+    /// (Pele's state/render.ts draws it with the box, before the name).
+    public let compositeTitleRules: CGPath
     /// The lines between concurrent regions, stroked one point wide in the border color in dashes of 3 and gaps of 4.
     public let regionDividers: CGPath
     /// The transitions' lines, stroked one point wide with round caps in the line color.
@@ -49,6 +63,14 @@ public struct StateDiagramDrawingParts {
 
     public init(layout: StateDiagramLayout) {
         composites = FlowchartClusterDrawingParts(clusters: layout.composites)
+        let rules = CGMutablePath()
+        for composite in layout.composites {
+            guard let title = composite.title else { continue }
+            let band = composite.frame.minY + title.size.height + StateDiagramClusterGraph.titleRoom
+            rules.move(to: CGPoint(x: composite.frame.minX, y: band))
+            rules.addLine(to: CGPoint(x: composite.frame.maxX, y: band))
+        }
+        compositeTitleRules = rules
         let dividers = CGMutablePath()
         for divider in layout.regionDividers { dividers.addPath(DiagramEdgeDrawing.path(divider)) }
         regionDividers = dividers

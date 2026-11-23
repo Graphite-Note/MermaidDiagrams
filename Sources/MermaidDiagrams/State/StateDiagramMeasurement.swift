@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramMeasurement.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: A state diagram's text measured and its shapes sized, Pele's, with the spans its transitions spread along.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A state diagram's text measured and its shapes sized, Pele's: what the layout needs before it places anything.
@@ -32,6 +43,16 @@ struct StateDiagramMeasurement {
     let noteSizes: [CGSize]
     /// For each state, the indexes of its transitions to itself, in their written order.
     let selfLoopTransitionIndices: [[Int]]
+
+    /// How much of each side of a state's box its transitions share out, clear of its corners (Pele's `span`: the box's
+    /// side across the flow less 24); 0 for the marks, which keep their transitions at the middle.
+    func sideSpan(of state: Int, in diagram: StateDiagram, flowIsVertical: Bool) -> CGFloat {
+        guard diagram.states[state].kind == .state else { return 0 }
+        return max(0, (flowIsVertical ? stateSizes[state].width : stateSizes[state].height) - Self.spanCornerClearance)
+    }
+
+    /// What `sideSpan` keeps clear of a box's corners, on both sides together.
+    static let spanCornerClearance: CGFloat = 24
 
     init<Measurer: DiagramTextMeasuring>(diagram: StateDiagram, nameText: Measurer, smallText: Measurer, flowIsVertical: Bool,
                                          wrappingWidth: CGFloat, noteWrappingWidth: CGFloat) {

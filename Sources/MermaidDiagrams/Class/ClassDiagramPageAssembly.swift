@@ -5,8 +5,8 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -181,8 +181,9 @@ struct ClassDiagramPageAssembly {
 
     /// The namespaces' boxes, each title along its box's top, clear of the relations where it can be.
     mutating func placeNamespaces(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
+        let crossings = FlowchartRoutePointIndex(edgePoints)
         namespaces = placement.clusterFrames.enumerated().map { index, frame in
-            let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, edgePoints: edgePoints) }
+            let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
             return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[index], isTitleCrossed: title?.isCrossed ?? false)
         }
     }

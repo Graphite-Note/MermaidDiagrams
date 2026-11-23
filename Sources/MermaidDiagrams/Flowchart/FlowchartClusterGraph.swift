@@ -5,8 +5,8 @@
  * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -54,6 +54,7 @@ struct FlowchartClusterGraph {
         var layoutNodeIndices: [Int?] = []
         var nodeSizes: [CGSize] = []
         var nodeClusters: [Int?] = []
+        var nodeSideSpans: [CGFloat] = []
         for node in diagram.nodes.indices {
             guard nesting.representedSubgraphs[node] == nil else {
                 layoutNodeIndices.append(nil)
@@ -62,25 +63,34 @@ struct FlowchartClusterGraph {
             layoutNodeIndices.append(nodeSizes.count)
             nodeSizes.append(measured.layoutSize(of: node, loopSide: nodeLoopSides[node]))
             nodeClusters.append(nesting.nodeSubgraphs[node])
+            // A node whose loops go out below runs across, and spreads its edges along its height.
+            nodeSideSpans.append(measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: nodeLoopSides[node] == .bottom ? .left : .top))
         }
         self.layoutNodeIndices = layoutNodeIndices
+        // Pele lists the groups before the nodes, an outer group before those inside it (flowchart/graph.ts), so an
+        // empty group comes before the nodes of its box; a group an edge crosses runs as the box around it.
         let clusters = diagram.subgraphs.indices.map { subgraph in
-            Self.cluster(parent: nesting.subgraphParents[subgraph], direction: diagram.subgraphs[subgraph].direction, title: measuredTitles[subgraph])
+            var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: nesting.subgraphDirections[subgraph],
+                                       title: measuredTitles[subgraph], spreadsEdgeEnds: measured.spreadsEdgeEnds)
+            cluster.sequence = CGFloat(nesting.subgraphOrder[subgraph] - diagram.subgraphs.count)
+            return cluster
         }
         let edges = Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,
                                    representedSubgraphs: nesting.representedSubgraphs)
         layoutEdgeIndices = edges.diagramIndices
-        graph = LayeredClusterGraph(nodeSizes: nodeSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges.layout,
-                                    direction: diagram.direction.layeredDirection)
+        graph = LayeredClusterGraph(nodeSizes: nodeSizes, nodeSideSpans: nodeSideSpans, nodeClusters: nodeClusters, clusters: clusters,
+                                    edges: edges.layout, direction: diagram.direction.layeredDirection)
     }
 
-    /// A group's box: Pele's padding, the title's band along the top, at least as wide as the title.
-    private static func cluster(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?) -> LayeredCluster {
+    /// A group's box: Pele's padding, the title's band along the top, at least as wide as the title. A flowchart's group
+    /// spreads the edges meeting it along its whole side (flowchart/render.ts gives it an infinite span); an agent flow's
+    /// keeps them at its middle, as agentflow/render.ts gives its groups, like its nodes, no span.
+    private static func cluster(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?, spreadsEdgeEnds: Bool) -> LayeredCluster {
         let titleSize = title?.size ?? .zero
         let top = title == nil ? clusterPadding : titleSize.height + 2 * titleMargin
         return LayeredCluster(parent: parent, direction: direction?.layeredDirection,
                               padding: LayeredClusterPadding(side: clusterPadding, top: top, bottom: clusterPadding),
-                              minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance)
+                              minimumWidth: titleSize.width + 2 * clusterPadding - titleWidthAllowance, sideSpan: spreadsEdgeEnds ? .infinity : 0)
     }
 
     /// The edges between two different ends, with their texts' room; an edge from a node or a group to itself loops

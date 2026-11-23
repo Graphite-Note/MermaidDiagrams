@@ -5,8 +5,8 @@
  * Description: Lays a state diagram out in Pele's style, its composite states as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,10 +17,11 @@ import CoreGraphics
 /// transitions as S curves that spread along the sides of boxes; transitions to a state itself as loops beside it;
 /// notes beside their states across the flow; and the title above.
 public enum StateDiagramLayoutEngine {
-    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44)
+    static let spacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44, borderSeparation: 20,
+                                        routing: LayeredRouting(headRoom: DiagramEdgeMark.arrowLength - 1))
     /// The gaps of a diagram with composite states: a border point of a box is 20 points from the rank next to it, as in
     /// a flowchart's boxes.
-    static let clusterSpacing = LayeredSpacing(nodeSeparation: 40, edgeSeparation: 16, rankSeparation: 44, borderSeparation: 20)
+    static let clusterSpacing = spacing
     /// Around the whole diagram.
     static let padding: CGFloat = 8
     /// The widest a line of a state's or a transition's text is before it wraps.
@@ -61,7 +62,8 @@ public enum StateDiagramLayoutEngine {
                                      }
                                      return LayeredEdge(source: positionOfState[transition.sourceIndex], target: positionOfState[transition.targetIndex],
                                                         minimumRankSpan: 1, labelSize: labelSize)
-                                 })
+                                 },
+                                 nodeSideSpans: order.map { state in measured.sideSpan(of: state, in: diagram, flowIsVertical: flowAxes.flowIsVertical) })
         guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
@@ -86,10 +88,8 @@ public enum StateDiagramLayoutEngine {
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch .tooManyPoints {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         } catch {
-            throw .compositeStatesNotLaidOut
+            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = StateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings, axes: axes)
         page.placeStates(clustered: clustered, placement: placement)
