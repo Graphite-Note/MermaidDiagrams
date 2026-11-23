@@ -6,14 +6,14 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
 
 extension DiagramScene {
-    /// The state diagram's painting: the composite states' boxes and the dashed lines between their regions, the
+    /// The state diagram's painting: the composite states' boxes with the lines under their names and the dashed lines between their regions, the
     /// transitions, the dashed lines to the notes and the arrows, the names of boxes transitions cross, the patches behind
     /// transition text and that text, the states and their text, the notes and their text, the title.
     public init(layout: StateDiagramLayout) {
@@ -32,6 +32,7 @@ extension StateDiagramDrawingParts {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         let dashed = DiagramStroke.rounded(lineWidth: Self.lineWidth, dashLengths: Self.noteConnectorDashLengths)
         composites.addBoxes(to: &builder)
+        builder.stroke(compositeTitleRules, .border, line, part: .cluster)
         builder.stroke(regionDividers, .border, dashed, part: .cluster)
         builder.stroke(transitionLines, .line, line, part: .edge)
         builder.stroke(noteConnectors, .border, dashed, part: .edge)

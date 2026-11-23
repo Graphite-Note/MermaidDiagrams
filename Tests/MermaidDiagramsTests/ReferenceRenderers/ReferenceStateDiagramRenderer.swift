@@ -6,8 +6,8 @@
  *              DiagramSceneParityTests compares the scene's pixels with.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -24,6 +24,7 @@ enum ReferenceStateDiagramRenderer {
         context.setLineCap(.round)
         context.setLineJoin(.round)
         ReferenceFlowchartRenderer.drawClusters(parts.composites, text: &text, in: context, palette: palette)
+        stroke(parts.compositeTitleRules, width: lineWidth, color: palette.border, in: context)
         context.setLineDash(phase: 0, lengths: StateDiagramDrawingParts.noteConnectorDashLengths)
         stroke(parts.regionDividers, width: lineWidth, color: palette.border, in: context)
         context.setLineDash(phase: 0, lengths: [])

@@ -5,7 +5,7 @@
  * Description: Puts a placed state diagram on the page: states, transitions, loops, notes and composite boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -26,8 +26,6 @@ struct StateDiagramPageAssembly {
     private var clustered: StateDiagramClusterGraph?
     private var composites: [FlowchartLayoutCluster] = []
     private var regionDividers: [DiagramPath] = []
-    /// For each transition placed through boxes, the points it passes, its ends included: where it crosses a box's top.
-    private var transitionPoints: [[CGPoint]] = []
     /// The composites' boxes, by composite index, for a diagram laid out in boxes.
     private var compositeFrames: [CGRect] = []
     /// The centers of the notes beside composites, by note index.
@@ -46,25 +44,16 @@ struct StateDiagramPageAssembly {
     }
 
     /// The transitions between two different states, along their routes. `layeredTransitionIndices[i]` is the
-    /// transition of the placement's `i`-th route.
+    /// transition of the placement's `i`-th route. Each end is where Pele's layout spread and settled it on its state's
+    /// place, moved onto the state's own box (`StateDiagramRouteEnds`), as Pele's state diagram draws it.
     mutating func placeTransitions(layeredTransitionIndices: [Int], placement: LayeredPlacement) {
-        var ends: [StateDiagramEdgePorts.End] = []
         for (layeredIndex, transitionIndex) in layeredTransitionIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
+            let path = placement.edgePaths[layeredIndex].map(axes.pagePoint)
             let transition = diagram.transitions[transitionIndex]
-            let leavesDownstream = route[1].y > route[0].y
-            let arrivesFromUpstream = route[route.count - 2].y < route[route.count - 1].y
-            ends.append(StateDiagramEdgePorts.End(transitionIndex: transitionIndex, isSourceEnd: true, state: transition.sourceIndex,
-                                                  side: leavesDownstream ? axes.downstreamSide : axes.upstreamSide, neighbor: axes.pagePoint(route[1])))
-            ends.append(StateDiagramEdgePorts.End(transitionIndex: transitionIndex, isSourceEnd: false, state: transition.targetIndex,
-                                                  side: arrivesFromUpstream ? axes.upstreamSide : axes.downstreamSide,
-                                                  neighbor: axes.pagePoint(route[route.count - 2])))
-        }
-        let ports = StateDiagramEdgePorts(ends: ends, transitionCount: diagram.transitions.count, stateCenters: stateCenters,
-                                          kinds: diagram.states.map(\.kind), stateSizes: measured.stateSizes)
-        for (layeredIndex, transitionIndex) in layeredTransitionIndices.enumerated() {
-            let route = placement.edgeRoutes[layeredIndex]
-            guard let sourcePoint = ports.sourcePoints[transitionIndex], let targetPoint = ports.targetPoints[transitionIndex] else { continue }
+            guard path.count >= 2, route.count >= 2 else { continue }
+            let sourcePoint = attachedEnd(path[0], next: path[1], state: transition.sourceIndex)
+            let targetPoint = attachedEnd(path[path.count - 1], next: path[path.count - 2], state: transition.targetIndex)
             let points = [sourcePoint] + route.dropFirst().dropLast().map(axes.pagePoint) + [targetPoint]
             let drawn = DiagramRouteDrawing.path(through: points, flowIsVertical: axes.flowIsVertical, startTrim: 0,
                                                  endTrim: DiagramEdgeMark.lineTrim(for: .arrow))
@@ -74,6 +63,15 @@ struct StateDiagramPageAssembly {
                 path: drawn.path, arrow: DiagramEdgeMark(arrowhead: .arrow, tip: targetPoint, direction: drawn.endDirection),
                 text: centered(measured.transitionTexts[transitionIndex], at: textCenter))
         }
+    }
+
+    /// An end of a transition of a diagram laid out without boxes, from its state's place onto its state.
+    private func attachedEnd(_ end: CGPoint, next: CGPoint, state: Int) -> CGPoint {
+        let place = surroundings.placeSizes[state]
+        let layoutSize = axes.flowIsVertical ? CGSize(width: place.across, height: place.along) : CGSize(width: place.along, height: place.across)
+        let kind = diagram.states[state].kind
+        return StateDiagramRouteEnds.attached(end, next: next, center: stateCenters[state], layoutSize: layoutSize, drawnSize: measured.stateSizes[state],
+                                              isBar: kind == .fork || kind == .join)
     }
 
     /// The states of a diagram laid out in boxes at their centers on the page; a composite state at the center of its box.
@@ -90,40 +88,33 @@ struct StateDiagramPageAssembly {
         }
     }
 
-    /// The transitions of a diagram laid out in boxes, along their routes: each end on the side of its state or box that
-    /// its route leaves or arrives by, spread along it with the other ends there; each segment an S along its own flow.
+    /// The transitions of a diagram laid out in boxes, along their routes: each end where Pele's layout spread and
+    /// settled it on its state's place, moved onto the state's own box (`StateDiagramRouteEnds`); an end at a composite
+    /// stays on the composite's box where the layout left it, as Pele's `attach` leaves a group's; each segment an S
+    /// along its own flow.
     mutating func placeTransitions(clustered: StateDiagramClusterGraph, placement: LayeredClusterPlacement) {
-        var ends: [StateDiagramEdgePorts.End] = []
-        for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
-            let route = placement.edgeRoutes[layoutIndex]
-            let transition = diagram.transitions[transitionIndex]
-            // A transition between a composite and a state inside it has a point inside the composite for its composite end.
-            let anchor = clustered.anchors[transitionIndex]?.anchor
-            if anchor?.isInward != true {
-                ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: true, state: transition.sourceIndex))
-            }
-            if anchor.map({ anchor in !anchor.isInward }) != true {
-                ends.append(Self.routeEnd(of: route, transitionIndex: transitionIndex, isSourceEnd: false, state: transition.targetIndex))
-            }
+        func attached(_ end: CGPoint, next: CGPoint, state: Int) -> CGPoint {
+            guard clustered.compositeOfState[state] == nil, let node = clustered.layoutNodeIndices[state] else { return end }
+            let kind = diagram.states[state].kind
+            return StateDiagramRouteEnds.attached(end, next: next, center: placement.nodeCenters[node], layoutSize: clustered.graph.nodeSizes[node],
+                                                  drawnSize: measured.stateSizes[state], isBar: kind == .fork || kind == .join)
         }
-        var sizes = measured.stateSizes
-        for (state, compositeIndex) in clustered.compositeOfState.enumerated() {
-            if let compositeIndex { sizes[state] = placement.clusterFrames[compositeIndex].size }
-        }
-        let ports = StateDiagramEdgePorts(ends: ends, transitionCount: diagram.transitions.count, stateCenters: stateCenters,
-                                          kinds: diagram.states.map(\.kind), stateSizes: sizes)
         for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
-            var route = placement.edgeRoutes[layoutIndex]
+            let laidOut = placement.edgeRoutes[layoutIndex]
+            var route = laidOut
             if let anchored = clustered.anchors[transitionIndex]?.anchor {
                 route = Self.anchoredRoute(route, anchor: anchored, frame: placement.clusterFrames[anchored.compositeIndex],
                                            direction: clustered.compositeDirections[anchored.compositeIndex], title: clustered.titles[anchored.compositeIndex])
             }
             let isInward = clustered.anchors[transitionIndex]?.anchor.isInward
-            guard let sourcePoint = isInward == true ? route.points.first : ports.sourcePoints[transitionIndex],
-                  let targetPoint = isInward == false ? route.points.last : ports.targetPoints[transitionIndex] else { continue }
+            let transition = diagram.transitions[transitionIndex]
+            let laidOutPoints = laidOut.points
+            guard laidOutPoints.count >= 2, let firstPoint = route.points.first, let lastPoint = route.points.last else { continue }
+            let sourcePoint = isInward == true ? firstPoint : attached(laidOutPoints[0], next: laidOutPoints[1], state: transition.sourceIndex)
+            let targetPoint = isInward == false ? lastPoint
+                : attached(laidOutPoints[laidOutPoints.count - 1], next: laidOutPoints[laidOutPoints.count - 2], state: transition.targetIndex)
             let (points, segmentAxes) = Self.withoutPointsOnTheEnds([sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint],
                                                                     segmentsRunVertically: route.segmentsRunVertically)
-            transitionPoints.append(points)
             let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: 0,
                                                  endTrim: DiagramEdgeMark.lineTrim(for: .arrow))
             let textCenter = placement.edgeLabelCenters[layoutIndex]
@@ -171,25 +162,15 @@ struct StateDiagramPageAssembly {
         return (points, axes)
     }
 
-    /// An end of a route through boxes: the side of its state or box that its first or last segment leaves or arrives
-    /// by, along that segment's flow, and the route's next point, which orders the ends along the side.
-    private static func routeEnd(of route: LayeredClusterRoute, transitionIndex: Int, isSourceEnd: Bool, state: Int) -> StateDiagramEdgePorts.End {
-        let points = route.points
-        let end = isSourceEnd ? points[0] : points[points.count - 1]
-        let next = isSourceEnd ? points[1] : points[points.count - 2]
-        let runsVertically = isSourceEnd ? route.segmentsRunVertically[0] : route.segmentsRunVertically[route.segmentsRunVertically.count - 1]
-        let side: DiagramSide = runsVertically ? (next.y > end.y ? .bottom : .top) : (next.x > end.x ? .right : .left)
-        return StateDiagramEdgePorts.End(transitionIndex: transitionIndex, isSourceEnd: isSourceEnd, state: state, side: side, neighbor: next)
-    }
-
-    /// The composite states' boxes, each name along its box's top clear of the transitions where it can be, and a dashed
-    /// line between each two concurrent regions of a body.
+    /// The composite states' boxes, each name in the band along its box's top, clear of the transitions' bends where it
+    /// can be (`StateDiagramCompositeTitles`, from the layout's routes as Pele reads them), and a dashed line between
+    /// each two concurrent regions of a body.
     mutating func placeComposites(clustered: StateDiagramClusterGraph, placement: LayeredClusterPlacement) {
-        let crossings = FlowchartRoutePointIndex(transitionPoints)
+        let titles = StateDiagramCompositeTitles(routes: placement.edgeRoutes.map(\.points))
         composites = diagram.composites.indices.map { compositeIndex in
             let frame = placement.clusterFrames[compositeIndex]
-            let title = clustered.titles[compositeIndex].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
-            return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[compositeIndex], isTitleCrossed: title?.isCrossed ?? false)
+            let title = clustered.titles[compositeIndex].map { title in titles.placed(title, in: frame) }
+            return FlowchartLayoutCluster(frame: frame, title: title, depth: clustered.depths[compositeIndex], isTitleCrossed: false)
         }
         regionDividers = clustered.regionClusterIndices.flatMap { regionIndices in
             StateDiagramRegionDividers.dividers(between: regionIndices.map { region in placement.clusterFrames[region] })
