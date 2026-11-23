@@ -7,8 +7,8 @@
  *              typed error within seconds, and every number on their page finite.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -30,6 +30,8 @@ final class GridDiagramSafetyTests: XCTestCase {
             for case .text(let text) in prepared.scene.items {
                 XCTAssertTrue(text.block.center.x.isFinite && text.block.center.y.isFinite, name, file: file, line: line)
             }
+            // The narrow scene is laid out when it is read: read it, so that its layout is bounded in time too.
+            if let narrow = prepared.narrowScene { XCTAssertTrue(narrow.size.width.isFinite && narrow.size.height.isFinite, name, file: file, line: line) }
         } catch {
             _ = error.category
         }
