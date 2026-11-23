@@ -6,8 +6,8 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A line of a tree view's text after its keyword, as its grammar reads it, with the line it was written on.
@@ -101,11 +101,14 @@ enum TreeViewBoxDrawingReader {
     }
 
     private static func withoutTrailingWhitespace(_ text: String) -> String {
-        String(text.reversed().drop { character in character.isWhitespace }.reversed())
+        var end = text.endIndex
+        while end > text.startIndex, case let before = text.index(before: end), text[before].isWhitespace { end = before }
+        return String(text[..<end])
     }
 
     private static func expandingTabs(_ line: String) -> String {
-        line.replacing("\t", with: "    ")
+        guard line.utf8.contains(0x09) else { return line }
+        return line.replacing("\t", with: "    ")
     }
 
     private static func isWhitespace(_ unit: UInt16) -> Bool {

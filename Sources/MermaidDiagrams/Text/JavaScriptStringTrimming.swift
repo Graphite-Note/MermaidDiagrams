@@ -6,7 +6,7 @@
  *              trimStart and trimEnd leave it, as Pele trims a label's lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -41,15 +41,18 @@ enum JavaScriptStringTrimming {
     }
 
     static func trimmedStart(_ text: String) -> String {
-        guard let first = text.unicodeScalars.first, isWhitespace(first) else { return text }
-        return String(String.UnicodeScalarView(text.unicodeScalars.drop(while: isWhitespace)))
+        let scalars = text.unicodeScalars
+        guard let first = scalars.first, isWhitespace(first) else { return text }
+        let start = scalars.firstIndex { scalar in !isWhitespace(scalar) } ?? scalars.endIndex
+        return String(Substring(scalars[start...]))
     }
 
     static func trimmedEnd(_ text: String) -> String {
-        guard let last = text.unicodeScalars.last, isWhitespace(last) else { return text }
-        var scalars = text.unicodeScalars
-        while let last = scalars.last, isWhitespace(last) { scalars.removeLast() }
-        return String(scalars)
+        let scalars = text.unicodeScalars
+        guard let last = scalars.last, isWhitespace(last) else { return text }
+        var end = scalars.endIndex
+        while end > scalars.startIndex, case let before = scalars.index(before: end), isWhitespace(scalars[before]) { end = before }
+        return String(Substring(scalars[..<end]))
     }
 
     static func endsWithWhitespace(_ text: String) -> Bool {

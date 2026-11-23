@@ -6,8 +6,8 @@
  *              splits them between a shape and its text, and the text color Pele's ink picks over a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -104,7 +104,11 @@ public struct VennAppearance: Equatable, Sendable {
     /// `url(`, `expression(`, `javascript:`, `@import` or `image-set`, a comment, one of `<>{};\`, or a control character
     /// that XML does not allow.
     static func isUnsafe(_ value: String) -> Bool {
-        if value.range(of: unsafePattern, options: [.regularExpression, .caseInsensitive]) != nil { return true }
+        if let asciiMatch = VennUnsafeValueScan.matchesUnsafePattern(value) {
+            if asciiMatch { return true }
+        } else if value.range(of: unsafePattern, options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
         return value.unicodeScalars.contains { scalar in
             let code = scalar.value
             return code <= 0x08 || code == 0x0B || code == 0x0C || (0x0E...0x1F).contains(code) || code == 0x7F || code == 0xFFFE || code == 0xFFFF

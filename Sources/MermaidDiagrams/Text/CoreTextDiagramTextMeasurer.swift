@@ -6,7 +6,7 @@
  *              drawn, printable ASCII from a table of the font's advances.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -21,6 +21,8 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     private let font: CTFont
+    /// The face's key, under which the widths of lines beyond printable ASCII are kept (`CoreTextFontFaces`).
+    private let faceKey: CoreTextFontFaceKey
     /// The font it was made from, and whether it measures its bold, its italic or the system's monospaced font, so that it
     /// can be made again at another size.
     let diagramFont: DiagramFont
@@ -42,8 +44,9 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     /// Measures in the bold of `diagramFont` when `isBold`, as a class's name is drawn, in its italic when `isItalic`,
     /// and in the system's monospaced font at its size when `isMonospaced` (a railroad diagram's terminals).
     init(font diagramFont: DiagramFont, isBold: Bool, isItalic: Bool = false, isMonospaced: Bool = false) {
-        let face = CoreTextFontFaces.shared.face(CoreTextFontFaceKey(postScriptName: diagramFont.postScriptName, size: diagramFont.size, isBold: isBold,
-                                                                     isItalic: isItalic, isMonospaced: isMonospaced))
+        faceKey = CoreTextFontFaceKey(postScriptName: diagramFont.postScriptName, size: diagramFont.size, isBold: isBold, isItalic: isItalic,
+                                      isMonospaced: isMonospaced)
+        let face = CoreTextFontFaces.shared.face(faceKey)
         font = face.font
         self.diagramFont = diagramFont
         self.isBold = isBold
@@ -64,8 +67,6 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
     }
 
     private func lineWidth(of text: String) -> CGFloat {
-        let attributes = [kCTFontAttributeName as NSAttributedString.Key: font]
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
-        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        CoreTextFontFaces.shared.lineWidth(of: text, in: faceKey, font: font)
     }
 }

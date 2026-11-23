@@ -193,18 +193,7 @@ enum SequenceAttributesFlowSyntax {
         scalar.value < 0x80 ? scalar.value == 0x20 || (0x09...0x0D).contains(scalar.value) : scalar.properties.isWhitespace
     }
 
-    /// The scalars as a string, encoded to UTF-8 at once (appending scalars to a string one by one goes through the
-    /// standard library's generic path, slower than reading the YAML).
     static func string<Scalars: Sequence>(_ text: Scalars) -> String where Scalars.Element == Unicode.Scalar {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(text.underestimatedCount)
-        for scalar in text {
-            if scalar.value < 0x80 {
-                bytes.append(UInt8(truncatingIfNeeded: scalar.value))
-            } else if let encoded = UTF8.encode(scalar) {
-                bytes.append(contentsOf: encoded)
-            }
-        }
-        return String(decoding: bytes, as: UTF8.self)
+        UnicodeScalarText.string(text)
     }
 }

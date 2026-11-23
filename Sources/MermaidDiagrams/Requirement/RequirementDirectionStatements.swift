@@ -6,8 +6,8 @@
  *              token a line starts, as Mermaid's lexer rules `.*direction\s+TB[^\n]*` and the others decide it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The direction statements of a requirement diagram's text, as Pele's lexer finds them: every match of
@@ -27,8 +27,9 @@ struct RequirementDirectionStatements {
     private var lineEnd = -1
     private let bytes: [UInt8]
 
-    /// Whether the text holds any direction statement: when it holds none, no position needs asking about.
-    var isEmpty: Bool { starts.allSatisfy(\.isEmpty) }
+    /// Whether the text holds any direction statement: when it holds none, no position needs asking about. Found once, as
+    /// the lexer asks at every token.
+    private(set) var isEmpty = true
 
     init(bytes: [UInt8], from start: Int) {
         self.bytes = bytes
@@ -37,6 +38,7 @@ struct RequirementDirectionStatements {
             if let (kind, end) = match(at: position) {
                 starts[kind].append(position)
                 keywordEnds[kind].append(end)
+                isEmpty = false
                 position = end
             } else {
                 position += 1

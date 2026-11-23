@@ -6,8 +6,8 @@
  *              are read from, and the characters its lexer tests on UTF-16 code units.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A token of a C4 diagram, in the order of Pele's `tokens.ts`, by Jison's name (`PERSON`, `STR_KEY`). The order
@@ -99,6 +99,7 @@ enum C4Characters {
 
     /// `text` without white space at either end, as JavaScript's `trim` leaves it.
     static func trimmed(_ text: String) -> String {
+        if let first = text.utf16.first, let last = text.utf16.last, !isSpace(first), !isSpace(last) { return text }
         let units = Array(text.utf16)
         guard let first = units.firstIndex(where: { unit in !isSpace(unit) }), let last = units.lastIndex(where: { unit in !isSpace(unit) }) else {
             return ""

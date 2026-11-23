@@ -6,7 +6,7 @@
  *              or Japanese character with its punctuation, and the places a zero-width space or a soft hyphen allows.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -21,7 +21,7 @@ enum DiagramTextPieces {
         var start = 0
         while start < scalars.count {
             let end = pieceEnd(in: scalars, from: start)
-            pieces.append(String(String.UnicodeScalarView(scalars[start..<end])))
+            pieces.append(UnicodeScalarText.string(scalars[start..<end]))
             start = end
         }
         return pieces

@@ -41,8 +41,19 @@ final class CoreTextFontFaces: @unchecked Sendable {
     static let lastPrintableASCII: UInt8 = 126
     private static let largestKeptFaceCount = 256
 
+    /// The most line widths kept, and the longest text kept, in UTF-8 bytes: past the count every width is let go, so that
+    /// text of every kind keeps at most about a megabyte.
+    private static let largestKeptWidthCount = 4_096
+    private static let longestKeptTextByteCount = 256
+
     private let lock = NSLock()
     private var facesByKey: [CoreTextFontFaceKey: CoreTextFontFace] = [:]
+    private var lineWidthsByText: [LineWidthKey: CGFloat] = [:]
+
+    private struct LineWidthKey: Hashable {
+        let face: CoreTextFontFaceKey
+        let text: String
+    }
 
     /// The face of `key`, made the first time it is asked for.
     func face(_ key: CoreTextFontFaceKey) -> CoreTextFontFace {
@@ -55,6 +66,30 @@ final class CoreTextFontFaces: @unchecked Sendable {
         if facesByKey.count < Self.largestKeptFaceCount { facesByKey[key] = made }
         lock.unlock()
         return made
+    }
+
+    /// The width of a Core Text line of `text` in the face of `key`, laid out the first time it is asked for: text beyond
+    /// printable ASCII, whose fallback fonts Core Text finds for each line it makes (a tree view's box drawing, a C4
+    /// diagram's guillemets), costs microseconds a line.
+    func lineWidth(of text: String, in key: CoreTextFontFaceKey, font: CTFont) -> CGFloat {
+        guard text.utf8.count <= Self.longestKeptTextByteCount else { return Self.layOutLineWidth(of: text, font: font) }
+        let widthKey = LineWidthKey(face: key, text: text)
+        lock.lock()
+        let known = lineWidthsByText[widthKey]
+        lock.unlock()
+        if let known { return known }
+        let width = Self.layOutLineWidth(of: text, font: font)
+        lock.lock()
+        if lineWidthsByText.count >= Self.largestKeptWidthCount { lineWidthsByText.removeAll(keepingCapacity: true) }
+        lineWidthsByText[widthKey] = width
+        lock.unlock()
+        return width
+    }
+
+    private static func layOutLineWidth(of text: String, font: CTFont) -> CGFloat {
+        let attributes = [kCTFontAttributeName as NSAttributedString.Key: font]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
     private static func makeFace(_ key: CoreTextFontFaceKey) -> CoreTextFontFace {
