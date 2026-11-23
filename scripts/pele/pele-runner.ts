@@ -7,8 +7,8 @@
  *              tests and its benchmark against Pele.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  *
  * MIT licensed, as the package is. It reads Pele's sources and corpora as data and runs none of Pele's scripts: see
  * README.md beside it for the exact command.
@@ -56,12 +56,14 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--bench]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--bench] [--svg]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
 const runsCompat = flags.length === 0 || flags.includes('--compat');
 const runsBench = flags.length === 0 || flags.includes('--bench');
+// --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
+const writesDrawings = flags.includes('--svg');
 
 // Mermaid's Gantt charts are placed against "now": the package's tests and benchmark use the same instant
 // (GanttChartCorpus.now, 2014-01-15 12:00 UTC); the command runs with TZ=UTC.
@@ -228,6 +230,19 @@ const allCorpora = await corpora();
 const machine = { deno: Deno.version.deno, v8: Deno.version.v8, os: Deno.build.os, arch: Deno.build.arch };
 const peleVersion = JSON.parse(await Deno.readTextFile(`${peleRoot}/package.json`)).version;
 await Deno.mkdir(outputFolder, { recursive: true });
+
+if (writesDrawings) {
+  await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+  for (const [corpus, sources] of allCorpora) {
+    for (const [index, source] of sources.entries()) {
+      try {
+        await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${index}.svg`, core.render(source, { now: ganttNow }).svg);
+      } catch {
+        // A refused input has no drawing; pele-corpus.json records its error.
+      }
+    }
+  }
+}
 
 if (runsCorpus) {
   const records: InputRecord[] = [];
