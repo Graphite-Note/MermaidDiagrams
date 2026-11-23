@@ -5,7 +5,7 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -108,15 +108,18 @@ enum FlowchartNodeSyntax {
                 definition.label = DiagramLabelDecoder.label(from: written.text, form: written.form)
                 definition.hasBlankWrittenLabel = JavaScriptStringTrimming.trimmed(written.text).isEmpty
             case "view": definition.asksForCollapsedView = FlowchartTextSyntax.unquoted(value).text == "collapsed"
-            default: readAssetAttribute(key.lowercased(), value: FlowchartTextSyntax.unquoted(value).text, into: &definition.assetAttributes)
+            // Pele's database reads these keys as written: `Icon:` is no icon.
+            default: readAssetAttribute(key, writtenValue: value, into: &definition.assetAttributes)
             }
         }
     }
 
-    /// An icon's or a picture's attribute, as Pele's database keeps one that is not empty (`if (doc.icon)`); `w` and `h`
-    /// are read as JavaScript's `Number` reads them.
-    private static func readAssetAttribute(_ key: String, value: String, into attributes: inout FlowchartNodeAssetAttributes) {
-        guard !value.isEmpty else { return }
+    /// An icon's or a picture's attribute, as Pele's database keeps one whose YAML value is truthy (`if (doc.icon)`): not
+    /// empty, and not an unquoted `null`, `~`, `false` or number zero (`w: 0` leaves the width written before); `w` and
+    /// `h` are read as JavaScript's `Number` reads them.
+    private static func readAssetAttribute(_ key: String, writtenValue: String, into attributes: inout FlowchartNodeAssetAttributes) {
+        let value = FlowchartTextSyntax.unquoted(writtenValue).text
+        guard !value.isEmpty, writtenValue.hasPrefix("\"") || !isFalsyYAMLScalar(value) else { return }
         switch key {
         case "icon": attributes.icon = value
         case "img": attributes.image = value
@@ -128,6 +131,16 @@ enum FlowchartNodeSyntax {
         case "h": attributes.height = JavaScriptNumber.value(of: Substring(value)) ?? .nan
         default: break
         }
+    }
+
+    /// Whether Pele's YAML reader reads an unquoted `text` as a value JavaScript takes for false (util/yaml.ts `scalar`):
+    /// null, false, or a number that is zero or not a number.
+    private static func isFalsyYAMLScalar(_ text: String) -> Bool {
+        if ["~", "null", "Null", "NULL", "false", "False", "FALSE", ".nan", ".NaN", ".NAN"].contains(text) { return true }
+        guard let first = text.unicodeScalars.first, first == "-" || first == "+" || first == "." || ("0"..."9").contains(first) else { return false }
+        // A sign before a hexadecimal, octal or binary number is YAML's, which JavaScript's Number does not read.
+        let unsigned = first == "-" || first == "+" ? text.dropFirst() : Substring(text)
+        return JavaScriptNumber.value(of: unsigned) == 0
     }
 
     /// One `key: value` of an attribute list; the value is quoted text or runs to a comma, a line break or the brace.

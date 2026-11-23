@@ -6,7 +6,7 @@
  *              Pele reads without markup, a Markdown string's indentation, and the literal text of journeys and timelines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -60,7 +60,8 @@ enum DiagramLabelLineBreaks {
         var hasSemicolon = false
         for scalar in scalars {
             switch scalar {
-            case "<", "\\", "\n", "*", "_", "&": return false
+            // Pele also reads for markup any text with a `ﬂ`, the first character of its hidden entity codes.
+            case "<", "\\", "\n", "*", "_", "&", "\u{FB02}": return false
             case "#": hasHash = true
             case ";": hasSemicolon = true
             default: break
@@ -77,7 +78,8 @@ enum DiagramLabelLineBreaks {
         var hasSemicolon = false
         for byte in bytes {
             switch byte {
-            case UInt8(ascii: "<"), UInt8(ascii: "\\"), UInt8(ascii: "\n"), UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "&"), UInt8(ascii: ":"):
+            // 0xEF starts the UTF-8 of `ﬂ` (among others), which the scalars' pass looks at.
+            case UInt8(ascii: "<"), UInt8(ascii: "\\"), UInt8(ascii: "\n"), UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "&"), UInt8(ascii: ":"), 0xEF:
                 return false
             case UInt8(ascii: "#"): hasHash = true
             case UInt8(ascii: ";"): hasSemicolon = true

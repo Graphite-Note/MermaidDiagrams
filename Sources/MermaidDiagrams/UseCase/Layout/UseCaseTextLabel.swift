@@ -7,7 +7,7 @@
  *              closer once there are several; and the measurers of the sizes and styles they are drawn in.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -48,8 +48,8 @@ extension UseCaseTextMeasurers where Measurer == CoreTextDiagramTextMeasurer {
 
 enum UseCaseTextLabel {
     /// `text` measured in `measurer`, wrapped at `room`: no lines for no text. A plain text is one line as written, its
-    /// ends trimmed and only Mermaid's codes (`#quot;`, `#40;`) read; a Markdown one loses its emphasis and breaks
-    /// where it breaks. Several lines are 1.3 times the size apart, rounded, as Pele sets them.
+    /// ends trimmed and only Mermaid's codes (`#quot;`, `#40;`) read; a Markdown one keeps its bold and italic pieces
+    /// and breaks where it breaks. Several lines are 1.3 times the size apart, rounded, as Pele sets them.
     static func block(_ text: String?, labelType: UseCaseLabelType = .text, measurer: some DiagramTextMeasuring, room: CGFloat) -> DiagramTextBlock {
         guard let text, !text.isEmpty else { return empty(measurer) }
         let label: DiagramLabel = labelType == .markdown ? DiagramLabelDecoder.label(from: text, form: .markdown)

@@ -6,7 +6,7 @@
  *              layoutLabel wraps them, a text of more than one line set 1.3 times its size apart.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -79,7 +79,7 @@ struct DiagramMeasuredLines {
         guard label.spans != nil else {
             let line = label.lines[index]
             let width = measuring.measurer.width(of: line)
-            guard width > maximumWidth, Self.canBreak(line) else {
+            guard width > maximumWidth, Self.canBreak(line, isReadWithoutMarkup: label.isReadWithoutMarkup) else {
                 return add(line.isEmpty ? [] : [DiagramMeasuredSpan(text: line, style: [], width: width)], width: width)
             }
             return wrap([DiagramMeasuredSpan(text: line, style: [], width: width)], measuring: &measuring, maximumWidth: maximumWidth)
@@ -109,9 +109,12 @@ struct DiagramMeasuredLines {
 
     /// Whether a plain line has a place Pele's wrap can break it at: whitespace, a Chinese or Japanese character, or a
     /// zero-width space or soft hyphen.
-    private static func canBreak(_ line: String) -> Bool {
+    /// Whether wrapping can break `line`, as Pele's layoutLabel decides: a line read without markup only at a plain space
+    /// (`text.includes(' ')`), a Chinese or Japanese character or a break hint; a line read for its markup at any white space.
+    private static func canBreak(_ line: String, isReadWithoutMarkup: Bool) -> Bool {
         line.unicodeScalars.contains { scalar in
-            JavaScriptStringTrimming.isWhitespace(scalar) || DiagramTextPieces.isCJK(scalar) || DiagramTextPieces.isHint(scalar)
+            (isReadWithoutMarkup ? scalar == " " : JavaScriptStringTrimming.isWhitespace(scalar)) || DiagramTextPieces.isCJK(scalar)
+                || DiagramTextPieces.isHint(scalar)
         }
     }
 }

@@ -6,7 +6,7 @@
  *              sizes, places and frames them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -39,6 +39,17 @@ final class FlowchartNodeAssetTests: XCTestCase {
         XCTAssertEqual(diagram.nodes[0].label.lines, ["Shown"], "A label written in brackets stays")
         XCTAssertEqual(diagram.nodes[1].asset?.kind, .image(address: "pic.png"))
         XCTAssertEqual(diagram.nodes[1].asset?.keepsProportions, true)
+    }
+
+    /// Pele's database keeps an attribute whose YAML value is truthy (`if (doc.w)`), under its key as written.
+    func testAFalsyValueLeavesTheAttributeBeforeItAndKeysAreReadAsWritten() throws {
+        let diagram = try FlowchartReading.flowchart(
+            "flowchart TD\n  A@{ icon: \"fa:x\", w: 100, h: 70 }\n  A@{ w: 0, h: \"0\", form: null }\n  B@{ Icon: \"fa:y\" }\n  C@{ icon: \"fa:z\", form: circle }\n  C@{ form: false }")
+        let icon = try XCTUnwrap(diagram.nodes[0].asset)
+        XCTAssertEqual(icon.writtenWidth, 100, "An unquoted zero is false: the width written before stays")
+        XCTAssertNil(icon.writtenHeight, "A quoted zero is a text, true: it replaces the height, and is no side")
+        XCTAssertNil(diagram.nodes[1].asset, "`Icon` is not Pele's `icon`")
+        XCTAssertEqual(diagram.nodes[2].asset?.form, .circle)
     }
 
     func testAnIconNodeStacksItsBoxAndItsLabelAsPeleDoes() throws {

@@ -6,7 +6,7 @@
  *              draws and writes a label's spans.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -69,6 +69,16 @@ final class DiagramStyledTextTests: XCTestCase {
     func testRunsOfSpacesAreMeasured() {
         XCTAssertEqual(block("a   b").lineWidths[0], measurer.width(of: "a   b"))
         XCTAssertEqual(block("a   b").lines, ["a   b"])
+    }
+
+    /// Pele's layoutLabel wraps a text without markup only when it has a plain space (`text.includes(' ')`), and a text
+    /// read for its markup between any of RE_PIECE's pieces, a tab or a no-break space among them.
+    func testATextWithoutMarkupWrapsOnlyAtAPlainSpaceAndATextWithMarkupAtAnyWhiteSpace() {
+        XCTAssertEqual(block("alpha\tbeta\u{A0}gamma", maximumWidth: 30).lines, ["alpha\tbeta\u{A0}gamma"])
+        XCTAssertEqual(block("alpha\tbeta &amp;\u{A0}gamma", maximumWidth: 30).lines, ["alpha", "beta", "&", "gamma"])
+        XCTAssertEqual(block("alpha\tbeta\u{FB02}gamma", maximumWidth: 30).lines, ["alpha", "beta\u{FB02}gamma"],
+                       "A ﬂ is read for its markup, as Pele reads its hidden codes")
+        XCTAssertEqual(block("alpha beta", maximumWidth: 30).lines, ["alpha", "beta"])
     }
 
     func testFittingBreaksAStyledWordBetweenItsCharactersInItsEmphasis() throws {
