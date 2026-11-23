@@ -6,7 +6,7 @@
  *              its stroke), a text per placed text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -65,7 +65,7 @@ struct DiagramSVGBody {
             gradientCount += 1
             addGradientDefinition(gradient)
             content.append(" fill=\"url(#")
-            appendGradientIdentifier(into: &content)
+            Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &content)
             content.append(")\"")
             content.appendOpacity(gradient.opacity, attribute: "fill-opacity")
         }
@@ -105,11 +105,12 @@ struct DiagramSVGBody {
         }
     }
 
-    /// `<prefix>-gradient-<n>`, the latest gradient's id.
-    private func appendGradientIdentifier(into buffer: inout DiagramSVGBuffer) {
-        buffer.append(identifierPrefix)
+    /// `<prefix>-gradient-<n>`, the latest gradient's id. Static, as `self` passed to a method of its own while one of its
+    /// buffers is passed `inout` is copied, buffers and all, which made each gradient copy the whole document.
+    private static func appendGradientIdentifier(prefix: String, number: Int, into buffer: inout DiagramSVGBuffer) {
+        buffer.append(prefix)
         buffer.append("-gradient-")
-        buffer.appendNumber(CGFloat(gradientCount))
+        buffer.appendNumber(CGFloat(number))
     }
 
     /// A gradient across the page between its two points, the end colors carried on beyond them (SVG's `pad`).
@@ -117,7 +118,7 @@ struct DiagramSVGBody {
         let start = paints.text(of: gradient.startPaint)
         let end = paints.text(of: gradient.endPaint)
         definitions.append("<linearGradient id=\"")
-        appendGradientIdentifier(into: &definitions)
+        Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &definitions)
         definitions.append("\" gradientUnits=\"userSpaceOnUse\" x1=\"")
         definitions.appendNumber(gradient.startPoint.x)
         definitions.append("\" y1=\"")

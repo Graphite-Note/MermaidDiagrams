@@ -4,10 +4,10 @@
  * Layer: Tests
  * Description: Every sample's scene written as SVG is well-formed XML of its size and view box with a path per shape and
  *              a text per text, in either color mode; hostile text is escaped; numbers are compact; text beyond ASCII
- *              and gradients are written whole.
+ *              and gradients are written whole, each without copying the document.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -142,5 +142,28 @@ final class DiagramSVGWriterTests: XCTestCase {
             XCTAssertTrue(document.contains("fill=\"url(#note-9-gradient-\(index))\""), "gradient \(index) used")
         }
         XCTAssertNotNil(DiagramSVGDocumentReading.read(document), "Well-formed XML")
+    }
+
+    /// Each gradient writes its id into both buffers; a buffer passed `inout` beside a copy of the body (a method of the
+    /// body's own) was copied whole for each, so a Sankey of many bands copied its document once per band.
+    func testGradientsAreWrittenWithoutCopyingTheDocument() {
+        let reserved = 1 << 20
+        var body = DiagramSVGBody(colors: .palette(DiagramScenePaletteSamples.light), identifierPrefix: "pele",
+                                  content: DiagramSVGBuffer(reservingCapacity: reserved))
+        body.definitions = DiagramSVGBuffer(reservingCapacity: reserved)
+        let gradient = DiagramLinearGradient(startPaint: .accent, endPaint: .series(2), startPoint: .zero, endPoint: CGPoint(x: 40, y: 0))
+        let shape = DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 40, height: 10), transform: nil),
+                                      painting: .gradientFill(gradient), part: DiagramScenePart.allCases[0])
+        func storage(_ buffer: DiagramSVGBuffer) -> UnsafePointer<UInt8>? {
+            buffer.bytes.withUnsafeBufferPointer { bytes in bytes.baseAddress }
+        }
+        let content = storage(body.content)
+        let definitions = storage(body.definitions)
+        for _ in 0..<200 { body.add(.shape(shape)) }
+        XCTAssertLessThan(body.content.count, reserved)
+        XCTAssertEqual(storage(body.content), content, "the document's buffer is written in place")
+        XCTAssertEqual(storage(body.definitions), definitions, "the definitions' buffer is written in place")
+        XCTAssertTrue(body.content.text.contains("fill=\"url(#pele-gradient-200)\""))
+        XCTAssertTrue(body.definitions.text.contains("<linearGradient id=\"pele-gradient-200\""))
     }
 }
