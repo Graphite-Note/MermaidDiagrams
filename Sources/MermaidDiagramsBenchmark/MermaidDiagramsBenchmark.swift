@@ -4,10 +4,11 @@
  * Layer: Benchmark
  * Description: Times reading, laying out and drawing every diagram type on Pele's benchmark inputs and Mermaid's
  *              documentation examples, the memory a layout holds, what each type's scene and SVG add, and the same
- *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked.
+ *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked; paints the README's
+ *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.10
+ * Version: 0.11
  * Date: 23/11/2026
  */
 
@@ -38,7 +39,8 @@ struct MermaidDiagramsBenchmark {
     /// target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one case for a sampler (`ProfilingLoop`);
     /// `--output-digest [folder]` prints a digest of every corpus input's output to compare two builds (`OutputDigest`);
     /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
-    /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`).
+    /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`); `--readme-pictures` paints
+    /// the README's pictures of every type (`ReadmePictures`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
@@ -46,6 +48,9 @@ struct MermaidDiagramsBenchmark {
         }
         if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
             return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
+        }
+        if let picturesIndex = CommandLine.arguments.firstIndex(of: "--readme-pictures") {
+            return try ReadmePictures.run(arguments: Array(CommandLine.arguments[(picturesIndex + 1)...]), typography: typography)
         }
         let arguments = Set(CommandLine.arguments.dropFirst())
         if arguments.contains("--layout-memory") { return try LayoutMemoryBenchmark.run(typography: typography) }
