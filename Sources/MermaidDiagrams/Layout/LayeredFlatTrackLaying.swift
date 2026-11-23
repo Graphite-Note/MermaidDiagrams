@@ -5,7 +5,7 @@
  * Description: Lays the pieces of one gap of Pele's layered layout on tracks, and finds the curves that need levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -116,19 +116,23 @@ extension LayeredFlatTracks {
     /// unless the curves mostly cross each other, when the gap grows instead.
     mutating func assignLevels(rank: Int, all: [Int]) {
         let pairs = nearPairs(all)
-        let level = levelPieces(rank: rank, all: all, pairs: pairs)
-        if level.isEmpty { return }
+        defer {
+            for piece in all {
+                isLevel[piece] = false
+                isBeside[piece] = false
+            }
+        }
+        if markLevelPieces(rank: rank, all: all, pairs: pairs) == 0 { return }
         var crossing = 0
         var alongside = 0
-        var beside = Set<Int>()
         for pair in stride(from: 0, to: pairs.count, by: 2) {
             let first = all[pairs[pair]], second = all[pairs[pair + 1]]
-            if level.contains(first) && level.contains(second) {
+            if isLevel[first] && isLevel[second] {
                 if !overlap(first, second) { continue }
                 if runsRight(first) != runsRight(second) { crossing += 1 } else if !areMates(first, second) { alongside += 1 }
-            } else if (level.contains(first) || level.contains(second)) && meet(first, second) {
-                beside.insert(first)
-                beside.insert(second)
+            } else if (isLevel[first] || isLevel[second]) && meet(first, second) {
+                isBeside[first] = true
+                isBeside[second] = true
             }
         }
         if crossing > alongside {
@@ -137,31 +141,37 @@ extension LayeredFlatTracks {
             }
             return
         }
-        var members = all.filter { piece in level.contains(piece) || (!pieces.isWide[piece] && beside.contains(piece)) }
+        var members = all.filter { piece in isLevel[piece] || (!pieces.isWide[piece] && isBeside[piece]) }
         _ = lay(&members)
         trackCount[rank] = members.map { piece in pieces.levels[piece] }.max() ?? 0
     }
 
-    /// The pieces that turn onto levels: first those that run far across and have another such piece to be told apart
-    /// from, then any two that would pass too near each other as plain curves.
-    private mutating func levelPieces(rank: Int, all: [Int], pairs: [Int]) -> Set<Int> {
+    /// Marks in `isLevel` the pieces that turn onto levels: first those that run far across and have another such
+    /// piece to be told apart from, then any two that would pass too near each other as plain curves. Returns how many.
+    private mutating func markLevelPieces(rank: Int, all: [Int], pairs: [Int]) -> Int {
         var far = all.filter { piece in pieces.isWide[piece] }
         _ = lay(&far)
-        var level = Set(far.filter { piece in pieces.levels[piece] > 1 })
+        var levelCount = 0
+        func mark(_ piece: Int) {
+            if isLevel[piece] { return }
+            isLevel[piece] = true
+            levelCount += 1
+        }
+        for piece in far where pieces.levels[piece] > 1 { mark(piece) }
         for pair in stride(from: 0, to: pairs.count, by: 2) {
             let first = all[pairs[pair]], second = all[pairs[pair + 1]]
-            if (level.contains(first) && level.contains(second)) || !clash(first, second) || runsRight(first) != runsRight(second) { continue }
+            if (isLevel[first] && isLevel[second]) || !clash(first, second) || runsRight(first) != runsRight(second) { continue }
             let limit = pieces.isWide[first] || pieces.isWide[second] ? LayeredFlatConstants.levelClear : LayeredFlatConstants.levelTouch
             if passNear(first, second, height: room[rank], limit: limit) {
-                level.insert(first)
-                level.insert(second)
+                mark(first)
+                mark(second)
             }
         }
         for piece in far {
             pieces.track[piece] = -1
             pieces.levels[piece] = 0
         }
-        return level
+        return levelCount
     }
 
     private func runsRight(_ piece: Int) -> Bool { pieces.from[piece] < pieces.to[piece] }

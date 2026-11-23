@@ -5,7 +5,7 @@
  * Description: Pele's layered (Sugiyama) layout of one flat graph, ported step for step from layout/layered.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -76,9 +76,10 @@ struct LayeredFlatLayout {
         var graph = buildGraph(vertexCount: vertexCount)
         var result = LayeredFlatResult(width: 0, height: 0)
         if graph.segmentCount > 0 && graph.maximumRank > 0 {
-            var reduction = LayeredFlatCrossingReduction(graph: graph, nodes: nodes)
+            // The graph moves into the reduction and back, so that its order is changed in place and never copied.
+            var reduction = LayeredFlatCrossingReduction(graph: consume graph, nodes: nodes)
             (result.crossings, result.declaredCrossings) = reduction.reduce()
-            graph = reduction.graph
+            graph = (consume reduction).graph
             graph.settlePositions()
         }
         if options.ordersOnly {

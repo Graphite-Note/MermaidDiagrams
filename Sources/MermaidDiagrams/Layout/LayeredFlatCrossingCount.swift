@@ -5,7 +5,7 @@
  * Description: Counts the crossings of an order of Pele's layered layout, with a tree over each rank's places.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -28,6 +28,10 @@ struct LayeredFlatCrossingReduction {
     var tree: [Int]
     var targets: [Int]
     var barycenter: [Double]
+    /// The vertices of the rank a sweep is moving, kept between ranks so that each sweep reuses one list.
+    var movingVertices: [Int] = []
+    /// The second list the sweeps' merge sort writes into.
+    var sortSpare: [Int] = []
     var groupDepth: [Int] = []
     var groupSum: [Double] = []
     var groupCount: [Int] = []

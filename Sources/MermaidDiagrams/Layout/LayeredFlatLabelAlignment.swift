@@ -5,7 +5,7 @@
  * Description: Brings the labels and bends of each edge of Pele's layered layout into line with one of its ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -50,18 +50,23 @@ struct LayeredFlatLabelAlignment {
     /// the nearer), or else nearest the first choice.
     private func choose(_ at: Double, up: (at: Double, sharing: Int), down: (at: Double, sharing: Int), least: Double, most: Double) -> Double {
         let upFirst = up.sharing != down.sharing ? up.sharing < down.sharing : abs(up.at - at) <= abs(down.at - at)
-        let choices = upFirst ? [up.at, down.at] : [down.at, up.at]
-        return choices.first { choice in choice >= least && choice <= most } ?? max(least, min(most, choices[0]))
+        let firstChoice = upFirst ? up.at : down.at
+        let secondChoice = upFirst ? down.at : up.at
+        if firstChoice >= least && firstChoice <= most { return firstChoice }
+        if secondChoice >= least && secondChoice <= most { return secondChoice }
+        return max(least, min(most, firstChoice))
     }
 
     func align(_ across: inout [Double]) {
         var isDone = [Bool](repeating: false, count: graph.vertexCount)
         guard graph.maximumRank > 1 else { return }
+        // One list of an edge's labels and bends, refilled for each edge.
+        var chain: [Int] = []
         for rank in 1..<graph.maximumRank {
             for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] {
                 let vertex = graph.order[index]
                 if !isPlaced(vertex) || isDone[vertex] { continue }
-                alignChain(through: vertex, across: &across, isDone: &isDone)
+                alignChain(through: vertex, across: &across, isDone: &isDone, chain: &chain)
             }
         }
     }
@@ -71,13 +76,13 @@ struct LayeredFlatLabelAlignment {
 
     /// The edge's labels and bends from its first node to its last, and the room they share: all on one line when there
     /// is one, else each in line with the nearest point above or below that is held in place.
-    private func alignChain(through vertex: Int, across: inout [Double], isDone: inout [Bool]) {
+    private func alignChain(through vertex: Int, across: inout [Double], isDone: inout [Bool], chain: inout [Int]) {
         var top = vertex
         while graph.vertexKind[graph.segmentFrom[upperSegment(of: top)]].isPassingPoint { top = graph.segmentFrom[upperSegment(of: top)] }
         var bottom = top
         var least = -Double.infinity
         var most = Double.infinity
-        var chain: [Int] = []
+        chain.removeAll(keepingCapacity: true)
         var current = top
         while graph.vertexKind[current].isPassingPoint {
             bottom = current

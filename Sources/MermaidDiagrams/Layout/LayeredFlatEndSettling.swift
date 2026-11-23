@@ -5,7 +5,7 @@
  * Description: Moves the ends of edges along their sides once the nodes have places, so that edges run straight.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -20,6 +20,20 @@ struct LayeredFlatEndSettling {
     let toEnds: [LayeredSegmentEnd]
     let free: [[Int]]
     let emptyRanks: [Bool]?
+    /// The pooled sums and counts of a run being fitted, kept between runs so that every fit reuses one pair.
+    private var poolSum: [Double] = []
+    private var poolCount: [Int] = []
+
+    init(graph: consuming LayeredFlatGraph, nodes: [LayeredFlatNode], across: [Double], fromEnds: [LayeredSegmentEnd],
+         toEnds: [LayeredSegmentEnd], free: [[Int]], emptyRanks: [Bool]?) {
+        self.graph = graph
+        self.nodes = nodes
+        self.across = across
+        self.fromEnds = fromEnds
+        self.toEnds = toEnds
+        self.free = free
+        self.emptyRanks = emptyRanks
+    }
 
     /// One side of a node whose ends may move: its free ends in order with their least gaps, and all its ends in order.
     private struct Side {
@@ -131,8 +145,34 @@ struct LayeredFlatEndSettling {
     private mutating func fit(_ side: Side, first: Int, size: Int, low: Double, high: Double, isAgain: Bool) -> Bool {
         var sum: [Double] = []
         var count: [Int] = []
-        sum.reserveCapacity(size)
-        count.reserveCapacity(size)
+        swap(&sum, &poolSum)
+        swap(&count, &poolCount)
+        defer {
+            swap(&sum, &poolSum)
+            swap(&count, &poolCount)
+        }
+        let total = pool(side, first: first, size: size, isAgain: isAgain, sum: &sum, count: &count)
+        var before: Double = 0
+        var moved = false
+        var placed = 0
+        for block in sum.indices {
+            let level = high - total < low ? (low + high - total) / 2 : max(low, min(high - total, sum[block] / Double(count[block])))
+            for _ in 0..<count[block] {
+                if placed > 0 { before += side.room[first + placed] }
+                let segment = side.segments[first + placed]
+                if abs(offset(segment, side: side.side) - level - before) > 0.01 { moved = true }
+                setOffset(segment, side: side.side, to: level + before)
+                placed += 1
+            }
+        }
+        return moved
+    }
+
+    /// The wanted places of a run of free ends pooled into blocks, each a sum of places and how many ends it holds;
+    /// returns the room the run takes.
+    private func pool(_ side: Side, first: Int, size: Int, isAgain: Bool, sum: inout [Double], count: inout [Int]) -> Double {
+        sum.removeAll(keepingCapacity: true)
+        count.removeAll(keepingCapacity: true)
         var before: Double = 0
         for index in 0..<size {
             if index > 0 { before += side.room[first + index] }
@@ -148,20 +188,6 @@ struct LayeredFlatEndSettling {
                 count[count.count - 1] += pooled
             }
         }
-        let total = before
-        var moved = false
-        var placed = 0
-        before = 0
-        for block in sum.indices {
-            let level = high - total < low ? (low + high - total) / 2 : max(low, min(high - total, sum[block] / Double(count[block])))
-            for _ in 0..<count[block] {
-                if placed > 0 { before += side.room[first + placed] }
-                let segment = side.segments[first + placed]
-                if abs(offset(segment, side: side.side) - level - before) > 0.01 { moved = true }
-                setOffset(segment, side: side.side, to: level + before)
-                placed += 1
-            }
-        }
-        return moved
+        return before
     }
 }

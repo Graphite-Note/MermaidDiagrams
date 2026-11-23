@@ -5,7 +5,7 @@
  * Description: Pele's positions across the flow: Brandes and Köpf's four aligned layouts, balanced (layered.ts position).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -13,32 +13,21 @@
 /// block compacted against its neighbours, the four layouts shifted onto the narrowest and each vertex placed at the
 /// mean of the middle two.
 enum LayeredFlatPositioning {
-    /// The working arrays of one of the four alignments.
-    private struct Alignment {
-        var root: [Int]
-        var align: [Int]
-        /// Offset of each vertex from its block's root, so that aligned edges meet at their attachment points.
-        var shift: [Double]
-
-        init(vertexCount: Int) {
-            root = Array(0..<vertexCount)
-            align = Array(0..<vertexCount)
-            shift = [Double](repeating: 0, count: vertexCount)
-        }
-    }
-
     static func positions(_ graph: inout LayeredFlatGraph, options: LayeredFlatOptions) -> [Double] {
-        let gap = (0..<graph.vertexCount).map { vertex in graph.halfRoom(of: vertex, options: options) }
+        let vertexCount = graph.vertexCount
+        var gap = [Double](repeating: 0, count: vertexCount)
+        for vertex in 0..<vertexCount { gap[vertex] = graph.halfRoom(of: vertex, options: options) }
         sortNeighbours(&graph)
         let conflict = conflictingSegments(graph)
-        var results: [[Double]] = []
+        // The four layouts one after the other, made with one set of working arrays.
+        var results = [Double](repeating: 0, count: 4 * vertexCount)
+        var work = LayeredPositioningWork(vertexCount: vertexCount)
         for variant in 0..<4 {
-            let isUpward = variant < 2
             let isRightward = variant & 1 == 1
-            let alignment = aligned(graph, conflict: conflict, isUpward: isUpward, isRightward: isRightward)
-            results.append(compacted(graph, root: alignment.root, shift: alignment.shift, gap: gap, isRightward: isRightward))
+            work.align(graph, conflict: conflict, isUpward: variant < 2, isRightward: isRightward)
+            work.compact(graph, gap: gap, isRightward: isRightward, into: &results, at: variant * vertexCount)
         }
-        return balanced(results, widths: graph.vertexWidth)
+        return balanced(&results, vertexCount: vertexCount, widths: graph.vertexWidth)
     }
 
     /// Neighbours in order across their rank, so that the medians can be read off directly.
@@ -94,43 +83,62 @@ enum LayeredFlatPositioning {
         return conflict
     }
 
-    /// Aligns each vertex with its median neighbour above (upward) or below, sweeping each rank left to right or right to left.
-    private static func aligned(_ graph: LayeredFlatGraph, conflict: [Bool], isUpward: Bool, isRightward: Bool) -> Alignment {
-        var alignment = Alignment(vertexCount: graph.vertexCount)
-        let starts = isUpward ? graph.predecessorStart : graph.successorStart
-        let list = isUpward ? graph.predecessorSegments : graph.successorSegments
-        let other = isUpward ? graph.segmentFrom : graph.segmentTo
-        let ownOffset = isUpward ? graph.segmentToOffset : graph.segmentFromOffset
-        let otherOffset = isUpward ? graph.segmentFromOffset : graph.segmentToOffset
-        for step in 0...graph.maximumRank {
-            let rank = isUpward ? step : graph.maximumRank - step
-            let start = graph.rankStart[rank]
-            let end = graph.rankStart[rank + 1]
-            let adjacent = isUpward ? rank - 1 : rank + 1
-            let adjacentLast = adjacent >= 0 && adjacent <= graph.maximumRank ? graph.rankStart[adjacent + 1] - graph.rankStart[adjacent] - 1 : 0
-            var previousIndex = -1
-            for offset in 0..<(end - start) {
-                let vertex = graph.order[isRightward ? end - 1 - offset : start + offset]
-                let from = starts[vertex]
-                let degree = starts[vertex + 1] - from
-                if degree == 0 { continue }
-                let low = from + ((degree - 1) >> 1)
-                let high = from + (degree >> 1)
-                for pass in 0..<2 {
-                    if pass == 1 && low == high { break }
-                    let segment = list[(pass == 0) != isRightward ? low : high]
-                    let neighbour = other[segment]
-                    let index = isRightward ? adjacentLast - graph.position[neighbour] : graph.position[neighbour]
-                    if alignment.align[vertex] == vertex && previousIndex < index && !conflict[segment] {
-                        alignment.align[neighbour] = vertex
-                        alignment.root[vertex] = alignment.root[neighbour]
-                        alignment.align[vertex] = alignment.root[vertex]
-                        alignment.shift[vertex] = alignment.shift[neighbour] + otherOffset[segment] - ownOffset[segment]
-                        previousIndex = index
-                    }
-                }
+    /// The four layouts moved onto the narrowest (the leftward ones by their left edges, the rightward by their right),
+    /// each vertex at the mean of its middle two positions. `results` holds the four layouts one after the other.
+    private static func balanced(_ results: inout [Double], vertexCount: Int, widths: [Double]) -> [Double] {
+        var narrowest = 0
+        var bestWidth = Double.infinity
+        var lows: [Double] = []
+        var highs: [Double] = []
+        lows.reserveCapacity(4)
+        highs.reserveCapacity(4)
+        for variant in 0..<4 {
+            let base = variant * vertexCount
+            var low = Double.infinity
+            var high = -Double.infinity
+            for vertex in 0..<vertexCount {
+                low = min(low, results[base + vertex] - widths[vertex] / 2)
+                high = max(high, results[base + vertex] + widths[vertex] / 2)
+            }
+            lows.append(low)
+            highs.append(high)
+            if high - low < bestWidth {
+                bestWidth = high - low
+                narrowest = variant
             }
         }
-        return alignment
+        for variant in 0..<4 {
+            let delta = variant & 1 == 0 ? lows[narrowest] - lows[variant] : highs[narrowest] - highs[variant]
+            if delta == 0 { continue }
+            let base = variant * vertexCount
+            for vertex in 0..<vertexCount { results[base + vertex] = results[base + vertex] + delta }
+        }
+        var balanced = [Double](repeating: 0, count: vertexCount)
+        for vertex in 0..<vertexCount {
+            let middle = middleTwo(results[vertex], results[vertexCount + vertex], results[2 * vertexCount + vertex],
+                                   results[3 * vertexCount + vertex])
+            balanced[vertex] = (middle.second + middle.third) / 2
+        }
+        return balanced
+    }
+
+    /// The second and third of four values sorted as `Array.sorted()` sorts four: by insertion, each value swapped
+    /// before the one ahead of it while it is less, so that equal values (zeros of either sign too) end where they would.
+    private static func middleTwo(_ first: Double, _ second: Double, _ third: Double, _ fourth: Double)
+        -> (second: Double, third: Double) {
+        var first = first, second = second, third = third, fourth = fourth
+        if second < first { swap(&first, &second) }
+        if third < second {
+            swap(&second, &third)
+            if second < first { swap(&first, &second) }
+        }
+        if fourth < third {
+            swap(&third, &fourth)
+            if third < second {
+                swap(&second, &third)
+                if second < first { swap(&first, &second) }
+            }
+        }
+        return (second, third)
     }
 }

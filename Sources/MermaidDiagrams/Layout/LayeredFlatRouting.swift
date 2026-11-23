@@ -5,7 +5,7 @@
  * Description: The steps of Pele's layered layout after ordering: positions, ends, straightening and the edges' pieces.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -19,10 +19,10 @@ extension LayeredFlatLayout {
         if let fromEnds = segmentFromEnd, let toEnds = segmentToEnd {
             let free = graph.freeEnds(fromEnds: fromEnds, toEnds: toEnds)
             LayeredFlatLabelAlignment(graph: graph, nodes: nodes, free: free, options: options, emptyRanks: emptyRanks).align(&across)
-            var settling = LayeredFlatEndSettling(graph: graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds, free: free,
-                                                  emptyRanks: emptyRanks)
+            var settling = LayeredFlatEndSettling(graph: consume graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds,
+                                                  free: free, emptyRanks: emptyRanks)
             settling.settle()
-            graph = settling.graph
+            graph = (consume settling).graph
             var snapping = LayeredFlatSnapping(graph: graph, options: options, emptyRanks: emptyRanks)
             snapping.snap(&across)
             for edgeIndex in edges.indices where !isDirect[edgeIndex] {
