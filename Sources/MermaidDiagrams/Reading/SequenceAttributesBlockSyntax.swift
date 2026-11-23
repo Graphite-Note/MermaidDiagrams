@@ -6,7 +6,7 @@
  *              reader does, for a sequence participant's attributes written over several lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -22,11 +22,12 @@ struct SequenceAttributesBlockSyntax {
     /// The value a whole YAML text holds: a flow collection when it is one, else a block value with nothing after it
     /// but blank lines, comments or `...`.
     static func value(of source: String) throws(SequenceAttributesYAMLFailure) -> SequenceAttributeValue {
-        let text = Array(source.unicodeScalars)
-        let trimmed = SequenceAttributesFlowSyntax.trimmed(text)
-        if let first = trimmed.first, first == "{" || first == "[" {
+        // The scalars are copied only for a flow collection; a block's lines are read apart.
+        let firstShown = source.unicodeScalars.first { scalar in !SequenceAttributesFlowSyntax.isTrimmed(scalar) }
+        if let first = firstShown, first == "{" || first == "[" {
+            let trimmed = SequenceAttributesFlowSyntax.trimmed(Array(source.unicodeScalars))
             do {
-                let (value, end) = try SequenceAttributesFlowSyntax.value(in: trimmed, at: 0, stops: "")
+                let (value, end) = try SequenceAttributesFlowSyntax.value(in: trimmed, at: 0, stops: [])
                 if SequenceAttributesFlowSyntax.skipSpaceAndComments(in: trimmed, from: end) == trimmed.count { return value }
             } catch {
                 throw .invalid
@@ -114,7 +115,7 @@ struct SequenceAttributesBlockSyntax {
             guard lineIndent == indent else { throw .invalid }
             let current = Array(lines[lineIndex][indent...])
             guard let (key, valueStart) = Self.splitKey(current) else { throw .invalid }
-            let keyText = try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: "").0.javaScriptText
+            let keyText = try SequenceAttributesFlowSyntax.value(in: key, at: 0, stops: []).0.javaScriptText
             let rest = Array(current[valueStart...])
             lineIndex += 1
             if Self.isBlankBeforeComment(rest) {

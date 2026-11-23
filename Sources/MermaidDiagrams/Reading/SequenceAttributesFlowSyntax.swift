@@ -6,7 +6,7 @@
  *              small YAML reader does, for a sequence participant's attributes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -18,9 +18,15 @@ enum SequenceAttributesFlowSyntax {
 
     static let maximumDepth = 64
 
+    /// What ends a plain scalar: a mapping's key, a list's item, a mapping's value in a flow collection (a colon only
+    /// when a space, a comma, a bracket or the end follows it).
+    private static let mappingKeyStops: [Unicode.Scalar] = [":", ",", "}"]
+    private static let listItemStops: [Unicode.Scalar] = [",", "]"]
+    private static let mappingValueStops: [Unicode.Scalar] = [",", "}"]
+
     /// The value starting at `position` and the position after it. Reading stops a plain scalar at any of `stops` (a
     /// colon only when a space, a comma, a bracket or the end follows it).
-    static func value(in text: Text, at position: Int, stops: String, depth: Int = 0) throws(SequenceAttributesYAMLFailure) -> (SequenceAttributeValue, Int) {
+    static func value(in text: Text, at position: Int, stops: [Unicode.Scalar], depth: Int = 0) throws(SequenceAttributesYAMLFailure) -> (SequenceAttributeValue, Int) {
         guard depth <= maximumDepth else { throw .invalid }
         let start = skipSpaceAndComments(in: text, from: position)
         guard start < text.count else { return (plainScalar(in: text, from: start, stops: stops).value, start) }
@@ -62,12 +68,12 @@ enum SequenceAttributesFlowSyntax {
             guard position < text.count else { throw .incomplete }
             if text[position] == closing { return (isMapping ? .mapping(mapping) : .list(items), position + 1) }
             guard isSeparated, text[position] != "," else { throw .invalid }
-            let (first, afterFirst) = try value(in: text, at: position, stops: isMapping ? ":,}" : ",]", depth: depth + 1)
+            let (first, afterFirst) = try value(in: text, at: position, stops: isMapping ? mappingKeyStops : listItemStops, depth: depth + 1)
             position = skipSpaceAndComments(in: text, from: afterFirst)
             if isMapping {
                 var entryValue = SequenceAttributeValue.null
                 if position < text.count, text[position] == ":" {
-                    (entryValue, position) = try value(in: text, at: position + 1, stops: ",}", depth: depth + 1)
+                    (entryValue, position) = try value(in: text, at: position + 1, stops: mappingValueStops, depth: depth + 1)
                 }
                 mapping[first.javaScriptText] = entryValue
                 position = skipSpaceAndComments(in: text, from: position)
@@ -101,12 +107,11 @@ enum SequenceAttributesFlowSyntax {
     }
 
     /// A plain scalar up to a stop or a comment, its line breaks folded, read as the JSON schema reads it.
-    private static func plainScalar(in text: Text, from start: Int, stops: String) -> (value: SequenceAttributeValue, end: Int) {
-        let stopScalars = Array(stops.unicodeScalars)
+    private static func plainScalar(in text: Text, from start: Int, stops: [Unicode.Scalar]) -> (value: SequenceAttributeValue, end: Int) {
         var end = start
         while end < text.count {
             let scalar = text[end]
-            if stopScalars.contains(scalar), scalar != ":" || end + 1 >= text.count || endsPlainKey(text[end + 1]) { break }
+            if stops.contains(scalar), scalar != ":" || end + 1 >= text.count || endsPlainKey(text[end + 1]) { break }
             if scalar == "#", end > start, isWhitespace(text[end - 1]) {
                 let lineEnd = text[end...].firstIndex(of: "\n") ?? text.count
                 return (SequenceAttributesScalarSyntax.scalar(string(folding(trimmed(text[start..<end])))), lineEnd)

@@ -6,7 +6,7 @@
  *              plain scalar continued on deeper lines), a line's key and its comment, as Pele's YAML reader reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -43,7 +43,7 @@ extension SequenceAttributesBlockSyntax {
         var batchSize = 1
         while true {
             do throws(SequenceAttributesYAMLFailure) {
-                let (value, end) = try SequenceAttributesFlowSyntax.value(in: text, at: 0, stops: "")
+                let (value, end) = try SequenceAttributesFlowSyntax.value(in: text, at: 0, stops: [])
                 let usedLineCount = text[..<end].count { scalar in scalar == "\n" }
                 let lineEnd = text[end...].firstIndex(of: "\n") ?? text.count
                 guard Self.isBlankBeforeComment(Array(text[end..<lineEnd])) else { throw .invalid }
