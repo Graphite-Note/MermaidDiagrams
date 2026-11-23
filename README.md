@@ -252,3 +252,10 @@ compiled, 158.46 interpreted, against 22.13 in Deno (package 15.63); agent flows
 diagrams 5.71 / 71.99 (8.41); C4 56.72 / 671.99 (71.54); requirement diagrams 20.79 / 261.69 (29.66); use case diagrams
 26.12 / 346.38 (45.75); Venn diagrams 44.98 / 648.06 (21.17); the 500-node mesh 5,145.58 / 87,741.33 (5,304.42). Every
 documentation example was drawn as in Deno.
+
+Not measured on the devices yet: on 2026-11-23, from about 17:00 to 18:50, neither the iPad Pro 11-inch (3rd generation,
+iPad13,6) nor the iPhone 13 Pro (iPhone14,2), both paired with the Mac over the network, opened a connection to Xcode
+(`devicectl`: "The tunnel connection failed while the system tried to connect to the device"; `xcodebuild`: timed out
+waiting for the destination) in 36 attempts, so the test never started on either; it ran on an iOS simulator (whose
+numbers say nothing of a device and are not given). The command above, run with a device unlocked and reachable, fills
+in the device's table.
