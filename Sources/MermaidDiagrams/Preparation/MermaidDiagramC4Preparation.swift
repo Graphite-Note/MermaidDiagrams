@@ -6,8 +6,8 @@
  *              reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -15,10 +15,11 @@ extension MermaidDiagramPreparationContext {
     func prepared(_ diagram: C4Diagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: C4Layout
         do { layout = try C4LayoutEngine.layout(diagram, typography: typography) } catch { throw .c4Layout(error) }
-        let narrow = narrowScene(of: diagram, regularSize: layout.size, laidOut: { diagram in
-            try C4LayoutEngine.tightLayout(diagram, typography: typography, columnWidth: narrowestColumnWidth)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .c4, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: diagram, regularSize: layout.size, laidOut: { diagram in
+                try C4LayoutEngine.tightLayout(diagram, typography: typography, columnWidth: narrowestColumnWidth)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .c4, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(c4: diagram))
     }
 }

@@ -6,7 +6,7 @@
  *              where its type has one, what a screen reader says of it, or a typed failure of the right kind.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -151,23 +151,25 @@ final class MermaidDiagramPreparationTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(map.narrowScene).size.width, map.scene.size.width)
     }
 
-    func testADiagramRefusedAsTooLargeIsNotLaidOutASecondTimeForANarrowColumn() {
+    func testADiagramRefusedAsTooLargeIsNotLaidOutASecondTimeForANarrowColumn() throws {
         let limits = MermaidDiagramLimits(maximumSourceBytes: 50_000, maximumNodeCount: 5_000, maximumEdgeCount: 5_000, maximumLayoutPointCount: 50_000,
                                           maximumDrawingSideLength: 400)
         let context = MermaidDiagramPreparationContext(typography: typography, limits: limits, narrowestColumnWidth: 280, now: GanttChartCorpus.now,
                                                        timeZone: GanttChartCorpus.timeZone)
         let narrowPage = DiagramScene(size: CGSize(width: 200, height: 300), font: typography.font, items: [])
-        var layoutCount = 0
-        let layOut = { (turned: String) -> String in
-            layoutCount += 1
+        let layoutCount = LockedLayoutCount()
+        let layOut = { @Sendable (turned: String) -> String in
+            layoutCount.add()
             return turned
         }
         XCTAssertNil(context.narrowScene(of: "turned", regularSize: CGSize(width: 500, height: 100), laidOut: layOut) { _ in narrowPage },
                      "The regular scene is beyond the limit, so the diagram is refused whatever its narrow scene")
-        XCTAssertEqual(layoutCount, 0)
-        XCTAssertEqual(context.narrowScene(of: "turned", regularSize: CGSize(width: 390, height: 100), laidOut: layOut) { _ in narrowPage }?.size,
-                       narrowPage.size)
-        XCTAssertEqual(layoutCount, 1)
+        XCTAssertEqual(layoutCount.value, 0)
+        let deferred = try XCTUnwrap(context.narrowScene(of: "turned", regularSize: CGSize(width: 390, height: 100), laidOut: layOut) { _ in narrowPage })
+        XCTAssertEqual(layoutCount.value, 0, "Nothing is laid out before the scene is read")
+        XCTAssertEqual(deferred.scene?.size, narrowPage.size)
+        XCTAssertEqual(deferred.scene?.size, narrowPage.size)
+        XCTAssertEqual(layoutCount.value, 1, "Laid out once, on the first read")
     }
 
     func testAPreparedDiagramWritesItsSVGWithItsTitleAndDescription() throws {
@@ -175,5 +177,23 @@ final class MermaidDiagramPreparationTests: XCTestCase {
         XCTAssertTrue(document.contains("<title id=\"pele-title\">Pets &amp; owners</title><desc id=\"pele-desc\">Who adopts what</desc>"))
         XCTAssertTrue(document.contains("class=\"pele pele-pie\""))
         XCTAssertNotNil(DiagramSVGDocumentReading.read(document))
+    }
+}
+
+/// A count the work of a narrow scene adds to from whichever thread reads it.
+private final class LockedLayoutCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func add() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
     }
 }

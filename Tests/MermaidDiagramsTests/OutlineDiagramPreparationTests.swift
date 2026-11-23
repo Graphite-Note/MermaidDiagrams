@@ -7,8 +7,8 @@
  *              within bounds and time, or refused with a typed error.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -109,6 +109,8 @@ final class OutlineDiagramPreparationTests: XCTestCase {
             do {
                 let prepared = try MermaidDiagramPreparation.prepare(source: source, typography: typography)
                 XCTAssertTrue(prepared.scene.size.width.isFinite && prepared.scene.size.height.isFinite, String(source.prefix(40)))
+                // The narrow scene is laid out when it is read: read it, so that its layout is bounded in time too.
+                if let narrow = prepared.narrowScene { XCTAssertTrue(narrow.size.width.isFinite && narrow.size.height.isFinite, String(source.prefix(40))) }
             } catch {
                 XCTAssertNotNil(error as MermaidDiagramPreparationFailure?, String(source.prefix(40)))
             }

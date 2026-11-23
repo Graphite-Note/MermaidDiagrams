@@ -6,7 +6,7 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -49,8 +49,10 @@ public enum MermaidDiagramPreparation {
     }
 }
 
-/// What every type's preparation is given.
-struct MermaidDiagramPreparationContext {
+/// What every type's preparation is given. Its values never change once made, and its typography's measurers read fonts
+/// that never change through caches that lock (`CoreTextFontFaces`), so the work that lays a narrow scene out later, on
+/// whatever thread first reads it, may hold it.
+struct MermaidDiagramPreparationContext: @unchecked Sendable {
     let typography: DiagramTypography
     let limits: MermaidDiagramLimits
     let narrowestColumnWidth: CGFloat?
@@ -96,24 +98,47 @@ struct MermaidDiagramPreparationContext {
         }
     }
 
+    /// Whether a regular layout of `regularSize` may have a narrow scene: a narrowest column is asked for, the layout is
+    /// wider than it and within the drawing limit. Each type asks it before it builds the work of `narrowScene`, so that a
+    /// diagram with none builds no work (the closures and what they hold) either.
+    func narrowSceneIsWanted(forRegularSize regularSize: CGSize) -> Bool {
+        guard let narrowestColumnWidth else { return false }
+        return regularSize.width > narrowestColumnWidth && limits.allowsDrawing(regularSize)
+    }
+
+    /// `narrowSceneIsWanted(forRegularSize:)` for a diagram Pele turns to run down only, which also needs the narrowest
+    /// column under Pele's 640-point breakpoint (`turnedNarrowScene`).
+    func turnedNarrowSceneIsWanted(forRegularSize regularSize: CGSize) -> Bool {
+        guard let narrowestColumnWidth, narrowestColumnWidth < DiagramWidthFitting.defaultDirectionBreakpoint else { return false }
+        return narrowSceneIsWanted(forRegularSize: regularSize)
+    }
+
     /// The scene of `turned` (the diagram turned to run down) laid out for a narrow column, when the regular layout is
     /// within the drawing limit and wider than the narrowest column, and the turned one is narrower than it and within the
-    /// limit; else nil, and nothing is laid out a second time. A regular layout beyond the limit is refused whatever the
-    /// narrow one would be, so it is not laid out again. A turned diagram whose layout fails keeps its regular layout alone.
-    func narrowScene<Diagram, Layout>(of turned: Diagram?, regularSize: CGSize, laidOut: (Diagram) throws -> Layout,
-                                      scene: (Layout) -> DiagramScene) -> DiagramScene? {
-        guard let narrowestColumnWidth, regularSize.width > narrowestColumnWidth, limits.allowsDrawing(regularSize), let turned,
-              let layout = try? laidOut(turned) else { return nil }
-        let narrow = scene(layout)
-        guard narrow.size.width < regularSize.width, limits.allowsDrawing(narrow.size) else { return nil }
-        return narrow
+    /// limit; else nil. Nothing is laid out here: the store returned turns the diagram and lays it out the first time its
+    /// scene is read (`PreparedMermaidDiagram.narrowScene`), and makes nil then where the turned layout fails or is not
+    /// narrower, so a diagram whose narrow scene is never read costs no second layout. Nil (no store) when the regular
+    /// layout is no wider than the narrowest column or beyond the drawing limit: a regular layout beyond the limit is
+    /// refused whatever the narrow one would be. A turned diagram whose layout fails keeps its regular layout alone.
+    func narrowScene<Diagram, Layout>(of turned: @autoclosure @escaping @Sendable () -> Diagram?, regularSize: CGSize,
+                                      laidOut: @escaping @Sendable (Diagram) throws -> Layout,
+                                      scene: @escaping @Sendable (Layout) -> DiagramScene) -> PreparedNarrowScene? {
+        guard narrowSceneIsWanted(forRegularSize: regularSize) else { return nil }
+        let limits = limits
+        return PreparedNarrowScene {
+            guard let turned = turned(), let layout = try? laidOut(turned) else { return nil }
+            let narrow = scene(layout)
+            guard narrow.size.width < regularSize.width, limits.allowsDrawing(narrow.size) else { return nil }
+            return narrow
+        }
     }
 
     /// The scene of `turned` for a diagram Pele turns to run down only (`turnToFit`): as `narrowScene`, and only for a
     /// column under Pele's 640-point breakpoint, past which Pele keeps a diagram across however wide it is.
-    func turnedNarrowScene<Diagram, Layout>(of turned: Diagram?, regularSize: CGSize, laidOut: (Diagram) throws -> Layout,
-                                            scene: (Layout) -> DiagramScene) -> DiagramScene? {
-        guard let narrowestColumnWidth, narrowestColumnWidth < DiagramWidthFitting.defaultDirectionBreakpoint else { return nil }
-        return narrowScene(of: turned, regularSize: regularSize, laidOut: laidOut, scene: scene)
+    func turnedNarrowScene<Diagram, Layout>(of turned: @autoclosure @escaping @Sendable () -> Diagram?, regularSize: CGSize,
+                                            laidOut: @escaping @Sendable (Diagram) throws -> Layout,
+                                            scene: @escaping @Sendable (Layout) -> DiagramScene) -> PreparedNarrowScene? {
+        guard turnedNarrowSceneIsWanted(forRegularSize: regularSize) else { return nil }
+        return narrowScene(of: turned(), regularSize: regularSize, laidOut: laidOut, scene: scene)
     }
 }

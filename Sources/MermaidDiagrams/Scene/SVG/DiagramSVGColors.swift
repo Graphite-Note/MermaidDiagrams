@@ -3,10 +3,10 @@
  * ----------------------------
  * Layer: Core
  * Description: How a scene's paints are written in SVG: in a palette's colors, or as Pele's CSS variables with Pele's
- *              colors as their fallbacks.
+ *              colors as their fallbacks; each paint's text worked out once per document.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -36,8 +36,8 @@ extension DiagramSVGColors {
     func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
         switch self {
         case .palette(let palette):
-            let color = paint.color(in: palette)
-            return DiagramSVGPaintText(color: Self.hexadecimal(color), opacity: Self.opacity(of: color))
+            let components = Self.sRGBComponents(of: paint.color(in: palette))
+            return DiagramSVGPaintText(color: Self.hexadecimal(components: components), opacity: components[3])
         case .peleVariables:
             switch paint.source {
             case .role(let role): return DiagramSVGPaintText(color: Self.variable(role), opacity: paint.opacity)
@@ -100,22 +100,56 @@ extension DiagramSVGColors {
 
     /// `#rrggbb` in sRGB; black for a color with no sRGB form.
     static func hexadecimal(_ color: CGColor) -> String {
-        let channels = sRGBComponents(of: color).prefix(3).map { component in Int((min(1, max(0, component)) * 255).rounded()) }
+        hexadecimal(components: sRGBComponents(of: color))
+    }
+
+    /// `#rrggbb` of the first three of sRGB components, each clamped to 0...1.
+    private static func hexadecimal(components: [CGFloat]) -> String {
+        let channels = components.prefix(3).map { component in Int((min(1, max(0, component)) * 255).rounded()) }
         return "#" + channels.map { channel in
             let digits = String(channel, radix: 16)
             return digits.count == 1 ? "0" + digits : digits
         }.joined()
     }
 
-    private static func opacity(of color: CGColor) -> CGFloat {
-        sRGBComponents(of: color).last ?? 1
-    }
+    /// The sRGB color space every color is converted to, made once.
+    private static let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)
 
+    /// Red, green, blue and opacity in sRGB; opaque black for a color with no sRGB form.
     private static func sRGBComponents(of color: CGColor) -> [CGFloat] {
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+        guard let space = sRGBColorSpace,
               let components = color.converted(to: space, intent: .defaultIntent, options: nil)?.components, components.count == 4 else {
             return [0, 0, 0, 1]
         }
         return components
+    }
+}
+
+/// The text of each paint of one document, worked out the first time the paint is written: a palette's colors are
+/// converted to sRGB and a series or mixture is spelled out once, not for every shape and text.
+struct DiagramSVGPaintTexts {
+    let colors: DiagramSVGColors
+    private var textsByPaint: [DiagramPaint: DiagramSVGPaintText] = [:]
+
+    init(colors: DiagramSVGColors) {
+        self.colors = colors
+    }
+
+    mutating func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
+        if case .peleVariables = colors, case .role(let role) = paint.source, role.isNamedByPeleAlone {
+            return DiagramSVGPaintText(color: DiagramSVGColors.variable(role), opacity: paint.opacity)
+        }
+        if let text = textsByPaint[paint] { return text }
+        let text = colors.text(of: paint)
+        textsByPaint[paint] = text
+        return text
+    }
+}
+
+private extension DiagramPaletteRole {
+    /// Whether Pele's variable for the role is a fixed text (every role but a series, whose text carries its color).
+    var isNamedByPeleAlone: Bool {
+        if case .series = self { return false }
+        return true
     }
 }

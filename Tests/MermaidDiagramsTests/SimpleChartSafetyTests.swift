@@ -6,8 +6,8 @@
  *              refused with a typed error or prepared within bounds, in time, never a crash.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -118,6 +118,8 @@ final class SimpleChartSafetyTests: XCTestCase {
                 let prepared = try MermaidDiagramPreparation.prepare(source: source, typography: typography)
                 XCTAssertTrue(prepared.scene.size.width.isFinite && prepared.scene.size.height.isFinite, name)
                 for shape in prepared.scene.shapes { XCTAssertTrue(shape.path.boundingBoxOfPath.width.isFinite || shape.path.isEmpty, name) }
+                // The narrow scene is laid out when it is read: read it, so that its layout is bounded in time too.
+                if let narrow = prepared.narrowScene { XCTAssertTrue(narrow.size.width.isFinite && narrow.size.height.isFinite, name) }
                 preparedCount += 1
             } catch {
                 refusedCount += 1
@@ -139,6 +141,7 @@ final class SimpleChartSafetyTests: XCTestCase {
         func check(_ text: String) {
             if let prepared = try? MermaidDiagramPreparation.prepare(source: text, typography: typography) {
                 XCTAssertTrue(prepared.scene.size.width.isFinite && prepared.scene.size.height.isFinite, text)
+                if let narrow = prepared.narrowScene { XCTAssertTrue(narrow.size.width.isFinite && narrow.size.height.isFinite, text) }
                 preparedCount += 1
             }
         }
@@ -165,7 +168,9 @@ final class SimpleChartSafetyTests: XCTestCase {
         let thread = Thread {
             let depth = 4_000
             let source = "treemap\n" + (0..<depth).map { level in String(repeating: " ", count: level % 200) + "\"s\(level)\"\n" }.joined() + " \"leaf\": 1\n"
-            _ = try? MermaidDiagramPreparation.prepare(source: String(source.prefix(MermaidDiagramLimits.standard.maximumSourceBytes)), typography: DiagramSceneSamples.typography)
+            // Its narrow scene read too, as it is laid out only then, so that the narrow layout runs on the small stack as well.
+            _ = (try? MermaidDiagramPreparation.prepare(source: String(source.prefix(MermaidDiagramLimits.standard.maximumSourceBytes)),
+                                                        typography: DiagramSceneSamples.typography))?.narrowScene
             finished.fulfill()
         }
         thread.stackSize = 512 * 1024

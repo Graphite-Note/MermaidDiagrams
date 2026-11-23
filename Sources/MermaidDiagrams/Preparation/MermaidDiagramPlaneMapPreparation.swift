@@ -6,8 +6,8 @@
  *              what a screen reader hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -29,10 +29,11 @@ extension MermaidDiagramPreparationContext {
     /// A Wardley map, and for a narrow column the map Pele draws to fit it: tight, its plot narrowed.
     func prepared(_ map: WardleyMap) -> PreparedMermaidDiagram {
         let layout = WardleyMapLayoutEngine.layout(map, typography: typography)
-        let narrow = narrowScene(of: map, regularSize: layout.size, laidOut: { map in
-            WardleyMapLayoutEngine.layout(map, typography: typography, fittingWidth: narrowestColumnWidth)
-        }, scene: DiagramScene.init(layout:))
-        return PreparedMermaidDiagram(kind: .wardleyMap, scene: DiagramScene(layout: layout), narrowScene: narrow,
+        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
+            ? narrowScene(of: map, regularSize: layout.size, laidOut: { map in
+                WardleyMapLayoutEngine.layout(map, typography: typography, fittingWidth: narrowestColumnWidth)
+            }, scene: DiagramScene.init(layout:)) : nil
+        return PreparedMermaidDiagram(kind: .wardleyMap, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(wardleyMap: map))
     }
 }
