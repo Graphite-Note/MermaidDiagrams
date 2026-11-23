@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--bench]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--bench] [--svg]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -41,6 +41,8 @@ With no flag it does all three:
 - `--compat` writes `pele-compat-inputs.json`, every string of `tests/compat`'s spec and test files that is a diagram text,
   and `pele-flowchart-compat.json`, every text Pele's ports of Mermaid's flowchart specs parse with what Pele's flowchart
   database made of it (the specs run with stand-ins for `describe`, `it` and `expect` that check nothing).
+- `--svg`, with `--corpus`, also writes each drawn input's SVG as `svg/<corpus>-<index>.svg` in the output folder, to look
+  at beside the package's drawing of the same input.
 - `--bench` reproduces Pele's `scripts/bench.mjs` (its five cases: the 114 flowchart examples, a tree and a mesh of 50 and
   of 500 nodes, generated with the same seed; each case timed whole, one run not counted, then runs until 300 ms are
   spent, at least 5 and at most 2,000) and times each type's documentation examples the same way, and writes

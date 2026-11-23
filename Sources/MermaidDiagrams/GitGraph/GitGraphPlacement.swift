@@ -1,3 +1,14 @@
+/**
+ * File: GitGraphPlacement.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Places a Git graph's lanes, commits, ids and tags in diagram space as Pele does.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// Places a Git graph's lanes, commits, ids and tags in diagram space as Pele does, and the rectangle they cover. A
@@ -71,7 +82,7 @@ struct GitGraphPlacement {
     /// The id level (`rotateCommitLabel: false`), centered under the dot in a horizontal graph and left of it in a
     /// vertical one.
     private mutating func placedLevelLabel(_ label: DiagramTextBlock, beside center: CGPoint, isVertical: Bool) -> GitGraphLayoutCommitLabel {
-        let reach = GitGraphGeometry.dotRadius + GitGraphGeometry.labelOffset
+        let reach = GitGraphGeometry.dotRadius + GitGraphGeometry.levelLabelOffset
         var text = label
         text.center = isVertical ? CGPoint(x: center.x - reach - label.size.width / 2, y: center.y)
             : CGPoint(x: center.x, y: center.y + reach + label.size.height / 2)

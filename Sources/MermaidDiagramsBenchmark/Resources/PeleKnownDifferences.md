@@ -8,7 +8,7 @@ refuses it and the other draws it (`refused`), when its page differs in `width` 
 spans of a class of their own, the scene's texts), or, where Pele draws `pele-edge` parts, when the edges' subpaths
 differ in number (`edges`). Every input that differs is listed here with why; the tests fail when an input differs and is
 not listed, or is listed and does not differ as listed. The reasons were found by reading both codes and comparing the
-drawings; those marked `not-traced` were not followed to their cause.
+drawings.
 
 ## Reasons
 
@@ -28,7 +28,8 @@ drawings; those marked `not-traced` were not followed to their cause.
 | icons-in-text | Pele draws `fa:fa-…` in a label as an icon one size wide (text/icons.ts); the package writes the words as text, so the labels are wider. |
 | layered-layout | The layered layout places nodes differently: the package's ranking, ordering and positioning (`LayeredRanking`, `LayeredOrdering`, `LayeredPositioning`, `LayeredClusterLayout`) follow Pele's method but are not step-for-step ports of layout/layered.ts and layout/compound.ts (which, for example, balance ranks in eight passes, order with its own sweeps and straighten long edges past labels), so an edge of several ranks, a crossing or a group can end up elsewhere: in `flowchart-docs#92` the target of `---->` sits one rank lower than Pele puts it, in `requirement-docs#4` the two requirements under `test_req` are swapped and the relations cross. |
 | self-loop | An agent flow's node with an edge to itself is 18 points narrower than Pele draws it: the loop's reach beside the node differs (not followed further). |
-| not-traced | Not followed to its cause in this pass. |
+| monospaced-font | Pele's table measures every monospaced character as 600 thousandths of the size (text/measurer.ts `metricsMeasurer`, `Style.Mono`); the package measures in the system's monospaced font (SF Mono, 602 thousandths). A railroad terminal is its text and 24 points rounded up to an even width (railroad/render.ts `even`), so `Hello` at 14 points is 66 points in Pele and 68 in the package: the code is the same, the font is not. |
+| muted-spans | Pele writes a PEG predicate's marks (`? ` and ` ?` around `!Keyword`) as muted `<tspan>` pieces of the predicate's one `<text>`; a scene text has one paint, so the package writes three texts. Nothing visible differs. |
 
 ## Inputs
 
@@ -48,7 +49,7 @@ drawings; those marked `not-traced` were not followed to their cause.
 | eventmodeling-docs#3 | texts | text-per-line | +2 +0 |
 | eventmodeling-docs#4 | texts | text-per-line | +2 +0 |
 | flowchart-docs#2 | width | beyond-ascii | +5 +0 |
-| flowchart-docs#3 | height | not-traced | -1 +9 |
+| flowchart-docs#3 | height | line-height | -1 +9 |
 | flowchart-docs#6 | height | layered-layout | +0 -5 |
 | flowchart-docs#7 | height | layered-layout | +0 -5 |
 | flowchart-docs#68 | width, height | icon-nodes | +28 -42 |
@@ -59,11 +60,10 @@ drawings; those marked `not-traced` were not followed to their cause.
 | flowchart-docs#97 | width | layered-layout | -12 +0 |
 | flowchart-docs#98 | width, texts | layered-layout, outlined-text | -20 +0 |
 | flowchart-docs#100 | width, height | layered-layout | -126 +84 |
-| flowchart-docs#102 | height | not-traced | -4 +12 |
+| flowchart-docs#102 | height | line-height | -4 +12 |
 | flowchart-docs#111 | width, height | icons-in-text | +206 +24 |
 | flowchart-docs#112 | width, height | icons-in-text | +86 +24 |
 | gantt-docs#6 | refused | nothing-to-draw |  |
-| git-docs#12 | width, height | not-traced | +56 -12 |
 | git-docs#14 | refused | repeated-commit |  |
 | info-docs#0 | width | info-version | +90 +0 |
 | info-docs#1 | width | info-version | +90 +0 |
@@ -72,16 +72,14 @@ drawings; those marked `not-traced` were not followed to their cause.
 | kanban-docs#2 | height | line-height | +0 +12 |
 | mindmap-docs#0 | height | line-height | +0 +6 |
 | mindmap-docs#12 | height | beyond-ascii | +3 +9 |
-| railroad-docs#2 | width | not-traced | +4 +0 |
-| railroad-docs#12 | texts | not-traced | +0 +0 |
+| railroad-docs#2 | width | monospaced-font | +4 +0 |
+| railroad-docs#12 | texts | muted-spans | +0 +0 |
 | requirement-docs#3 | width | layered-layout | -5 +0 |
 | requirement-docs#4 | width | layered-layout | +270 +0 |
 | requirement-docs#8 | width | layered-layout | -27 +0 |
 | sankey-docs#5 | texts | outlined-text | +0 +0 |
 | sequence-docs#23 | height | line-height | +0 +12 |
 | sequence-docs#24 | height | line-height | +0 +24 |
-| sequence-docs#29 | width | not-traced | -5 +0 |
-| sequence-docs#30 | width | not-traced | -5 +0 |
 | state-docs#0 | width | layered-layout | -3 +0 |
 | state-docs#2 | width, height | layered-layout | -12 -8 |
 | state-docs#3 | width, height | layered-layout | -12 -8 |

@@ -6,8 +6,8 @@
  *              ids, level ids and commits placed in parallel.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -67,6 +67,18 @@ final class GitGraphOptionsTests: XCTestCase {
         XCTAssertLessThan(first.text.frame.maxX, second.center.x - GitGraphGeometry.dotRadius, "The next commit stands past the level id.")
         let turned = try layout(options: "    rotateCommitLabel: true", " commit id: \"feat(api): a long label\"\n commit id: \"b\"")
         XCTAssertNotEqual(try XCTUnwrap(turned.commits[0].label).angle, 0)
+    }
+
+    func testLevelIdsAreSpacedAndPlacedAsPeleDoes() throws {
+        let level = try layout(options: "    rotateCommitLabel: false", " commit id: \"feat(api): a long label\"\n commit id: \"b\"\n commit id: \"c\"")
+        let first = try XCTUnwrap(level.commits[0].label)
+        // git/render.ts `space`: half the id, the next commit's half (its dot's radius, wider than its one-letter id)
+        // and one gap of 8, not a gap inside each id's half as well.
+        XCTAssertEqual(level.commits[1].center.x - level.commits[0].center.x,
+                       first.text.size.width / 2 + GitGraphGeometry.dotRadius + GitGraphGeometry.gap, accuracy: 0.01)
+        XCTAssertEqual(level.commits[2].center.x - level.commits[1].center.x, GitGraphGeometry.commitStep, accuracy: 0.01)
+        // The id's top stands `DOT + 6` below the commit's center, where a turned id's corner stands `DOT + 3`.
+        XCTAssertEqual(first.text.frame.minY - level.commits[0].center.y, GitGraphGeometry.dotRadius + 6, accuracy: 0.01)
     }
 
     func testCommitsInParallelStandByTheirDistanceFromTheFirst() throws {
