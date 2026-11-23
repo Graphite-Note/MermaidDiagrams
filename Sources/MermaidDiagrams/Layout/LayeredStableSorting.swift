@@ -14,6 +14,10 @@ extension Array {
     /// element before the second, and a comparison that is NaN or 0 a tie that keeps their order. A bottom-up merge sort.
     mutating func sortStably(by compare: (Element, Element) -> Double) {
         guard count > 1 else { return }
+        if count <= Self.insertionSortLimit {
+            sortByInsertion(by: compare)
+            return
+        }
         var source = self
         var target = self
         var width = 1
@@ -43,5 +47,21 @@ extension Array {
             width *= 2
         }
         self = source
+    }
+
+    /// Up to this many elements are sorted in place by insertion, which allocates nothing.
+    private static var insertionSortLimit: Int { 16 }
+
+    /// The same order by insertion: each element moves before those it compares strictly before.
+    private mutating func sortByInsertion(by compare: (Element, Element) -> Double) {
+        for index in 1..<count {
+            let element = self[index]
+            var position = index
+            while position > 0 && compare(element, self[position - 1]) < 0 {
+                self[position] = self[position - 1]
+                position -= 1
+            }
+            self[position] = element
+        }
     }
 }
