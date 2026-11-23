@@ -80,7 +80,7 @@ drawings; those marked `not-traced` were not followed to their cause.
 | usecase-docs#1 | height | layered-layout | +0 +4 |
 | usecase-docs#2 | height | layered-layout | +0 +4 |
 | usecase-docs#11 | height | layered-layout | +0 -8 |
-| usecase-docs#22 | height | layered-layout | -3 +18 |
+| usecase-docs#22 | height | layered-layout | -1 +18 |
 | bench-generated#0 | width | layered-layout | -368 +0 |
 | bench-generated#1 | width, height | layered-layout | -754 -115 |
 | bench-generated#2 | refused | drawing-limit |  |
