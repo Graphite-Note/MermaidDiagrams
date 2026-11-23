@@ -7,7 +7,7 @@
  *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.9
+ * Version: 0.10
  * Date: 23/11/2026
  */
 
@@ -35,13 +35,21 @@ struct MermaidDiagramsBenchmark {
     /// `--pele-comparison` times only the comparison with Pele; `--pele-javascriptcore` times it beside Pele run in
     /// JavaScriptCore on this machine instead of Pele's run in Deno (`PeleJavaScriptCoreComparison`, what the iPad and
     /// iPhone run as an XCTest); `--check-targets` exits with status 1, after a line naming each, when a median misses a
-    /// target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one case for a sampler (`ProfilingLoop`).
+    /// target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one case for a sampler (`ProfilingLoop`);
+    /// `--output-digest [folder]` prints a digest of every corpus input's output to compare two builds (`OutputDigest`);
+    /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
+    /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
+        if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
+            return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
+        }
         let arguments = Set(CommandLine.arguments.dropFirst())
+        if arguments.contains("--layout-memory") { return try LayoutMemoryBenchmark.run(typography: typography) }
+        if arguments.contains("--scenes") { return try DiagramSceneBenchmark.run(typography: typography) }
         let missedTargets: [String]
         if arguments.contains("--pele-javascriptcore") {
             let report = try await PeleJavaScriptCoreComparison.run()
