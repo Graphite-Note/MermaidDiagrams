@@ -8,7 +8,7 @@
  *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.10
+ * Version: 0.11
  * Date: 23/11/2026
  */
 
@@ -37,16 +37,24 @@ struct MermaidDiagramsBenchmark {
     /// JavaScriptCore on this machine instead of Pele's run in Deno (`PeleJavaScriptCoreComparison`, what the iPad and
     /// iPhone run as an XCTest); `--check-targets` exits with status 1, after a line naming each, when a median misses a
     /// target of Graphite's plan (`PeleComparisonBenchmark`); `--profile` repeats one case for a sampler (`ProfilingLoop`);
-    /// `--readme-pictures` paints the README's pictures of every type (`ReadmePictures`).
+    /// `--output-digest [folder]` prints a digest of every corpus input's output to compare two builds (`OutputDigest`);
+    /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
+    /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`); `--readme-pictures` paints
+    /// the README's pictures of every type (`ReadmePictures`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
+        if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
+            return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
+        }
         if let picturesIndex = CommandLine.arguments.firstIndex(of: "--readme-pictures") {
             return try ReadmePictures.run(arguments: Array(CommandLine.arguments[(picturesIndex + 1)...]), typography: typography)
         }
         let arguments = Set(CommandLine.arguments.dropFirst())
+        if arguments.contains("--layout-memory") { return try LayoutMemoryBenchmark.run(typography: typography) }
+        if arguments.contains("--scenes") { return try DiagramSceneBenchmark.run(typography: typography) }
         let missedTargets: [String]
         if arguments.contains("--pele-javascriptcore") {
             let report = try await PeleJavaScriptCoreComparison.run()
