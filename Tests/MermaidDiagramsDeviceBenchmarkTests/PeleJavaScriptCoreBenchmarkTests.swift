@@ -7,16 +7,17 @@
  *              does not time anything.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
 import MermaidDiagramsBenchmark
 import XCTest
 
-/// `TEST_RUNNER_MERMAID_DIAGRAMS_DEVICE_BENCHMARK=1 xcodebuild test -scheme MermaidDiagrams-Package -configuration Release
-/// -destination id=<device> -only-testing:MermaidDiagramsDeviceBenchmarkTests` (README, Beside Pele). With
-/// MERMAID_DIAGRAMS_CHECK_TARGETS set too, each target of Graphite's plan a median misses fails the test, as
+/// `xcodebuild test -scheme MermaidDiagramsDeviceBenchmark -configuration Release -enableCodeCoverage NO
+/// -destination id=<device> -allowProvisioningUpdates` (README, Beside Pele): the shared scheme sets
+/// MERMAID_DIAGRAMS_DEVICE_BENCHMARK. With `TEST_RUNNER_MERMAID_DIAGRAMS_CHECK_TARGETS=1` before `xcodebuild`
+/// (MERMAID_DIAGRAMS_CHECK_TARGETS in the test), each target of Graphite's plan a median misses fails the test, as
 /// `--check-targets` makes the Mac's benchmark exit with status 1.
 final class PeleJavaScriptCoreBenchmarkTests: XCTestCase {
     @MainActor

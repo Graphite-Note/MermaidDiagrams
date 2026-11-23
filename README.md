@@ -187,7 +187,8 @@ links (`javascriptcore-url.js`), which a page has. Before timing, each draws eve
 fails for one drawn otherwise than Pele drew it in Deno (`pele-bundle-drawings.json`: type, page and a hash of the SVG),
 but for the Gantt charts in the page when the device's time zone is not UTC (Pele writes their dates in the page's time
 zone, which an app cannot set). Each case is then timed as above, Pele in the JSContext with the same loop, and in the page
-with samples that each repeat the case for at least 50 ms (the page's clock moves by whole milliseconds) over 3 s; the
+with samples that each repeat the case for at least 50 ms (the page's clock moves by whole milliseconds) over 3 s, so its
+99th percentile is of those means and smoother than one run's; the
 speed-up and the targets are against Pele in the page. With `TEST_RUNNER_MERMAID_DIAGRAMS_CHECK_TARGETS=1` before
 `xcodebuild`, each missed target fails the test, as `--check-targets` fails the Mac's run. On the Mac,
 `--pele-javascriptcore` runs the same comparison beside Pele in a JSContext of the benchmark's own process (no page: the
@@ -256,6 +257,7 @@ documentation example was drawn as in Deno.
 Not measured on the devices yet: on 2026-11-23, from about 17:00 to 18:50, neither the iPad Pro 11-inch (3rd generation,
 iPad13,6) nor the iPhone 13 Pro (iPhone14,2), both paired with the Mac over the network, opened a connection to Xcode
 (`devicectl`: "The tunnel connection failed while the system tried to connect to the device"; `xcodebuild`: timed out
-waiting for the destination) in 36 attempts, so the test never started on either; it ran on an iOS simulator (whose
+waiting for the destination) in 36 attempts, nor in four more from about 18:55 to 19:15 with the test built anew for iOS
+in Release (each device listed as available at times, but no tunnel opened), so the test never started on either; it ran on an iOS simulator (whose
 numbers say nothing of a device and are not given). The command above, run with a device unlocked and reachable, fills
 in the device's table.
