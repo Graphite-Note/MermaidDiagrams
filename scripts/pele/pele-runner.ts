@@ -56,7 +56,7 @@ interface TimedCase {
 
 const [peleRoot, outputFolder, ...flags] = Deno.args;
 if (peleRoot === undefined || outputFolder === undefined) {
-  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--max-width=<width>,…] [--svg-at=<width>]');
+  console.error('usage: pele-runner.ts <pele root> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--max-width=<width>,…] [--svg-at=<width>] [--svg-of-texts=<file>.json]');
   Deno.exit(2);
 }
 const runsCorpus = flags.length === 0 || flags.includes('--corpus');
@@ -72,6 +72,9 @@ const narrowWidths = flags.find((flag) => flag.startsWith('--max-width='))?.slic
   .filter((width) => width > 0) ?? [];
 // --svg-at=<width> draws the --svg-of inputs as Pele's mount shows them in a container that wide.
 const svgWidth = Number(flags.find((flag) => flag.startsWith('--svg-at='))?.slice('--svg-at='.length) ?? 'NaN');
+// --svg-of-texts=<file>.json draws the diagram texts of a JSON array in a file beside this runner as svg/texts-<index>.svg
+// (at --svg-at's width when given), to compare a drawing of a text outside Pele's corpora; it records nothing.
+const svgTextsFile = flags.find((flag) => flag.startsWith('--svg-of-texts='))?.slice('--svg-of-texts='.length);
 // --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
 const writesDrawings = flags.includes('--svg');
 
@@ -362,6 +365,17 @@ if (svgInputs.length > 0) {
     }
   }
   console.log(`svg: ${svgInputs.length} inputs written`);
+}
+
+if (svgTextsFile !== undefined) {
+  if (svgTextsFile.includes('/') || !svgTextsFile.endsWith('.json')) throw new Error('--svg-of-texts names a .json file beside the runner');
+  const texts: string[] = JSON.parse(await Deno.readTextFile(new URL(svgTextsFile, import.meta.url)));
+  await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+  for (const [index, source] of texts.entries()) {
+    const drawing = svgWidth > 0 ? shown(source, svgWidth).svg : core.render(source, { now: ganttNow }).svg;
+    await Deno.writeTextFile(`${outputFolder}/svg/texts-${index}${svgWidth > 0 ? `-at-${svgWidth}` : ''}.svg`, drawing);
+  }
+  console.log(`svg: ${texts.length} texts written`);
 }
 
 if (narrowWidths.length > 0) {

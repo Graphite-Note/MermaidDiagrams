@@ -1,0 +1,5 @@
+[
+"gantt\n    dateFormat YYYY-MM-DD\n    title Release plan\n    section Build\n    Design      :a1, 2024-01-01, 10d\n    Implement   :a2, after a1, 15d\n    Release     :milestone, m1, 2024-01-26, 0d\n    Code freeze :vert, v1, 2024-01-25, 0d\n    click a1 href \"https://example.com\"\n    click a2 call callback()",
+"flowchart TD\n    subgraph one\n        a1 --> a2\n    end\n    one --> one",
+"flowchart LR\n    subgraph one\n        a1 --> a2\n    end\n    one --> one"
+]

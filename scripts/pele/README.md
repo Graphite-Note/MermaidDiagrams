@@ -19,7 +19,7 @@ runner checks and records; the package's tests measure in Arial (`ArialMT`) at P
 ## Command
 
 ```sh
-scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--svg-at=<width>] [--max-width=<width>,…]
+scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--random-flat] [--bench] [--preprocessing] [--svg] [--svg-of=<corpus>#<index>,…] [--svg-at=<width>] [--svg-of-texts=<file>.json] [--max-width=<width>,…]
 ```
 
 which runs, in Deno's sandbox (read access to the Pele checkout and this folder only, write access to the output folder
@@ -48,6 +48,9 @@ With no flag it does the corpus, compat, random flat, bench and preprocessing ru
   graph included) to `<output>/svg`; it records nothing.
 - `--svg-at=<width>` draws the `--svg-of` inputs as Pele's mount shows them in a container that wide (below), to
   `svg/<corpus>-<index>-at-<width>.svg`.
+- `--svg-of-texts=<file>.json` draws the diagram texts of a JSON array in a file beside the runner to
+  `svg/texts-<index>.svg` (at `--svg-at`'s width when given), to compare a text outside Pele's corpora; it records
+  nothing. `check-texts.json` holds the texts PeleKnownDifferences.md's `## Drawn as Pele draws them` was checked on.
 - `--max-width=<width>,…` writes `pele-narrow.json`: every documentation example (the `-docs` corpora) as Pele's mount
   shows it in a container of each width (`src/mount.ts` `fit`: the drawing without a width when it fits or when drawing
   it for no room at all changes nothing, else the drawing for that width, `maxWidth`), recorded as the corpus is with
