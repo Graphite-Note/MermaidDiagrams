@@ -6,8 +6,8 @@
  *              scalar's escapes, as Pele's small YAML reader does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -95,7 +95,7 @@ enum SequenceAttributesScalarSyntax {
         }
         if let hexadecimalLength {
             let digits = text[(index + 1)..<min(text.count, index + 1 + hexadecimalLength)].prefix { scalar in scalar.properties.isASCIIHexDigit }
-            guard !digits.isEmpty, let value = UInt32(String(String.UnicodeScalarView(digits)), radix: 16), value <= 0x10FFFF else { throw .invalid }
+            guard !digits.isEmpty, let value = UInt32(UnicodeScalarText.string(digits), radix: 16), value <= 0x10FFFF else { throw .invalid }
             return ([Unicode.Scalar(value) ?? "\u{FFFD}"], 1 + hexadecimalLength)
         }
         guard let replacement = escapes[letter] else { throw .invalid }

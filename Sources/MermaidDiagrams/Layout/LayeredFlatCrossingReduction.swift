@@ -5,7 +5,7 @@
  * Description: Orders the ranks of Pele's layered layout: barycenter sweeps, adjacent swaps, two attempts, the mirror.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -138,6 +138,7 @@ extension LayeredFlatCrossingReduction {
         let other = isDownward ? graph.segmentFrom : graph.segmentTo
         let otherOffset = isDownward ? graph.segmentFromOffset : graph.segmentToOffset
         var moving: [Int] = []
+        moving.reserveCapacity(end - start)
         for index in start..<end {
             let vertex = graph.order[index]
             let pin = vertex < graph.nodeCount ? pins[vertex] : 0

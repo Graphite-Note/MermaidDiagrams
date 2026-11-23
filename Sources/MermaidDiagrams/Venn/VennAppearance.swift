@@ -6,7 +6,7 @@
  *              splits them between a shape and its text, and the text color Pele's ink picks over a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -137,7 +137,7 @@ public struct VennAppearance: Equatable, Sendable {
 
     /// `!important` taken out, as Pele takes it out, and the spaces at the ends.
     private static func valueWithoutImportance(_ value: String) -> String {
-        PlaneMapText.trimmed(value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive))
+        PlaneMapText.trimmed(MermaidByte.withoutImportance(value))
     }
 
     /// A plain number from 0 to 1, or a percentage, clamped to 0 to 1; nil for anything else (`calc(…)`).

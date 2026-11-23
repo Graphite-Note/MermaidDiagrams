@@ -5,8 +5,8 @@
  * Description: What a treemap's `classDef` sets of its nodes' text, as Pele reads it: a font size, a weight and a slant.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -46,7 +46,7 @@ public struct TreemapClassTextStyle: Equatable, Sendable {
     /// number of points from 1 to 200 (`2em`), which Pele would leave to the browser.
     mutating func read(property: String, value written: String) -> Bool? {
         guard ["font-size", "font-weight", "font-style"].contains(property) else { return nil }
-        let value = written.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
+        let value = MermaidByte.withoutImportance(written).trimmingCharacters(in: .whitespaces)
         guard !value.isEmpty, !Self.isUnsafe(value) else { return false }
         switch property {
         case "font-size":

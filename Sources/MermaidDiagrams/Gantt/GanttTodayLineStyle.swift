@@ -5,8 +5,8 @@
  * Description: The style a Gantt chart's `todayMarker` declarations give today's line, as Pele reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -42,7 +42,7 @@ public struct GanttTodayLineStyle: Equatable, Sendable {
             guard let colon = declaration.firstIndex(of: ":"), colon != declaration.startIndex else { continue }
             let property = declaration[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             var value = declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            while let importance = value.range(of: "!important", options: .caseInsensitive) { value.removeSubrange(importance) }
+            while value.utf8.contains(MermaidByte.exclamationMark), let importance = value.range(of: "!important", options: .caseInsensitive) { value.removeSubrange(importance) }
             value = value.trimmingCharacters(in: .whitespaces)
             let lowered = value.lowercased()
             guard Self.lineProperties.contains(property), !value.isEmpty, !Self.unsafeFragments.contains(where: { fragment in lowered.contains(fragment) }) else { continue }

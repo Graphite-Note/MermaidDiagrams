@@ -6,8 +6,8 @@
  *              their texts, its relations' lines, arrowheads and labels, and the colors its styles set.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -120,7 +120,7 @@ public struct C4ElementLook: Equatable, Sendable {
     /// Whether a value is written that Pele's `resolveStyle` keeps: not empty and none of the values it leaves out.
     static func isWritten(_ value: String?) -> Bool {
         guard let value else { return false }
-        let trimmed = C4Characters.trimmed(value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive))
+        let trimmed = C4Characters.trimmed(MermaidByte.withoutImportance(value))
         return !trimmed.isEmpty && !VennAppearance.isUnsafe(trimmed)
     }
 

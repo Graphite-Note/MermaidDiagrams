@@ -6,8 +6,8 @@
  *              identifier, spaces made one block per cell, classes and styles waiting for their block, edges counted.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Pele's `BlockDb.setHierarchy`, over the parser's statements, with a stack of the containers open instead of
@@ -46,15 +46,18 @@ struct BlockHierarchy {
     /// Sets the document's statements, `top`, into the root.
     mutating func set(_ top: [Int]) {
         var stack = [Frame(statementIndices: top, parentIndex: BlockDiagram.rootIndex)]
-        while let frame = stack.last {
-            guard frame.next < frame.statementIndices.count else {
-                blocks[frame.parentIndex].childIndices = frame.childIndices
+        // The frame is read in place, never copied out: a copy would share its children's list, which placing a block
+        // then copies whole.
+        while let top = stack.indices.last {
+            guard stack[top].next < stack[top].statementIndices.count else {
+                blocks[stack[top].parentIndex].childIndices = stack[top].childIndices
                 stack.removeLast()
                 continue
             }
-            stack[stack.count - 1].next += 1
-            let parentIndex = frame.parentIndex
-            switch statements[frame.statementIndices[frame.next]] {
+            let statementIndex = stack[top].statementIndices[stack[top].next]
+            stack[top].next += 1
+            let parentIndex = stack[top].parentIndex
+            switch statements[statementIndex] {
             case .classDefinition(let name, let declarations): addClass(name, declarations: declarations)
             case .classAssignment(let identifiers, let className):
                 for identifier in identifiers.split(separator: ",", omittingEmptySubsequences: false) {

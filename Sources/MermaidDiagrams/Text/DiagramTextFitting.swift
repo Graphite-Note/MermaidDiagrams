@@ -6,8 +6,8 @@
  *              then the text is cut and ends in an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -61,7 +61,7 @@ enum DiagramTextFitting {
                                                            measurers: inout DiagramTextMeasurerSizes<Measurer>) -> DiagramFittedText? {
         let characters = Array(text.unicodeScalars)
         func start(_ length: Int) -> String {
-            trimmedAtEnd(String(String.UnicodeScalarView(characters[..<length]))) + ellipsis
+            trimmedAtEnd(UnicodeScalarText.string(characters[..<length])) + ellipsis
         }
         // The longest start that fits is found by doubling the length until one does not, then halving: a long text is
         // measured only as far as the width reaches.

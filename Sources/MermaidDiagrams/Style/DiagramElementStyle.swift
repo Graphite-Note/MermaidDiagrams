@@ -5,8 +5,8 @@
  * Description: How a diagram's statements change the look of one node or edge.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 01/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -57,7 +57,7 @@ public struct DiagramElementStyle: Equatable, Sendable {
             }
             let property = declaration[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             var value = declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            if let importance = value.range(of: "!important", options: .caseInsensitive) {
+            if value.utf8.contains(MermaidByte.exclamationMark), let importance = value.range(of: "!important", options: .caseInsensitive) {
                 value = value[..<importance.lowerBound].trimmingCharacters(in: .whitespaces)
             }
             if !style.set(property, to: value) { hasUnappliedDeclaration = true }

@@ -6,7 +6,7 @@
  *              named, decimal and hexadecimal codes into their characters, a code that names none left as HTML's.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -84,7 +84,7 @@ enum DiagramLabelEntities {
             return (character(numbered: scalars[digits..<end], radix: 16, code: scalars[start...end]), end + 1)
         }
         guard let end = endOfWordCharacters(in: scalars, from: body), end > body, end < scalars.count, scalars[end] == ";" else { return nil }
-        let name = String(String.UnicodeScalarView(scalars[body..<end]))
+        let name = UnicodeScalarText.string(scalars[body..<end])
         if let named = DiagramLabelEntityNames.character(named: name) { return (String.UnicodeScalarView([named]), end + 1) }
         return (String.UnicodeScalarView(scalars[start...end]), end + 1)
     }

@@ -6,15 +6,18 @@
  *              a search through its characters.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
+
+import Foundation
 
 /// The bytes of Mermaid's syntax, and the classes of bytes its readers test.
 enum MermaidByte {
     static let newline = UInt8(ascii: "\n")
     static let carriageReturn = UInt8(ascii: "\r")
     static let space = UInt8(ascii: " ")
+    static let exclamationMark = UInt8(ascii: "!")
     static let tab = UInt8(ascii: "\t")
     static let semicolon = UInt8(ascii: ";")
     static let colon = UInt8(ascii: ":")
@@ -68,6 +71,20 @@ enum MermaidByte {
     /// Whether a statement ends at this byte: a line break, a semicolon or a carriage return.
     static func endsStatement(_ byte: UInt8) -> Bool {
         byte == newline || byte == semicolon || byte == carriageReturn
+    }
+
+    /// The value without its `!important`s, in any case, as CSS's priority is dropped from a style's values; a value
+    /// without an exclamation mark's byte is returned as it is, as none can be found in it.
+    static func withoutImportance(_ value: String) -> String {
+        guard value.utf8.contains(exclamationMark) else { return value }
+        return value.replacingOccurrences(of: "!important", with: "", options: .caseInsensitive)
+    }
+
+    /// Whether the text starts and ends with a printable ASCII character other than a space: trimming white space or line
+    /// breaks from either end then leaves it as it is.
+    static func startsAndEndsWithPrintableASCII(_ text: String) -> Bool {
+        guard let first = text.utf8.first, let last = text.utf8.last else { return false }
+        return first > space && first < 0x7F && last > space && last < 0x7F
     }
 
     /// Whether the text's bytes hold two spaces in a row or a tab: false when its characters hold neither, so that a
