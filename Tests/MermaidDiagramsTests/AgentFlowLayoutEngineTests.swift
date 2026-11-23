@@ -7,8 +7,8 @@
  *              flow around it, palette slots and the turned layout; and its scene in Pele's order and paints.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -39,6 +39,14 @@ final class AgentFlowLayoutEngineTests: XCTestCase {
         XCTAssertEqual(try node("w", in: laidOut).frame.size, CGSize(width: 156, height: 66))
         // A tool's subroutine is 16 points wider than a box.
         XCTAssertEqual(try node("t", in: laidOut).frame.width, 172)
+    }
+
+    func testANodeBesideAFlowStandsInTheMiddleOfItsRankAsPelesFlowsSpreadNoEdges() throws {
+        // agentflow-reference#113: Pele gives an agent flow's boxes, like its nodes, no span, so no rank stands on one
+        // line: c, which only sends its edge on, is centred in the rank the taller flow sets, not set on its bottom.
+        let laidOut = try layout("agentflow-beta TB\n  flow outer[\"Outer\"]\n    flow inner[\"Inner\"]\n      a --> b\n    end\n    c --> d\n  end")
+        let inner = try XCTUnwrap(laidOut.flows.first { flow in flow.identifier == "inner" })
+        XCTAssertEqual(try node("c", in: laidOut).frame.midY, inner.frame.midY, accuracy: 0.001)
     }
 
     func testACollapsedFlowIsABoxWithRoomForItsDotsBelowItsText() throws {
