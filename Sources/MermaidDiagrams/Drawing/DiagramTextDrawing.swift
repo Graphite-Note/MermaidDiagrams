@@ -2,12 +2,12 @@
  * File: DiagramTextDrawing.swift
  * ------------------------------
  * Layer: Core
- * Description: Draws a diagram's text blocks with Core Text, regular, bold, italic or monospaced, into a context whose y
- *              runs down.
+ * Description: Draws a diagram's text blocks with Core Text, regular, bold, italic or monospaced, each run of a line in
+ *              its emphasis, into a context whose y runs down.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -36,16 +36,12 @@ struct DiagramTextDrawing {
     }
 
     /// Draws each line centered on the block's center, one line height below the last, over its outline (the glyphs'
-    /// edges stroked in a color with round joins) when it has one.
+    /// edges stroked in a color with round joins) when it has one. A line's runs are drawn one after the other from the
+    /// line's start, each in its emphasis added to the text's own.
     mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
                        outline: (color: CGColor, lineWidth: CGFloat)? = nil, in context: CGContext) {
         guard !block.lines.isEmpty else { return }
-        let coreTextFont = coreTextFont(FontKey(size: block.fontSize, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced))
-        let attributes: [NSAttributedString.Key: Any] = [
-            kCTFontAttributeName as NSAttributedString.Key: coreTextFont,
-            kCTForegroundColorAttributeName as NSAttributedString.Key: color,
-        ]
-        let top = block.center.y - block.size.height / 2
+        let key = FontKey(size: block.fontSize, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced)
         context.saveGState()
         // Core Text draws glyphs upright in a context whose y runs up; this one's runs down.
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
@@ -54,20 +50,39 @@ struct DiagramTextDrawing {
             context.setStrokeColor(outline.color)
             context.setLineWidth(outline.lineWidth)
             context.setLineJoin(.round)
-            Self.drawLines(of: block, attributes: attributes, top: top, in: context)
+            drawLines(of: block, key: key, color: color, in: context)
             context.setTextDrawingMode(.fill)
         }
-        Self.drawLines(of: block, attributes: attributes, top: top, in: context)
+        drawLines(of: block, key: key, color: color, in: context)
         context.restoreGState()
     }
 
-    private static func drawLines(of block: DiagramTextBlock, attributes: [NSAttributedString.Key: Any], top: CGFloat, in context: CGContext) {
+    private mutating func drawLines(of block: DiagramTextBlock, key: FontKey, color: CGColor, in context: CGContext) {
+        let top = block.center.y - block.size.height / 2
         for (index, line) in block.lines.enumerated() {
-            let coreTextLine = CTLineCreateWithAttributedString(NSAttributedString(string: line, attributes: attributes))
-            let baseline = top + (CGFloat(index) + 0.5) * block.lineHeight + block.fontSize * baselineShiftRatio
-            context.textPosition = CGPoint(x: block.center.x - block.lineWidths[index] / 2, y: baseline)
-            CTLineDraw(coreTextLine, context)
+            let baseline = top + (CGFloat(index) + 0.5) * block.lineHeight + block.fontSize * Self.baselineShiftRatio
+            var start = block.center.x - block.lineWidths[index] / 2
+            guard let runs = block.lineRuns?[index] else {
+                draw(line, font: coreTextFont(key), color: color, at: CGPoint(x: start, y: baseline), in: context)
+                continue
+            }
+            for run in runs {
+                let runKey = FontKey(size: key.size, isBold: key.isBold || run.style.contains(.bold), isItalic: key.isItalic || run.style.contains(.italic),
+                                     isMonospaced: key.isMonospaced || run.style.contains(.monospaced))
+                draw(run.text, font: coreTextFont(runKey), color: color, at: CGPoint(x: start, y: baseline), in: context)
+                start += run.width
+            }
         }
+    }
+
+    private func draw(_ text: String, font: CTFont, color: CGColor, at baselineStart: CGPoint, in context: CGContext) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            kCTFontAttributeName as NSAttributedString.Key: font,
+            kCTForegroundColorAttributeName as NSAttributedString.Key: color,
+        ]
+        let coreTextLine = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+        context.textPosition = baselineStart
+        CTLineDraw(coreTextLine, context)
     }
 
     /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.

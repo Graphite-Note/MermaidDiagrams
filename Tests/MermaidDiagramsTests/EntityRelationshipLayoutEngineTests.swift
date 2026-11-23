@@ -5,8 +5,8 @@
  * Description: Entity relationship diagrams laid out in Pele's measurements.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 23/11/2026
  */
 
 import XCTest
@@ -66,9 +66,10 @@ final class EntityRelationshipLayoutEngineTests: XCTestCase {
         let entity = try XCTUnwrap(try layout("erDiagram\nA {\n string a \"\(words)\"\n}").entities.first)
         let comment = texts(entity.rows[0], in: .comment)
         XCTAssertEqual(comment.count, 2, "59 characters of 7 points wrap at 260")
-        XCTAssertEqual(comment[1].center.y - comment[0].center.y, 21, accuracy: accuracy)
+        // 1.3 times the row's 14 points, rounded: Pele's distance between the lines of a text of several.
+        XCTAssertEqual(comment[1].center.y - comment[0].center.y, 18, accuracy: accuracy)
         XCTAssertEqual(comment[0].frame.minX, comment[1].frame.minX, accuracy: accuracy)
-        XCTAssertEqual(entity.rows[0].frame.height, 2 * 21 + 9, accuracy: accuracy)
+        XCTAssertEqual(entity.rows[0].frame.height, 2 * 18 + 9, accuracy: accuracy)
     }
 
     func testARelationshipRunsDownToTheSecondEntityPastItsLabel() throws {

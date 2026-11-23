@@ -41,8 +41,34 @@ extension FlowchartNodeSyntax {
             let form: DiagramLabelDecoder.Form = labelType == "string" || labelType == "text" ? .plain : .markdown
             definition.label = DiagramLabelDecoder.label(from: MermaidYAMLDocument.javaScriptText(label), form: form)
         }
+        // Pele keeps the label only when it is text (`typeof doc.label === 'string'`) to test whether it is blank.
+        if case .text(let written)? = entries["label"] { definition.hasBlankWrittenLabel = JavaScriptStringTrimming.trimmed(written).isEmpty }
         if let view = entries["view"] { definition.asksForCollapsedView = view == .text("collapsed") }
+        readAssetAttributes(entries, into: &definition.assetAttributes)
         return definition
+    }
+
+    /// An icon's or a picture's attributes, each kept as Pele's database keeps it when its value is truthy (`if (doc.icon)`):
+    /// `String(value)`, and `Number(value)` for `w` and `h`. Keys are read as written: `Icon:` is no icon.
+    private static func readAssetAttributes(_ entries: [String: DirectiveValue], into attributes: inout FlowchartNodeAssetAttributes) {
+        func text(_ key: String) -> String? {
+            entries[key].flatMap { value in MermaidYAMLDocument.isTruthy(value) ? MermaidYAMLDocument.javaScriptText(value) : nil }
+        }
+        func number(_ key: String) -> Double? {
+            guard let value = entries[key], MermaidYAMLDocument.isTruthy(value) else { return nil }
+            switch value {
+            case .number(let number): return number
+            case .boolean: return 1
+            default: return JavaScriptNumber.value(of: Substring(MermaidYAMLDocument.javaScriptText(value))) ?? .nan
+            }
+        }
+        attributes.icon = text("icon") ?? attributes.icon
+        attributes.image = text("img") ?? attributes.image
+        attributes.form = text("form") ?? attributes.form
+        attributes.position = text("pos") ?? attributes.position
+        attributes.constraint = text("constraint") ?? attributes.constraint
+        attributes.width = number("w") ?? attributes.width
+        attributes.height = number("h") ?? attributes.height
     }
 
     /// The text of Pele's `SHAPE_DATA` tokens from after `@{` to the closing `}`, which the cursor moves past.

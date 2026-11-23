@@ -1,3 +1,14 @@
+/**
+ * File: TimelineLayoutEngineTests.swift
+ * -------------------------------------
+ * Layer: Tests
+ * Description: A timeline's periods, events, sections and title placed as Pele places them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -94,7 +105,8 @@ final class TimelineLayoutEngineTests: XCTestCase {
         let title = try XCTUnwrap(layout.title)
         XCTAssertEqual(title.lines.map(\.count), [40, 20])
         XCTAssertEqual(layout.size.width, 320 + 16)
-        XCTAssertEqual(title.center, CGPoint(x: 168, y: 8 + 24))
+        // Two lines 21 points apart (1.3 times 16, rounded): Pele's fitLabel lays the broken title out again as two lines.
+        XCTAssertEqual(title.center, CGPoint(x: 168, y: 8 + 21))
         XCTAssertEqual(layout.periods[0].frame.minY - title.frame.maxY, 16, accuracy: accuracy)
         XCTAssertEqual(layout.periods[0].frame.minX, 8 + (320 - 196) / 2, accuracy: accuracy)
     }

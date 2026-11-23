@@ -6,8 +6,8 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -112,7 +112,8 @@ struct SwimlanePageAssembly {
         guard graph.nesting.representedSubgraphs[node] == nil else { return point }
         let frame = placement.frames[graph.nodeBoxes[node]]
         guard let side = Self.side(of: point, on: frame) else { return point }
-        return FlowchartEdgePorts.outlinePoint(center: CGPoint(x: frame.midX, y: frame.midY), shape: diagram.nodes[node].shape,
+        let shape = measured.assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape
+        return FlowchartEdgePorts.outlinePoint(center: CGPoint(x: frame.midX, y: frame.midY), shape: shape,
                                                size: measured.shapeSizes[node], side: side,
                                                offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
     }
@@ -175,7 +176,7 @@ extension SwimlanePageAssembly {
         let size = measured.shapeSizes[node]
         return FlowchartLayoutNode(shape: diagram.nodes[node].shape,
                                    frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height),
-                                   text: text, style: diagram.nodes[node].style)
+                                   text: text, style: diagram.nodes[node].style, asset: diagram.nodes[node].asset)
     }
 
     /// The groups inside lanes, each title along its box's top, clear of the edges where it can be, their depths counted from

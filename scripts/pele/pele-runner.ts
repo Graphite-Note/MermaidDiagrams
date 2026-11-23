@@ -63,7 +63,7 @@ const runsCorpus = flags.length === 0 || flags.includes('--corpus');
 const runsCompat = flags.length === 0 || flags.includes('--compat');
 const runsBench = flags.length === 0 || flags.includes('--bench');
 const runsPreprocessing = flags.length === 0 || flags.includes('--preprocessing');
-// `--svg` (with `--corpus`) also writes each input's SVG as svg/<corpus>-<index>.svg, to look at beside the package's drawing.
+// --svg writes each documentation example's SVG as svg/<corpus>-<index>.svg, untimed, to compare drawings by eye.
 const writesDrawings = flags.includes('--svg');
 
 // Mermaid's Gantt charts are placed against "now": the package's tests and benchmark use the same instant
@@ -189,7 +189,6 @@ function record(corpus: string, index: number, source: string): InputRecord {
     const code = (error as { code?: string }).code ?? 'exception';
     return { ...base, error: `${code}: ${String((error as Error).message ?? error).slice(0, 160)}` };
   }
-  if (writesDrawings) Deno.writeTextFileSync(`${outputFolder}/svg/${corpus}-${index}.svg`, rendered.svg);
   const timings = samples(() => core.render(source, options), 40);
   return {
     ...base,
@@ -232,7 +231,19 @@ const allCorpora = await corpora();
 const machine = { deno: Deno.version.deno, v8: Deno.version.v8, os: Deno.build.os, arch: Deno.build.arch };
 const peleVersion = JSON.parse(await Deno.readTextFile(`${peleRoot}/package.json`)).version;
 await Deno.mkdir(outputFolder, { recursive: true });
-if (writesDrawings) await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+
+if (writesDrawings) {
+  await Deno.mkdir(`${outputFolder}/svg`, { recursive: true });
+  for (const [corpus, sources] of allCorpora) {
+    for (const [index, source] of sources.entries()) {
+      try {
+        await Deno.writeTextFile(`${outputFolder}/svg/${corpus}-${index}.svg`, core.render(source, { now: ganttNow }).svg);
+      } catch {
+        // A refused input has no drawing; pele-corpus.json records its error.
+      }
+    }
+  }
+}
 
 if (runsCorpus) {
   const records: InputRecord[] = [];

@@ -2,10 +2,10 @@
  * File: XYChartParserTests.swift
  * ------------------------------
  * Layer: Tests
- * Description: The inputs of Mermaid's XY chart specs read as Mermaid's database holds them, and the errors.
+ * Description: An XY chart read as Pele reads it: its axes, categories, ranges, series and title.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.1
  * Date: 23/11/2026
  */
 
@@ -77,8 +77,7 @@ final class XYChartParserTests: XCTestCase {
         XCTAssertEqual(XYChartReading.text(first.xAxis.title), "this is x axis")
         XCTAssertEqual(categories(first), ["category1", "category 2", "category3"])
         let second = try chart("xychart \nx-axis xAxisName    [  \"cat1  with space\"  ,   cat2 , cat3]   \n   ")
-        // Pele's label layout trims a text and keeps the spaces inside it, which it measures (text/label.ts).
-        XCTAssertEqual(categories(second), ["cat1  with space", "cat2", "cat3"])
+        XCTAssertEqual(categories(second), ["cat1  with space", "cat2", "cat3"], "Runs of spaces are kept and measured, as Pele's layoutLabel keeps them")
         let third = try chart("xychart \nx-axis xAxisName    [  \"cat1  with space\"  ,   cat2 asdf , cat3]   \n   ")
         XCTAssertEqual(categories(third), ["cat1  with space", "cat2asdf", "cat3"])
     }

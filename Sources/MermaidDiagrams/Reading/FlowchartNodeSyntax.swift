@@ -5,7 +5,7 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -15,8 +15,13 @@ import Foundation
 struct FlowchartNodeDefinition {
     var shape: FlowchartNodeShape?
     var label: DiagramLabel?
+    /// Whether `label:` was written with nothing but spaces in it, or not at all: such a node drawn as an icon or a picture
+    /// loses the identifier it would otherwise show, as in Pele.
+    var hasBlankWrittenLabel = true
     /// `view: collapsed`, which a group's identifier takes to be drawn as one node.
     var asksForCollapsedView = false
+    /// The icon and picture attributes written (`icon`, `img`, `form`, `pos`, `w`, `h`, `constraint`); nil for one not written.
+    var assetAttributes = FlowchartNodeAssetAttributes()
 }
 
 /// Reads what follows a node's identifier: a shape in brackets around its text (`A{text}`), or attributes

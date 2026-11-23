@@ -5,9 +5,9 @@
  * Description: Where a flowchart's edges meet their nodes: the ends on one side spread along it, then moved onto the
  *              shape's outline.
  *
- * Authors: Félix Chevalier
- * Version: 0.2
- * Date: 20/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -36,8 +36,9 @@ struct FlowchartEdgePorts {
     /// - Parameter keptClear: By `sideKey`, points of a side, as offsets from its middle, that the ends there keep half
     ///   a port gap from: where other edges cross a box's border on that side.
     /// - Parameter spreadsEnds: Whether the ends on a side spread along it; when not, they all meet its middle.
+    /// - Parameter endsAtMiddle: Nodes whose ends all meet a side's middle whatever `spreadsEnds` says: icons and pictures.
     init(ends: [End], edgeCount: Int, nodeCenters: [CGPoint], shapes: [FlowchartNodeShape], shapeSizes: [CGSize], keptClear: [Int: [CGFloat]] = [:],
-         spreadsEnds: Bool = true) {
+         spreadsEnds: Bool = true, endsAtMiddle: Set<Int> = []) {
         sourcePoints = Array(repeating: nil, count: edgeCount)
         targetPoints = Array(repeating: nil, count: edgeCount)
         var endsBySide = [[End]](repeating: [], count: nodeCenters.count * DiagramSide.allCases.count)
@@ -45,7 +46,7 @@ struct FlowchartEdgePorts {
         for sideEnds in endsBySide where !sideEnds.isEmpty {
             let ordered = sideEnds.sorted { first, second in (first.neighborAcross, first.edgeIndex) < (second.neighborAcross, second.edgeIndex) }
             guard let side = ordered.first?.side, let node = ordered.first?.node else { continue }
-            let span = spreadsEnds ? FlowchartShapeGeometry.span(of: shapes[node], size: shapeSizes[node], side: side) : 0
+            let span = spreadsEnds && !endsAtMiddle.contains(node) ? FlowchartShapeGeometry.span(of: shapes[node], size: shapeSizes[node], side: side) : 0
             let step = ordered.count > 1 ? min(Self.portSeparation, span / CGFloat(ordered.count - 1)) : 0
             func spread(_ position: Int) -> CGFloat { (CGFloat(position) - CGFloat(ordered.count - 1) / 2) * step }
             // Only a side with points to keep clear of makes its offsets as an array first.

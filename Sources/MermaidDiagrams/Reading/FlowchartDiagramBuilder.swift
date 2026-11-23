@@ -81,6 +81,25 @@ struct FlowchartDiagramBuilder {
         if let shape = definition.shape { diagram.nodes[index].shape = shape }
         if let label = definition.label { diagram.nodes[index].label = label }
         if definition.asksForCollapsedView { collapsedIdentifiers.insert(diagram.nodes[index].identifier) }
+        defineAsset(nodeAt: index, as: definition)
+    }
+
+    /// The icon or picture attributes written replace the node's, and a node made an icon or a picture without a label
+    /// of its own shows none rather than its identifier (Pele's `addVertex`).
+    private mutating func defineAsset(nodeAt index: Int, as definition: FlowchartNodeDefinition) {
+        let written = definition.assetAttributes
+        var node = diagram.nodes[index]
+        if written.icon != nil || written.image != nil, definition.hasBlankWrittenLabel, node.label == DiagramLabel(node.identifier) {
+            node.label = DiagramLabel(lines: [""])
+        }
+        node.assetAttributes.icon = written.icon ?? node.assetAttributes.icon
+        node.assetAttributes.image = written.image ?? node.assetAttributes.image
+        node.assetAttributes.form = written.form ?? node.assetAttributes.form
+        node.assetAttributes.position = written.position ?? node.assetAttributes.position
+        node.assetAttributes.width = written.width ?? node.assetAttributes.width
+        node.assetAttributes.height = written.height ?? node.assetAttributes.height
+        node.assetAttributes.constraint = written.constraint ?? node.assetAttributes.constraint
+        diagram.nodes[index] = node
     }
 
     /// One edge from each source to each target, as `A & B --> C & D` asks.

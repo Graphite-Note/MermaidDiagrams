@@ -9,7 +9,7 @@
 # Version: 0.2
 # Date: 23/11/2026
 #
-# Usage: scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--bench] [--svg]
+# Usage: scripts/pele/run.sh <pele checkout> <output folder> [--corpus] [--compat] [--bench] [--preprocessing] [--svg]
 set -eu
 pele=$(cd "$1" && pwd)
 output=$2
