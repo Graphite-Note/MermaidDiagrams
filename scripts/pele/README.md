@@ -47,8 +47,8 @@ With no flag it does all but `--svg`:
   `pele-bench.json` with the median per case and the median and 99th percentile per diagram.
 - `--preprocessing` writes `pele-preprocessing.json` (`preprocessing-recorder.ts`): what Pele's own YAML reader
   (`src/util/yaml.ts`) makes of 52 texts (its own tests' texts, then front matter and node data written in the ways those
-  leave out), what its preprocessing (`src/preprocess.ts`, then `encodeEntities`) makes of 29 diagram texts (directives,
-  line breaks, front matter, colour semicolons): the text left, the title and the configuration, or the error; and the
+  leave out), what its preprocessing (`src/preprocess.ts`, then `encodeEntities`) makes of 33 diagram texts
+  (directives, tags' attributes, line breaks, front matter, colour semicolons): the text left, the title and the configuration, or the error; and the
   moment JavaScript's `new Date(text)` reads for 48 texts a Gantt chart's start may fall back to.
 - `--svg` writes the SVG Pele draws for each documentation example to `svg/<corpus>-<index>.svg` in the output folder
   (refused inputs have none), untimed, to compare a drawing with the package's by eye; it runs only when asked for.

@@ -26,13 +26,14 @@ struct FlowchartLink: Equatable {
 /// the text in bars after it (`-->|text|`) or inside it (`-- text -->`, `-. text .->`, `== text ==>`), and an
 /// identifier before it (`e1@-->`), which is read and left.
 enum FlowchartLinkSyntax {
-    /// Reads a link at the cursor, or returns nil and leaves the cursor where it was when none starts there.
-    static func readLink(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartLink? {
+    /// Reads a link at the cursor, or returns nil and leaves the cursor where it was when none starts there; `text` is
+    /// the cursor's text as the lexer tests it.
+    static func readLink(_ cursor: inout MermaidTextCursor, in text: FlowchartLexerText) throws(MermaidDiagramReadError) -> FlowchartLink? {
         var lookahead = cursor
         var identifier: String?
         // Pele's `LINK_ID`: the characters up to the last `@` of the run, which neither `{` nor `"` follows; spaces may
         // stand between it and the link, as Pele's link pattern starts with any.
-        if let end = FlowchartLexerText(bytes: cursor.bytes).endOfLinkIdentifier(at: cursor.position) {
+        if let end = text.endOfLinkIdentifier(at: cursor.position) {
             identifier = cursor.text(from: cursor.position, to: end - 1)
             lookahead.advance(by: end - cursor.position)
             lookahead.skipSpaces()

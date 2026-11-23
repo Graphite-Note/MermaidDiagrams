@@ -6,7 +6,7 @@
  *              that an identifier takes; and finds those tokens, and the ones a style takes, where Pele's lexer would.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -49,27 +49,28 @@ enum FlowchartPieceToken {
 /// `#node`, `:node`, `&`, `odd-` (before `>`) and `default.node` are identifiers; a keyword, a link (`-->`), a link's
 /// identifier (`e1@`), a bracket, `:::`, a space or a character that is neither ASCII nor a letter ends one.
 enum FlowchartIdentifierSyntax {
-    /// Reads an identifier at the cursor and moves past it, or returns nil and leaves the cursor when none starts there.
-    static func readIdentifier(_ cursor: inout MermaidTextCursor) -> String? {
+    /// Reads an identifier at the cursor and moves past it, or returns nil and leaves the cursor when none starts there;
+    /// `text` is the cursor's text as the lexer tests it.
+    static func readIdentifier(_ cursor: inout MermaidTextCursor, in text: FlowchartLexerText) -> String? {
         let start = cursor.position
-        let end = endOfIdentifier(in: cursor.bytes, from: start)
+        let end = endOfIdentifier(in: text, from: start)
         guard end > start else { return nil }
         cursor.advance(by: end - start)
         return cursor.text(from: start, to: end)
     }
 
     /// Where the identifier from `start` ends; `start` when none starts there.
-    static func endOfIdentifier(in bytes: [UInt8], from start: Int) -> Int {
+    static func endOfIdentifier(in text: FlowchartLexerText, from start: Int) -> Int {
         var end = start
-        while let (token, tokenEnd) = token(in: bytes, at: end), token.isIdentifierPiece { end = tokenEnd }
+        while let (token, tokenEnd) = token(in: text, at: end), token.isIdentifierPiece { end = tokenEnd }
         return end
     }
 
     /// The token Pele's lexer reads at `position` in its initial state and where it ends, when it is one an identifier
     /// or a style takes; nil for any other token, or none.
-    static func token(in bytes: [UInt8], at position: Int) -> (FlowchartPieceToken, Int)? {
+    static func token(in text: FlowchartLexerText, at position: Int) -> (FlowchartPieceToken, Int)? {
+        let bytes = text.bytes
         guard position < bytes.count else { return nil }
-        let text = FlowchartLexerText(bytes: bytes)
         let byte = bytes[position]
         // In the lexer's order: a quotation mark opens a string, `default` and `style` are tokens of their own before any
         // other check, then keywords, a direction statement anywhere on the line and a link's identifier.

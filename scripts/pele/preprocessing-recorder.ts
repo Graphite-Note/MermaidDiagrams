@@ -113,6 +113,10 @@ const preprocessingCases: string[] = [
   'railroad-beta\ns = terminal("%%{kept}") ;\nt = terminal("c") ;',
   'venn-beta\ntitle A\rset B',
   'gantt\n%%{init: {}}%%',
+  'flowchart LR\nfoo%%{init: {}}%%bar-->B',
+  'flowchart LR\nA-->%%{init:\n{"a": 1}}%%B',
+  'flowchart LR\nA[<span style="color:red">x</span>]-->B["<a href="u" title="t">y</a>"]',
+  'sequenceDiagram\nA->>B: <b class="x">hi</b> and "q" <i id="z>',
 ];
 
 export function recordPreprocessing(

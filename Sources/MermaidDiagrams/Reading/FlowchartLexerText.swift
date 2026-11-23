@@ -6,14 +6,21 @@
  *              keywords, its direction statement, a link's identifier, the start of a link and its node strings.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
 /// A flowchart's text as Pele's lexer (flowchart/lexer.ts) tests it where a token starts in its initial state. Past
-/// the end it reads as the line break Pele appends to the text it parses.
+/// the end it reads as the line break Pele appends to the text it parses. Made once per flowchart: its look-ahead index
+/// is built over the whole text.
 struct FlowchartLexerText {
     let bytes: [UInt8]
+    private let lookAhead: FlowchartLookAheadIndex
+
+    init(bytes: [UInt8]) {
+        self.bytes = bytes
+        lookAhead = FlowchartLookAheadIndex(bytes: bytes)
+    }
 
     func byte(at position: Int) -> UInt8? {
         position >= 0 && position < bytes.count ? bytes[position] : nil
@@ -76,22 +83,7 @@ struct FlowchartLexerText {
     /// The lexer's direction statement, `.*direction\s+(TB|BT|RL|LR|TD)[^\n]*` from `position`: `direction`, then
     /// whitespace and a direction, anywhere from here to the line's end, which makes the rest of the line one token.
     func startsDirectionStatement(at position: Int) -> Bool {
-        var index = position
-        while index < bytes.count, !isLineTerminator(at: index) {
-            if hasText(Self.direction, at: index) {
-                let afterSpaces = endOfSpaces(from: index + Self.direction.count)
-                if afterSpaces > index + Self.direction.count, Self.directions.contains(where: { word in hasText(word, at: afterSpaces) }) { return true }
-            }
-            index += 1
-        }
-        return false
-    }
-
-    /// A line feed, a carriage return, or a line or paragraph separator: what `.` does not match.
-    private func isLineTerminator(at position: Int) -> Bool {
-        let byte = bytes[position]
-        if byte == MermaidByte.newline || byte == MermaidByte.carriageReturn { return true }
-        return byte == 0xE2 && self.byte(at: position + 1) == 0x80 && (self.byte(at: position + 2) == 0xA8 || self.byte(at: position + 2) == 0xA9)
+        lookAhead.startsDirectionStatement(at: position)
     }
 
     /// Whether a link's identifier starts at `position`: the run of characters up to the next whitespace or
@@ -104,16 +96,7 @@ struct FlowchartLexerText {
     /// The position after the `@` that ends a link's identifier starting at `position`, or nil.
     func endOfLinkIdentifier(at position: Int) -> Int? {
         guard let first = byte(at: position), first != MermaidByte.quotationMark, JavaScriptWhitespace.length(in: bytes, at: position) == 0 else { return nil }
-        var runEnd = position
-        while runEnd < bytes.count, bytes[runEnd] != MermaidByte.quotationMark, JavaScriptWhitespace.length(in: bytes, at: runEnd) == 0 { runEnd += 1 }
-        var index = runEnd - 1
-        while index > position {
-            if bytes[index] == MermaidByte.atSign, byte(at: index + 1) != MermaidByte.openingBrace, byte(at: index + 1) != MermaidByte.quotationMark {
-                return index + 1
-            }
-            index -= 1
-        }
-        return nil
+        return lookAhead.lastLinkIdentifierEnd(inWordFrom: position).map { atSign in atSign + 1 }
     }
 
     /// Whether the lexer's `link` reads a link at `position`, where `x`, `o`, `-` or `.` stands: `--`, `---`, `-->` and
@@ -196,6 +179,4 @@ struct FlowchartLexerText {
     private static let graph = Array("graph".utf8)
     private static let end = Array("end".utf8)
     private static let linkTargets = ["_self", "_blank", "_parent", "_top"].map { word in Array(word.utf8) }
-    private static let direction = Array("direction".utf8)
-    private static let directions = ["TB", "BT", "RL", "LR", "TD"].map { word in Array(word.utf8) }
 }

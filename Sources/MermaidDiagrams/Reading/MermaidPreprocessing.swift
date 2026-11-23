@@ -3,16 +3,15 @@
  * --------------------------------
  * Layer: Core
  * Description: What Pele does to a diagram's text before its type reads it (preprocess.ts): line breaks made line
- *              feeds, directives taken out wherever they stand, and the semicolon a style's colour loses.
+ *              feeds, an HTML tag's attributes single-quoted, directives taken out wherever they stand, and the
+ *              semicolon a style's colour loses.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
-/// Pele's preprocessing of a diagram's text, over its UTF-8 bytes. Where Pele removes a directive the package blanks it
-/// with spaces and keeps its line breaks, so that a statement's line stays the one the text shows; the readers skip
-/// blank space as they skip a removed directive's absence.
+/// Pele's preprocessing of a diagram's text, over its UTF-8 bytes.
 enum MermaidPreprocessing {
     /// `normalizeLineBreaks`: every carriage return and line feed pair, and every carriage return alone, a line feed.
     static func normalizedLineBreaks(_ bytes: [UInt8]) -> [UInt8] {
@@ -32,18 +31,71 @@ enum MermaidPreprocessing {
         return normalized
     }
 
-    /// `bytes` with every directive from `start` on blanked, as Pele's `directives` removes each match of Mermaid's
-    /// directive pattern (`MermaidDirectiveConfiguration.nextDirective`) wherever it stands: within a line, over several
-    /// lines, or unclosed to the end of the text. Line breaks are kept.
-    static func blankingDirectives(in bytes: [UInt8], from start: Int) -> [UInt8] {
+    /// `preprocess`'s first step after the line breaks: in every tag up to the text's last `>` (`<(\w+)([^>]*)>`), each
+    /// attribute value in double quotation marks (`="([^"]*)"`) put in single ones, so that `<span style="color:red">`
+    /// reads `<span style='color:red'>` and a flowchart's plain text, which takes no `"`, takes the tag. The length stays.
+    static func singleQuotingTagAttributes(_ bytes: [UInt8]) -> [UInt8] {
+        guard let lastClose = bytes.lastIndex(of: MermaidByte.greaterThan), lastClose > 0, bytes.contains(MermaidByte.lessThan) else { return bytes }
+        var quoted = bytes
+        var index = 0
+        while index < lastClose {
+            guard bytes[index] == MermaidByte.lessThan, FlowchartLexerText.isWord(bytes[index + 1]) else {
+                index += 1
+                continue
+            }
+            var attributesStart = index + 1
+            while FlowchartLexerText.isWord(bytes[attributesStart]) { attributesStart += 1 }
+            // A `>` is at `lastClose` at the latest, so the tag closes.
+            var tagEnd = attributesStart
+            while bytes[tagEnd] != MermaidByte.greaterThan { tagEnd += 1 }
+            var attribute = attributesStart
+            while attribute + 1 < tagEnd {
+                guard bytes[attribute] == MermaidByte.equals, bytes[attribute + 1] == MermaidByte.quotationMark,
+                      let closing = bytes[(attribute + 2)..<tagEnd].firstIndex(of: MermaidByte.quotationMark) else {
+                    attribute += 1
+                    continue
+                }
+                quoted[attribute + 1] = UInt8(ascii: "'")
+                quoted[closing] = UInt8(ascii: "'")
+                attribute = closing + 1
+            }
+            index = tagEnd + 1
+        }
+        return quoted
+    }
+
+    /// `bytes` without the directives from `start` on, as Pele's `directives` removes each match of Mermaid's directive
+    /// pattern (`MermaidDirectiveConfiguration.nextDirective`) wherever it stands: within a line, over several lines, or
+    /// unclosed to the end of the text, so that the text on either side of it joins (`A-->%%{…}%%B` reads `A-->B`). The
+    /// line breaks a directive held are put back before the line break that ends the joined line, so that every later
+    /// line keeps the number the text shows, as Pele's errors name the line as written; a blank line is what any reader
+    /// skips.
+    static func removingDirectives(from bytes: [UInt8], from start: Int) -> [UInt8] {
         guard containsDirectiveStart(bytes, from: start) else { return bytes }
-        var blanked = bytes
+        var kept = Array(bytes[..<start])
+        kept.reserveCapacity(bytes.count)
+        var heldLineBreaks = 0
+        func keep(_ range: Range<Int>) {
+            if heldLineBreaks > 0, let lineBreak = bytes[range].firstIndex(of: MermaidByte.newline) {
+                kept.append(contentsOf: bytes[range.lowerBound..<lineBreak])
+                kept.append(contentsOf: repeatElement(MermaidByte.newline, count: heldLineBreaks))
+                heldLineBreaks = 0
+                kept.append(contentsOf: bytes[lineBreak..<range.upperBound])
+            } else {
+                kept.append(contentsOf: bytes[range])
+            }
+        }
         var position = start
+        var keptUpTo = start
         while let match = MermaidDirectiveConfiguration.nextDirective(in: bytes, from: position) {
-            for index in match.start..<match.end where blanked[index] != MermaidByte.newline { blanked[index] = MermaidByte.space }
+            keep(keptUpTo..<match.start)
+            heldLineBreaks += bytes[match.start..<match.end].reduce(0) { count, byte in byte == MermaidByte.newline ? count + 1 : count }
+            keptUpTo = match.end
             position = max(match.end, match.start + 1)
         }
-        return blanked
+        keep(keptUpTo..<bytes.count)
+        kept.append(contentsOf: repeatElement(MermaidByte.newline, count: heldLineBreaks))
+        return kept
     }
 
     /// Mermaid's `text.replace(/keyword.*:\S*#.*;/g, …)` as Pele does it (`dropColorSemicolons`), for `style` and then

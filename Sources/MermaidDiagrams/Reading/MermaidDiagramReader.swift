@@ -50,7 +50,8 @@ public enum MermaidDiagram: Equatable, Sendable {
 }
 
 /// Reads Mermaid text as Pele does (preprocess.ts): line breaks made line feeds, the front matter (`---` … `---`),
-/// whose `title:` is kept and which is refused when it is not YAML, directives (`%%{init: …}%%`) taken out wherever they
+/// whose `title:` is kept and which is refused when it is not YAML, tags' attributes put in single quotation marks,
+/// directives (`%%{init: …}%%`) taken out wherever they
 /// stand, a colour's last semicolon dropped (`MermaidPreprocessing`), comments, then the keyword that names the
 /// diagram's type and the diagram itself.
 public enum MermaidDiagramReader {
@@ -131,13 +132,14 @@ public enum MermaidDiagramReader {
     }
 
     /// The front matter's title, and a cursor after the front matter on the text preprocessed as Pele does: line breaks
-    /// made line feeds, directives blanked, a colour's last semicolon dropped.
+    /// made line feeds, tags' attributes single-quoted, directives removed, a colour's last semicolon dropped. A line
+    /// the cursor counts is a line of that text: lines a directive spans count as one.
     static func preprocessed(_ source: String) throws(MermaidDiagramReadError) -> (title: String?, cursor: MermaidTextCursor) {
         var written = Array(source.utf8)
         if written.starts(with: byteOrderMark) { written.removeFirst(byteOrderMark.count) }
-        let sourceBytes = MermaidPreprocessing.normalizedLineBreaks(written)
+        let sourceBytes = MermaidPreprocessing.singleQuotingTagAttributes(MermaidPreprocessing.normalizedLineBreaks(written))
         let (title, start) = try readFrontMatter(sourceBytes)
-        let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.blankingDirectives(in: sourceBytes, from: start), from: start)
+        let bytes = MermaidPreprocessing.droppingColorSemicolons(MermaidPreprocessing.removingDirectives(from: sourceBytes, from: start), from: start)
         var cursor = MermaidTextCursor(bytes: bytes, sourceBytes: sourceBytes)
         cursor.advance(by: start)
         return (title, cursor)

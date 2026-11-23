@@ -563,6 +563,32 @@
    "text": "gantt\n",
    "title": null,
    "config": {}
+  },
+  {
+   "source": "flowchart LR\nfoo%%{init: {}}%%bar-->B",
+   "text": "flowchart LR\nfoobar-->B",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "flowchart LR\nA-->%%{init:\n{\"a\": 1}}%%B",
+   "text": "flowchart LR\nA-->B",
+   "title": null,
+   "config": {
+    "a": 1
+   }
+  },
+  {
+   "source": "flowchart LR\nA[<span style=\"color:red\">x</span>]-->B[\"<a href=\"u\" title=\"t\">y</a>\"]",
+   "text": "flowchart LR\nA[<span style='color:red'>x</span>]-->B[\"<a href='u' title='t'>y</a>\"]",
+   "title": null,
+   "config": {}
+  },
+  {
+   "source": "sequenceDiagram\nA->>B: <b class=\"x\">hi</b> and \"q\" <i id=\"z>",
+   "text": "sequenceDiagram\nA->>B: <b class='x'>hi</b> and \"q\" <i id=\"z>",
+   "title": null,
+   "config": {}
   }
  ],
  "dates": [

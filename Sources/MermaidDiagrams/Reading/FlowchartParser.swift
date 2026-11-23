@@ -16,10 +16,12 @@
 struct FlowchartParser {
     private var cursor: MermaidTextCursor
     private var builder: FlowchartDiagramBuilder
+    /// The cursor's text as Pele's lexer tests it, made once.
+    private let lexerText: FlowchartLexerText
 
     /// Reads the flowchart whose keyword ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartDiagram {
-        var parser = FlowchartParser(cursor: cursor, builder: FlowchartDiagramBuilder(limits: limits))
+        var parser = FlowchartParser(cursor: cursor, builder: FlowchartDiagramBuilder(limits: limits), lexerText: FlowchartLexerText(bytes: cursor.bytes))
         try parser.readDirection()
         try parser.readStatements()
         return parser.builder.finishedDiagram()
@@ -79,7 +81,7 @@ struct FlowchartParser {
         case "classDef", "class", "style", "linkStyle":
             let statementStart = cursor.position
             skipStatement()
-            guard FlowchartStyleGrammar.isReadByPele(keyword: word, in: cursor.bytes, from: statementStart, to: cursor.position) else {
+            guard FlowchartStyleGrammar.isReadByPele(keyword: word, in: lexerText, from: statementStart, to: cursor.position) else {
                 throw .invalidSyntax(line: statementLine, problem: .unexpectedText(cursor.trimmedText(from: statementStart, to: cursor.position)))
             }
             builder.apply(FlowchartStyleSyntax.statement(keyword: word, text: cursor.trimmedText(from: statementStart, to: cursor.position)))
@@ -98,7 +100,7 @@ struct FlowchartParser {
         var previousGroup = firstGroup
         while true {
             cursor.skipSpaces()
-            guard let link = try FlowchartLinkSyntax.readLink(&cursor) else { return }
+            guard let link = try FlowchartLinkSyntax.readLink(&cursor, in: lexerText) else { return }
             if let identifier = link.identifier { builder.recordEdgeIdentifier(identifier) }
             cursor.skipSpaces()
             guard let nextGroup = try readNodeGroup() else { throw .invalidSyntax(line: cursor.line, problem: .expectedNode) }
@@ -130,7 +132,7 @@ struct FlowchartParser {
     /// A node: its identifier, then its shape and text or its attributes, then any `:::class`, then any attributes.
     private mutating func readNode() throws(MermaidDiagramReadError) -> Int? {
         let line = cursor.line
-        guard let identifier = FlowchartIdentifierSyntax.readIdentifier(&cursor) else {
+        guard let identifier = FlowchartIdentifierSyntax.readIdentifier(&cursor, in: lexerText) else {
             throw .invalidSyntax(line: line, problem: cursor.isAtEnd ? .expectedNode : .unexpectedText(cursor.excerpt()))
         }
         if FlowchartNodeSyntax.isAtAttributes(cursor), builder.isEdgeIdentifier(identifier) {
@@ -146,7 +148,7 @@ struct FlowchartParser {
         }
         while cursor.hasPrefix(Self.classMarker) {
             cursor.advance(by: Self.classMarker.count)
-            if let className = FlowchartIdentifierSyntax.readIdentifier(&cursor) { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
+            if let className = FlowchartIdentifierSyntax.readIdentifier(&cursor, in: lexerText) { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
         }
         // Attributes may also follow a shape in brackets and its classes (`C[Hello]@{ shape: circle }`), as Pele reads them.
         if FlowchartNodeSyntax.isAtAttributes(cursor) { builder.define(nodeAt: index, as: try FlowchartNodeSyntax.readAttributes(&cursor)) }
