@@ -9,7 +9,7 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -22,7 +22,7 @@ final class TypeReaderSpeedTests: XCTestCase {
     /// Pieces that sit at the edges of what the byte readers tell apart: white space beyond ASCII, a combining mark and a
     /// mark that joins the character after it, line breaks, quotation marks doubled or not, backslashes, comments and
     /// the punctuation the grammars read.
-    private static let pieces = [" ", "\t", "  ", "\u{A0}", "\u{3000}", "\u{2028}", "\u{2029}", "\u{FEFF}", "\u{85}", "\u{200B}", "\u{301}",
+    static let pieces = [" ", "\t", "  ", "\u{A0}", "\u{3000}", "\u{2028}", "\u{2029}", "\u{FEFF}", "\u{85}", "\u{200B}", "\u{301}",
                                  "\u{600}", "\r\n", "\n", "\r", "_", "''", "'", "\"", "\\", " #", "#", "é", "\u{1F600}", "├── ", "│   ", ":",
                                  ",", "{", "}", "(", ")", "[", "]", "Icons", "0.5", "--> ", "<", ">", "^", "v", "x", "%%", "@{", "a", "Z", "1"]
 
@@ -116,11 +116,11 @@ final class TypeReaderSpeedTests: XCTestCase {
     }
 
     /// White space other than the space: ASCII's, JavaScript's beyond it, and what only Foundation or neither holds white.
-    private static let blanks = ["\t", "\u{A0}", "\u{3000}", "\u{2028}", "\u{FEFF}", "\u{85}", "\u{200B}", "\u{2007}", "\u{0B}", " \u{301}"]
+    static let blanks = ["\t", "\u{A0}", "\u{3000}", "\u{2028}", "\u{FEFF}", "\u{85}", "\u{200B}", "\u{2007}", "\u{0B}", " \u{301}"]
 
     /// Each text, then copies of it with a piece put in at a character boundary, copies cut at one, and copies with their
     /// spaces and line breaks made other white space.
-    private static func variants(of sources: [String], seed: UInt64) -> [String] {
+    static func variants(of sources: [String], seed: UInt64) -> [String] {
         var state = seed
         var variants: [String] = []
         func next(_ bound: Int) -> Int {
@@ -152,7 +152,7 @@ final class TypeReaderSpeedTests: XCTestCase {
 
     /// The text with each space after the first character of a line but the first made `blank`, every other one, or the
     /// first of each line only (the one after a statement's keyword).
-    private static func replacingInnerSpaces(of source: String, with blank: String, everyOther: Bool, firstOfLineOnly: Bool) -> String {
+    static func replacingInnerSpaces(of source: String, with blank: String, everyOther: Bool, firstOfLineOnly: Bool) -> String {
         var replaced = ""
         var isFirstLine = true
         var isLineStart = true
@@ -179,7 +179,7 @@ final class TypeReaderSpeedTests: XCTestCase {
     }
 
     /// A description of a value that does not depend on the order a dictionary or a set holds its entries in.
-    private static func canonicalDescription(of value: Any) -> String {
+    static func canonicalDescription(of value: Any) -> String {
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {
         case .dictionary:
@@ -204,10 +204,10 @@ final class TypeReaderSpeedTests: XCTestCase {
         }
     }
 
-    private static let offsetBasis: UInt64 = 0xcbf2_9ce4_8422_2325
+    static let offsetBasis: UInt64 = 0xcbf2_9ce4_8422_2325
 
     /// FNV-1a over the UTF-8 bytes, 64 bits, carried on from `digest`.
-    private static func digest(_ text: String, from digest: UInt64) -> UInt64 {
+    static func digest(_ text: String, from digest: UInt64) -> UInt64 {
         var hash = digest
         for byte in text.utf8 { hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3 }
         return hash
