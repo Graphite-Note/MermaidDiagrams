@@ -2,12 +2,12 @@
  * File: LaneBands.swift
  * ---------------------
  * Layer: Core
- * Description: The lane layout's ranks along the flow: a band per rank after the lanes' titles, the room after each rank
- *              closed up where only plain handoffs and straight lines pass.
+ * Description: The lane layout's ranks along the flow, on spans of the thread's scratch arena: a band per rank after
+ *              the lanes' titles, the room after each rank closed up where only plain handoffs and straight lines pass.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -22,29 +22,42 @@ struct LaneBands {
     /// How much closer ranks close up.
     static let closing: CGFloat = 3
 
-    private(set) var starts: [CGFloat] = []
-    private(set) var ends: [CGFloat] = []
+    let starts: ScratchSpan<CGFloat>
+    let ends: ScratchSpan<CGFloat>
     /// The diagram's length along the flow, its lanes' titles included.
-    private(set) var length: CGFloat = 0
+    let length: CGFloat
 
-    init(pass: LanePass) {
-        let separations = Self.separations(pass)
+    init(pass: LanePass, arena: DiagramScratchArena) {
+        let rankCount = pass.maximumRank + 1
+        starts = arena.uninitializedSpan(count: rankCount)
+        ends = arena.uninitializedSpan(count: rankCount)
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        let separations = Self.separations(pass, arena: arena)
         var position = pass.titleDepth + pass.setup.endPadding
-        for (rank, row) in pass.rows.enumerated() {
-            let depth = row.map { vertex in pass.along[vertex] }.max() ?? 0
-            starts.append(position)
-            ends.append(position + depth)
+        for rank in 0..<rankCount {
+            // The deepest vertex of the rank, kept as `Sequence.max()` keeps it: a later one only when strictly deeper.
+            var depth: CGFloat = 0
+            let range = pass.rowRange(rank)
+            if !range.isEmpty {
+                depth = pass.along[pass.rowVertices[range.lowerBound]]
+                for slot in range.dropFirst() where depth < pass.along[pass.rowVertices[slot]] { depth = pass.along[pass.rowVertices[slot]] }
+            }
+            starts[rank] = position
+            ends[rank] = position + depth
             position += depth + (rank == pass.maximumRank ? 0 : separations[rank])
         }
         length = position + pass.setup.endPadding
     }
 
     /// The room after each rank.
-    private static func separations(_ pass: LanePass) -> [CGFloat] {
+    private static func separations(_ pass: LanePass, arena: DiagramScratchArena) -> ScratchSpan<CGFloat> {
         let full = pass.spacing.rankSeparation / CGFloat(pass.setup.step)
-        guard pass.isPlain.contains(true) else { return Array(repeating: full, count: pass.maximumRank + 1) }
-        var separations = [CGFloat](repeating: full / closing, count: pass.maximumRank + 1)
-        for (edgeIndex, edge) in pass.setup.edges.enumerated() {
+        guard pass.isPlain.contains(true) else { return arena.span(count: pass.maximumRank + 1, repeating: full) }
+        let separations = arena.span(count: pass.maximumRank + 1, repeating: full / closing)
+        let edges = pass.setup.edges
+        for edgeIndex in 0..<edges.count {
+            let edge = edges[edgeIndex]
             let upper = edge.upper
             let lower = edge.lower
             let span = pass.spans[edgeIndex]
@@ -54,7 +67,8 @@ struct LaneBands {
                 for rank in pass.rank[upper]..<pass.rank[lower] { separations[rank] = max(separations[rank], room) }
                 continue
             }
-            guard let first = pass.firstPassingPoint[edgeIndex], span > pass.setup.step * edge.minimumRankSpan else {
+            let first = pass.firstPassingPoint[edgeIndex]
+            guard first >= 0, span > pass.setup.step * edge.minimumRankSpan else {
                 for rank in pass.rank[upper]..<pass.rank[lower] { separations[rank] = full }
                 continue
             }

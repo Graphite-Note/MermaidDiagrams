@@ -2,13 +2,13 @@
  * File: LanePlacedPass.swift
  * --------------------------
  * Layer: Core
- * Description: A lane layout pass put on the page: the boxes at their ranks and places, the lanes the length of the
- *              diagram, the groups inside lanes around what they hold, and the edges' routes through the ranks or straight
- *              to a group's border.
+ * Description: A lane layout pass put on the page, on spans of the thread's scratch arena: the boxes at their ranks and
+ *              places, the lanes the length of the diagram, the groups inside lanes around what they hold, and the
+ *              edges' routes through the ranks or straight to a group's border, every route a range of one list.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -20,25 +20,39 @@ struct LaneRoutePoint: Equatable {
     var axis: Int
 }
 
-/// A pass of the lane layout on the page: where Pele's `place` leaves its nodes and edges.
+/// A point in flow space: across the flow and along it.
+struct LaneFlowPoint {
+    var across: CGFloat
+    var along: CGFloat
+}
+
+/// A pass of the lane layout on the page: where Pele's `place` leaves its nodes and edges. Each graph edge's route is
+/// `routeCounts[edge]` points from `routeStarts[edge]` of `routePoints`, none for an edge from a box to itself; a route
+/// replaced later is written again at the list's end.
 struct LanePlacedPass {
     let pass: LanePass
     let bands: LaneBands
-    private(set) var frames: [CGRect]
-    /// By the graph's edges; empty for an edge from a box to itself.
-    var routes: [[LaneRoutePoint]]
-    var labelCenters: [CGPoint]
+    let frames: ScratchSpan<CGRect>
+    var routePoints: ScratchList<LaneRoutePoint>
+    let routeStarts: ScratchSpan<Int>
+    let routeCounts: ScratchSpan<Int>
+    let labelCenters: ScratchSpan<CGPoint>
 
-    init(pass: LanePass, bands: LaneBands) {
+    init(pass: LanePass, bands: LaneBands, arena: DiagramScratchArena) {
         self.pass = pass
         self.bands = bands
-        let graph = pass.setup.graph
-        frames = graph.boxes.map { box in CGRect(origin: .zero, size: box.size) }
-        routes = Array(repeating: [], count: graph.edges.count)
-        labelCenters = Array(repeating: .zero, count: graph.edges.count)
+        let boxes = pass.setup.boxes
+        let frames: ScratchSpan<CGRect> = arena.uninitializedSpan(count: boxes.count)
+        for box in 0..<boxes.count { frames[box] = CGRect(origin: .zero, size: boxes[box].size) }
+        self.frames = frames
+        let edgeCount = pass.setup.graphEdges.count
+        routePoints = arena.list(capacity: 2 * edgeCount + pass.vertexCount, of: LaneRoutePoint.self)
+        routeStarts = arena.span(count: edgeCount, repeating: 0)
+        routeCounts = arena.span(count: edgeCount, repeating: 0)
+        labelCenters = arena.span(count: edgeCount, repeating: CGPoint.zero)
         placeItems()
         placeLanes()
-        placeGroups()
+        placeGroups(arena: arena)
         routeRankedEdges()
         routeGroupEdges()
     }
@@ -47,17 +61,25 @@ struct LanePlacedPass {
     var axis: Int { runsAcross ? 1 : 0 }
 
     /// A point of flow space (across, along) on the page, the flow mirrored after the lanes' titles where it runs up or left.
+    @inline(__always)
     func pagePoint(across: CGFloat, along: CGFloat) -> CGPoint {
         let flowed = pass.setup.isFlipped ? pass.titleDepth + bands.length - along : along
         return runsAcross ? CGPoint(x: flowed, y: across) : CGPoint(x: across, y: flowed)
     }
 
     /// The middle of an item's or a passing point's band along the flow.
+    @inline(__always)
     func bandMiddle(of vertex: Int) -> CGFloat {
         (bands.starts[pass.rank[vertex]] + bands.ends[pass.rank[vertex]]) / 2
     }
 
-    private mutating func placeItems() {
+    /// The route of graph edge `edgeIndex`, as a span of the points list: valid until the list next grows.
+    @inline(__always)
+    func route(of edgeIndex: Int) -> ScratchSpan<LaneRoutePoint> {
+        routePoints.elements.part(routeStarts[edgeIndex]..<(routeStarts[edgeIndex] + routeCounts[edgeIndex]))
+    }
+
+    private func placeItems() {
         for (item, box) in pass.setup.items.enumerated() {
             let center = pagePoint(across: pass.centers[item], along: bandMiddle(of: item))
             frames[box] = CGRect(x: center.x - frames[box].width / 2, y: center.y - frames[box].height / 2, width: frames[box].width, height: frames[box].height)
@@ -65,7 +87,7 @@ struct LanePlacedPass {
     }
 
     /// Each lane a band across the flow the length of the diagram.
-    private mutating func placeLanes() {
+    private func placeLanes() {
         for (slot, box) in pass.setup.lanes.enumerated() {
             let start = pass.laneStarts[slot]
             let breadth = pass.laneStarts[slot + 1] - start
@@ -75,11 +97,14 @@ struct LanePlacedPass {
 
     /// The groups inside lanes around their members, the deepest first, each its padding around what it holds and at least
     /// its least width.
-    private mutating func placeGroups() {
-        let boxes = pass.setup.graph.boxes
-        var depth = [Int](repeating: 0, count: boxes.count)
-        var inner: [Int] = []
-        for box in boxes.indices where boxes[box].isGroup && pass.setup.laneSlots[box] == nil && pass.setup.itemOfBox[box] == nil {
+    private func placeGroups(arena: DiagramScratchArena) {
+        let setup = pass.setup
+        let boxes = setup.boxes
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        let depth = arena.span(count: boxes.count, repeating: 0)
+        var inner = arena.list(capacity: 8, of: Int.self)
+        for box in 0..<boxes.count where boxes[box].isGroup && setup.laneSlots[box] == -1 && setup.itemOfBox[box] == -1 {
             var parent = boxes[box].parent
             while let current = parent, depth[box] < LaneLayoutItems.maximumHops {
                 depth[box] += 1
@@ -87,15 +112,19 @@ struct LanePlacedPass {
             }
             inner.append(box)
         }
-        inner.sort { first, second in (depth[second], first) < (depth[first], second) }
-        var held = [CGRect?](repeating: nil, count: boxes.count)
+        guard !inner.isEmpty else { return }
+        inner.sortStably(in: arena) { first, second in (depth[second], first) < (depth[first], second) }
+        let held: ScratchSpan<CGRect> = arena.uninitializedSpan(count: boxes.count)
+        let holds = arena.span(count: boxes.count, repeating: false)
         func grow(_ group: Int?, by frame: CGRect) {
-            guard let group, pass.setup.laneSlots[group] == nil else { return }
-            held[group] = held[group].map { box in box.union(frame) } ?? frame
+            guard let group, setup.laneSlots[group] == -1 else { return }
+            held[group] = holds[group] ? held[group].union(frame) : frame
+            holds[group] = true
         }
-        for box in pass.setup.items { grow(boxes[box].parent, by: frames[box]) }
+        for box in setup.items { grow(boxes[box].parent, by: frames[box]) }
         for group in inner {
-            guard let content = held[group] else { continue }
+            guard holds[group] else { continue }
+            let content = held[group]
             let padding = boxes[group].padding
             let width = max(content.width + 2 * padding.side, boxes[group].minimumWidth)
             frames[group] = CGRect(x: content.midX - width / 2, y: content.minY - padding.top, width: width,
@@ -109,35 +138,54 @@ extension LanePlacedPass {
     /// Each ranked edge from the end of its upper item's box through its passing points to the start of its lower item's,
     /// in its own direction; its text at its passing point's band, or halfway.
     private mutating func routeRankedEdges() {
-        for (edgeIndex, edge) in pass.setup.edges.enumerated() {
+        let edges = pass.setup.edges
+        for edgeIndex in 0..<edges.count {
+            let edge = edges[edgeIndex]
             let upper = edge.upper
             let lower = edge.lower
-            var points = [(pass.centers[upper], bands.ends[pass.rank[upper]] - (bands.ends[pass.rank[upper]] - bands.starts[pass.rank[upper]] - pass.along[upper]) / 2)]
-            if let first = pass.firstPassingPoint[edgeIndex] {
+            let start = routePoints.count
+            let upperRank = pass.rank[upper]
+            appendPoint(across: pass.centers[upper], along: bands.ends[upperRank] - (bands.ends[upperRank] - bands.starts[upperRank] - pass.along[upper]) / 2)
+            let first = pass.firstPassingPoint[edgeIndex]
+            if first >= 0 {
                 for vertex in first..<(first + pass.spans[edgeIndex] - 1) {
-                    points.append((pass.centers[vertex], bands.starts[pass.rank[vertex]]))
-                    if bands.ends[pass.rank[vertex]] > bands.starts[pass.rank[vertex]] { points.append((pass.centers[vertex], bands.ends[pass.rank[vertex]])) }
+                    let vertexRank = pass.rank[vertex]
+                    appendPoint(across: pass.centers[vertex], along: bands.starts[vertexRank])
+                    if bands.ends[vertexRank] > bands.starts[vertexRank] { appendPoint(across: pass.centers[vertex], along: bands.ends[vertexRank]) }
                 }
             }
-            points.append((pass.centers[lower], bands.starts[pass.rank[lower]] + (bands.ends[pass.rank[lower]] - bands.starts[pass.rank[lower]] - pass.along[lower]) / 2))
-            var route = points.map { across, along in LaneRoutePoint(point: pagePoint(across: across, along: along), axis: axis) }
-            if edge.isReversed { route.reverse() }
-            routes[edge.edgeIndex] = route
-            if let label = pass.labelVertex[edgeIndex] {
+            let lowerRank = pass.rank[lower]
+            appendPoint(across: pass.centers[lower], along: bands.starts[lowerRank] + (bands.ends[lowerRank] - bands.starts[lowerRank] - pass.along[lower]) / 2)
+            let count = routePoints.count - start
+            if edge.isReversed { routePoints.elements.reverse(start..<(start + count)) }
+            routeStarts[edge.edgeIndex] = start
+            routeCounts[edge.edgeIndex] = count
+            let label = pass.labelVertex[edgeIndex]
+            if label >= 0 {
                 labelCenters[edge.edgeIndex] = pagePoint(across: pass.centers[label], along: bandMiddle(of: label))
             } else {
-                labelCenters[edge.edgeIndex] = Self.midpoint(route[0].point, route[route.count - 1].point)
+                labelCenters[edge.edgeIndex] = Self.midpoint(routePoints[start].point, routePoints[start + count - 1].point)
             }
         }
     }
 
+    @inline(__always)
+    private mutating func appendPoint(across: CGFloat, along: CGFloat) {
+        routePoints.append(LaneRoutePoint(point: pagePoint(across: across, along: along), axis: axis))
+    }
+
     /// An edge that starts or ends at a lane or a group runs straight to its border.
     private mutating func routeGroupEdges() {
-        for (edgeIndex, edge) in pass.setup.graph.edges.enumerated() where routes[edgeIndex].isEmpty && edge.source != edge.target {
+        let edges = pass.setup.graphEdges
+        for edgeIndex in 0..<edges.count where routeCounts[edgeIndex] == 0 && edges[edgeIndex].source != edges[edgeIndex].target {
+            let edge = edges[edgeIndex]
             let start = Self.border(of: frames[edge.source], toward: frames[edge.target])
             let end = Self.border(of: frames[edge.target], toward: frames[edge.source])
             let flatAxis = abs(end.x - start.x) > abs(end.y - start.y) ? 1 : 0
-            routes[edgeIndex] = [LaneRoutePoint(point: start, axis: flatAxis), LaneRoutePoint(point: end, axis: flatAxis)]
+            routeStarts[edgeIndex] = routePoints.count
+            routeCounts[edgeIndex] = 2
+            routePoints.append(LaneRoutePoint(point: start, axis: flatAxis))
+            routePoints.append(LaneRoutePoint(point: end, axis: flatAxis))
             labelCenters[edgeIndex] = Self.midpoint(start, end)
         }
     }
