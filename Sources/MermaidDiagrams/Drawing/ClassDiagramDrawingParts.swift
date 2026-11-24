@@ -117,6 +117,14 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
         classFills = maker.makePath()
         noteFills = maker.makePath()
         outlines = maker.makePath()
+        Self.addBoxes(of: layout, fills: classFills, noteFills: noteFills, outlines: outlines, making: maker)
+        memberUnderlines = maker.makePath()
+        Self.addUnderlines(of: layout, to: memberUnderlines)
+    }
+
+    /// The classes' boxes and the notes, filled and outlined, with the lines between compartments and the notes' folds.
+    private static func addBoxes<Maker: DiagramPathMaking>(of layout: ClassDiagramLayout, fills classFills: Path, noteFills: Path, outlines: Path,
+                                                           making maker: Maker) where Maker.Path == Path {
         for box in layout.classes {
             let madeCount = maker.madePathCount
             let outline = maker.roundedRectangle(box.frame, cornerWidth: ClassDiagramDrawingParts.boxCornerRadius,
@@ -142,10 +150,12 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
             outlines.addLines(between: [CGPoint(x: frame.maxX - fold, y: frame.minY), CGPoint(x: frame.maxX - fold, y: frame.minY + fold),
                                         CGPoint(x: frame.maxX, y: frame.minY + fold)])
         }
-        memberUnderlines = maker.makePath()
+    }
+
+    /// A line under each static member's text, from its first character to its last.
+    private static func addUnderlines(of layout: ClassDiagramLayout, to memberUnderlines: Path) {
         for box in layout.classes {
             for member in box.members where member.classifier == .static {
-                // A line under the static member's text, from its first character to its last.
                 let text = member.text
                 let y = text.center.y + text.fontSize * (DiagramTextDrawing.baselineShiftRatio + ClassDiagramDrawingParts.underlineDropRatio)
                 memberUnderlines.move(to: CGPoint(x: text.frame.minX, y: y))
