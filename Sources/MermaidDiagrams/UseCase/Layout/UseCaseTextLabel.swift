@@ -7,8 +7,8 @@
  *              closer once there are several; and the measurers of the sizes and styles they are drawn in.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -74,7 +74,9 @@ enum UseCaseTextLabel {
     /// `text` with each of Mermaid's codes (`#name;`, `#123;`) as its character, HTML's (`&amp;`) left as written, as
     /// Pele shows a plain label.
     static func mermaidCodesRead(_ text: String) -> String {
-        guard text.contains("#"), text.contains(";") else { return text }
+        // A text without the bytes of `#` and `;` holds no code; one with them is read character by character, which
+        // keeps it as it is unless a code stands alone.
+        guard text.utf8.contains(UInt8(ascii: "#")), text.utf8.contains(UInt8(ascii: ";")) else { return text }
         let characters = Array(text)
         var result = ""
         var index = 0
