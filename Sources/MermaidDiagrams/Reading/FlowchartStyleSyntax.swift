@@ -2,25 +2,41 @@
  * File: FlowchartStyleSyntax.swift
  * --------------------------------
  * Layer: Core
- * Description: Reads the statements that style a flowchart: on bytes when they are ASCII, through their characters
- *              otherwise.
+ * Description: Reads the statements that style a flowchart, their declarations included: on bytes when they are
+ *              ASCII, through their characters otherwise.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
-/// A statement that styles a flowchart.
+/// A statement that styles a flowchart, its declarations read when it is.
 enum FlowchartStyleStatement: Equatable {
     /// `classDef name,other fill:#f9f,stroke:#333`: what the classes set.
-    case classDefinition(names: [String], declarations: String)
+    case classDefinition(names: [String], declarations: FlowchartStyleDeclarations)
     /// `class A,B name`: the nodes take the class.
     case classAssignment(identifiers: [String], className: String)
     /// `style A fill:#f9f,stroke:#333`: what the node sets for itself.
-    case nodeStyle(identifier: String, declarations: String)
+    case nodeStyle(identifier: String, declarations: FlowchartStyleDeclarations)
     /// `linkStyle 0,2 stroke:#f00` (the edges at those indexes, counted from 0 in the order written) or `linkStyle default stroke:#f00`
     /// (every edge, with `indices` nil).
-    case linkStyle(indices: [Int]?, declarations: String)
+    case linkStyle(indices: [Int]?, declarations: FlowchartStyleDeclarations)
+}
+
+/// What a statement's declarations set (`DiagramElementStyle.reading`), and whether one of them was not applied.
+struct FlowchartStyleDeclarations: Equatable {
+    let style: DiagramElementStyle
+    let hasUnappliedDeclaration: Bool
+
+    /// The declarations of a statement's text.
+    init(_ text: String) {
+        (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(text)
+    }
+
+    /// The declarations of ASCII bytes, read on them.
+    init(_ bytes: UnsafeBufferPointer<UInt8>) {
+        (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(bytes: bytes)
+    }
 }
 
 /// Reads the text of the statements that style a flowchart (`classDef`, `class`, `style`, `linkStyle`), after their keyword.
@@ -32,17 +48,17 @@ enum FlowchartStyleSyntax {
         switch keyword {
         case "classDef":
             let names = commaSeparated(head)
-            return names.isEmpty ? nil : .classDefinition(names: names, declarations: rest)
+            return names.isEmpty ? nil : .classDefinition(names: names, declarations: FlowchartStyleDeclarations(rest))
         case "class":
             let identifiers = commaSeparated(head)
             let className = split(rest).head
             return identifiers.isEmpty || className.isEmpty ? nil : .classAssignment(identifiers: identifiers, className: className)
         case "style":
-            return .nodeStyle(identifier: head, declarations: rest)
+            return .nodeStyle(identifier: head, declarations: FlowchartStyleDeclarations(rest))
         case "linkStyle":
-            if head == "default" { return .linkStyle(indices: nil, declarations: rest) }
+            if head == "default" { return .linkStyle(indices: nil, declarations: FlowchartStyleDeclarations(rest)) }
             let indices = commaSeparated(head).compactMap { index in Int(index) }
-            return indices.count == commaSeparated(head).count ? .linkStyle(indices: indices, declarations: rest) : nil
+            return indices.count == commaSeparated(head).count ? .linkStyle(indices: indices, declarations: FlowchartStyleDeclarations(rest)) : nil
         default:
             return nil
         }
@@ -70,22 +86,25 @@ extension FlowchartStyleSyntax {
         let (head, rest) = split(range, in: bytes)
         guard !head.isEmpty else { return nil }
         func text(_ part: Range<Int>) -> String { bytes.string(from: part.lowerBound, to: part.upperBound) }
-        let declarations = text(rest)
+        // Read only for the statements that take them, after the head is read, as the statement's text read them.
+        func declarations() -> FlowchartStyleDeclarations {
+            FlowchartStyleDeclarations(UnsafeBufferPointer(start: bytes.base + rest.lowerBound, count: rest.count))
+        }
         switch keyword {
         case .classDefinition:
             let names = commaSeparated(head, in: bytes).map(text)
-            return names.isEmpty ? nil : .classDefinition(names: names, declarations: declarations)
+            return names.isEmpty ? nil : .classDefinition(names: names, declarations: declarations())
         case .classAssignment:
             let identifiers = commaSeparated(head, in: bytes).map(text)
             let className = split(rest, in: bytes).head
             return identifiers.isEmpty || className.isEmpty ? nil : .classAssignment(identifiers: identifiers, className: text(className))
         case .style:
-            return .nodeStyle(identifier: text(head), declarations: declarations)
+            return .nodeStyle(identifier: text(head), declarations: declarations())
         case .linkStyle:
-            if head.count == 7, bytes.hasText("default", at: head.lowerBound) { return .linkStyle(indices: nil, declarations: declarations) }
+            if head.count == 7, bytes.hasText("default", at: head.lowerBound) { return .linkStyle(indices: nil, declarations: declarations()) }
             let parts = commaSeparated(head, in: bytes)
             let indices = parts.compactMap { part in Int(text(part)) }
-            return indices.count == parts.count ? .linkStyle(indices: indices, declarations: declarations) : nil
+            return indices.count == parts.count ? .linkStyle(indices: indices, declarations: declarations()) : nil
         }
     }
 

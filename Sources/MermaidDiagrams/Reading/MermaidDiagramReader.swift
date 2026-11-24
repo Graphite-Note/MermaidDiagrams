@@ -5,7 +5,7 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.26
+ * Version: 0.27
  * Date: 24/11/2026
  */
 
@@ -58,17 +58,64 @@ public enum MermaidDiagramReader {
     public static func read(_ source: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> MermaidDiagram {
         guard source.utf8.count <= limits.maximumSourceBytes else { throw .sourceTooLarge(limitBytes: limits.maximumSourceBytes) }
         let frontEnd = try MermaidFrontEnd.read(source)
-        let title = frontEnd.frontMatterTitle
         switch frontEnd.typeKeyword {
         // A flowchart has no title statement of its own: its title is the front matter's.
         case .flowchart: return .flowchart(try FlowchartParser.parse(frontEnd, limits: limits))
         case .swimlane: return .swimlane(try FlowchartParser.parse(frontEnd, limits: limits))
-        case .other: return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: title)
+        case .other:
+            return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: frontEnd.frontMatterTitle)
+        default: return try namedDiagram(frontEnd, limits: limits)
+        }
+    }
+
+    /// The diagram of a type one exact keyword names, told from the keyword's bytes (`MermaidTypeKeyword`), read from a
+    /// cursor after the keyword: one of the fourteen types this package read first, or one of those it reads since.
+    private static func namedDiagram(_ frontEnd: MermaidFrontEndResult, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> MermaidDiagram {
+        let cursor = MermaidTextCursor(frontEnd)
+        let title = frontEnd.frontMatterTitle
+        switch frontEnd.typeKeyword {
+        case .stateDiagram: return .stateDiagram(titled(try StateDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .classDiagram: return .classDiagram(titled(try ClassDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .sequence: return .sequence(titled(try SequenceParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .entityRelationship: return .entityRelationship(titled(try EntityRelationshipParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .mindmap: return .mindmap(titled(try MindmapParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .timeline: return .timeline(titled(try TimelineParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .pieChart: return .pieChart(titled(try PieChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .ganttChart: return .ganttChart(titled(try GanttChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .gitGraph: return .gitGraph(titled(try GitGraphParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .userJourney: return .userJourney(titled(try UserJourneyParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .quadrantChart: return .quadrantChart(titled(try QuadrantChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .xyChart: return .xyChart(titled(try XYChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .sankey: return .sankey(titled(try SankeyParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        default: return try newerNamedDiagram(frontEnd, at: cursor, limits: limits)
+        }
+    }
+
+    /// The diagram of one of the types this package reads since its first fourteen that one exact keyword names.
+    private static func newerNamedDiagram(_ frontEnd: MermaidFrontEndResult, at cursor: MermaidTextCursor,
+                                          limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> MermaidDiagram {
+        let title = frontEnd.frontMatterTitle
+        switch frontEnd.typeKeyword {
+        case .kanban: return .kanban(titled(try KanbanParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .treeView: return .treeView(titled(try TreeViewParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .info: return .info(titled(try InfoDiagramParser.parse(cursor), frontMatterTitle: title))
+        case .packet: return .packet(titled(try PacketDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .radar: return .radar(titled(try RadarChartParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .treemap: return .treemap(titled(try TreemapDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .venn: return .venn(titled(try VennParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .cynefin: return .cynefin(titled(try CynefinParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .wardleyMap: return .wardleyMap(titled(try WardleyMapParser.parse(cursor, limits: limits), frontMatterTitle: title))
+        case .block: return .block(titled(try BlockParser.parse(cursor, keyword: frontEnd.keywordText, limits: limits), frontMatterTitle: title))
+        case .architecture:
+            return .architecture(titled(try ArchitectureParser.parse(cursor, keyword: frontEnd.keywordText, limits: limits), frontMatterTitle: title))
+        case .useCase: return .useCase(titled(try UseCaseParser.parse(keyword: frontEnd.keywordText, endingAt: cursor, limits: limits), frontMatterTitle: title))
+        case .agentFlow: return .agentFlow(titled(try AgentFlowParser.parse(cursor, keyword: frontEnd.keywordText, limits: limits), frontMatterTitle: title))
+        default: return try diagram(named: frontEnd.keywordText, at: cursor, limits: limits, frontMatterTitle: title)
         }
     }
 
     /// The diagram of the type `keyword` names, read from `cursor`: one of the fourteen types this package read first, or
-    /// else one of those it reads since.
+    /// else one of those it reads since. The reader asks for it only for keywords `MermaidTypeKeyword` does not tell.
     private static func diagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
                                 frontMatterTitle title: String?) throws(MermaidDiagramReadError) -> MermaidDiagram {
         switch keyword {
@@ -170,11 +217,16 @@ public enum MermaidDiagramReader {
             if opening.hasPrefix(fence), opening.readRestOfLine() == "---" { throw .invalidSyntax(line: 1, problem: .unclosedFrontMatter) }
             return (nil, 0)
         }
-        guard let value = read.value else {
+        return (try frontMatterTitle(read, of: frontMatter), frontMatter.end)
+    }
+
+    /// The title of front matter that was found and read; front matter that is not YAML is refused, as Pele refuses it.
+    static func frontMatterTitle(_ read: MermaidReadFrontMatter, of frontMatter: MermaidFrontMatter) throws(MermaidDiagramReadError) -> String? {
+        guard let tree = read.tree else {
             let firstLine = frontMatter.body.split(separator: "\n").first { line in !line.allSatisfy(\.isWhitespace) } ?? ""
             throw .invalidSyntax(line: 2, problem: .unexpectedText(String(firstLine.trimmingCharacters(in: .whitespaces).prefix(24))))
         }
-        return (MermaidFrontMatter.title(in: value), frontMatter.end)
+        return MermaidFrontMatter.title(in: tree)
     }
 
     private static let byteOrderMark: [UInt8] = [0xEF, 0xBB, 0xBF]

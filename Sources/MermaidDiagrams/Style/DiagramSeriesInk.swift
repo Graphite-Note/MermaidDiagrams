@@ -3,11 +3,12 @@
  * ----------------------------
  * Layer: Core
  * Description: The label color Pele picks for text on a series color a diagram's theme variables set: its dark text on
- *              a light color, white on a dark one, where the color's contrast is known (Pele's src/svg/ink.ts).
+ *              a light color, white on a dark one, where the color's contrast is known (Pele's src/svg/ink.ts); a
+ *              hexadecimal color read on its bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -32,6 +33,14 @@ enum DiagramSeriesInk {
 
     /// Luminance and opacity, as Pele's `color` gives them: named colors 0 or 1, so that only their side counts.
     static func luminanceAndAlpha(_ raw: String) -> (Double, Double)? {
+        if let (_, color) = DiagramThemeColor.hexadecimalColor(raw) {
+            return (luminance(color.red, color.green, color.blue), color.alpha)
+        }
+        return luminanceAndAlphaOfText(raw)
+    }
+
+    /// `luminanceAndAlpha` read through the value's characters, as it reads every value but an ASCII hexadecimal one.
+    static func luminanceAndAlphaOfText(_ raw: String) -> (Double, Double)? {
         let value = String(JavaScriptWhitespace.trimmed(Substring(raw))).lowercased()
         let name = value.replacingFirst("grey", with: "gray")
         if darkNames.contains(name) { return (0, 1) }

@@ -3,11 +3,12 @@
  * -----------------------------
  * Layer: Core
  * Description: A color a diagram's theme variables give one of its series, accepted only as Pele's safeColor accepts it:
- *              a color that can load nothing, end no declaration and read none of the page's variables but Pele's.
+ *              a color that can load nothing, end no declaration and read none of the page's variables but Pele's; a
+ *              hexadecimal one read on its bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// A series color a diagram's theme variables set (`pie1: '#ffeb3b'`, `cScale0: oklch(70% 0.1 200)`), as CSS writes it.
@@ -25,10 +26,37 @@ public struct DiagramThemeColor: Hashable, Sendable {
     /// (`rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()`, `color-mix()`, `light-dark()`,
     /// with their `a` forms) and `var()`, and `var()` only of Pele's own variables (`--pele-…`).
     public init?(cssText written: String) {
+        if let (text, color) = Self.hexadecimalColor(written) {
+            cssText = text
+            expression = .color(DiagramLinearColor(encoded: color))
+            return
+        }
         let color = String(JavaScriptWhitespace.trimmed(Substring(written)))
         guard Self.isSafe(color) else { return nil }
         cssText = color
         expression = DiagramThemeColorExpression.read(Substring(color))
+    }
+
+    /// An ASCII value that is `#` and three, four, six or eight hexadecimal digits once JavaScript's white space is
+    /// trimmed, read on its bytes: its text, which `isSafe` accepts, and the color `DiagramThemeColorExpression.read`
+    /// reads it as. Nil for any other value, which is read through its characters.
+    static func hexadecimalColor(_ written: String) -> (String, DiagramColor)? {
+        var text = written
+        return text.withUTF8 { bytes -> (String, DiagramColor)? in
+            var start = 0
+            var end = bytes.count
+            while start < end, isJavaScriptWhitespace(bytes[start]) { start += 1 }
+            while end > start, isJavaScriptWhitespace(bytes[end - 1]) { end -= 1 }
+            let trimmed = UnsafeBufferPointer(rebasing: bytes[start..<end])
+            guard trimmed.first == UInt8(ascii: "#"), !bytes.contains(where: { byte in byte >= 0x80 }),
+                  let color = DiagramColor.hexadecimal(trimmed) else { return nil }
+            return (String(decoding: trimmed, as: UTF8.self), color)
+        }
+    }
+
+    /// JavaScript's white space among ASCII bytes: tab, line feed, vertical tab, form feed, carriage return and space.
+    private static func isJavaScriptWhitespace(_ byte: UInt8) -> Bool {
+        byte == MermaidByte.space || (MermaidByte.tab...MermaidByte.carriageReturn).contains(byte)
     }
 
     static func isSafe(_ color: String) -> Bool {

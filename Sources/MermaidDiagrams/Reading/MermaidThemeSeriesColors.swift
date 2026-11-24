@@ -3,11 +3,12 @@
  * ------------------------------------
  * Layer: Core
  * Description: Reads the series colors a diagram's theme variables set, from its front matter's config.themeVariables
- *              and its %%{init: …}%% directives, as Pele's palette.ts reads them per type.
+ *              and its %%{init: …}%% directives, as Pele's palette.ts reads them per type: only the variables a type
+ *              reads are looked up, and a diagram that sets none gets none at once.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// Which of Mermaid's theme variables set a type's series colors, as Pele's `PALETTES` names them: the variables'
@@ -35,32 +36,44 @@ enum MermaidThemeSeriesPalette {
         }
     }
 
-    /// The series colors the theme variables of the cursor's text set for this type.
+    /// The series colors the theme variables of the cursor's text set for this type: each numbered variable looked up
+    /// in the front matter's tree and the directives (`MermaidConfigurationSection`), none at all when neither sets a
+    /// theme variable, as most diagrams do; an XY chart's list read from the section's options by its path.
     func seriesColors(in cursor: MermaidTextCursor) -> DiagramSeriesColors {
-        seriesColors(MermaidConfigurationOptions(section: Self.themeVariablesSection, in: cursor))
+        guard let (prefix, first) = numberedVariables else {
+            return seriesColors(MermaidConfigurationOptions(section: Self.themeVariablesSection, in: cursor))
+        }
+        let themeVariables = MermaidConfigurationSection(named: Self.themeVariablesSection, in: cursor)
+        guard !themeVariables.isEmpty else { return .none }
+        return seriesColors(numberedValues: (0..<DiagramSeriesColors.slotCount).map { slot in themeVariables.value(named: prefix + String(first + slot)) })
     }
 
     /// Pele's `palette`: each of the eight slots from its entry (an XY chart's list and a Venn diagram's taken again in
     /// turn), an entry that is not a color Pele accepts leaving its slot unset.
     func seriesColors(_ themeVariables: MermaidConfigurationOptions) -> DiagramSeriesColors {
-        guard let (entries, repeats) = entries(themeVariables), !entries.isEmpty else { return .none }
+        guard let (prefix, first) = numberedVariables else {
+            guard themeVariables.values[Self.xyChartSection] == .collection,
+                  case .text(let list)? = themeVariables.nestedValues[Self.xyChartSection + "." + Self.plotColorPaletteName] else { return .none }
+            return seriesColors(entries: Self.colorList(list).map { entry in .text(entry) }, repeats: true)
+        }
+        return seriesColors(numberedValues: (0..<DiagramSeriesColors.slotCount).map { slot in themeVariables.values[prefix + String(first + slot)] })
+    }
+
+    /// The colors of the values of the numbered variables in order: a Venn diagram's those set and not empty, taken
+    /// again in turn.
+    private func seriesColors(numberedValues values: [MermaidConfigurationOptions.Value?]) -> DiagramSeriesColors {
+        guard self == .venn else { return seriesColors(entries: values, repeats: false) }
+        return seriesColors(entries: values.filter { value in value != nil && value != .text("") }, repeats: true)
+    }
+
+    private func seriesColors(entries: [MermaidConfigurationOptions.Value?], repeats: Bool) -> DiagramSeriesColors {
+        guard !entries.isEmpty else { return .none }
         let colors = (0..<DiagramSeriesColors.slotCount).map { slot -> DiagramThemeColor? in
             guard repeats || slot < entries.count, case .text(let text)? = entries[slot % entries.count] else { return nil }
             return DiagramThemeColor(cssText: text)
         }
+        guard colors.contains(where: { color in color != nil }) else { return .none }
         return DiagramSeriesColors(colors: colors)
-    }
-
-    /// The values of its variables in order, and whether they are taken again in turn.
-    private func entries(_ themeVariables: MermaidConfigurationOptions) -> ([MermaidConfigurationOptions.Value?], Bool)? {
-        guard let (prefix, first) = numberedVariables else {
-            guard themeVariables.values[Self.xyChartSection] == .collection,
-                  case .text(let list)? = themeVariables.nestedValues[Self.xyChartSection + "." + Self.plotColorPaletteName] else { return nil }
-            return (Self.colorList(list).map { entry in .text(entry) }, true)
-        }
-        let values = (0..<DiagramSeriesColors.slotCount).map { slot in themeVariables.values[prefix + String(first + slot)] }
-        guard self == .venn else { return (values, false) }
-        return (values.filter { value in value != nil && value != .text("") }, true)
     }
 
     /// Pele's `splitList`: the comma list cut at the commas outside parentheses (those of `rgb()` stay), each entry

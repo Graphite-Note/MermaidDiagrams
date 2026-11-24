@@ -1,3 +1,14 @@
+/**
+ * File: DiagramPalette.swift
+ * --------------------------
+ * Layer: Core
+ * Description: The colors a diagram is drawn in, by Pele's roles, given at draw time.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// The colors a diagram is drawn in, by Pele's roles (`--pele-bg`, `--pele-fg`, `--pele-line`, `--pele-surface`,
@@ -50,9 +61,12 @@ public struct DiagramPalette: Sendable {
         self.alternateSurface = alternateSurface ?? Self.mixed(background, foreground, share: Self.alternateSurfaceShare) ?? surface
     }
 
-    /// The color of the series at `index`, the colors taken in turn; the line color when there are none.
+    /// The color of the series at `index`, the colors taken in turn, a negative index counted back from the last as
+    /// `DiagramSeriesColors.slot(ofSeries:)` counts it; the line color when there are none.
     public func seriesColor(at index: Int) -> CGColor {
-        series.isEmpty ? line : series[index % series.count]
+        guard !series.isEmpty else { return line }
+        let remainder = index % series.count
+        return series[remainder < 0 ? remainder + series.count : remainder]
     }
 
     /// Pele's accent, `#5b7bd5`.

@@ -56,3 +56,12 @@ transpiled them, joined into one plain script by `scripts/pele/bundle.sh`, which
 `pele-bundle-drawings.json`: what Pele in Deno drew of each documentation example when the script was made (type, page
 and a hash of the SVG), which the script drew alike. `javascriptcore-url.js`: the URL class Pele's links ask for, which a
 JSContext lacks, for http and https (MIT licensed, as the package is).
+
+`configured-docs.json`: the 146 inputs of the documentation corpora above (`*-docs.json`, same licenses) that have front
+matter, a `%%{…}%%` directive, or a statement or shorthand that styles the diagram (`style`, `classDef`, `linkStyle`,
+`class`, `cssClass`, `:::`), in the order of their corpora's names, used unchanged: the corpus the reading of
+configuration, theme variables and styles is measured on (`--profile configured-docs parsing`). `directive-docs.json`:
+the 71 of those whose front matter has a `config:` of block mappings and scalars, each with that `config:` written as an
+`%%{init: …}%%` directive in its place (in JSON with single quotation marks, as Mermaid's documentation writes them) and
+the front matter's `title:` kept, so that the directives' reading is measured on the same diagrams. Both were made on
+2026-11-24 by a script that reads the documentation corpora; Pele has no record of either.
