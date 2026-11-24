@@ -47,6 +47,10 @@ struct LayeredFlatLayout {
     /// Every span the layout works in comes from `arena`, after `points`' room.
     static func layout(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, points: inout ScratchList<CGPoint>,
                        options: LayeredFlatOptions, maximumVertexCount: Int, arena: DiagramScratchArena) -> LayeredFlatResult? {
+        #if DEBUG
+        LayeredLayoutRecording.current?.flatLayouts.append(.init(nodes: Array(nodes), edges: edges.map(LayeredFlatEdge.init), options: options,
+                                                                 maximumVertexCount: maximumVertexCount))
+        #endif
         if nodes.isEmpty { return LayeredFlatResult(width: 0, height: 0) }
         if nodes.count == 1 && edges.isEmpty && nodes[0].kind == .node {
             nodes[0].rank = 0
@@ -67,10 +71,7 @@ struct LayeredFlatLayout {
     /// each edge laid out gets its route as a list of its own. For compound layouts and tests.
     static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
                        maximumVertexCount: Int = .max) -> LayeredFlatResult? {
-        #if DEBUG
-        LayeredLayoutRecording.current?.flatLayouts.append(.init(nodes: nodes, edges: edges, options: options, maximumVertexCount: maximumVertexCount))
-        #endif
-        return DiagramScratchArena.withCurrentThread { arena in
+        DiagramScratchArena.withCurrentThread { arena in
             let nodeSpan: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: nodes.count)
             for node in nodes.indices { nodeSpan[node] = nodes[node] }
             let edgeSpan: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: edges.count)

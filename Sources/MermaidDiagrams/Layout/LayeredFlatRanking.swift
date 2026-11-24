@@ -190,18 +190,23 @@ enum LayeredFlatRanking {
         for node in nodes.indices { nodes[node].rank = ranks[node] - lowest }
     }
 
-    /// `orient` then `rank` on lists, with the calling thread's arena, as a compound layout ranks a level.
-    static func orientAndRank(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], step: Int) {
+    /// `orient` then `rank`, as a compound layout ranks a level.
+    static func orientAndRank(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, step: Int, arena: DiagramScratchArena) {
         #if DEBUG
-        LayeredLayoutRecording.current?.rankings.append((nodes, edges))
+        LayeredLayoutRecording.current?.rankings.append((Array(nodes), edges.map(LayeredFlatEdge.init)))
         #endif
+        orient(nodes: nodes, edges: edges, arena: arena)
+        rank(nodes: nodes, edges: edges, step: step, arena: arena)
+    }
+
+    /// `orientAndRank` on lists, with the calling thread's arena.
+    static func orientAndRank(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], step: Int) {
         DiagramScratchArena.withCurrentThread { arena in
             let nodeSpan: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: nodes.count)
             for node in nodes.indices { nodeSpan[node] = nodes[node] }
             let edgeSpan: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: edges.count)
             for edgeIndex in edges.indices { edgeSpan[edgeIndex] = LayeredSpanEdge(edges[edgeIndex]) }
-            orient(nodes: nodeSpan, edges: edgeSpan, arena: arena)
-            rank(nodes: nodeSpan, edges: edgeSpan, step: step, arena: arena)
+            orientAndRank(nodes: nodeSpan, edges: edgeSpan, step: step, arena: arena)
             for node in nodes.indices { nodes[node].rank = nodeSpan[node].rank }
             for edgeIndex in edges.indices { edges[edgeIndex].isReversed = edgeSpan[edgeIndex].isReversed }
         }

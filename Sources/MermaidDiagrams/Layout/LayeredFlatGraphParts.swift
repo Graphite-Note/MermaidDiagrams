@@ -121,6 +121,19 @@ struct LayeredSpanEdge {
     }
 }
 
+extension LayeredFlatEdge {
+    /// `edge` as a flat edge, its route not given.
+    init(_ edge: LayeredSpanEdge) {
+        self.init(tail: edge.tail, head: edge.head, minimumLength: edge.minimumLength, labelWidth: edge.labelWidth, labelHeight: edge.labelHeight)
+        tailOffset = edge.tailOffset
+        headOffset = edge.headOffset
+        isTailHeld = edge.isTailHeld
+        isHeadHeld = edge.isHeadHeld
+        isReversed = edge.isReversed
+        labelCenter = edge.labelCenter
+    }
+}
+
 /// How a layered layout spaces and routes its graph (Pele's `LayeredOptions`).
 struct LayeredFlatOptions: Equatable, Sendable {
     var nodeSeparation: Double

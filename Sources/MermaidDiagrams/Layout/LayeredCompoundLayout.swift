@@ -40,9 +40,12 @@ struct LayeredCompoundLayout {
     var total = (width: 0.0, height: 0.0)
     var loops: [Int] = []
     var strays: [Int] = []
+    /// The calling thread's arena, for the levels' flat graphs and layouts.
+    let arena: DiagramScratchArena
 
     init(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], rootDirection: LayeredDirection, options: LayeredFlatOptions,
-         maximumVertexCount: Int) {
+         maximumVertexCount: Int, arena: DiagramScratchArena) {
+        self.arena = arena
         self.nodes = nodes
         self.edges = edges
         self.options = options
@@ -58,16 +61,19 @@ struct LayeredCompoundLayout {
     /// than the limit.
     static func layout(nodes: inout [LayeredCompoundNode], edges: inout [LayeredCompoundEdge], rootDirection: LayeredDirection,
                        options: LayeredFlatOptions, maximumVertexCount: Int = .max) -> (width: Double, height: Double)? {
-        var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: rootDirection, options: options,
-                                           maximumVertexCount: maximumVertexCount)
-        layout.buildLevels()
-        let ports = layout.budgetPorts()
-        layout.assignEdges()
-        layout.isOrdered = ports > 1 && ports <= LayeredCompoundConstants.maximumOrderedPorts && edges.count <= LayeredCompoundConstants.maximumOrderedEdges
-        guard layout.arrange() else { return nil }
-        nodes = layout.nodes
-        edges = layout.edges
-        return layout.total
+        let laidOut: LayeredCompoundLayout? = DiagramScratchArena.withCurrentThread { arena in
+            var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: rootDirection, options: options,
+                                               maximumVertexCount: maximumVertexCount, arena: arena)
+            layout.buildLevels()
+            let ports = layout.budgetPorts()
+            layout.assignEdges()
+            layout.isOrdered = ports > 1 && ports <= LayeredCompoundConstants.maximumOrderedPorts && edges.count <= LayeredCompoundConstants.maximumOrderedEdges
+            return layout.arrange() ? layout : nil
+        }
+        guard let laidOut else { return nil }
+        nodes = laidOut.nodes
+        edges = laidOut.edges
+        return laidOut.total
     }
 
     /// The top level and each group's level, breadth first; groups that contain each other, unreachable from the top,

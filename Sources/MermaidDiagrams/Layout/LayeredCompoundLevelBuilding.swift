@@ -5,18 +5,19 @@
  * Description: Builds the flat layered graph of one level of Pele's compound layout, its ports and held ends included.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
 /// One level as a flat layered graph: its items, then a port vertex for each edge crossing the border on the side the
 /// flow starts or ends at; `portVertex` gives each port's vertex, -1 for a port on another side, which pins its item.
+/// Its lists are the scratch arena's: the caller gives them back once the level is laid out.
 struct LayeredCompoundLevelGraph {
-    var nodes: [LayeredFlatNode] = []
-    var edges: [LayeredFlatEdge] = []
-    var portVertex: [Int] = []
+    var nodes: ScratchList<LayeredFlatNode>
+    var edges: ScratchList<LayeredSpanEdge>
+    var portVertex: ScratchSpan<Int>
 }
 
 extension LayeredCompoundLayout {
@@ -25,7 +26,9 @@ extension LayeredCompoundLayout {
         let level = levels[levelIndex]
         let isVertical = level.direction.runsVertically
         let start = level.direction.startSide
-        var graph = LayeredCompoundLevelGraph()
+        var graph = LayeredCompoundLevelGraph(nodes: arena.list(capacity: level.items.count + level.ports.count, of: LayeredFlatNode.self),
+                                              edges: arena.list(capacity: level.edges.count + level.ports.count, of: LayeredSpanEdge.self),
+                                              portVertex: arena.span(count: level.ports.count, repeating: -1))
         for (index, item) in level.items.enumerated() {
             local[item] = index
             let node = nodes[item]
@@ -46,9 +49,8 @@ extension LayeredCompoundLayout {
                 flatEdge.isTailHeld = isHeld(levelEdge.first, edge: levelEdge.edgeIndex, isOutgoing: true)
                 flatEdge.isHeadHeld = isHeld(levelEdge.second, edge: levelEdge.edgeIndex, isOutgoing: false)
             }
-            graph.edges.append(flatEdge)
+            graph.edges.append(LayeredSpanEdge(flatEdge))
         }
-        graph.portVertex = [Int](repeating: -1, count: level.ports.count)
         for (portIndex, port) in level.ports.enumerated() {
             if port.side == start || port.side == start.opposite {
                 addPortVertex(port, index: portIndex, to: &graph, isStart: port.side == start, isVertical: isVertical, isSized: isSized, level: level)
@@ -75,7 +77,7 @@ extension LayeredCompoundLayout {
             flatEdge.headOffset = heldOffset(port.inner, edge: port.edgeIndex, isOutgoing: false, isVertical: isVertical, isSized: isSized)
             flatEdge.isHeadHeld = isHeld(port.inner, edge: port.edgeIndex, isOutgoing: false)
         }
-        graph.edges.append(flatEdge)
+        graph.edges.append(LayeredSpanEdge(flatEdge))
     }
 
     /// Whether an end at `item` is a group's port the edge passes through, which is held where the group's inside put it.
