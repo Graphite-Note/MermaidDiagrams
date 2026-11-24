@@ -1,83 +1,85 @@
 /**
- * File: LayeredFlatWorkspaceTests.swift
- * -------------------------------------
+ * File: LayeredFlatArenaTests.swift
+ * ---------------------------------
  * Layer: Tests
- * Description: The layered layout's workspace hands out lists that hold exactly what was asked, never changes a list
- *              still held elsewhere, and a layout run in a workspace other layouts used gives what a fresh one gives.
+ * Description: The layered layout's link lists keep each key's links in order, a layout run in a scratch arena that
+ *              other layouts used, or within another use of it, gives what it gives in a fresh one, and a large graph
+ *              leaves no more than the arena's limit behind.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 import XCTest
 @testable import MermaidDiagrams
 
-final class LayeredFlatWorkspaceTests: XCTestCase {
-    /// Lists given back longer, shorter and full of other values come out again as long as asked, every element the
-    /// value asked for; an empty list asked for is empty, with the room asked for.
-    func testTakenListsHoldExactlyWhatWasAskedWhateverWasGivenBack() {
-        let workspace = LayeredFlatWorkspace()
-        for length in [0, 1, 5, 40, 3, 200, 17] {
-            workspace.recycle(Array(repeating: 7, count: length) + [-3, 9])
-            workspace.recycle([Double](repeating: .nan, count: length + 1))
-            workspace.recycle([Bool](repeating: true, count: length + 2))
-        }
-        for count in [0, 1, 2, 4, 39, 41, 199, 300, 16] {
-            XCTAssertEqual(workspace.integers(count: count, repeating: -1), [Int](repeating: -1, count: count))
-            XCTAssertEqual(workspace.numbers(count: count, repeating: 0.5), [Double](repeating: 0.5, count: count))
-            XCTAssertEqual(workspace.flags(count: count, repeating: false), [Bool](repeating: false, count: count))
-            XCTAssertEqual(workspace.kinds(count: count, repeating: .label), [LayeredVertexKind](repeating: .label, count: count))
-            let empty = workspace.emptyIntegers(capacity: count)
-            XCTAssertTrue(empty.isEmpty)
-            XCTAssertGreaterThanOrEqual(empty.capacity, count)
-            XCTAssertTrue(workspace.emptyNumbers(capacity: count).isEmpty)
-            XCTAssertTrue(workspace.emptyEnds(capacity: count).isEmpty)
-        }
-    }
-
-    /// A list given back while another holder still has it is copied by the next taker's first change, so the other
-    /// holder's elements stay as they were.
-    func testListStillHeldElsewhereIsNeverChanged() {
-        let workspace = LayeredFlatWorkspace()
-        let held = Array(0..<50)
-        workspace.recycle(held)
-        var taken = workspace.integers(count: 50, repeating: 9)
-        taken[0] = -1
-        XCTAssertEqual(held, Array(0..<50))
-        XCTAssertEqual(taken.dropFirst(), ArraySlice(repeating: 9, count: 49))
-    }
-
+final class LayeredFlatArenaTests: XCTestCase {
     /// Each key's list holds its values in the order the links were added, as appending to an array per key would.
     func testLinkListsKeepTheOrderOfTheLinksOfEachKey() {
         var generator = LayeredWorkspaceGenerator(seed: 0xC0FF_EE11)
-        let workspace = LayeredFlatWorkspace()
+        let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         for count in [1, 2, 7, 30] {
             let linkCount = Int.random(in: 0..<(4 * count), using: &generator)
             let keys = (0..<linkCount).map { _ in Int.random(in: 0..<count, using: &generator) }
             let values = (0..<linkCount).map { _ in Int.random(in: 0..<100, using: &generator) }
             var expected = [[Int]](repeating: [], count: count)
             for index in keys.indices { expected[keys[index]].append(values[index]) }
-            let lists = LayeredLinkLists(count: count, keys: keys, values: values, workspace: workspace)
+            let keySpan = arena.span(count: linkCount, repeating: 0)
+            let valueSpan = arena.span(count: linkCount, repeating: 0)
+            for index in keys.indices {
+                keySpan[index] = keys[index]
+                valueSpan[index] = values[index]
+            }
+            let lists = LayeredLinkLists(count: count, keys: keySpan, values: valueSpan, arena: arena)
             for key in 0..<count { XCTAssertEqual(Array(lists[key]), expected[key], "key \(key) of \(count)") }
-            lists.recycle(into: workspace)
         }
     }
 
     /// Flat layouts of many kinds of graph (labels, twin edges, offsets, ends spread along sides, held ends, groups,
-    /// orders only, edges on tracks or straight), each in a workspace that every layout before it used, in two orders,
-    /// give exactly the places, routes, sizes and crossings each gives in a workspace of its own.
-    func testLayoutInAUsedWorkspaceMatchesALayoutInAFreshOne() {
+    /// orders only, edges on tracks or straight), each run in the thread's arena after every layout before it, in two
+    /// orders, or within another use of the arena that holds spans of its own, give exactly the places, routes, sizes and
+    /// crossings each gives in an arena just released.
+    func testLayoutInAUsedArenaMatchesALayoutInAFreshOne() {
         var generator = LayeredWorkspaceGenerator(seed: 0x1A7E_5EED)
         let graphs = (0..<60).map { index in Self.randomGraph(index, using: &generator) }
-        let fresh = graphs.map { graph in Self.laidOut(graph, workspace: nil) }
-        for order in [Array(graphs.indices), graphs.indices.reversed()] {
-            let shared = LayeredFlatWorkspace()
-            for index in order {
-                XCTAssertEqual(Self.laidOut(graphs[index], workspace: shared), fresh[index], "graph \(index)")
-            }
+        let fresh = graphs.map { graph in
+            DiagramScratchArena.releaseCurrentThreadArena()
+            return Self.laidOut(graph)
         }
+        for order in [Array(graphs.indices), graphs.indices.reversed()] {
+            for index in order { XCTAssertEqual(Self.laidOut(graphs[index]), fresh[index], "graph \(index)") }
+        }
+        DiagramScratchArena.withCurrentThread { arena in
+            let held = arena.span(count: 5_000, repeating: 7)
+            for index in graphs.indices { XCTAssertEqual(Self.laidOut(graphs[index]), fresh[index], "nested graph \(index)") }
+            XCTAssertTrue(held.allSatisfy { value in value == 7 })
+        }
+    }
+
+    /// A graph far larger than the arena keeps (2,000 nodes, 6,000 edges of which a third labelled, so about 30,000
+    /// vertices) is laid out, nested within another use of the arena, and leaves the thread's arena holding no more
+    /// than `retainedByteLimit` once the outermost use ends: a hostile graph does not leave its memory behind.
+    func testALargeGraphLeavesNoMoreThanTheRetainedLimitBehind() {
+        var generator = LayeredWorkspaceGenerator(seed: 0xB16_6AF)
+        let nodeCount = 2_000
+        var nodes = (0..<nodeCount).map { _ in LayeredFlatNode(width: 40, height: 20) }
+        var edges = (0..<6_000).map { index in
+            LayeredFlatEdge(tail: Int.random(in: 0..<nodeCount, using: &generator), head: Int.random(in: 0..<nodeCount, using: &generator),
+                            labelWidth: index % 3 == 0 ? 30 : 0, labelHeight: index % 3 == 0 ? 14 : 0)
+        }
+        let result = DiagramScratchArena.withCurrentThread { arena in
+            let held = arena.span(count: 1_000, repeating: 3)
+            let result = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: LayeredCompoundTesting.options)
+            XCTAssertTrue(held.allSatisfy { value in value == 3 })
+            XCTAssertGreaterThan(arena.heldByteCount, DiagramScratchArena.retainedByteLimit)
+            return result
+        }
+        XCTAssertNotNil(result)
+        XCTAssertTrue(edges.allSatisfy { edge in edge.tail == edge.head || edge.points.count >= 2 })
+        XCTAssertLessThanOrEqual(DiagramScratchArena.current.heldByteCount, DiagramScratchArena.retainedByteLimit)
     }
 
     private struct Graph {
@@ -96,10 +98,10 @@ final class LayeredFlatWorkspaceTests: XCTestCase {
         var offsets: [Double]
     }
 
-    private static func laidOut(_ graph: Graph, workspace: LayeredFlatWorkspace?) -> Outcome {
+    private static func laidOut(_ graph: Graph) -> Outcome {
         var nodes = graph.nodes
         var edges = graph.edges
-        let result = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: graph.options, workspace: workspace)
+        let result = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: graph.options)
         return Outcome(result: result, places: nodes.map { node in CGPoint(x: node.x, y: node.y) }, ranks: nodes.map(\.rank),
                        routes: edges.map(\.points), labelCenters: edges.map(\.labelCenter),
                        offsets: edges.flatMap { edge in [edge.tailOffset, edge.headOffset] })

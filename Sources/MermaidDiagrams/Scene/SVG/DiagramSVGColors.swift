@@ -3,12 +3,12 @@
  * ----------------------------
  * Layer: Core
  * Description: How a scene's paints are written in SVG: in a palette's colors, or as Pele's CSS variables with Pele's
- *              colors as their fallbacks; each paint's text worked out once per document, a series' variable taken from a
- *              table.
+ *              colors as their fallbacks; each paint's text as a String, which the document's writer writes as bytes
+ *              (DiagramSVGPaintWriter), and colors in sRGB hexadecimal.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -69,32 +69,14 @@ extension DiagramSVGColors {
         }
     }
 
-    /// A role as Pele's variable, through its alias where Pele sets one.
+    /// A role as Pele's variable, through its alias where Pele sets one: the literal the document's writer writes
+    /// (`DiagramSVGPaintWriter.variable(_:)`), a series' with its color as the fallback (`var(--pele-series-1,#4c78a8)`).
     static func variable(_ role: DiagramPaletteRole) -> String {
-        switch role {
-        case .background: "var(--_bg)"
-        case .foreground: "var(--_fg)"
-        case .line: "var(--_l)"
-        case .surface: "var(--_s)"
-        case .border: "var(--_b)"
-        case .accent: "var(--_c)"
-        case .critical: "var(--pele-critical,#e45756)"
-        case .muted: "var(--_m)"
-        case .alternateSurface: "var(--_a)"
-        case .series(let index): peleSeriesVariables[seriesSlot(index)]
-        }
+        DiagramSVGPaintWriter.variable(role).withUTF8Buffer { bytes in String(decoding: bytes, as: UTF8.self) }
     }
 
-    /// Pele's eight series variables, each with its color as the fallback (`var(--pele-series-1,#4c78a8)`):
-    /// `DiagramPalette.peleSeries` in sRGB hexadecimal, as `hexadecimal(_:)` writes them (which a test checks), so that a
-    /// series paint is not spelled out again in every document.
-    static let peleSeriesVariables = [
-        "var(--pele-series-1,#4c78a8)", "var(--pele-series-2,#f58518)", "var(--pele-series-3,#54a24b)", "var(--pele-series-4,#e45756)",
-        "var(--pele-series-5,#72b7b2)", "var(--pele-series-6,#eeca3b)", "var(--pele-series-7,#b279a2)", "var(--pele-series-8,#9d755d)"
-    ]
-
     /// Which of Pele's eight series variables a series index takes, the colors taken in turn.
-    private static func seriesSlot(_ index: Int) -> Int {
+    static func seriesSlot(_ index: Int) -> Int {
         ((index % DiagramPalette.peleSeries.count) + DiagramPalette.peleSeries.count) % DiagramPalette.peleSeries.count
     }
 
@@ -104,22 +86,26 @@ extension DiagramSVGColors {
     }
 
     /// `#rrggbb` of sRGB components, each clamped to 0...1, written through a table of digits.
-    private static func hexadecimal(components: SRGBComponents) -> String {
-        String(unsafeUninitializedCapacity: 7) { characters in
-            characters[0] = UInt8(ascii: "#")
-            writeChannel(components.red, into: characters, at: 1)
-            writeChannel(components.green, into: characters, at: 3)
-            writeChannel(components.blue, into: characters, at: 5)
+    static func hexadecimal(components: SRGBComponents) -> String {
+        let packed = packedHexadecimal(components: components)
+        return String(unsafeUninitializedCapacity: 7) { characters in
+            for index in 0..<7 { characters[index] = UInt8(truncatingIfNeeded: packed >> (index * 8)) }
             return 7
         }
     }
 
-    /// The two hexadecimal digits of a component clamped to 0...1, as a channel of 0 to 255.
-    private static func writeChannel(_ component: CGFloat, into characters: UnsafeMutableBufferPointer<UInt8>, at index: Int) {
+    /// `#rrggbb` of sRGB components as the low seven bytes of a word, the first byte lowest, as the document's writer
+    /// stores it.
+    static func packedHexadecimal(components: SRGBComponents) -> UInt64 {
+        UInt64(UInt8(ascii: "#")) | channelDigits(components.red) << 8 | channelDigits(components.green) << 24 | channelDigits(components.blue) << 40
+    }
+
+    /// The two hexadecimal digits of a component clamped to 0...1, as a channel of 0 to 255, the first lowest.
+    @inline(__always)
+    private static func channelDigits(_ component: CGFloat) -> UInt64 {
         let channel = Int((min(1, max(0, component)) * 255).rounded())
         let digits = hexadecimalDigits.utf8Start
-        characters[index] = digits[channel >> 4]
-        characters[index + 1] = digits[channel & 0xF]
+        return UInt64(digits[channel >> 4]) | UInt64(digits[channel & 0xF]) << 8
     }
 
     /// The sixteen hexadecimal digits in lower case, as `String(_:radix:)` writes them.
@@ -137,45 +123,11 @@ extension DiagramSVGColors {
     }
 
     /// Red, green, blue and opacity in sRGB; opaque black for a color with no sRGB form.
-    private static func sRGBComponents(of color: CGColor) -> SRGBComponents {
+    static func sRGBComponents(of color: CGColor) -> SRGBComponents {
         guard let space = sRGBColorSpace,
               let components = color.converted(to: space, intent: .defaultIntent, options: nil)?.components, components.count == 4 else {
             return SRGBComponents(red: 0, green: 0, blue: 0, opacity: 1)
         }
         return SRGBComponents(red: components[0], green: components[1], blue: components[2], opacity: components[3])
-    }
-}
-
-/// The text of each paint of one document, worked out the first time the paint is written: a palette's colors are
-/// converted to sRGB and a mixture or a written color is spelled out once, not for every shape and text. With Pele's
-/// variables a role's text is fixed (a series' from its table) and is never looked up. A document has few paints, so the
-/// first ones are found by comparing them in turn, which hashes nothing; past `scannedPaintCount` they are hashed.
-struct DiagramSVGPaintTexts {
-    let colors: DiagramSVGColors
-    private var scannedPaints: [(paint: DiagramPaint, text: DiagramSVGPaintText)] = []
-    private var textsByPaint: [DiagramPaint: DiagramSVGPaintText] = [:]
-
-    /// How many paints are kept to be compared in turn before the rest are hashed.
-    static let scannedPaintCount = 24
-
-    init(colors: DiagramSVGColors) {
-        self.colors = colors
-    }
-
-    mutating func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
-        if case .peleVariables = colors, case .role(let role) = paint.source {
-            return DiagramSVGPaintText(color: DiagramSVGColors.variable(role), opacity: paint.opacity)
-        }
-        for entry in scannedPaints where entry.paint == paint { return entry.text }
-        if scannedPaints.count < Self.scannedPaintCount {
-            let text = colors.text(of: paint)
-            if scannedPaints.isEmpty { scannedPaints.reserveCapacity(Self.scannedPaintCount) }
-            scannedPaints.append((paint, text))
-            return text
-        }
-        if let text = textsByPaint[paint] { return text }
-        let text = colors.text(of: paint)
-        textsByPaint[paint] = text
-        return text
     }
 }
