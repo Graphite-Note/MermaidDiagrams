@@ -7,7 +7,7 @@
  *              or a block costs no allocation of its own and copies as one reference.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -106,6 +106,9 @@ final class DiagramTextThreadState {
     /// of its own).
     var measuring = DiagramTextMeasuringScratch()
     var isMeasuring = false
+    /// The decoding lists of labels with markup, and whether they are in use.
+    var decoder = DiagramLabelByteDecoder()
+    var isDecoding = false
 
     deinit {
         measuring.free()

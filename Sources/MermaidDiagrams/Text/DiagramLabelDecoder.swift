@@ -6,15 +6,15 @@
  *              it: line breaks, HTML's and Markdown's emphasis as spans, other tags dropped, icons left out, codes read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 24/11/2026
  */
 
 /// Turns the text written for a node, an edge or a group into the lines that are drawn, as Pele's `layoutLabel` reads
 /// it (text/label.ts): a text with no markup is one line, trimmed; else it breaks at `<br>`, a written `\n` and a line
-/// break, each line trimmed, and each line is read into spans (`DiagramLabelInlineMarkup`): emphasis tags and, in a
+/// break, each line trimmed, and each line is read into spans (`DiagramLabelByteMarkup`): emphasis tags and, in a
 /// Markdown string, `*` and `_` markers set the spans' emphasis, other HTML tags are dropped, `fa:fa-…` icon names are
-/// left out (`DiagramLabelIcons`), and entity codes are read (`DiagramLabelEntities`). Spaces inside a line are kept
+/// left out (`DiagramLabelByteEntities`), and entity codes are read (`DiagramLabelEntities`). Spaces inside a line are kept
 /// as written, as Pele keeps and measures them.
 enum DiagramLabelDecoder {
     /// How the text was written: plain or quoted, or as a Markdown string (`"`…`"`).
@@ -27,21 +27,27 @@ enum DiagramLabelDecoder {
     }
 
     static func label(from rawText: String, form: Form) -> DiagramLabel {
+        let label = decoded(rawText, form: form)
+        #if DEBUG
+        DiagramLabelDecodingObservation.observer?(rawText, form, label)
+        #endif
+        return label
+    }
+
+    private static func decoded(_ rawText: String, form: Form) -> DiagramLabel {
         // Most text is one line without markup, which a pass over its bytes finds without reading its characters; its
         // bytes are then kept as they are, trimmed, in the thread's text storage.
         let isLiteral = form == .literal
         let unmarked = rawText.utf8.withContiguousStorageIfAvailable { bytes in unmarkedLabel(bytes, isLiteral: isLiteral) }
             ?? Array(rawText.utf8).withUnsafeBufferPointer { bytes in unmarkedLabel(bytes, isLiteral: isLiteral) }
         if let unmarked { return unmarked }
-        var scalars = Array(rawText.unicodeScalars)
-        if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
-        let isMarkdown = form == .markdown
-        let source = isMarkdown ? DiagramLabelLineBreaks.markdownSource(scalars) : JavaScriptStringTrimming.trimmed(scalars[...])
-        var open: DiagramTextStyle = []
-        let lines = DiagramLabelLineBreaks.lines(of: source).map { line in
-            DiagramLabelInlineMarkup.spans(of: JavaScriptStringTrimming.trimmed(line), isMarkdown: isMarkdown, open: &open)
-        }
-        return DiagramLabel(spans: lines)
+        return rawText.utf8.withContiguousStorageIfAvailable { bytes in markedLabel(bytes, form: form) }
+            ?? Array(rawText.utf8).withUnsafeBufferPointer { bytes in markedLabel(bytes, form: form) }
+    }
+
+    /// The label of text with markup, read on its bytes (`DiagramLabelByteDecoder`) with the thread's decoding lists.
+    private static func markedLabel(_ bytes: UnsafeBufferPointer<UInt8>, form: Form) -> DiagramLabel {
+        DiagramTextThreadState.current.withDecoder { decoder in decoder.label(of: bytes, form: form) }
     }
 
     /// The label of text Pele reads without markup, one line of its bytes trimmed of JavaScript's white space (empty text
@@ -60,3 +66,11 @@ enum DiagramLabelDecoder {
         DiagramLabelEntities.decoded(line)
     }
 }
+
+#if DEBUG
+/// What the tests watch of every label decoded in a debug build: the text written, its form and the label made, so that
+/// every label of every corpus is checked against the decoding it replaces.
+enum DiagramLabelDecodingObservation {
+    nonisolated(unsafe) static var observer: ((String, DiagramLabelDecoder.Form, DiagramLabel) -> Void)?
+}
+#endif

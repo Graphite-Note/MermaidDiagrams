@@ -7,7 +7,7 @@
  *              they fit there, else with its bytes copied, a line of one run without emphasis written as its range alone.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -103,5 +103,16 @@ extension DiagramTextThreadState {
         defer { isMeasuring = false }
         measuring.removeAll()
         return body(&measuring)
+    }
+
+    /// `body` with this thread's label decoder; a decoding that starts while another runs gets its own.
+    func withDecoder<Result>(_ body: (inout DiagramLabelByteDecoder) -> Result) -> Result {
+        guard !isDecoding else {
+            var own = DiagramLabelByteDecoder()
+            return body(&own)
+        }
+        isDecoding = true
+        defer { isDecoding = false }
+        return body(&decoder)
     }
 }

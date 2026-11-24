@@ -6,7 +6,7 @@
  *              alone; and compares two texts' bytes as Strings compare them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -68,6 +68,30 @@ enum DiagramLabelWriting {
                               at: first, index: index)
         }
         return DiagramLabel(storage: storage, record: DiagramLabelRecord(first: first, end: 0, lineCount: Int32(lines.count), flags: .hasSpans))
+    }
+
+    /// A label read for its markup from its decoded bytes: its lines' and, when one has an emphasis, its spans' ranges
+    /// of `decoded`; never read without markup.
+    static func label(decoded: UnsafeBufferPointer<UInt8>, lines: [DiagramLabelLineRecord], spans: [DiagramLabelSpanRecord]?) -> DiagramLabel {
+        if lines.count == 1, spans == nil {
+            return oneLine(UnsafeBufferPointer(rebasing: decoded[Int(lines[0].start)..<Int(lines[0].end)]), flags: [])
+        }
+        let recordBytes = DiagramTextStorage.recordByteCount(lines.count, of: DiagramLabelLineRecord.self)
+            + (spans.map { spans in DiagramTextStorage.recordByteCount(spans.count, of: DiagramLabelSpanRecord.self) } ?? 0)
+        let storage = DiagramTextThreadState.current.storage(forBytes: decoded.count, recordBytes: recordBytes)
+        let base = storage.append(decoded)
+        let first = storage.reserveRecords(count: lines.count, of: DiagramLabelLineRecord.self)
+        let firstSpan = spans.map { spans in storage.reserveRecords(count: spans.count, of: DiagramLabelSpanRecord.self) } ?? 0
+        let spanStride = Int32(MemoryLayout<DiagramLabelSpanRecord>.stride)
+        for (index, line) in lines.enumerated() {
+            storage.setRecord(DiagramLabelLineRecord(start: base + line.start, end: base + line.end, firstSpan: firstSpan + line.firstSpan * spanStride,
+                                                     spanCount: spans == nil ? 0 : line.spanCount), at: first, index: index)
+        }
+        for (index, span) in (spans ?? []).enumerated() {
+            storage.setRecord(DiagramLabelSpanRecord(start: base + span.start, end: base + span.end, style: span.style), at: firstSpan, index: index)
+        }
+        return DiagramLabel(storage: storage, record: DiagramLabelRecord(first: first, end: 0, lineCount: Int32(lines.count),
+                                                                         flags: spans == nil ? [] : .hasSpans))
     }
 
     /// Appends `text`'s UTF-8 to `storage`, which has room for it; returns where it starts.

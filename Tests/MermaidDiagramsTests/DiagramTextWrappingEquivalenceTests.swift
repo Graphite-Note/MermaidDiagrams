@@ -8,7 +8,7 @@
  *              bytes decide whether it is read for markup as its scalars did; and C4's spoken kind names.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -256,7 +256,7 @@ final class DiagramLabelByteCheckEquivalenceTests: XCTestCase {
             }
             for isLiteral in [false, true] {
                 var scalars = Array(text.unicodeScalars)
-                if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
+                if isLiteral { scalars = ReferenceLabelLineBreaks.literalText(scalars) }
                 let expected = Self.isUnmarkedReadScalarByScalar(scalars)
                 XCTAssertEqual(DiagramLabelLineBreaks.isUnmarked(Array(text.utf8), isLiteral: isLiteral), expected, "\(text.debugDescription) \(isLiteral)")
                 if !expected { markedCount += 1 }
@@ -289,6 +289,6 @@ extension DiagramLabelByteCheckEquivalenceTests {
             }
         }
         if hasHash, hasSemicolon, DiagramLabelEntities.mermaidCodesAsHTML(scalars) != scalars { return false }
-        return !DiagramLabelIcons.containsIconName(scalars[...])
+        return !ReferenceLabelIcons.containsIconName(scalars[...])
     }
 }
