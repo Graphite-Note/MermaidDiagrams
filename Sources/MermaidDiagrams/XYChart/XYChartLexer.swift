@@ -5,7 +5,7 @@
  * Description: Splits an XY chart's text after its keyword into the tokens of Mermaid's XY chart grammar, on its
  *              UTF-8 bytes, as Pele's lexer does.
  *
- * Authors: felixchvl
+ * Authors: felixchvl, Bahey Shalash
  * Version: 0.2
  * Date: 23/11/2026
  */

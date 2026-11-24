@@ -4,7 +4,7 @@
  * Layer: Core
  * Description: The tokens of Mermaid's XY chart grammar: their kinds, where each starts and ends, and its line.
  *
- * Authors: felixchvl
+ * Authors: felixchvl, Bahey Shalash
  * Version: 0.2
  * Date: 23/11/2026
  */

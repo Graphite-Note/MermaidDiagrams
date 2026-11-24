@@ -5,7 +5,7 @@
  * Description: A Gantt task's data after its colon: its tags, identifier, start and end, split and trimmed on the
  *              text's bytes when it is all ASCII.
  *
- * Authors: felixchvl
+ * Authors: felixchvl, Bahey Shalash
  * Version: 0.2
  * Date: 23/11/2026
  */
