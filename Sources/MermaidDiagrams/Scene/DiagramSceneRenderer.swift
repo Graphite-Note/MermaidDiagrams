@@ -3,11 +3,11 @@
  * --------------------------------
  * Layer: Core
  * Description: Draws any diagram's scene into a Core Graphics context in a palette's colors: the one Core Graphics
- *              painter of every diagram type.
+ *              painter of every diagram type, laying each shape's elements into the context where the scene keeps them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -23,7 +23,7 @@ public enum DiagramSceneRenderer {
         var colors = DiagramPaintColors(palette: scene.palette(over: palette))
         var text = DiagramTextDrawing(font: scene.font)
         context.saveGState()
-        for item in scene.items {
+        scene.forEachItem { item in
             switch item {
             case .shape(let shape): paint(shape, colors: &colors, in: context)
             case .text(let placed): draw(placed, colors: &colors, text: &text, in: context)
@@ -32,44 +32,60 @@ public enum DiagramSceneRenderer {
         context.restoreGState()
     }
 
-    private static func paint(_ shape: DiagramSceneShape, colors: inout DiagramPaintColors, in context: CGContext) {
+    /// The shape's path laid into the context again for each paint, from its elements: the context's path is used up
+    /// by each fill, stroke or clip.
+    private static func paint(_ shape: DiagramSceneShapeView, colors: inout DiagramPaintColors, in context: CGContext) {
         switch shape.painting {
         case .fill(let paint):
-            fill(shape.path, with: paint, colors: &colors, in: context)
+            fill(shape, with: paint, colors: &colors, in: context)
         case .stroke(let paint, let stroke):
-            self.stroke(shape.path, with: paint, stroke, colors: &colors, in: context)
+            self.stroke(shape, with: paint, stroke, colors: &colors, in: context)
         case .fillAndStroke(let fillPaint, let strokePaint, let stroke):
-            fill(shape.path, with: fillPaint, colors: &colors, in: context)
-            self.stroke(shape.path, with: strokePaint, stroke, colors: &colors, in: context)
+            fill(shape, with: fillPaint, colors: &colors, in: context)
+            self.stroke(shape, with: strokePaint, stroke, colors: &colors, in: context)
         case .gradientFill(let gradient):
-            fill(shape.path, with: gradient, colors: &colors, in: context)
+            fill(shape, with: gradient, colors: &colors, in: context)
         }
     }
 
-    private static func fill(_ path: CGPath, with paint: DiagramPaint, colors: inout DiagramPaintColors, in context: CGContext) {
+    /// The shape's elements added to the context's path, as `CGContext.addPath` adds a path's.
+    private static func addPath(of shape: DiagramSceneShapeView, to context: CGContext) {
+        shape.forEachElement { verb, points in
+            switch verb {
+            case .move: context.move(to: points[0])
+            case .line: context.addLine(to: points[0])
+            case .quadraticCurve: context.addQuadCurve(to: points[1], control: points[0])
+            case .cubicCurve: context.addCurve(to: points[2], control1: points[0], control2: points[1])
+            case .close: context.closePath()
+            }
+        }
+    }
+
+    private static func fill(_ shape: DiagramSceneShapeView, with paint: DiagramPaint, colors: inout DiagramPaintColors, in context: CGContext) {
         context.setFillColor(colors.color(of: paint))
-        context.addPath(path)
+        addPath(of: shape, to: context)
         context.fillPath()
     }
 
-    private static func stroke(_ path: CGPath, with paint: DiagramPaint, _ stroke: DiagramStroke, colors: inout DiagramPaintColors,
+    private static func stroke(_ shape: DiagramSceneShapeView, with paint: DiagramPaint, _ stroke: DiagramStroke, colors: inout DiagramPaintColors,
                                in context: CGContext) {
         context.setStrokeColor(colors.color(of: paint))
         context.setLineWidth(stroke.lineWidth)
         context.setLineDash(phase: 0, lengths: stroke.dashLengths)
         context.setLineCap(stroke.lineCap)
         context.setLineJoin(stroke.lineJoin)
-        context.addPath(path)
+        addPath(of: shape, to: context)
         context.strokePath()
     }
 
     /// The path filled with the gradient at its opacity, the end colors carried on past the gradient's ends.
-    private static func fill(_ path: CGPath, with gradient: DiagramLinearGradient, colors: inout DiagramPaintColors, in context: CGContext) {
+    private static func fill(_ shape: DiagramSceneShapeView, with gradient: DiagramLinearGradient, colors: inout DiagramPaintColors,
+                             in context: CGContext) {
         let ends = [colors.color(of: gradient.startPaint), colors.color(of: gradient.endPaint)]
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let coreGraphicsGradient = CGGradient(colorsSpace: space, colors: ends as CFArray, locations: [0, 1]) else { return }
         context.saveGState()
-        context.addPath(path)
+        addPath(of: shape, to: context)
         context.clip()
         context.setAlpha(gradient.opacity)
         context.drawLinearGradient(coreGraphicsGradient, start: gradient.startPoint, end: gradient.endPoint,

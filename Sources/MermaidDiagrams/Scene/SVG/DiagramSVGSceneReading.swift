@@ -2,36 +2,35 @@
  * File: DiagramSVGSceneReading.swift
  * ----------------------------------
  * Layer: Core
- * Description: How the SVG writer reads a scene as it is stored today, items of Core Graphics paths: whether it has
- *              gradient fills, the gradients' definitions, and each item's element, a path's data read from its
- *              CGPath; the one place that changes when the scene's storage does.
+ * Description: How the SVG writer reads a scene where it keeps its items: whether it has gradient fills, the gradients'
+ *              definitions, and each item's element, a path's data written straight from the elements in the scene's
+ *              storage, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
 import CoreGraphics
 
 extension DiagramSVGBody {
-    /// Whether any shape of `items` is filled with a gradient, which needs `<defs>`; each item is read where the array
-    /// holds it, without a copy.
-    static func hasGradientFills(_ items: [DiagramSceneItem]) -> Bool {
-        items.withUnsafeBufferPointer { items in
-            for index in items.indices {
-                if case .shape(let shape) = items[index], case .gradientFill = shape.painting { return true }
+    /// Whether any shape of `scene` is filled with a gradient, which needs `<defs>`.
+    static func hasGradientFills(_ scene: DiagramScene) -> Bool {
+        scene.paintings.withUnsafeBufferPointer { paintings in
+            for index in paintings.indices {
+                if case .gradientFill = paintings[index] { return true }
             }
             return false
         }
     }
 
-    /// `<defs>` with a definition of each gradient fill of `items`, numbered in their order as `add(_:)` numbers their
-    /// uses, or nothing when no item has one: written before the items, where the document has them, so that nothing is
-    /// put in before the body afterwards.
-    mutating func appendDefinitions(of items: [DiagramSceneItem]) {
+    /// `<defs>` with a definition of each gradient fill of `scene`, numbered in their order as `add(_:)` numbers their
+    /// uses (the paintings are in the shapes' order), or nothing when no shape has one: written before the items, where
+    /// the document has them, so that nothing is put in before the body afterwards.
+    mutating func appendDefinitions(of scene: DiagramScene) {
         var definitionCount = 0
-        for item in items {
-            guard case .shape(let shape) = item, case .gradientFill(let gradient) = shape.painting else { continue }
+        for painting in scene.paintings {
+            guard case .gradientFill(let gradient) = painting else { continue }
             if definitionCount == 0 { appendDefinitionsOpening() }
             definitionCount += 1
             appendGradientDefinition(gradient, number: definitionCount)
@@ -39,19 +38,32 @@ extension DiagramSVGBody {
         if definitionCount > 0 { appendDefinitionsClosing() }
     }
 
-    mutating func add(_ item: DiagramSceneItem) {
-        switch item {
-        case .shape(let shape):
-            appendShapeOpening(part: shape.part)
-            content.appendPathData(shape.path)
-            appendShapeClosing(painting: shape.painting)
-        case .text(let text):
-            add(text)
+    /// Every item, back to front.
+    mutating func addItems(of scene: DiagramScene) {
+        scene.storage.withContents { contents in
+            for index in 0..<contents.itemCount {
+                let record = contents.records[index]
+                switch record.kind {
+                case .shape:
+                    appendShapeOpening(part: record.part)
+                    appendPathData(contents, itemAt: index)
+                    appendShapeClosing(painting: scene.paintings[Int(record.index)])
+                case .text:
+                    add(scene.texts[Int(record.index)])
+                }
+            }
         }
     }
 
-    /// Every item, back to front.
-    mutating func addItems(of items: [DiagramSceneItem]) {
-        for item in items { add(item) }
+    /// The path data of the shape at `index`: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates, each element written
+    /// whole at the cursor once its room is made.
+    private mutating func appendPathData(_ contents: DiagramSceneStorageContents, itemAt index: Int) {
+        var point = UnsafePointer(contents.points + Int(contents.records[index].firstPoint))
+        for verbIndex in contents.verbRange(ofItemAt: index) {
+            let verb = contents.verbs[verbIndex]
+            content.reserve(DiagramSVGNumberWriting.largestPathElementByteCount)
+            content.write(pathElement: verb, point)
+            point += verb.pointCount
+        }
     }
 }

@@ -1,0 +1,181 @@
+/**
+ * File: DiagramSceneStorageTests.swift
+ * ------------------------------------
+ * Layer: Tests
+ * Description: A scene keeps each shape's elements as Core Graphics gives them out, a move after a move and an empty path
+ *              included; its fast reading and its compatibility views agree; builders record into their thread's blocks,
+ *              a builder made while another records gets blocks of its own, large blocks are freed, and scenes built on
+ *              many threads at once are those built alone.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
+import CoreGraphics
+import Foundation
+import XCTest
+@testable import MermaidDiagrams
+@testable import MermaidDiagramsBenchmark
+
+final class DiagramSceneStorageTests: XCTestCase {
+    private let font = DiagramFont(postScriptName: nil, size: 16)
+
+    /// The elements of a Core Graphics path as it gives them out: a verb and its points' bits.
+    private func elements(of path: CGPath) -> [[UInt64]] {
+        var elements: [[UInt64]] = []
+        path.applyWithBlock { element in
+            let count: Int
+            switch element.pointee.type {
+            case .moveToPoint, .addLineToPoint: count = 1
+            case .addQuadCurveToPoint: count = 2
+            case .addCurveToPoint: count = 3
+            default: count = 0
+            }
+            var entry = [UInt64(element.pointee.type.rawValue)]
+            for index in 0..<count { entry += [UInt64(element.pointee.points[index].x.bitPattern), UInt64(element.pointee.points[index].y.bitPattern)] }
+            elements.append(entry)
+        }
+        return elements
+    }
+
+    private func elements(of shape: DiagramSceneShapeView) -> [[UInt64]] {
+        var elements: [[UInt64]] = []
+        shape.forEachElement { verb, points in
+            var entry = [UInt64(verb.rawValue)]
+            for index in 0..<verb.pointCount { entry += [UInt64(points[index].x.bitPattern), UInt64(points[index].y.bitPattern)] }
+            elements.append(entry)
+        }
+        return elements
+    }
+
+    /// Paths of every kind Core Graphics holds or builds: shapes held whole, an arc, a move after a move, an empty path,
+    /// paths joined into one.
+    private func samplePaths() -> [CGPath] {
+        let rounded = CGPath(roundedRect: CGRect(x: 3.3, y: 4.7, width: 90, height: 31), cornerWidth: 4, cornerHeight: 4, transform: nil)
+        let arc = CGMutablePath()
+        arc.addArc(center: CGPoint(x: 10, y: 10), radius: 7.5, startAngle: 0.3, endAngle: 2.9, clockwise: false)
+        let lone = CGMutablePath()
+        lone.move(to: CGPoint(x: 1, y: 1))
+        let twoMoves = CGMutablePath()
+        twoMoves.addPath(lone)
+        let next = CGMutablePath()
+        next.move(to: CGPoint(x: 5, y: 5))
+        next.addLine(to: CGPoint(x: 6, y: 9))
+        twoMoves.addPath(next)
+        let joined = CGMutablePath()
+        joined.addPath(rounded)
+        joined.addPath(CGPath(ellipseIn: CGRect(x: 100, y: 0, width: 20, height: 10), transform: nil))
+        joined.addQuadCurve(to: CGPoint(x: 140, y: 3), control: CGPoint(x: 130, y: -8))
+        joined.closeSubpath()
+        return [rounded, arc, lone, twoMoves, CGMutablePath(), joined, CGPath(rect: CGRect(x: -2, y: 1, width: -4, height: 6), transform: nil)]
+    }
+
+    func testItemsCopiedIntoASceneAreReadBackElementForElement() throws {
+        let paths = samplePaths()
+        var block = DiagramTextBlock(label: DiagramLabel("a"), measurer: UniformWidthTextMeasurer(), maximumWidth: 100)
+        block.center = CGPoint(x: 5, y: 5)
+        var items: [DiagramSceneItem] = []
+        for (index, path) in paths.enumerated() {
+            items.append(.shape(DiagramSceneShape(path: path, painting: .fill(.series(index)), part: .node)))
+            if index.isMultiple(of: 2) { items.append(.text(DiagramSceneText(block: block, paint: .foreground, part: .label))) }
+        }
+        let scene = DiagramScene(size: CGSize(width: 200, height: 50), font: font, items: items)
+        XCTAssertEqual(scene.itemCount, items.count)
+        XCTAssertEqual(scene.texts.count, 4)
+        var shapeIndex = 0
+        var itemIndex = 0
+        scene.forEachItem { item in
+            switch (item, items[itemIndex]) {
+            case (.shape(let view), .shape(let original)):
+                XCTAssertEqual(elements(of: view), elements(of: original.path), "path \(shapeIndex)")
+                XCTAssertEqual(view.elementCount, elements(of: original.path).count)
+                XCTAssertEqual(view.painting, original.painting)
+                shapeIndex += 1
+            case (.text(let text), .text(let original)):
+                XCTAssertEqual(text.block.center, original.block.center)
+            default:
+                XCTFail("item \(itemIndex) changed kind")
+            }
+            itemIndex += 1
+        }
+        XCTAssertEqual(shapeIndex, paths.count)
+        for (shape, path) in zip(scene.shapes, paths) {
+            XCTAssertEqual(elements(of: shape.path), elements(of: path), "a path made again from the elements has them all, a move after a move too")
+        }
+    }
+
+    func testABuilderMadeWhileAnotherRecordsHasBlocksOfItsOwn() throws {
+        let square = CGPath(rect: CGRect(x: 0, y: 0, width: 10, height: 10), transform: nil)
+        var outer = DiagramSceneBuilder()
+        outer.fill(square, .surface, part: .node)
+        outer.keepNextShapeApart()
+        var inner = DiagramSceneBuilder()
+        inner.stroke(CGPath(ellipseIn: CGRect(x: 0, y: 0, width: 4, height: 4), transform: nil), .border, DiagramStroke(lineWidth: 1), part: .edge)
+        let innerScene = inner.scene(size: CGSize(width: 4, height: 4), font: font)
+        outer.fill(square, .accent, part: .cluster)
+        let outerScene = outer.scene(size: CGSize(width: 10, height: 10), font: font)
+        XCTAssertEqual(innerScene.shapes.map(\.painting), [.stroke(.border, DiagramStroke(lineWidth: 1))])
+        XCTAssertEqual(outerScene.shapes.map(\.painting), [.fill(.surface), .fill(.accent)])
+        XCTAssertEqual(outerScene.shapes.map { shape in elements(of: shape.path) }, [elements(of: square), elements(of: square)])
+    }
+
+    func testBlocksGrownPastAMebibyteAreFreedForTheNextScene() {
+        var builder = DiagramSceneBuilder()
+        let path = CGMutablePath()
+        for index in 0..<120_000 { path.addRect(CGRect(x: CGFloat(index), y: 0, width: 1, height: 1)) }
+        builder.fill(path, .surface, part: .node)
+        let large = builder.scene(size: CGSize(width: 120_000, height: 1), font: font)
+        XCTAssertEqual(large.shapes.first.map { shape in elements(of: shape.path).count }, 600_000)
+        _ = consume builder
+        let buffers = DiagramSceneRecordBuffers.borrow()
+        defer { buffers.giveBack() }
+        XCTAssertLessThanOrEqual(buffers.capacityByteCount, DiagramSceneRecordBuffers.largestKeptByteCount)
+    }
+
+    /// Sixteen threads prepare the same diagrams at once, each in its own order: every scene's SVG is the one prepared
+    /// alone on one thread, so that no thread records into another's blocks or lanes.
+    func testScenesBuiltOnManyThreadsAtOnceAreThoseBuiltAlone() throws {
+        var sources: [String] = []
+        for (_, corpus) in try OutputDigest.corpora() { sources += corpus.prefix(6) }
+        let typography = DiagramSceneSamples.typography
+        func document(_ source: String) -> String? {
+            (try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
+                                                    timeZone: GanttChartCorpus.timeZone)).map { prepared in prepared.svgDocument() }
+        }
+        let expected = sources.map(document)
+        XCTAssertGreaterThan(expected.compactMap { $0 }.count, 150)
+        let shared = SharedSources(sources: sources, expected: expected)
+        let tally = StorageThreadTally()
+        DispatchQueue.concurrentPerform(iterations: 16) { thread in
+            for step in 0..<shared.sources.count {
+                let index = (thread &* 53 &+ step) % shared.sources.count
+                tally.record(document(shared.sources[index]) == shared.expected[index])
+            }
+        }
+        XCTAssertEqual(tally.differenceCount, 0)
+        XCTAssertEqual(tally.matchCount, 16 * sources.count)
+    }
+}
+
+private final class SharedSources: @unchecked Sendable {
+    let sources: [String]
+    let expected: [String?]
+
+    init(sources: [String], expected: [String?]) {
+        self.sources = sources
+        self.expected = expected
+    }
+}
+
+private final class StorageThreadTally: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var matchCount = 0
+    private(set) var differenceCount = 0
+
+    func record(_ matches: Bool) {
+        lock.lock()
+        if matches { matchCount += 1 } else { differenceCount += 1 }
+        lock.unlock()
+    }
+}

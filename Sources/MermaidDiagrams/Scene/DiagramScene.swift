@@ -3,11 +3,12 @@
  * ------------------------
  * Layer: Core
  * Description: A diagram's painting as a list of shapes and placed text, back to front, its colors given as roles of a
- *              palette, the one form every diagram type is drawn, exported and themed from.
+ *              palette, the one form every diagram type is drawn, exported and themed from; its shapes' paths are kept
+ *              as their elements in one block, and a Core Graphics path is made only for a reader that asks for one.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
- * Date: 23/11/2026
+ * Version: 0.7
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -17,23 +18,41 @@ import CoreGraphics
 /// scene again in other colors without reading or laying out again. Core Graphics draws it (`DiagramSceneRenderer`), SVG
 /// writes it (`DiagramSVGWriter`), and a view can paint it as its own shapes: each item is one fill, stroke, or fill and
 /// stroke of one path, whatever its type painted alike already merged into that path, or one placed text.
+///
+/// The shapes' paths are kept as their elements, as Core Graphics gives a path's elements out, in one block of memory
+/// with a small record per item (`DiagramSceneStorage`). `forEachItem` reads them where they are; `items` and `shapes`
+/// make a Core Graphics path of each shape on every read.
 public struct DiagramScene: Sendable {
     /// The page, its origin at the top left and its y running down, in points.
     public let size: CGSize
     /// The font the text was measured in: each text is drawn in it at its block's own size.
     public let font: DiagramFont
-    /// What is painted, back to front.
-    public let items: [DiagramSceneItem]
     /// The series colors the diagram's own theme variables set (`pie1`, `cScale0`, `xyChart.plotColorPalette` …), which
     /// its series are painted in over any palette's (`DiagramSeriesColors.palette(over:)`), as Pele's SVG sets them over
     /// the page's; none for most diagrams. The label inks on them are already the paints of the texts they color.
     public let seriesColors: DiagramSeriesColors
+    /// The text, back to front, without the shapes.
+    public let texts: [DiagramSceneText]
+    /// The items' records and the shapes' elements.
+    let storage: DiagramSceneStorage
+    /// Each shape's painting, in the shapes' order.
+    let paintings: [DiagramShapePainting]
 
+    /// A scene of `items`, each shape's path read once into the scene's storage.
     public init(size: CGSize, font: DiagramFont, items: [DiagramSceneItem], seriesColors: DiagramSeriesColors = .none) {
+        var builder = DiagramSceneItemCopying()
+        for item in items { builder.add(item) }
+        self = builder.scene(size: size, font: font, seriesColors: seriesColors)
+    }
+
+    init(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors, storage: DiagramSceneStorage, paintings: [DiagramShapePainting],
+         texts: [DiagramSceneText]) {
         self.size = size
         self.font = font
-        self.items = items
         self.seriesColors = seriesColors
+        self.storage = storage
+        self.paintings = paintings
+        self.texts = texts
     }
 
     /// The palette the scene is painted in where a host's is `palette`: the host's, with the series the diagram's theme
@@ -42,20 +61,46 @@ public struct DiagramScene: Sendable {
         seriesColors.palette(over: palette)
     }
 
-    /// The shapes, back to front, without the text.
-    public var shapes: [DiagramSceneShape] {
-        items.compactMap { item in
-            guard case .shape(let shape) = item else { return nil }
-            return shape
+    /// How many items the scene paints.
+    public var itemCount: Int { storage.itemCount }
+
+    /// Calls `body` with each item, back to front, where the scene keeps it: a shape's elements are read without a Core
+    /// Graphics path, and are valid only inside `body`.
+    public func forEachItem(_ body: (DiagramSceneItemView) throws -> Void) rethrows {
+        try storage.withContents { contents in
+            for index in 0..<contents.itemCount {
+                let record = contents.records[index]
+                switch record.kind {
+                case .shape:
+                    try body(.shape(DiagramSceneShapeView(contents: contents, index: index, painting: paintings[Int(record.index)], part: record.part)))
+                case .text:
+                    try body(.text(texts[Int(record.index)]))
+                }
+            }
         }
     }
 
-    /// The text, back to front, without the shapes.
-    public var texts: [DiagramSceneText] {
-        items.compactMap { item in
-            guard case .text(let text) = item else { return nil }
-            return text
+    /// What is painted, back to front, each shape's path made anew from its elements.
+    public var items: [DiagramSceneItem] {
+        var items: [DiagramSceneItem] = []
+        items.reserveCapacity(itemCount)
+        forEachItem { item in
+            switch item {
+            case .shape(let shape): items.append(.shape(DiagramSceneShape(unchangedPath: shape.makePath(), painting: shape.painting, part: shape.part)))
+            case .text(let text): items.append(.text(text))
+            }
         }
+        return items
+    }
+
+    /// The shapes, back to front, without the text, each path made anew from its elements.
+    public var shapes: [DiagramSceneShape] {
+        var shapes: [DiagramSceneShape] = []
+        forEachItem { item in
+            guard case .shape(let shape) = item else { return }
+            shapes.append(DiagramSceneShape(unchangedPath: shape.makePath(), painting: shape.painting, part: shape.part))
+        }
+        return shapes
     }
 }
 
@@ -63,6 +108,35 @@ public struct DiagramScene: Sendable {
 public enum DiagramSceneItem: Sendable {
     case shape(DiagramSceneShape)
     case text(DiagramSceneText)
+}
+
+/// One thing a scene paints, read where the scene keeps it (`DiagramScene.forEachItem`).
+public enum DiagramSceneItemView {
+    case shape(DiagramSceneShapeView)
+    case text(DiagramSceneText)
+}
+
+/// A shape of a scene read where the scene keeps it: its painting, its part and its path's elements, valid only inside
+/// the `forEachItem` call that gave it.
+public struct DiagramSceneShapeView {
+    let contents: DiagramSceneStorageContents
+    let index: Int
+    public let painting: DiagramShapePainting
+    public let part: DiagramScenePart
+
+    /// Calls `body` with each element of the shape's path and its points (a curve's control points before its end), as
+    /// Core Graphics gives a path's elements out.
+    public func forEachElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) throws -> Void) rethrows {
+        try contents.forEachElement(ofItemAt: index, body)
+    }
+
+    /// How many elements the shape's path has.
+    public var elementCount: Int { contents.verbRange(ofItemAt: index).count }
+
+    /// A Core Graphics path of the shape's elements.
+    public func makePath() -> CGPath {
+        contents.makePath(ofItemAt: index)
+    }
 }
 
 /// A path filled, stroked, or filled and stroked once: everything of a diagram painted alike and one after the other, in one path.
@@ -196,114 +270,4 @@ public struct DiagramTextOutline: Hashable, Sendable {
         self.paint = paint
         self.lineWidth = lineWidth
     }
-}
-
-/// What part of a diagram an item paints, by the class Pele's SVG gives it (`pele-` and the raw value).
-public enum DiagramScenePart: String, Hashable, Sendable, CaseIterable {
-    /// The diagram's title.
-    case title
-    /// Edges, transitions, messages, links and connectors.
-    case edge
-    /// The marks at their ends: arrowheads, circles, crosses, cardinalities.
-    case marker
-    /// The text on edges.
-    case edgeLabel = "edge-label"
-    /// The patches behind text, which keep lines from running through it.
-    case labelBackground = "label-bg"
-    /// Nodes and what a chart plots: shapes, states, classes, entities, participants, slices, bars, points, tasks, commits.
-    case node
-    /// The text in or beside nodes.
-    case label
-    /// Boxes that hold others: groups, composite states, blocks, sections, lanes, bands.
-    case cluster
-    /// Their titles.
-    case clusterLabel = "cluster-label"
-    /// Notes and their text.
-    case note
-    /// Axes, grids, scales and lifelines.
-    case axis
-    /// The text along axes.
-    case axisLabel = "axis-label"
-    /// Legends and their text.
-    case legend
-    /// A kanban column's count of cards.
-    case count
-    /// A kanban card's priority mark.
-    case priority
-    /// A kanban card's ticket.
-    case ticket
-    /// A kanban card's assignee.
-    case assigned
-    /// A tree view's lines from each folder to its entries.
-    case treeGuides = "tree-guides"
-    /// The band behind a highlighted tree view entry.
-    case treeHighlight = "tree-highlight"
-    /// A tree view entry's description.
-    case treeDescription = "tree-description"
-    /// An icon drawn from its glyph: a tree view's file and folder icons.
-    case icon
-    /// An Ishikawa diagram's spine, which runs to its head.
-    case ishikawaSpine = "ishikawa-spine"
-    /// An Ishikawa diagram's bones, from the spine to each category and cause.
-    case ishikawaBones = "ishikawa-bones"
-    /// An info diagram's line of the package's version.
-    case version
-    /// The first and last bit written above a packet diagram's field.
-    case bitNumber = "packet-bits"
-    /// The rings of a radar chart.
-    case graticule
-    /// A radar chart's curve.
-    case curve
-    /// A treemap's section: a box that holds others.
-    case section
-    /// A treemap's leaf.
-    case leaf
-    /// The value a treemap writes in a box.
-    case value
-    /// A Venn diagram's circles, the overlaps a style outlines, and the texts written in its regions.
-    case vennSet = "venn-set"
-    case vennOverlap = "venn-overlap"
-    case vennText = "venn-text"
-    /// A Cynefin framework's domains, the dashed boundaries between them, the cliff, and the domains' subtitles.
-    case cynefinRegion = "cynefin-region"
-    case cynefinBoundary = "cynefin-boundaries"
-    case cynefinCliff = "cynefin-cliff"
-    case cynefinSubtitle = "cynefin-subtitle"
-    /// A Wardley map's frame: its stages, its grid, its axes and their texts.
-    case wardleyStage = "wardley-stage"
-    case wardleyGrid = "wardley-grid"
-    case wardleyAxis = "wardley-axis"
-    case wardleyStageLabel = "wardley-stage-label"
-    case wardleyAxisLabel = "wardley-axis-label"
-    /// A Wardley map's pipelines, evolutions, inertia bars, annotations and their list, notes, and forces.
-    case wardleyPipeline = "wardley-pipeline"
-    case wardleyTrend = "wardley-trend"
-    case wardleyInertia = "wardley-inertia"
-    case wardleyAnnotation = "wardley-annotation"
-    case wardleyAnnotations = "wardley-annotations"
-    case wardleyNote = "wardley-note"
-    case wardleyAccelerator = "wardley-accelerator"
-    case wardleyDeaccelerator = "wardley-deaccelerator"
-    /// A C4 element's kind and a boundary's type, a technology, and a description.
-    case c4Type = "c4-type"
-    case c4Technology = "c4-techn"
-    case c4Description = "c4-descr"
-    /// The wider lines of the page's color under lines that cross the border of a filled box.
-    case casing = "casings"
-    /// The text an architecture diagram's service shows in place of an icon.
-    case iconText = "icon-text"
-    /// A requirement's or an element's stereotype (`«Requirement»`), a use case diagram's stereotypes (`«Human»`), and the
-    /// names of a requirement's fields.
-    case stereotype
-    case field
-    /// A use case diagram's actor figure, the slash of a business actor or use case, a JSON table's lines, keys and values,
-    /// and a package boundary's tab.
-    case actorFigure = "actor-figure"
-    case business
-    case jsonLines = "json-lines"
-    case jsonKey = "json-key"
-    case jsonValue = "json-value"
-    case boundaryTab = "boundary-tab"
-    /// The three dots of an agent flow's collapsed flow.
-    case collapsedMark = "collapsed-mark"
 }
