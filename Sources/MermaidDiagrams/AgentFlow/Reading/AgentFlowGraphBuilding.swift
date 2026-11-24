@@ -7,7 +7,7 @@
  *              edges between what is still drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -45,6 +45,8 @@ extension AgentFlowDiagramBuilder {
 
     /// The styles of the classes named, each trimmed, the text styles of each after its styles.
     func compiledStyles(of classNames: [String]) -> [String] {
+        // Without a class definition no name has styles.
+        guard !classIndices.isEmpty else { return [] }
         var styles: [String] = []
         for name in classNames {
             guard let index = classIndices[name] else { continue }
@@ -134,7 +136,7 @@ extension AgentFlowDiagramBuilder {
         let type = vertex.type.map(AgentFlowShapes.resolvingAlias)
         return AgentFlowGraphNode(identifier: vertex.identifier, label: vertex.text, labelType: vertex.labelType,
                                   shape: type == nil || type == "square" ? "squareRect" : type ?? "squareRect", isGroup: false,
-                                  parentIdentifier: parent, styles: vertex.styles, compiledStyles: compiledStyles(of: ["default", "node"] + vertex.classes),
+                                  parentIdentifier: parent, styles: vertex.styles, compiledStyles: classIndices.isEmpty ? [] : compiledStyles(of: ["default", "node"] + vertex.classes),
                                   classes: "default " + vertex.classes.joined(separator: " "), link: vertex.link, linkTarget: vertex.linkTarget,
                                   tooltip: tooltips[vertex.identifier])
     }
