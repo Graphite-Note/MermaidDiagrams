@@ -3,11 +3,12 @@
  * ---------------------------------
  * Layer: Core
  * Description: One thread's path lanes, kept between scenes: a recording hands lanes out of a pool whose blocks keep
- *              their size, and gives them all back when it ends; a recording begun inside another gets a workspace of its
- *              own, blocks grown past a mebibyte are freed, and every lane is capped by the diagram limits.
+ *              their size, takes back those a drawing made for a moment, last first, and all of them when it ends; a
+ *              recording begun inside another gets a workspace of its own, blocks grown past a mebibyte are freed, and
+ *              every lane is capped by the diagram limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -20,14 +21,16 @@ import Darwin
 /// nothing once its lanes have grown; when the recording ends every lane is emptied and given back, and a lane used
 /// afterwards fails debug builds' check. A recording begun while one runs on the same thread (a narrow scene read while
 /// another scene records) gets a workspace of its own. Blocks grown past `largestKeptByteCount` are freed at the end of a
-/// recording, and each lane records at most `elementLimit(for:)` verbs, so hostile input cannot grow it without bound.
+/// recording, and every grown block when the pool's blocks together take more, and each lane records at most
+/// `elementLimit(for:)` verbs, so hostile input cannot grow it without bound.
 final class DiagramSceneWorkspace {
     /// The lane states, each at its own address, which lanes point at; the first `handedOutCount` are in use.
     private var pool: [UnsafeMutablePointer<DiagramPathLaneState>] = []
     private var handedOutCount = 0
     private var isRecording = false
     private var elementLimit = DiagramSceneWorkspace.elementLimit(for: .standard)
-    /// Which recording the lanes handed out belong to.
+    /// The number of the last lane handed out: each lane handed out gets the next, and a lane given back or ended
+    /// with its recording gets 0, which no handle has, so that debug builds catch a handle used after its lane went back.
     private var generation: UInt32 = 0
 
     /// The most bytes a lane state keeps between recordings.
@@ -83,14 +86,30 @@ final class DiagramSceneWorkspace {
     }
 
     private func endRecording() {
-        for index in 0..<handedOutCount {
+        giveLanesBack(downTo: 0)
+        if pooledByteCount > Self.largestKeptByteCount {
+            for state in pool { state.pointee.trim(toAtMost: Self.smallVerbCapacity * Self.smallLaneByteCountPerVerb, verbCapacity: Self.smallVerbCapacity) }
+        }
+        isRecording = false
+    }
+
+    /// The bytes a small lane's blocks take for each verb they have room for: the verb and three points.
+    private static let smallLaneByteCountPerVerb = MemoryLayout<DiagramPathVerb>.stride + 3 * MemoryLayout<CGPoint>.stride
+
+    /// How many lanes this recording has handed out and not taken back.
+    var handedOutLaneCount: Int { handedOutCount }
+
+    /// Takes back the lanes handed out after `count` were, the last first: they are emptied, and their blocks serve the
+    /// lanes handed out next. A drawing gives back the lanes it made for a moment once it has added them where they go.
+    func giveLanesBack(downTo count: Int) {
+        precondition(count <= handedOutCount, "lanes are given back in the order opposite to the one they were handed out in")
+        for index in count..<handedOutCount {
             let state = pool[index]
             state.pointee.trim(toAtMost: Self.largestKeptByteCount, verbCapacity: Self.smallVerbCapacity)
             state.pointee.removeAll()
+            state.pointee.generation = 0
         }
-        handedOutCount = 0
-        generation &+= 1
-        isRecording = false
+        handedOutCount = count
     }
 
     // MARK: Lanes
@@ -109,6 +128,8 @@ final class DiagramSceneWorkspace {
             state.pointee.deallocate()
             state.initialize(to: DiagramPathLaneState(verbCapacity: Self.smallVerbCapacity, elementLimit: elementLimit))
         }
+        generation &+= 1
+        if generation == 0 { generation = 1 }
         state.pointee.generation = generation
         return DiagramPathLane(state: state)
     }

@@ -5,8 +5,8 @@
  * Description: A laid-out flowchart's geometry grouped by how it is painted.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -56,93 +56,37 @@ public struct FlowchartDrawingParts {
     static let edgeTextPatchExtraWidth: CGFloat = 8
 
     public init(layout: FlowchartLayout) {
-        let edges = EdgePaths(edges: layout.edges)
-        let nodes = NodePaths(nodes: layout.nodes)
+        let maker = DiagramCoreGraphicsPaths()
+        let edges = FlowchartEdgePaths(edges: layout.edges, making: maker)
+        let nodes = FlowchartNodePaths(nodes: layout.nodes, making: maker)
         clusters = FlowchartClusterDrawingParts(clusters: layout.clusters)
-        solidEdges = edges.solid
-        thickEdges = edges.thick
-        dottedEdges = edges.dotted
-        filledMarks = edges.filledMarks
-        strokedMarks = edges.strokedMarks
-        edgeTextPatches = edges.textPatches
+        solidEdges = edges.solid.path
+        thickEdges = edges.thick.path
+        dottedEdges = edges.dotted.path
+        filledMarks = edges.filledMarks.path
+        strokedMarks = edges.strokedMarks.path
+        edgeTextPatches = edges.textPatches.path
         edgeTexts = layout.edges.compactMap(\.text)
-        nodeFills = nodes.fills
-        nodeOutlines = nodes.outlines
-        layeredNodeShapes = nodes.layered
-        nodeTexts = nodes.texts
-        styledEdges = edges.styled
-        styledNodes = nodes.styled
-        title = layout.title
-    }
-
-    /// The edges' lines by stroke, their marks, and the patches behind their text.
-    private struct EdgePaths {
-        let solid = CGMutablePath()
-        let thick = CGMutablePath()
-        let dotted = CGMutablePath()
-        let filledMarks = CGMutablePath()
-        let strokedMarks = CGMutablePath()
-        let textPatches = CGMutablePath()
-        var styled: [FlowchartStyledEdgeParts] = []
-
-        init(edges: [FlowchartLayoutEdge]) {
-            for edge in edges {
-                if let style = edge.style, edge.stroke != .invisible {
-                    styled.append(FlowchartStyledEdgeParts(edge: edge, style: style))
-                } else {
-                    switch edge.stroke {
-                    case .solid: solid.addPath(DiagramEdgeDrawing.path(edge.path))
-                    case .thick: thick.addPath(DiagramEdgeDrawing.path(edge.path))
-                    case .dotted: dotted.addPath(DiagramEdgeDrawing.path(edge.path))
-                    case .invisible: break
-                    }
-                    if edge.stroke != .invisible {
-                        for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) {
-                            DiagramEdgeDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks)
-                        }
-                    }
-                }
-                if let text = edge.text {
-                    textPatches.addPath(CGPath(roundedRect: text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
-                                               cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
-                                               cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius, transform: nil))
-                }
-            }
+        nodeFills = nodes.fills.path
+        nodeOutlines = nodes.outlines.path
+        styledEdges = layout.edges.compactMap { edge in
+            guard FlowchartEdgePaths<DiagramCoreGraphicsPath>.isStyled(edge), let style = edge.style else { return nil }
+            return FlowchartStyledEdgeParts(edge: edge, style: style)
         }
-    }
-
-    /// The node shapes to fill, and their outlines and inner lines to stroke.
-    private struct NodePaths {
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
         var layered: [FlowchartShapeLayer] = []
         var texts: [DiagramTextBlock] = []
         var styled: [FlowchartStyledNodeParts] = []
-
-        init(nodes: [FlowchartLayoutNode]) {
-            for node in nodes {
-                if let style = node.style {
-                    styled.append(FlowchartStyledNodeParts(node: node, style: style))
-                    continue
-                }
-                texts.append(node.text)
-                if let asset = node.asset {
-                    if let frame = FlowchartNodeAssetDrawing.frame(of: asset, in: node) {
-                        fills.addPath(frame)
-                        outlines.addPath(frame)
-                    }
-                    continue
-                }
-                if let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) {
-                    layered.append(contentsOf: layers)
-                    continue
-                }
-                if let outline = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame) {
-                    fills.addPath(outline)
-                    outlines.addPath(outline)
-                }
-                if let innerLines = FlowchartShapeDrawing.innerLines(of: node.shape, in: node.frame) { outlines.addPath(innerLines) }
+        for node in layout.nodes {
+            if let style = node.style {
+                styled.append(FlowchartStyledNodeParts(node: node, style: style))
+                continue
             }
+            texts.append(node.text)
+            if node.asset == nil, let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) { layered.append(contentsOf: layers) }
         }
+        layeredNodeShapes = layered
+        nodeTexts = texts
+        styledNodes = styled
+        title = layout.title
     }
 }

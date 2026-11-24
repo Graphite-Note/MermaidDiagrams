@@ -2,27 +2,30 @@
  * File: FlowchartShapePen.swift
  * -----------------------------
  * Layer: Core
- * Description: Draws a node shape's path as Pele's SVG path data draws it, in coordinates from the shape's center.
+ * Description: Draws a node shape's path as Pele's SVG path data draws it, in coordinates from the shape's center, into a
+ *              Core Graphics path or a lane.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// Draws a Core Graphics path the way Pele writes a shape's SVG path data (`M`, `H`, `V`, `L`, `l`, `A`, `q`, `t`, `Z`),
+/// Draws a path (a Core Graphics path or a lane) the way Pele writes a shape's SVG path data (`M`, `H`, `V`, `L`, `l`, `A`, `q`, `t`, `Z`),
 /// each point given from the shape's center, so that a shape reads as Pele's `svg/shapes.ts` writes it.
-struct FlowchartShapePen {
-    let path = CGMutablePath()
+struct FlowchartShapePen<Path: DiagramPathRecording> {
+    let path: Path
     private let center: CGPoint
     /// Where the pen is, from the center.
     private var current = CGPoint.zero
     /// The control point of the last quadratic curve, from the center, which a smooth one reflects.
     private var lastQuadraticControl: CGPoint?
 
-    init(center: CGPoint) {
+    /// A pen drawing into `path`, an empty path.
+    init(center: CGPoint, path: Path) {
         self.center = center
+        self.path = path
     }
 
     /// `M x,y`.

@@ -7,7 +7,7 @@
  *              Graphics' rules, and paths added to it as Core Graphics adds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -330,6 +330,20 @@ struct DiagramPathLaneState {
         (points + pointCount).initialize(from: other.points, count: other.pointCount)
         verbCount &+= other.verbCount
         pointCount &+= other.pointCount
+        subpathStart = other.subpathStart
+    }
+
+    /// `other`'s elements from its verb `verbStart` and its point `pointStart` on, copied as they are after this lane's,
+    /// its subpath starting where `other`'s does.
+    mutating func appendElements(of other: borrowing DiagramPathLaneState, fromVerb verbStart: Int, point pointStart: Int) {
+        let addedVerbCount = other.verbCount - verbStart
+        let addedPointCount = other.pointCount - pointStart
+        guard addedVerbCount > 0 else { return }
+        reserve(verbs: addedVerbCount, points: addedPointCount)
+        (verbs + verbCount).initialize(from: other.verbs + verbStart, count: addedVerbCount)
+        (points + pointCount).initialize(from: other.points + pointStart, count: addedPointCount)
+        verbCount &+= addedVerbCount
+        pointCount &+= addedPointCount
         subpathStart = other.subpathStart
     }
 

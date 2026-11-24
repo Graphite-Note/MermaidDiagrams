@@ -5,8 +5,8 @@
  * Description: The nodes and edges a flowchart gave colors of their own, painted apart.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -72,10 +72,19 @@ public struct FlowchartStyledEdgeParts {
         filledMarks = filled
         strokedMarks = stroked
         self.style = style
-        usualLineWidth = edge.stroke == .thick ? FlowchartDrawingParts.thickLineWidth : FlowchartDrawingParts.lineWidth
-        usualDashLengths = edge.stroke == .dotted ? FlowchartDrawingParts.dottedDashLengths : []
+        usualLineWidth = Self.usualLineWidth(of: edge.stroke)
+        usualDashLengths = Self.usualDashLengths(of: edge.stroke)
     }
 
     public var lineWidth: CGFloat { style.strokeWidth ?? usualLineWidth }
     public var dashLengths: [CGFloat] { style.strokeDashLengths ?? usualDashLengths }
+
+    /// The width of an edge of this kind when its style sets none.
+    static func usualLineWidth(of stroke: FlowchartEdgeStroke) -> CGFloat {
+        stroke == .thick ? FlowchartDrawingParts.thickLineWidth : FlowchartDrawingParts.lineWidth
+    }
+
+    static func usualDashLengths(of stroke: FlowchartEdgeStroke) -> [CGFloat] {
+        stroke == .dotted ? FlowchartDrawingParts.dottedDashLengths : []
+    }
 }
