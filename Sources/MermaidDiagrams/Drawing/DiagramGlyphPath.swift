@@ -3,11 +3,11 @@
  * ----------------------------
  * Layer: Core
  * Description: Reads the SVG path data of a glyph drawn on a square grid, Pele's 24 by 24 icons, into a Core Graphics
- *              path, and places it in a frame.
+ *              path and its elements, and places it in a frame, as a Core Graphics path or into a scene's lane.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -16,9 +16,13 @@ import CoreGraphics
 /// every command (`M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `A`, `Z`), absolute in capitals and relative in lower case, a
 /// command's arguments repeated without the letter, numbers written without separators where SVG allows (`1.5.5`, `2-1`)
 /// and an arc's flags as single digits. Data SVG would refuse is refused (nil), so that a glyph is drawn whole or not at all.
-struct DiagramGlyphPath {
-    /// The outline in the grid's units, its origin at the grid's top left and its y running down.
+struct DiagramGlyphPath: @unchecked Sendable {
+    /// The outline in the grid's units, its origin at the grid's top left and its y running down. Immutable once read,
+    /// so a glyph read once is shared by every thread (the reason the glyph is `@unchecked Sendable`).
     let gridPath: CGPath
+    /// The outline's elements, as `CGPathApply` gives them out, and their points in order.
+    private let gridVerbs: [DiagramPathVerb]
+    private let gridPoints: [CGPoint]
     /// The side of the square the data is drawn on.
     let gridSide: CGFloat
 
@@ -32,14 +36,54 @@ struct DiagramGlyphPath {
         guard let path = reader.read(), gridSide > 0 else { return nil }
         gridPath = path
         self.gridSide = gridSide
+        var verbs: [DiagramPathVerb] = []
+        var points: [CGPoint] = []
+        path.applyWithBlock { element in
+            let verb: DiagramPathVerb
+            switch element.pointee.type {
+            case .moveToPoint: verb = .move
+            case .addLineToPoint: verb = .line
+            case .addQuadCurveToPoint: verb = .quadraticCurve
+            case .addCurveToPoint: verb = .cubicCurve
+            case .closeSubpath: verb = .close
+            @unknown default: return
+            }
+            verbs.append(verb)
+            for index in 0..<verb.pointCount { points.append(element.pointee.points[index]) }
+        }
+        gridVerbs = verbs
+        gridPoints = points
     }
 
     /// The outline scaled from its grid to `frame`'s square, whose side is the frame's smaller side, centered in it.
     func path(in frame: CGRect) -> CGPath {
+        var transform = placement(in: frame)
+        return gridPath.copy(using: &transform) ?? gridPath
+    }
+
+    /// The outline placed as `path(in:)` places it, recorded into `lane` after what it holds, which is empty: the same
+    /// elements, each point through the same transform, bit for bit.
+    func record(in frame: CGRect, into lane: DiagramPathLane) {
+        let transform = placement(in: frame)
+        var pointIndex = 0
+        var moved = (CGPoint.zero, CGPoint.zero, CGPoint.zero)
+        for verb in gridVerbs {
+            withUnsafeMutableBytes(of: &moved) { bytes in
+                let movedPoints = bytes.baseAddress.unsafelyUnwrapped.assumingMemoryBound(to: CGPoint.self)
+                for index in 0..<verb.pointCount {
+                    movedPoints[index] = DiagramPathArithmetic.point(gridPoints[pointIndex + index], transformedBy: transform)
+                }
+                lane.state.pointee.appendCopied(verb, UnsafePointer(movedPoints))
+            }
+            pointIndex += verb.pointCount
+        }
+    }
+
+    /// The grid scaled to `frame`'s square, whose side is the frame's smaller side, centered in it.
+    private func placement(in frame: CGRect) -> CGAffineTransform {
         let side = min(frame.width, frame.height)
         let scale = side / gridSide
-        var transform = CGAffineTransform(translationX: frame.midX - side / 2, y: frame.midY - side / 2).scaledBy(x: scale, y: scale)
-        return gridPath.copy(using: &transform) ?? gridPath
+        return CGAffineTransform(translationX: frame.midX - side / 2, y: frame.midY - side / 2).scaledBy(x: scale, y: scale)
     }
 }
 
