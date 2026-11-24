@@ -7,7 +7,7 @@
  *              and records of a text storage, its lines made as Strings only when read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -38,13 +38,15 @@ public struct DiagramTextBlock: Equatable, Sendable {
     /// How many lines the block has.
     public var lineCount: Int { Int(record.lineCount) }
 
-    /// The width of line `index` in the font it was measured in.
+    /// The width of line `index` in the font it was measured in; `index` is below `lineCount`, as an array's would be.
     public func lineWidth(at index: Int) -> CGFloat {
-        record.isOneLine ? record.widestLineWidth : lineRecord(at: index).width
+        precondition(index >= 0 && index < lineCount, "line index out of range")
+        return record.isOneLine ? record.widestLineWidth : lineRecord(at: index).width
     }
 
-    /// The UTF-8 bytes of line `index`, valid in `body` only.
+    /// The UTF-8 bytes of line `index`, valid in `body` only; `index` is below `lineCount`, as an array's would be.
     public func withUTF8<Result>(ofLine index: Int, _ body: (UnsafeBufferPointer<UInt8>) throws -> Result) rethrows -> Result {
+        precondition(index >= 0 && index < lineCount, "line index out of range")
         let range = lineRange(at: index)
         return try withExtendedLifetime(storage) { try body(storage.bytes(from: range.start, to: range.end)) }
     }

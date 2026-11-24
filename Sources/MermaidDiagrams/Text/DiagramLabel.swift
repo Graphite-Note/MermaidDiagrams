@@ -6,7 +6,7 @@
  *              byte ranges of a text storage: a label holds no String and no list of its own.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -49,8 +49,9 @@ public struct DiagramLabel: Equatable, Sendable {
     /// How many lines the label has.
     public var lineCount: Int { Int(record.lineCount) }
 
-    /// The UTF-8 bytes of line `index`, valid in `body` only.
+    /// The UTF-8 bytes of line `index`, valid in `body` only; `index` is below `lineCount`, as an array's would be.
     public func withUTF8<Result>(ofLine index: Int, _ body: (UnsafeBufferPointer<UInt8>) throws -> Result) rethrows -> Result {
+        precondition(index >= 0 && index < lineCount, "line index out of range")
         let range = lineRange(at: index)
         return try withExtendedLifetime(storage) { try body(storage.bytes(from: range.start, to: range.end)) }
     }

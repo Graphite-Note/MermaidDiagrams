@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: Checks that random labels of every kind of text measured into a text storage, wrapped and broken between
  *              characters, are 0.7.0's blocks to the bit, in fonts whose advances sum exactly and fonts whose do not, and
- *              that long lines, many lines and long words are measured in time that grows with their length only.
+ *              that spans of spaces alone wrap as they did at every width, and that long lines, many lines and long words
+ *              are measured in time that grows with their length only.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -17,11 +18,15 @@ import Foundation
 import XCTest
 
 final class DiagramTextBlockEquivalenceTests: XCTestCase {
-    /// Words, white space of every kind JavaScript has, soft hyphens, zero-width spaces, Chinese and Japanese text with its
-    /// punctuation, accents, a combining mark, emoji, guillemets, a tab and a carriage return before a line feed.
-    private static let parts = ["word", "a", "Wrapping", "x1", "(", ")", ",", ".", "-", ":", "!", "?", "'", "~", " ", " ", "  ", "   ", "\t", "\r\n",
-                                "\u{A0}", "\u{2003}", "\u{3000}", "\u{FEFF}", "\u{AD}", "hy\u{AD}phen", "\u{200B}", "日本語", "中", "、", "。", "（", "」",
-                                "é", "e\u{301}", "\u{1F600}", "«", "»", "→", "LongUnbrokenWordOfManyLetters"]
+    /// Words, white space of every kind JavaScript has (the space, a tab, a line feed, a carriage return, the vertical tab
+    /// and form feed, the no-break, ogham, en quad to hair, line, paragraph, narrow no-break, medium mathematical and
+    /// ideographic spaces and the byte order mark), soft hyphens, zero-width spaces, Chinese and Japanese text with its
+    /// punctuation, accents, a combining mark, emoji, guillemets, quotes and braces: every part the wrapping's own
+    /// equivalence test with release 0.6.1's String wrapping draws from, so that the wrapping on bytes meets each of them.
+    private static let parts = ["word", "a", "Wrapping", "x1", "(", ")", ",", ".", "-", ":", "!", "?", "'", "\"", "~", "{", "}", " ", " ", "  ", "   ",
+                                "\t", "\n", "\r", "\r\n", "\u{0B}", "\u{0C}", "\u{A0}", "\u{1680}", "\u{2000}", "\u{2003}", "\u{200A}", "\u{2028}",
+                                "\u{2029}", "\u{202F}", "\u{205F}", "\u{3000}", "\u{FEFF}", "\u{AD}", "hy\u{AD}phen", "\u{200B}", "日本語", "中", "、", "。",
+                                "（", "「", "」", "é", "e\u{301}", "\u{1F600}", "ü", "«", "»", "→", "LongUnbrokenWordOfManyLetters"]
     private static let styles: [DiagramTextStyle] = [[], [], [], .bold, .italic, .monospaced, [.bold, .italic]]
     private static let widths: [CGFloat] = [0, 1, 5, 12, 20, 33.5, 47, 60, 80, 99.25, 120, 150, 200, 260, 400]
     /// 16, 14 and 12 points sum exactly; 12.8, 17.3 and 9.1 do not.
@@ -84,6 +89,38 @@ final class DiagramTextBlockEquivalenceTests: XCTestCase {
     func testLabelsOfAnyTextAreTheReferenceBlocksToTheBit() {
         for (index, font) in Self.fonts.enumerated() {
             assertSameBlocks(CoreTextDiagramTextMeasurer(font: font), seed: 0x5EED_B011 + UInt64(index), labelCount: 120, asciiOnly: false)
+        }
+    }
+
+    /// A span of spaces alone after text on its line, in the line's emphasis or another, at every quarter point of width
+    /// from none to past the whole line: where the spaces do not fit after the text, the line is not ended for them, as
+    /// 0.7.0 wrapped it (counting their width there makes an extra empty line).
+    func testSpansOfSpacesAloneWrapAsTheReferenceAtEveryWidth() {
+        let spaces = ["", " ", "   "]
+        var labels: [DiagramLabel] = []
+        for leading in ["ab", "word x1"] {
+            for between in spaces.dropFirst() {
+                for style in [DiagramTextStyle(), .bold] {
+                    for trailing in ["", "cd", " ef"] {
+                        let line = [DiagramLabelSpan(text: leading, style: []), DiagramLabelSpan(text: between, style: style)]
+                            + (trailing.isEmpty ? [] : [DiagramLabelSpan(text: trailing, style: [])])
+                        labels.append(DiagramLabel(spans: [line]))
+                        labels.append(DiagramLabel(spans: [line, [DiagramLabelSpan(text: "next", style: .italic)]]))
+                    }
+                }
+            }
+        }
+        for size in [16.0, 14, 12, 12.8] {
+            let measurer = CoreTextDiagramTextMeasurer(font: DiagramFont(postScriptName: nil, size: size))
+            for label in labels {
+                for quarter in 0...(4 * 120) {
+                    let maximumWidth = CGFloat(quarter) / 4
+                    let description = "\(label.lines.debugDescription) at \(maximumWidth) in \(size)"
+                    DiagramTextStorageTests.assertSame(DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth),
+                                                       ReferenceTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth),
+                                                       fontSize: size, description)
+                }
+            }
         }
     }
 
