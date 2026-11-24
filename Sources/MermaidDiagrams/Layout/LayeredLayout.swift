@@ -19,6 +19,9 @@ import CoreGraphics
 enum LayeredLayout {
     /// Lays `graph` out, or returns nil when it would need more than `maximumPointCount` nodes and passing points.
     static func place(_ graph: LayeredGraph, spacing: LayeredSpacing, maximumPointCount: Int) -> LayeredPlacement? {
+        #if DEBUG
+        LayeredLayoutRecording.current?.placements.append(.init(graph: graph, spacing: spacing, maximumPointCount: maximumPointCount))
+        #endif
         var nodes = graph.nodeSizes.enumerated().map { node, size in
             var flatNode = LayeredFlatNode(width: Double(size.across), height: Double(size.along))
             flatNode.sideSpan = node < graph.nodeSideSpans.count ? Double(graph.nodeSideSpans[node]) : 0

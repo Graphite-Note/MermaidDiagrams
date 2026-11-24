@@ -51,6 +51,9 @@ extension LayeredCompoundLayout {
             }
             if !isNeeded { continue }
             var graph = buildGraph(of: levelIndex, isSized: false)
+            #if DEBUG
+            LayeredLayoutRecording.current?.rankings.append((graph.nodes, graph.edges))
+            #endif
             LayeredFlatRanking.orient(nodes: graph.nodes, edges: &graph.edges, workspace: workspace)
             LayeredFlatRanking.rank(nodes: &graph.nodes, edges: graph.edges, step: 1, workspace: workspace)
             let start = level.direction.startSide

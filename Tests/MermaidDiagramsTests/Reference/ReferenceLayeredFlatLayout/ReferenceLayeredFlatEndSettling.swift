@@ -1,0 +1,240 @@
+/**
+ * File: ReferenceLayeredFlatEndSettling.swift
+ * -------------------------------------------
+ * Layer: Tests
+ * Description: The 0.7.0 layered layout kept as the reference the span layout is checked against: moves the ends of
+ *              edges along their sides once the nodes have places, so that edges run straight.
+ *
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
+@testable import MermaidDiagrams
+
+/// Pele's `settle` (layout/layered.ts): an end moves along its side when that lets its edge run straight; any other end
+/// leans towards where its edge goes, where its side is long enough, and an end with a side to itself stays in the
+/// middle. The ends of one side keep their order and spacing, pooled by isotonic fitting between the held ends.
+struct ReferenceLayeredFlatEndSettling {
+    var graph: ReferenceLayeredFlatGraph
+    let nodes: [LayeredFlatNode]
+    let across: [Double]
+    let fromEnds: [LayeredSegmentEnd]
+    let toEnds: [LayeredSegmentEnd]
+    /// How many free ends each side of each vertex has, side 0 first (`ReferenceLayeredFlatGraph.freeEnds`).
+    let free: [Int]
+    let emptyRanks: [Bool]?
+    let workspace: ReferenceLayeredFlatWorkspace
+    /// The pooled sums and counts of a run being fitted, kept between runs so that every fit reuses one pair.
+    private var poolSum: [Double]
+    private var poolCount: [Int]
+    /// The free ends of every side in order, with their least gaps, and all their ends in order, one side after another.
+    private var sideSegments: [Int]
+    private var sideRoom: [Double]
+    private var sideAll: [Int]
+
+    init(graph: consuming ReferenceLayeredFlatGraph, nodes: [LayeredFlatNode], across: [Double], fromEnds: [LayeredSegmentEnd],
+         toEnds: [LayeredSegmentEnd], free: [Int], emptyRanks: [Bool]?, workspace: ReferenceLayeredFlatWorkspace) {
+        self.graph = graph
+        self.nodes = nodes
+        self.across = across
+        self.fromEnds = fromEnds
+        self.toEnds = toEnds
+        self.free = free
+        self.emptyRanks = emptyRanks
+        self.workspace = workspace
+        // Every segment has an end on each side: no side list holds more than all of them.
+        let endCount = 2 * self.graph.segmentCount
+        poolSum = workspace.emptyNumbers(capacity: 0)
+        poolCount = workspace.emptyIntegers(capacity: 0)
+        sideSegments = workspace.emptyIntegers(capacity: endCount)
+        sideRoom = workspace.emptyNumbers(capacity: endCount)
+        sideAll = workspace.emptyIntegers(capacity: endCount)
+    }
+
+    /// The graph with its ends settled, the settling's own lists given back to the workspace.
+    consuming func finished() -> ReferenceLayeredFlatGraph {
+        workspace.recycle(poolSum)
+        workspace.recycle(poolCount)
+        workspace.recycle(sideSegments)
+        workspace.recycle(sideRoom)
+        workspace.recycle(sideAll)
+        return graph
+    }
+
+    /// One side of a node whose ends may move: where its free ends and their least gaps start in `sideSegments` and
+    /// `sideRoom`, and where all its ends start in `sideAll`, and how many.
+    private struct Side {
+        var vertex: Int
+        var side: Int
+        var span: Double
+        var segmentStart: Int
+        var allStart: Int
+        var allCount: Int
+    }
+
+    /// Where the end of `segment` on `vertex` should be, from the middle of its side, following the edge up (side 0)
+    /// or down to the next point held in place.
+    private func wanted(_ segment: Int, side: Int, vertex: Int, span: Double, isAgain: Bool) -> Double {
+        if free[side * graph.vertexCount + vertex] < 2 { return 0 }
+        let segment = graph.followed(segment, isUpward: side == 0, emptyRanks: emptyRanks)
+        let other = side == 0 ? graph.segmentFrom[segment] : graph.segmentTo[segment]
+        let point = across[other] + (side == 0 ? graph.segmentFromOffset[segment] : graph.segmentToOffset[segment])
+        // Once the other end has its place, this one comes into line with it if it can.
+        if isAgain && abs(point - across[vertex]) <= span / 2 + LayeredFlatConstants.inLine {
+            return max(-span / 2, min(span / 2, point - across[vertex]))
+        }
+        // The part of the other side that its end may move along, if it may move.
+        var middle = point
+        var width: Double = 0
+        let otherEnd = side == 0 ? fromEnds[segment] : toEnds[segment]
+        if other < graph.nodeCount && nodes[other].kind == .node && otherEnd != .held && free[(1 - side) * graph.vertexCount + other] >= 2 {
+            width = max(0, min(nodes[other].sideSpan, graph.vertexWidth[other]))
+            if width > 0 { middle = across[other] }
+        }
+        let low = max(across[vertex] - span / 2, middle - width / 2)
+        let high = min(across[vertex] + span / 2, middle + width / 2)
+        // Two sides with no part in line: the end leans towards the other, if its side is long enough.
+        if low > high + LayeredFlatConstants.inLine {
+            let lean = max(0, span / 2 - LayeredFlatConstants.leanClear)
+            return max(-lean, min(lean, point - across[vertex]))
+        }
+        // Both ends settle on one place in the part the two sides share: nearer the middle of the narrower.
+        let place = (across[vertex] * width + middle * span) / (width + span)
+        return max(low, min(high, place)) - across[vertex]
+    }
+
+    /// The sides whose ends may move, their ends written to `sideSegments`, `sideRoom` and `sideAll`.
+    private mutating func sides() -> [Side] {
+        var found: [Side] = []
+        found.reserveCapacity(2 * graph.nodeCount)
+        var ends = ReferenceLayeredSideEnds(workspace: workspace)
+        var all = workspace.emptyIntegers(capacity: 0)
+        defer {
+            ends.recycle(into: workspace)
+            workspace.recycle(all)
+        }
+        var spare = workspace.emptyIntegers(capacity: 0)
+        defer { workspace.recycle(spare) }
+        // The graph's lists read once, outside the loops, for both sides.
+        let position = graph.position, segmentFrom = graph.segmentFrom, segmentTo = graph.segmentTo
+        let predecessorStart = graph.predecessorStart, successorStart = graph.successorStart
+        let predecessorSegments = graph.predecessorSegments, successorSegments = graph.successorSegments
+        for vertex in 0..<graph.nodeCount {
+            let span = min(nodes[vertex].sideSpan, graph.vertexWidth[vertex])
+            if span <= 0 || nodes[vertex].kind != .node { continue }
+            for side in 0..<2 {
+                graph.fillSideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds, into: &ends)
+                if ends.segments.isEmpty { continue }
+                if ends.segments.count == 1 { ends.room.append(0) }
+                let starts = side == 0 ? predecessorStart : successorStart
+                all.removeAll(keepingCapacity: true)
+                all.append(contentsOf: (side == 0 ? predecessorSegments : successorSegments)[starts[vertex]..<starts[vertex + 1]])
+                let other = side == 0 ? segmentFrom : segmentTo
+                all.sortStably(spare: &spare) { first, second in
+                    (position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]])
+                        : Double(first - second)) < 0
+                }
+                found.append(Side(vertex: vertex, side: side, span: span, segmentStart: sideSegments.count, allStart: sideAll.count,
+                                  allCount: all.count))
+                sideSegments.append(contentsOf: ends.segments)
+                sideRoom.append(contentsOf: ends.room)
+                sideAll.append(contentsOf: all)
+            }
+        }
+        return found
+    }
+
+    /// The ends of an edge follow each other, so the nodes are gone over until none moves, six times at most.
+    mutating func settle() {
+        let sides = sides()
+        var pass = 0
+        var moved = true
+        while moved && pass < 6 {
+            moved = false
+            for side in sides where settle(side, isAgain: pass > 0) { moved = true }
+            pass += 1
+        }
+    }
+
+    /// Settles one side: held ends divide the free ends into runs, each fitted between the held ends around it.
+    private mutating func settle(_ side: Side, isAgain: Bool) -> Bool {
+        let kinds = side.side == 0 ? toEnds : fromEnds
+        var moved = false
+        var first = 0
+        var low = -side.span / 2
+        for index in 0...side.allCount {
+            let isHeld = index < side.allCount && kinds[sideAll[side.allStart + index]] == .held
+            if index < side.allCount && !isHeld { continue }
+            // Free ends since the last held end occupy segments[first..<first + size].
+            var size = 0
+            var back = index - 1
+            while back >= 0 && kinds[sideAll[side.allStart + back]] != .held { size += 1; back -= 1 }
+            let high = isHeld ? offset(sideAll[side.allStart + index], side: side.side) - LayeredFlatConstants.portPitch : side.span / 2
+            if size > 0 {
+                if fit(side, first: first, size: size, low: low, high: high, isAgain: isAgain) { moved = true }
+                first += size
+            }
+            if isHeld { low = offset(sideAll[side.allStart + index], side: side.side) + LayeredFlatConstants.portPitch }
+        }
+        return moved
+    }
+
+    private func offset(_ segment: Int, side: Int) -> Double { side == 0 ? graph.segmentToOffset[segment] : graph.segmentFromOffset[segment] }
+
+    private mutating func setOffset(_ segment: Int, side: Int, to offset: Double) {
+        if side == 0 { graph.segmentToOffset[segment] = offset } else { graph.segmentFromOffset[segment] = offset }
+    }
+
+    /// Isotonic fitting of one run of free ends: their order and spacing kept by pooling neighbours that are too close,
+    /// a run that cannot fit between its held ends centred between them. Whether an end moved.
+    private mutating func fit(_ side: Side, first: Int, size: Int, low: Double, high: Double, isAgain: Bool) -> Bool {
+        var sum: [Double] = []
+        var count: [Int] = []
+        swap(&sum, &poolSum)
+        swap(&count, &poolCount)
+        defer {
+            swap(&sum, &poolSum)
+            swap(&count, &poolCount)
+        }
+        let total = pool(side, first: first, size: size, isAgain: isAgain, sum: &sum, count: &count)
+        var before: Double = 0
+        var moved = false
+        var placed = 0
+        for block in sum.indices {
+            let level = high - total < low ? (low + high - total) / 2 : max(low, min(high - total, sum[block] / Double(count[block])))
+            for _ in 0..<count[block] {
+                if placed > 0 { before += sideRoom[side.segmentStart + first + placed] }
+                let segment = sideSegments[side.segmentStart + first + placed]
+                if abs(offset(segment, side: side.side) - level - before) > 0.01 { moved = true }
+                setOffset(segment, side: side.side, to: level + before)
+                placed += 1
+            }
+        }
+        return moved
+    }
+
+    /// The wanted places of a run of free ends pooled into blocks, each a sum of places and how many ends it holds;
+    /// returns the room the run takes.
+    private func pool(_ side: Side, first: Int, size: Int, isAgain: Bool, sum: inout [Double], count: inout [Int]) -> Double {
+        sum.removeAll(keepingCapacity: true)
+        count.removeAll(keepingCapacity: true)
+        var before: Double = 0
+        for index in 0..<size {
+            let at = side.segmentStart + first + index
+            if index > 0 { before += sideRoom[at] }
+            sum.append(wanted(sideSegments[at], side: side.side, vertex: side.vertex, span: side.span, isAgain: isAgain) - before)
+            count.append(1)
+            // Keep ends together when spacing forced them to share a place.
+            var together = index > 0 && sideRoom[at] == 0
+            while sum.count > 1 && (together || sum[sum.count - 2] / Double(count[count.count - 2]) > sum[sum.count - 1] / Double(count[count.count - 1])) {
+                together = false
+                let top = sum.removeLast()
+                let pooled = count.removeLast()
+                sum[sum.count - 1] += top
+                count[count.count - 1] += pooled
+            }
+        }
+        return before
+    }
+}

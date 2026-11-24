@@ -46,6 +46,9 @@ struct LayeredFlatLayout {
     /// layout makes its own.
     static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
                        maximumVertexCount: Int = .max, workspace givenWorkspace: LayeredFlatWorkspace? = nil) -> LayeredFlatResult? {
+        #if DEBUG
+        LayeredLayoutRecording.current?.flatLayouts.append(.init(nodes: nodes, edges: edges, options: options, maximumVertexCount: maximumVertexCount))
+        #endif
         if nodes.isEmpty { return LayeredFlatResult(width: 0, height: 0) }
         if nodes.count == 1 && edges.isEmpty && nodes[0].kind == .node {
             nodes[0].rank = 0
