@@ -7,7 +7,7 @@
  *              (groups, labels decoded while reading, icons and pictures, styles).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -31,6 +31,16 @@ struct FlowchartLabelReference: Equatable, Sendable {
 
     static func decoded(at index: Int) -> FlowchartLabelReference {
         FlowchartLabelReference(kind: .decoded, range: MermaidTextRange(start: index, end: index))
+    }
+
+    /// The label of one line without markup, its bytes written into the thread's text storage as `DiagramLabelDecoder`
+    /// writes a text it finds without markup; a debug build shows it to the decoding's observer, as the decoder does.
+    static func lineLabel(_ bytes: UnsafeBufferPointer<UInt8>) -> DiagramLabel {
+        let label = DiagramLabelWriting.oneLine(bytes, flags: .isReadWithoutMarkup)
+        #if DEBUG
+        DiagramLabelDecodingObservation.observer?(String(decoding: bytes, as: UTF8.self), .plain, label)
+        #endif
+        return label
     }
 }
 
@@ -113,10 +123,21 @@ struct FlowchartModel: Sendable {
     func label(_ reference: FlowchartLabelReference) -> DiagramLabel? {
         switch reference.kind {
         case .none: nil
-        case .line: DiagramLabel(lines: [string(reference.range)])
+        case .line: lineLabel(reference.range)
         case .plain: DiagramLabelDecoder.label(from: string(reference.range), form: .plain)
         case .markdown: DiagramLabelDecoder.label(from: string(reference.range), form: .markdown)
         case .decoded: extras?.decodedLabels[reference.range.lowerBound]
+        }
+    }
+
+    /// The label of the line at `range`, read from the text's bytes or the side bytes without making a String.
+    private func lineLabel(_ range: MermaidTextRange) -> DiagramLabel {
+        guard range.start < 0 else {
+            return text.withBytes { bytes in FlowchartLabelReference.lineLabel(UnsafeBufferPointer(rebasing: bytes[range.lowerBound..<range.upperBound])) }
+        }
+        let start = Int(~range.start)
+        return (extras?.sideBytes ?? []).withUnsafeBufferPointer { side in
+            FlowchartLabelReference.lineLabel(UnsafeBufferPointer(rebasing: side[start..<start + range.count]))
         }
     }
 

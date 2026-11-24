@@ -6,8 +6,8 @@
  *              cross, when that wraps them on fewer lines, as Pele does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -56,7 +56,7 @@ struct SequenceGapWidening<Measurer: DiagramTextMeasuring> {
         func spread(_ share: (Int) -> CGFloat) -> (columns: SequenceColumns, extents: SequenceExtents, counts: [Int]) {
             let respaced = columns.respaced(gaps: columns.gaps.indices.map { gapIndex in columns.gaps[gapIndex] + share(gapIndex) })
             let placed = SequenceExtents(diagram: diagram, columns: respaced, measurers: measurers)
-            return (respaced, placed, wrapped.eventIndices.map { eventIndex in placed.eventTexts[eventIndex]?.lines.count ?? 0 })
+            return (respaced, placed, wrapped.eventIndices.map { eventIndex in placed.eventTexts[eventIndex]?.lineCount ?? 0 })
         }
         func even(_ gapIndex: Int) -> CGFloat { wrapped.isCrossed[gapIndex] ? spare / CGFloat(crossedCount) : 0 }
         let missing = wrapped.wanted.reduce(0, +)
@@ -83,9 +83,9 @@ struct SequenceGapWidening<Measurer: DiagramTextMeasuring> {
         for (eventIndex, event) in diagram.events.enumerated() {
             guard case .message(let message) = event, message.sourceIndex != message.targetIndex, let text = extents.eventTexts[eventIndex] else { continue }
             let natural = measurers.unwrappedMessageBlock(message.text)
-            guard text.lines.count > natural.lines.count else { continue }
+            guard text.lineCount > natural.lineCount else { continue }
             wrapped.eventIndices.append(eventIndex)
-            wrapped.lineCount += text.lines.count
+            wrapped.lineCount += text.lineCount
             let low = min(message.sourceIndex, message.targetIndex)
             let high = max(message.sourceIndex, message.targetIndex)
             stretch[low] += 1

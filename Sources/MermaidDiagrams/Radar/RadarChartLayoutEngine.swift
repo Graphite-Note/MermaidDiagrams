@@ -6,8 +6,8 @@
  *              narrow for it, as Pele fits one to its width.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -79,7 +79,7 @@ public enum RadarChartLayoutEngine {
         if !legendTexts.isEmpty { extent = extent.union(legendFrame(of: legendTexts, at: legendOrigin)) }
         let title = chart.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleRoom)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let bodyWidth = max(extent.width, title?.size.width ?? 0)
         let pageSize = CGSize(width: (bodyWidth + 2 * padding).rounded(.up), height: (extent.height + titleHeight + 2 * padding).rounded(.up))

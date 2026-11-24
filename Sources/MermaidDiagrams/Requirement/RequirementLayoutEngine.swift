@@ -6,8 +6,8 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -129,7 +129,7 @@ struct RequirementPageAssembly {
         let innerWidth = max(extent.width, titleSize.width)
         let offset = CGVector(dx: padding + (innerWidth - extent.width) / 2, dy: padding + titleHeight)
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (extent.height + titleHeight + 2 * padding).rounded(.up))
-        var placedTitle = title.flatMap { title in title.lines.isEmpty ? nil : title }
+        var placedTitle = title.flatMap { title in title.lineCount == 0 ? nil : title }
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
         let boxes = measured.boxes.indices.map { box in Self.placedBox(measured.boxes[box], at: centers[box]).translated(by: offset) }
         return RequirementLayout(size: size, font: font, boxes: boxes, relations: relations.compactMap { relation in relation?.translated(by: offset) },

@@ -5,8 +5,8 @@
  * Description: One placing of Pele's compound layout: port sides, every level laid out inside out, routes joined.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -50,9 +50,10 @@ extension LayeredCompoundLayout {
                     || (nodes[levelEdge.second].isGroup && edges[levelEdge.edgeIndex].target != levelEdge.second)
             }
             if !isNeeded { continue }
-            var graph = buildGraph(of: levelIndex, isSized: false)
-            LayeredFlatRanking.orient(nodes: graph.nodes, edges: &graph.edges, workspace: workspace)
-            LayeredFlatRanking.rank(nodes: &graph.nodes, edges: graph.edges, step: 1, workspace: workspace)
+            let mark = arena.mark()
+            defer { arena.release(to: mark) }
+            let graph = buildGraph(of: levelIndex, isSized: false)
+            LayeredFlatRanking.orientAndRank(nodes: graph.nodes.elements, edges: graph.edges.elements, step: 1, arena: arena)
             let start = level.direction.startSide
             for (index, levelEdge) in level.edges.enumerated() {
                 let isFirstAbove = !graph.edges[index].isReversed
@@ -73,9 +74,12 @@ extension LayeredCompoundLayout {
 
     /// Lays one level out as a flat graph and turns it onto the page inside its box.
     private mutating func layOut(_ levelIndex: Int, vertexBudget: inout Int) -> Bool {
-        var built = buildGraph(of: levelIndex, isSized: true)
-        guard let size = LayeredFlatLayout.layout(nodes: &built.nodes, edges: &built.edges, options: options, maximumVertexCount: vertexBudget,
-                                                  workspace: workspace) else {
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        let built = buildGraph(of: levelIndex, isSized: true)
+        var points = arena.list(capacity: 4 * built.edges.count, of: CGPoint.self)
+        guard let size = LayeredFlatLayout.layout(nodes: built.nodes.elements, edges: built.edges.elements, points: &points, options: options,
+                                                  maximumVertexCount: vertexBudget, arena: arena) else {
             return false
         }
         vertexBudget -= built.nodes.count
@@ -87,20 +91,7 @@ extension LayeredCompoundLayout {
             nodes[item].x = point.x
             nodes[item].y = point.y
         }
-        for (index, levelEdge) in level.edges.enumerated() {
-            let flatEdge = built.edges[index]
-            levels[levelIndex].routes[levelEdge.edgeIndex] = box.route(flatEdge.points)
-            if edges[levelEdge.edgeIndex].labelWidth > 0 { edges[levelEdge.edgeIndex].labelCenter = box.pagePoint(flatEdge.labelCenter) }
-        }
-        var portEdge = level.edges.count
-        for portIndex in level.ports.indices {
-            if built.portVertex[portIndex] >= 0 {
-                placeBorderPort(portIndex, of: levelIndex, route: box.route(built.edges[portEdge].points), box: box)
-                portEdge += 1
-            } else {
-                placeSidePort(portIndex, of: levelIndex, box: box)
-            }
-        }
+        writeRoutes(of: levelIndex, built: built, points: points.elements, box: box)
         if let identifier = group.map({ _ in level.identifier }) {
             nodes[identifier].width = box.width
             nodes[identifier].height = box.height
@@ -108,5 +99,27 @@ extension LayeredCompoundLayout {
             total = (box.width, box.height)
         }
         return true
+    }
+
+    /// The routes of the level's edges and ports on the page, and its edges' label centers.
+    private mutating func writeRoutes(of levelIndex: Int, built: LayeredCompoundLevelGraph, points: ScratchSpan<CGPoint>, box: LayeredCompoundBox) {
+        func route(of flatEdge: LayeredSpanEdge) -> ScratchSpan<CGPoint> {
+            flatEdge.pointStart >= 0 ? points.part(flatEdge.pointStart..<(flatEdge.pointStart + flatEdge.pointCount)) : .empty
+        }
+        let level = levels[levelIndex]
+        for (index, levelEdge) in level.edges.enumerated() {
+            let flatEdge = built.edges[index]
+            levels[levelIndex].routes[levelEdge.edgeIndex] = box.route(route(of: flatEdge))
+            if edges[levelEdge.edgeIndex].labelWidth > 0 { edges[levelEdge.edgeIndex].labelCenter = box.pagePoint(flatEdge.labelCenter) }
+        }
+        var portEdge = level.edges.count
+        for portIndex in level.ports.indices {
+            if built.portVertex[portIndex] >= 0 {
+                placeBorderPort(portIndex, of: levelIndex, route: box.route(route(of: built.edges[portEdge])), box: box)
+                portEdge += 1
+            } else {
+                placeSidePort(portIndex, of: levelIndex, box: box)
+            }
+        }
     }
 }

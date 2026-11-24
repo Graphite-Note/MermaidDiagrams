@@ -53,7 +53,7 @@ struct FlowchartMeasurement {
         self.textOffsets = textOffsets
         edgeTexts = (0..<diagram.edgeCount).map { edgeIndex in
             diagram.edgeLabel(at: edgeIndex).map { label in DiagramTextBlock(label: label, measurer: edgeText, maximumWidth: wrappingWidth) }
-                .flatMap { text in text.lines.isEmpty ? nil : text }
+                .flatMap { text in text.lineCount == 0 ? nil : text }
         }
         var selfLoopEdgeIndices = [[Int]](repeating: [], count: nodeCount)
         for edgeIndex in 0..<diagram.edgeCount {

@@ -5,8 +5,8 @@
  * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -95,7 +95,7 @@ struct StateDiagramClusterGraph {
     private static func titles<Measurer: DiagramTextMeasuring>(of diagram: StateDiagram, titleText: Measurer) -> [DiagramTextBlock?] {
         diagram.composites.map { composite in
             let title = DiagramTextBlock(label: diagram.states[composite.stateIndex].name, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
     }
 

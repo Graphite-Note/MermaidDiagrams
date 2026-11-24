@@ -30,11 +30,12 @@ extension MermaidDiagramAccessibility {
     /// Each requirement and element by its kind and name, then each relation as its two ends around its kind: “Requirement
     /// test_req”, “test_entity satisfies test_req”.
     init(requirement diagram: RequirementDiagram) {
-        let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
-        let elements = diagram.elements.map { element in "Element \(element.name)" }
-        let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
-        self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: requirements + elements + relations)
+        self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
+            let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
+            let elements = diagram.elements.map { element in "Element \(element.name)" }
+            let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
+            return requirements + elements + relations
+        }
     }
 }
 
@@ -54,15 +55,18 @@ extension MermaidDiagramPreparationContext {
 }
 
 extension MermaidDiagramAccessibility {
-    /// Each lane's title, then the text of each node drawn, as a flowchart's: “Customer, Warehouse, Browse catalogue, Pay”.
+    /// Each lane's title, then the text of each node drawn, as a flowchart's: “Customer, Warehouse, Browse catalogue, Pay”;
+    /// its title and description a flowchart's.
     init(swimlane diagram: FlowchartDiagram) {
         let flowchart = MermaidDiagramAccessibility(flowchart: diagram)
-        let nesting = FlowchartClusterNesting(diagram: diagram)
-        let subgraphs = diagram.subgraphs
-        let laneTitles = subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
-            .map { subgraph in subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
-        let groupNodes = Set(subgraphs.compactMap(\.representingNodeIndex))
-        let nodeTexts = (0..<diagram.nodeCount).filter { node in !groupNodes.contains(node) }.map { node in diagram.nodeLabel(at: node).spokenText }
-        self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description, summary: laneTitles + nodeTexts)
+        self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description) {
+            let nesting = FlowchartClusterNesting(diagram: diagram)
+            let subgraphs = diagram.subgraphs
+            let laneTitles = subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
+                .map { subgraph in subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
+            let groupNodes = Set(subgraphs.compactMap(\.representingNodeIndex))
+            let nodeTexts = (0..<diagram.nodeCount).filter { node in !groupNodes.contains(node) }.map { node in diagram.nodeLabel(at: node).spokenText }
+            return laneTitles + nodeTexts
+        }
     }
 }

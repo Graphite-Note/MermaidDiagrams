@@ -6,8 +6,8 @@
  *              says what a screen reader hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -50,35 +50,41 @@ extension MermaidDiagramPreparationContext {
 extension MermaidDiagramAccessibility {
     /// Each column with its cards, in the board's order: “Todo: Write the docs, Fix the bug”.
     init(kanban board: KanbanBoard) {
-        let columns = board.columns.map { column in
-            column.cards.isEmpty ? column.label.spokenText
-                : column.label.spokenText + ": " + column.cards.map(\.label.spokenText).joined(separator: ", ")
+        self.init(kind: .kanban, title: board.title, description: nil, summarySeparator: "; ") {
+            let columns = board.columns.map { column in
+                column.cards.isEmpty ? column.label.spokenText
+                    : column.label.spokenText + ": " + column.cards.map(\.label.spokenText).joined(separator: ", ")
+            }
+            return columns
         }
-        self.init(kind: .kanban, title: board.title, description: nil, summary: columns, summarySeparator: "; ")
     }
 
     /// Each entry's name in the order written, a folder's with its `/`.
     init(treeView diagram: TreeViewDiagram) {
-        self.init(kind: .treeView, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: diagram.entries.map { entry in entry.isFolder ? entry.name + "/" : entry.name })
+        self.init(kind: .treeView, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription) {
+            diagram.entries.map { entry in entry.isFolder ? entry.name + "/" : entry.name }
+        }
     }
 
     /// The effect, then each category with its causes in the order written: “Blurry photo; Process: Out of focus, Too slow”.
     init(ishikawa diagram: IshikawaDiagram) {
-        var summary: [String] = []
-        if let effect = diagram.nodes.first {
-            summary.append(effect.text)
-            for categoryIndex in effect.childIndices {
-                var causes: [String] = []
-                var pending = Array(diagram.nodes[categoryIndex].childIndices.reversed())
-                while let index = pending.popLast() {
-                    causes.append(diagram.nodes[index].text)
-                    pending += diagram.nodes[index].childIndices.reversed()
+        self.init(kind: .ishikawa, title: diagram.title, description: nil, summarySeparator: "; ") {
+            var summary: [String] = []
+            if let effect = diagram.nodes.first {
+                summary.append(effect.text)
+                for categoryIndex in effect.childIndices {
+                    var causes: [String] = []
+                    var pending = Array(diagram.nodes[categoryIndex].childIndices.reversed())
+                    while let index = pending.popLast() {
+                        causes.append(diagram.nodes[index].text)
+                        pending += diagram.nodes[index].childIndices.reversed()
+                    }
+                    let category = diagram.nodes[categoryIndex].text
+                    summary.append(causes.isEmpty ? category : category + ": " + causes.joined(separator: ", "))
                 }
-                let category = diagram.nodes[categoryIndex].text
-                summary.append(causes.isEmpty ? category : category + ": " + causes.joined(separator: ", "))
             }
+            return summary
         }
-        self.init(kind: .ishikawa, title: diagram.title, description: nil, summary: summary, summarySeparator: "; ")
     }
 }

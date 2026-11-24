@@ -82,7 +82,7 @@ struct SwimlaneGraph {
                                                                        titleWidth: CGFloat) -> [DiagramTextBlock?] {
         subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: titleWidth)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
     }
 

@@ -8,8 +8,8 @@
  *              bytes decide whether it is read for markup as its scalars did; and C4's spoken kind names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -35,12 +35,12 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
         }
     }
 
-    private func randomLine(_ generator: inout Generator, asciiOnly: Bool) -> [DiagramMeasuredSpan] {
+    private func randomLine(_ generator: inout Generator, asciiOnly: Bool) -> [ReferenceMeasuredSpan] {
         let parts = asciiOnly ? Self.parts.filter { part in part.unicodeScalars.allSatisfy { scalar in scalar.value >= 0x20 && scalar.value < 0x7F } }
             : Self.parts
         return (0..<(1 + generator.next(below: 4))).map { _ in
             let text = (0..<generator.next(below: 14)).map { _ in parts[generator.next(below: parts.count)] }.joined()
-            return DiagramMeasuredSpan(text: text, style: Self.styles[generator.next(below: Self.styles.count)], width: 0)
+            return ReferenceMeasuredSpan(text: text, style: Self.styles[generator.next(below: Self.styles.count)], width: 0)
         }
     }
 
@@ -51,13 +51,13 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
         for _ in 0..<lineCount {
             let spans = randomLine(&generator, asciiOnly: asciiOnly)
             for maximumWidth in Self.widths {
-                var wrapping = DiagramTextWrapping(measuring: DiagramStyledMeasuring(measurer), lines: DiagramMeasuredLines(keepsRuns: true),
+                var wrapping = ReferenceTextWrapping(measuring: DiagramStyledMeasuring(measurer), lines: ReferenceMeasuredLines(keepsRuns: true),
                                                    maximumWidth: maximumWidth)
                 wrapping.wrap(spans)
                 let wrapped = wrapping.finishedLines
                 var reference = StringPieceTextWrapping(measuring: DiagramStyledMeasuring(measurer), maximumWidth: maximumWidth)
                 reference.wrap(spans)
-                var expected = DiagramMeasuredLines(keepsRuns: true)
+                var expected = ReferenceMeasuredLines(keepsRuns: true)
                 for line in reference.lines { expected.add(line.spans, width: line.width) }
                 let description = "\(spans.map(\.text).debugDescription) at \(maximumWidth)"
                 XCTAssertEqual(wrapped.lines, expected.lines, description, file: file, line: line)
@@ -95,12 +95,13 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
     /// above would see it.
     func testAddingSeparateWidthsRoundsDifferently() {
         let measurer = CoreTextDiagramTextMeasurer(font: Self.fonts[1])
+        guard let advances = measurer.printableASCIIAdvances else { return XCTFail("a registered face has advances") }
         let words = ["Wrapping ", "a ", "label ", "of ", "many ", "words ", "differs ", "in ", "its ", "last ", "bits"]
         var continued: CGFloat = 0
         var added: CGFloat = 0
         var differs = false
         for word in words {
-            continued = measurer.printableASCIIAdvances.width(continuing: continued, over: word.utf8)
+            continued = advances.width(continuing: continued, over: word.utf8)
             added += measurer.width(of: word)
             differs = differs || continued != added
         }
@@ -119,8 +120,8 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
 struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
     private var measuring: DiagramStyledMeasuring<Measurer>
     private let maximumWidth: CGFloat
-    private(set) var lines: [(spans: [DiagramMeasuredSpan], width: CGFloat)] = []
-    private var current: [DiagramMeasuredSpan] = []
+    private(set) var lines: [(spans: [ReferenceMeasuredSpan], width: CGFloat)] = []
+    private var current: [ReferenceMeasuredSpan] = []
     private var width: CGFloat = 0
 
     init(measuring: DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
@@ -132,14 +133,14 @@ struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
     var finishedMeasuring: DiagramStyledMeasuring<Measurer> { measuring }
 
     /// Lays `line` into lines; every span of a line is wrapped together, the last one ending the line.
-    mutating func wrap(_ line: [DiagramMeasuredSpan]) {
+    mutating func wrap(_ line: [ReferenceMeasuredSpan]) {
         for (index, span) in line.enumerated() {
             wrap(span, isLastOfLine: index == line.count - 1)
         }
         if !current.isEmpty || lines.isEmpty { commit() }
     }
 
-    private mutating func wrap(_ span: DiagramMeasuredSpan, isLastOfLine: Bool) {
+    private mutating func wrap(_ span: ReferenceMeasuredSpan, isLastOfLine: Bool) {
         let pieces = DiagramTextPieces.pieces(ofScalars: span.text)
         let softHyphenWidths = span.text.unicodeScalars.contains(DiagramTextPieces.softHyphen)
             ? StringPieceSoftHyphenWidths(pieces: pieces, style: span.style, isLastOfLine: isLastOfLine, measuring: &measuring) : nil
@@ -179,7 +180,7 @@ struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
             current.append(last)
         }
         let pieceFullWidth = measuring.width(of: piece, style: style)
-        current.append(DiagramMeasuredSpan(text: piece, style: style, width: pieceFullWidth))
+        current.append(ReferenceMeasuredSpan(text: piece, style: style, width: pieceFullWidth))
         width += pieceFullWidth
     }
 
@@ -255,7 +256,7 @@ final class DiagramLabelByteCheckEquivalenceTests: XCTestCase {
             }
             for isLiteral in [false, true] {
                 var scalars = Array(text.unicodeScalars)
-                if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
+                if isLiteral { scalars = ReferenceLabelLineBreaks.literalText(scalars) }
                 let expected = Self.isUnmarkedReadScalarByScalar(scalars)
                 XCTAssertEqual(DiagramLabelLineBreaks.isUnmarked(Array(text.utf8), isLiteral: isLiteral), expected, "\(text.debugDescription) \(isLiteral)")
                 if !expected { markedCount += 1 }
@@ -288,6 +289,6 @@ extension DiagramLabelByteCheckEquivalenceTests {
             }
         }
         if hasHash, hasSemicolon, DiagramLabelEntities.mermaidCodesAsHTML(scalars) != scalars { return false }
-        return !DiagramLabelIcons.containsIconName(scalars[...])
+        return !ReferenceLabelIcons.containsIconName(scalars[...])
     }
 }

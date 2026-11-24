@@ -5,8 +5,8 @@
  * Description: Lays a user journey out as a column of cards, as Pele's vertical journey does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -97,7 +97,7 @@ struct UserJourneyColumnPlacement<Measurer: DiagramTextMeasuring> {
     private func fittedTitle(room: CGFloat) -> DiagramTextBlock? {
         diagram.title.map { title in
             TimelineTextFitting.fitted(DiagramLabelDecoder.label(from: title, form: .literal), measurer: titleText, maximumWidth: room)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
     }
 
     /// A section's heading, bold and fitted to the room, started a little in from the cards' left edge with its top at `top`; nil
@@ -105,7 +105,7 @@ struct UserJourneyColumnPlacement<Measurer: DiagramTextMeasuring> {
     private func placedHeading(_ heading: DiagramLabel?, top: CGFloat, room: CGFloat) -> DiagramTextBlock? {
         guard let heading else { return nil }
         var block = TimelineTextFitting.fitted(heading, measurer: titleText, maximumWidth: room - UserJourneyColumnGeometry.headingGutter)
-        guard !block.lines.isEmpty else { return nil }
+        guard block.lineCount > 0 else { return nil }
         block.center = CGPoint(x: UserJourneyLayoutEngine.padding + UserJourneyColumnGeometry.headingIndent + block.size.width / 2,
                                y: top + block.size.height / 2)
         return block

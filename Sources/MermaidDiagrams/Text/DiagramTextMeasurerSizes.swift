@@ -6,8 +6,8 @@
  *              it, as the text is drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -22,8 +22,7 @@ protocol DiagramTextResizableMeasuring: DiagramTextMeasuring {
 
 extension CoreTextDiagramTextMeasurer: DiagramTextResizableMeasuring {
     func resized(to fontSize: CGFloat) -> CoreTextDiagramTextMeasurer {
-        CoreTextDiagramTextMeasurer(font: diagramFont.resized(to: fontSize), isBold: isBold, isItalic: isItalic,
-                                    isMonospaced: isMonospaced)
+        CoreTextDiagramTextMeasurer(face: face.resized(to: fontSize))
     }
 }
 
@@ -31,7 +30,8 @@ extension CoreTextDiagramTextMeasurer: DiagramTextResizableMeasuring {
 /// gives the width at another size in proportion to its own.
 struct DiagramTextMeasurerSizes<Measurer: DiagramTextMeasuring> {
     let measurer: Measurer
-    private var resized: [CGFloat: Measurer] = [:]
+    /// The sizes measured at so far, each with its measurer, looked through in order: a text is fitted at a few sizes.
+    private var resized: [(fontSize: CGFloat, measurer: Measurer)] = []
 
     /// The most sizes kept: a class may set any size, and past this a size is measured without being kept.
     private static var largestKeptSizeCount: Int { 64 }
@@ -44,12 +44,12 @@ struct DiagramTextMeasurerSizes<Measurer: DiagramTextMeasuring> {
     mutating func width(of text: String, atFontSize fontSize: CGFloat) -> CGFloat {
         guard measurer.fontSize > 0, fontSize > 0 else { return 0 }
         if fontSize == measurer.fontSize { return measurer.width(of: text) }
-        if let known = resized[fontSize] { return known.width(of: text) }
+        if let known = resized.first(where: { entry in entry.fontSize == fontSize }) { return known.measurer.width(of: text) }
         guard let resizable = measurer as? any DiagramTextResizableMeasuring, fontSize.isFinite,
               let copy = resizable.resized(to: fontSize) as? Measurer else {
             return measurer.width(of: text) * fontSize / measurer.fontSize
         }
-        if resized.count < Self.largestKeptSizeCount { resized[fontSize] = copy }
+        if resized.count < Self.largestKeptSizeCount { resized.append((fontSize, copy)) }
         return copy.width(of: text)
     }
 

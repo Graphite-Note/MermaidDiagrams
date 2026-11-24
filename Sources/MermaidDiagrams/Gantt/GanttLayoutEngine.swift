@@ -5,8 +5,8 @@
  * Description: Lays a Gantt chart out in Pele's style, with its options and for a narrow column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -74,7 +74,7 @@ public enum GanttLayoutEngine {
                                                        measurers: GanttMeasurers<Measurer>, font: DiagramFont, availableWidth: CGFloat? = nil) -> GanttLayout {
         let title = chart.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: measurers.title, maximumWidth: wrappingWidth)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         guard let span = GanttTimeSpan(schedule: schedule) else {
             let size = CGSize(width: (max(title?.size.width ?? 0, 1) + 2 * padding).rounded(.up),

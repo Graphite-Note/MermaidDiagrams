@@ -88,7 +88,7 @@ struct AgentFlowMeasurement {
         func measuredText(of edgeIndex: Int) -> DiagramTextBlock? {
             let edge = graph.edges[edgeIndex]
             let text = PlaneMapLabel.block(Self.label(edge.label, type: edge.labelType), measurer: edgeText, maximumWidth: wrappingWidth)
-            return text.lines.isEmpty ? nil : text
+            return text.lineCount == 0 ? nil : text
         }
         let edgeTexts = clustered.laidOutEdgeIndices.map(measuredText(of:))
         var heldEdgeTexts: [Int: DiagramTextBlock] = [:]

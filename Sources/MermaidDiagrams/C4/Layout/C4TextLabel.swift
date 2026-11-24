@@ -7,8 +7,8 @@
  *              technology in italic.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -22,9 +22,9 @@ enum C4TextLabel {
         // The decoder breaks at a written `\\n` and trims each line before reading its codes, as Pele's layoutLabel does.
         let label = DiagramLabelDecoder.label(from: text, form: .plain)
         let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
-        guard wrapped.lines.isEmpty else { return wrapped }
+        guard wrapped.lineCount == 0 else { return wrapped }
         // Lines with nothing on them still take their height, as Pele lays out each part between breaks.
-        let lines = label.lines.isEmpty ? [""] : label.lines
+        let lines = label.lineCount == 0 ? [""] : label.lines
         return DiagramTextBlock(lines: lines, lineWidths: lines.map { _ in CGFloat(0) }, fontSize: measurer.fontSize,
                                 lineHeight: DiagramTextBlock.lineHeight(lineCount: lines.count, measurer: measurer))
     }

@@ -6,7 +6,7 @@
  *              the box of what few flowcharts have is made only when one of its lists holds anything.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -65,10 +65,19 @@ struct FlowchartModelParts {
     func label(_ reference: FlowchartLabelReference, in bytes: FlowchartBytes) -> DiagramLabel? {
         switch reference.kind {
         case .none: nil
-        case .line: DiagramLabel(lines: [string(reference.range, in: bytes)])
+        case .line: lineLabel(reference.range, in: bytes)
         case .plain: DiagramLabelDecoder.label(from: string(reference.range, in: bytes), form: .plain)
         case .markdown: DiagramLabelDecoder.label(from: string(reference.range, in: bytes), form: .markdown)
         case .decoded: rareIfAny?.decodedLabels[reference.range.lowerBound]
+        }
+    }
+
+    /// The label of the line at `range`, of the text read or of the side bytes, without making a String.
+    private func lineLabel(_ range: MermaidTextRange, in bytes: FlowchartBytes) -> DiagramLabel {
+        guard range.start < 0 else { return FlowchartLabelReference.lineLabel(UnsafeBufferPointer(rebasing: bytes.buffer[range.lowerBound..<range.upperBound])) }
+        let start = Int(~range.start)
+        return (rareIfAny?.sideBytes ?? []).withUnsafeBufferPointer { side in
+            FlowchartLabelReference.lineLabel(UnsafeBufferPointer(rebasing: side[start..<start + range.count]))
         }
     }
 

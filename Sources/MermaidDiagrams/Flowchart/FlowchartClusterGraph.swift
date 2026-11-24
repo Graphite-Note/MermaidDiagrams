@@ -48,7 +48,7 @@ struct FlowchartClusterGraph {
         let subgraphCount = diagram.subgraphCount
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
         titles = measuredTitles
         depths = nesting.subgraphDepths

@@ -1,13 +1,16 @@
 /**
- * File: LayeredFlatWorkspace.swift
- * --------------------------------
- * Layer: Core
- * Description: The working lists of the layered layout, made once per layout and reused by each of its passes.
+ * File: ReferenceLayeredFlatWorkspace.swift
+ * -----------------------------------------
+ * Layer: Tests
+ * Description: The 0.7.0 layered layout kept as the reference the span layout is checked against: the working lists of
+ *              the layered layout, made once per layout and reused by each of its passes.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
- * Date: 23/11/2026
+ * Date: 24/11/2026
  */
+
+@testable import MermaidDiagrams
 
 /// The lists the layered layout works in, kept from one pass to the next and from one flat layout to the next within a
 /// compound layout: a pass takes a list of the length it needs, filled with one value, and gives it back when it is
@@ -15,14 +18,14 @@
 /// A workspace is made by each top-level layout call and lives no longer than it (no state is shared between layouts,
 /// which run on any thread). It keeps at most 32 lists of each element type, each no longer than the longest list of
 /// the layout, which `MermaidDiagramLimits` bounds.
-final class LayeredFlatWorkspace {
+final class ReferenceLayeredFlatWorkspace {
     // Only the workspace's own methods touch the pools, one call at a time and never from within another, so the
     // runtime's exclusivity checks on them are left out.
-    @exclusivity(unchecked) private var integerLists = LayeredListPool<32, Int>()
-    @exclusivity(unchecked) private var numberLists = LayeredListPool<24, Double>()
-    @exclusivity(unchecked) private var flagLists = LayeredListPool<12, Bool>()
-    @exclusivity(unchecked) private var kindLists = LayeredListPool<2, LayeredVertexKind>()
-    @exclusivity(unchecked) private var endLists = LayeredListPool<4, LayeredSegmentEnd>()
+    @exclusivity(unchecked) private var integerLists = ReferenceLayeredListPool<32, Int>()
+    @exclusivity(unchecked) private var numberLists = ReferenceLayeredListPool<24, Double>()
+    @exclusivity(unchecked) private var flagLists = ReferenceLayeredListPool<12, Bool>()
+    @exclusivity(unchecked) private var kindLists = ReferenceLayeredListPool<2, LayeredVertexKind>()
+    @exclusivity(unchecked) private var endLists = ReferenceLayeredListPool<4, LayeredSegmentEnd>()
 
     init() {}
 
@@ -58,7 +61,7 @@ final class LayeredFlatWorkspace {
 
 /// The lists of one element type a workspace keeps, at most `keeping`, held in the workspace itself so that keeping
 /// them costs no allocation of its own. A taker gets a kept list with room for what it asks, or a new one when none has.
-struct LayeredListPool<let keeping: Int, Element> {
+struct ReferenceLayeredListPool<let keeping: Int, Element> {
     private var lists = InlineArray<keeping, [Element]>(repeating: [])
     /// The room of each kept list, read without reaching into the lists themselves.
     private var capacities = InlineArray<keeping, Int>(repeating: 0)

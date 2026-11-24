@@ -5,8 +5,8 @@
  * Description: Lays a Git graph out in Pele's style: lanes, commits, ids, tags, branch names and the title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -35,7 +35,7 @@ public enum GitGraphLayoutEngine {
         let placement = GitGraphPlacement(diagram: diagram, room: room, positions: positions, geometry: geometry)
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: titleText, maximumWidth: GitGraphGeometry.wrappingWidth)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let body = placement.bounds
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let innerWidth = max(body.width, title?.size.width ?? 0)

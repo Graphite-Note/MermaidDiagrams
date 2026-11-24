@@ -6,8 +6,8 @@
  *              turnToFit draws it, and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -28,29 +28,34 @@ extension MermaidDiagramAccessibility {
     /// Each actor and use case by its label, then each relationship as its two ends and its label or kind: “Customer;
     /// Place order; Customer to Place order; Checkout includes Browse”.
     init(useCase diagram: UseCaseDiagram) {
-        var names: [String: String] = [:]
-        for actor in diagram.actors { names[actor.identifier] = Self.useCaseName(actor.label, labelType: actor.labelType, identifier: actor.identifier) }
-        for useCase in diagram.useCases {
-            names[useCase.identifier] = Self.useCaseName(useCase.label, labelType: useCase.labelType, identifier: useCase.identifier)
-        }
-        let elements = diagram.actors.map { actor in names[actor.identifier] ?? actor.identifier }
-            + diagram.useCases.map { useCase in names[useCase.identifier] ?? useCase.identifier }
-        let relationships = diagram.relationships.map { relationship in
-            let source = names[relationship.source] ?? relationship.source
-            let target = names[relationship.target] ?? relationship.target
-            switch relationship.type {
-            case .include: return source + " includes " + target
-            case .extend: return source + " extends " + target
-            case .generalization: return source + " is a kind of " + target
-            case .association:
-                let label = relationship.label.map { label in Self.useCaseName(label, labelType: relationship.labelType ?? .text, identifier: "") } ?? ""
-                return label.isEmpty ? source + " to " + target : source + " to " + target + ": " + label
-            }
-        }
         let title = diagram.accessibilityTitle.isEmpty ? diagram.title : diagram.accessibilityTitle
         self.init(kind: .useCase, title: title.flatMap { title in title.isEmpty ? nil : title },
-                  description: diagram.accessibilityDescription.isEmpty ? nil : diagram.accessibilityDescription,
-                  summary: elements + relationships, summarySeparator: "; ")
+                  description: diagram.accessibilityDescription.isEmpty ? nil : diagram.accessibilityDescription, summarySeparator: "; ") {
+            var names: [String: String] = [:]
+            for actor in diagram.actors {
+                names[actor.identifier] = Self.useCaseName(actor.label, labelType: actor.labelType, identifier: actor.identifier)
+            }
+            for useCase in diagram.useCases {
+                names[useCase.identifier] = Self.useCaseName(useCase.label, labelType: useCase.labelType, identifier: useCase.identifier)
+            }
+            let elements = diagram.actors.map { actor in names[actor.identifier] ?? actor.identifier }
+                + diagram.useCases.map { useCase in names[useCase.identifier] ?? useCase.identifier }
+            let relationships = diagram.relationships.map { relationship in
+                let source = names[relationship.source] ?? relationship.source
+                let target = names[relationship.target] ?? relationship.target
+                switch relationship.type {
+                case .include: return source + " includes " + target
+                case .extend: return source + " extends " + target
+                case .generalization: return source + " is a kind of " + target
+                case .association:
+                    let label = relationship.label.map { label in
+                        Self.useCaseName(label, labelType: relationship.labelType ?? .text, identifier: "")
+                    } ?? ""
+                    return label.isEmpty ? source + " to " + target : source + " to " + target + ": " + label
+                }
+            }
+            return elements + relationships
+        }
     }
 
     /// A label as it is drawn, read aloud, else `identifier`.

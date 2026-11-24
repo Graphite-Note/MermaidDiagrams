@@ -6,8 +6,8 @@
  *              up around their icons, descriptions beside the names, guide lines from each folder to its entries.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -46,7 +46,7 @@ public enum TreeViewLayoutEngine {
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.bold, maximumWidth: tightWidth.map { width in max(80, width - 2 * padding) } ?? 4_000)
         }
-        let titleHeight = title.map { title in title.lines.isEmpty ? 0 : title.size.height + titleGap } ?? 0
+        let titleHeight = title.map { title in title.lineCount == 0 ? 0 : title.size.height + titleGap } ?? 0
         let rows = TreeViewRowPlacement(diagram, measurers: measurers, tightWidth: tightWidth)
         let width = max(rows.width, title?.size.width ?? 0)
         let inset = padding + (rows.hasHighlight ? highlightOverhang : 0)

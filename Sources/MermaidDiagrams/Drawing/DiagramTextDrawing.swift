@@ -6,8 +6,8 @@
  *              its emphasis, into a context whose y runs down.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.7
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -40,7 +40,7 @@ struct DiagramTextDrawing {
     /// line's start, each in its emphasis added to the text's own.
     mutating func draw(_ block: DiagramTextBlock, color: CGColor, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
                        outline: (color: CGColor, lineWidth: CGFloat)? = nil, in context: CGContext) {
-        guard !block.lines.isEmpty else { return }
+        guard block.lineCount > 0 else { return }
         let key = FontKey(size: block.fontSize, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced)
         context.saveGState()
         // Core Text draws glyphs upright in a context whose y runs up; this one's runs down.
@@ -59,14 +59,14 @@ struct DiagramTextDrawing {
 
     private mutating func drawLines(of block: DiagramTextBlock, key: FontKey, color: CGColor, in context: CGContext) {
         let top = block.center.y - block.size.height / 2
-        for (index, line) in block.lines.enumerated() {
+        for index in 0..<block.lineCount {
             let baseline = top + (CGFloat(index) + 0.5) * block.lineHeight + block.fontSize * Self.baselineShiftRatio
-            var start = block.center.x - block.lineWidths[index] / 2
-            guard let runs = block.lineRuns?[index] else {
-                draw(line, font: coreTextFont(key), color: color, at: CGPoint(x: start, y: baseline), in: context)
+            var start = block.center.x - block.lineWidth(at: index) / 2
+            guard block.record.hasEmphasis else {
+                draw(block.line(at: index), font: coreTextFont(key), color: color, at: CGPoint(x: start, y: baseline), in: context)
                 continue
             }
-            for run in runs {
+            for run in block.runs(ofLine: index) {
                 let runKey = FontKey(size: key.size, isBold: key.isBold || run.style.contains(.bold), isItalic: key.isItalic || run.style.contains(.italic),
                                      isMonospaced: key.isMonospaced || run.style.contains(.monospaced))
                 draw(run.text, font: coreTextFont(runKey), color: color, at: CGPoint(x: start, y: baseline), in: context)
@@ -88,8 +88,9 @@ struct DiagramTextDrawing {
     /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.
     private mutating func coreTextFont(_ key: FontKey) -> CTFont {
         if let made = fontsByKey[key] { return made }
-        let made = CoreTextFontFaces.shared.face(CoreTextFontFaceKey(postScriptName: font.postScriptName, size: key.size, isBold: key.isBold,
-                                                                     isItalic: key.isItalic, isMonospaced: key.isMonospaced)).font
+        let made = DiagramFontFaceRegistry.shared.coreTextFont(of: CoreTextFontFaceKey(postScriptName: font.postScriptName, size: key.size,
+                                                                                       isBold: key.isBold, isItalic: key.isItalic,
+                                                                                       isMonospaced: key.isMonospaced))
         fontsByKey[key] = made
         return made
     }

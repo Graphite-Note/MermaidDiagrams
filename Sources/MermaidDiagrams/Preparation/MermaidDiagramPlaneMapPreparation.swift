@@ -6,8 +6,8 @@
  *              what a screen reader hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -42,47 +42,54 @@ extension MermaidDiagramAccessibility {
     /// Each anchor and component in the order added, then each link between them: “Business; Cup of Tea; Business to Cup
     /// of Tea”.
     init(wardleyMap map: WardleyMap) {
-        var labelByIdentifier: [String: String] = [:]
-        for node in map.nodes { labelByIdentifier[node.identifier] = node.label }
-        let links = map.links.map { link in (labelByIdentifier[link.source] ?? link.source) + " to " + (labelByIdentifier[link.target] ?? link.target) }
-        self.init(kind: .wardleyMap, title: map.accessibilityTitle ?? map.title, description: map.accessibilityDescription,
-                  summary: map.nodes.map(\.label) + links, summarySeparator: "; ")
+        self.init(kind: .wardleyMap, title: map.accessibilityTitle ?? map.title, description: map.accessibilityDescription, summarySeparator: "; ") {
+            var labelByIdentifier: [String: String] = [:]
+            for node in map.nodes { labelByIdentifier[node.identifier] = node.label }
+            let links = map.links.map { link in
+                (labelByIdentifier[link.source] ?? link.source) + " to " + (labelByIdentifier[link.target] ?? link.target)
+            }
+            return map.nodes.map(\.label) + links
+        }
     }
 
     /// Each domain that has items, in the order drawn, with its items, then each transition with its label: “Complex:
     /// Investigate root cause, Run chaos experiment; Complex to Complicated: Pattern identified”.
     init(cynefin diagram: CynefinDiagram) {
-        let domains = CynefinLayoutEngine.quadrants.map(\.domain) + [.confusion]
-        let itemTexts = domains.compactMap { domain -> String? in
-            guard let items = diagram.items[domain], !items.isEmpty else { return nil }
-            return domain.name + ": " + items.map(Self.spoken).joined(separator: ", ")
+        self.init(kind: .cynefin, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription, summarySeparator: "; ") {
+            let domains = CynefinLayoutEngine.quadrants.map(\.domain) + [.confusion]
+            let itemTexts = domains.compactMap { domain -> String? in
+                guard let items = diagram.items[domain], !items.isEmpty else { return nil }
+                return domain.name + ": " + items.map(Self.spoken).joined(separator: ", ")
+            }
+            let transitionTexts = diagram.transitions.map { transition in
+                let names = transition.from.name + " to " + transition.to.name
+                return transition.label.map { label in names + ": " + Self.spoken(label) } ?? names
+            }
+            return itemTexts + transitionTexts
         }
-        let transitionTexts = diagram.transitions.map { transition in
-            let names = transition.from.name + " to " + transition.to.name
-            return transition.label.map { label in names + ": " + Self.spoken(label) } ?? names
-        }
-        self.init(kind: .cynefin, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: itemTexts + transitionTexts, summarySeparator: "; ")
     }
 
     /// Each set and stated overlap once, in the order written, with the texts written in it: “Frontend: React, Design
     /// Systems; Backend; Shared: OpenAPI”, an overlap without a label named by its sets (“A and B”). Mermaid's Venn grammar
     /// has no accessibility statements.
     init(venn diagram: VennDiagram) {
-        var keys: [[String]] = []
-        var stated: [[String]: VennSubset] = [:]
-        for subset in diagram.subsets {
-            if stated[subset.sets] == nil { keys.append(subset.sets) }
-            stated[subset.sets] = subset
-        }
-        let regions = keys.compactMap { key -> String? in
-            guard let subset = stated[key] else { return nil }
-            let name = Self.spoken(subset.label ?? key.joined(separator: " and "))
-            let texts = diagram.texts.filter { text in text.sets == key }.map { text in Self.spoken(text.label ?? text.identifier) }
-            return texts.isEmpty ? name : name + ": " + texts.joined(separator: ", ")
-        }
         let title = diagram.title.flatMap { title in title.isEmpty ? nil : Self.spoken(title) }
-        self.init(kind: .venn, title: title, description: nil, summary: regions, summarySeparator: "; ")
+        self.init(kind: .venn, title: title, description: nil, summarySeparator: "; ") {
+            var keys: [[String]] = []
+            var stated: [[String]: VennSubset] = [:]
+            for subset in diagram.subsets {
+                if stated[subset.sets] == nil { keys.append(subset.sets) }
+                stated[subset.sets] = subset
+            }
+            let regions = keys.compactMap { key -> String? in
+                guard let subset = stated[key] else { return nil }
+                let name = Self.spoken(subset.label ?? key.joined(separator: " and "))
+                let texts = diagram.texts.filter { text in text.sets == key }.map { text in Self.spoken(text.label ?? text.identifier) }
+                return texts.isEmpty ? name : name + ": " + texts.joined(separator: ", ")
+            }
+            return regions
+        }
     }
 
     /// A text as it is drawn, its lines joined by spaces.

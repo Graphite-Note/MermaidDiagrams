@@ -5,8 +5,8 @@
  * Description: Lays out a graph whose nodes sit in nested boxes with the port of Pele's compound layout.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,6 +19,16 @@ enum LayeredClusterLayout {
     /// all its boxes together.
     static func place(_ graph: LayeredClusterGraph, spacing: LayeredSpacing,
                       maximumPointCount: Int) throws(LayeredClusterLayoutError) -> LayeredClusterPlacement {
+        #if DEBUG
+        LayeredLayoutRecording.current?.clusterPlacements.append(.init(graph: graph, spacing: spacing, maximumPointCount: maximumPointCount))
+        #endif
+        if let placed = placeWithoutClusters(graph, spacing: spacing, maximumPointCount: maximumPointCount) { return try placed.get() }
+        return try placeInCompoundLayout(graph, spacing: spacing, maximumPointCount: maximumPointCount)
+    }
+
+    /// `place` through the compound layout, whatever the graph.
+    static func placeInCompoundLayout(_ graph: LayeredClusterGraph, spacing: LayeredSpacing,
+                                      maximumPointCount: Int) throws(LayeredClusterLayoutError) -> LayeredClusterPlacement {
         let nodeCount = graph.nodeSizes.count
         var nodes = compoundNodes(graph)
         func index(of end: LayeredClusterEnd) -> Int {
