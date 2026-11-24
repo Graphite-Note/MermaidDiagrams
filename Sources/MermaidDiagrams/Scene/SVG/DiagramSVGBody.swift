@@ -3,25 +3,25 @@
  * --------------------------
  * Layer: Core
  * Description: Writes a scene's items as SVG elements into the document's buffer: a path per shape (one for a fill and
- *              its stroke), a text per placed text, and the gradients they name.
+ *              its stroke), a text per placed text, and before them the definitions of the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
 import CoreGraphics
 
-/// The elements of an SVG document's body, written item by item into `content`, and the gradients they name, into
-/// `definitions`.
-struct DiagramSVGBody {
+/// The elements of an SVG document's body, written item by item into `content`; the gradients they name are defined
+/// first, in `<defs>` (`appendDefinitions(of:)`), numbered in the order the items use them.
+struct DiagramSVGBody: ~Copyable {
     private var paints: DiagramSVGPaintTexts
     let identifierPrefix: String
     var content: DiagramSVGBuffer
-    var definitions = DiagramSVGBuffer()
+    /// How many gradient fills the items written so far used.
     private var gradientCount = 0
 
-    init(colors: DiagramSVGColors, identifierPrefix: String, content: DiagramSVGBuffer) {
+    init(colors: DiagramSVGColors, identifierPrefix: String, content: consuming DiagramSVGBuffer) {
         paints = DiagramSVGPaintTexts(colors: colors)
         self.identifierPrefix = identifierPrefix
         self.content = content
@@ -63,7 +63,6 @@ struct DiagramSVGBody {
             appendStrokeAttributes(paints.text(of: strokePaint), stroke)
         case .gradientFill(let gradient):
             gradientCount += 1
-            addGradientDefinition(gradient)
             content.append(" fill=\"url(#")
             Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &content)
             content.append(")\"")
@@ -105,37 +104,51 @@ struct DiagramSVGBody {
         }
     }
 
-    /// `<prefix>-gradient-<n>`, the latest gradient's id. Static, as `self` passed to a method of its own while one of its
-    /// buffers is passed `inout` is copied, buffers and all, which made each gradient copy the whole document.
+    /// `<prefix>-gradient-<n>`, a gradient's id. Static, so that no copy of `self` is made beside its buffer passed
+    /// `inout`.
     private static func appendGradientIdentifier(prefix: String, number: Int, into buffer: inout DiagramSVGBuffer) {
         buffer.append(prefix)
         buffer.append("-gradient-")
         buffer.appendNumber(CGFloat(number))
     }
 
+    /// `<defs>` with a definition of each gradient fill of `items`, numbered in their order as `add(_:)` numbers their
+    /// uses, or nothing when no item has one: written before the items, where the document has them, so that nothing is
+    /// put in before the body afterwards.
+    mutating func appendDefinitions(of items: [DiagramSceneItem]) {
+        var definitionCount = 0
+        for item in items {
+            guard case .shape(let shape) = item, case .gradientFill(let gradient) = shape.painting else { continue }
+            if definitionCount == 0 { content.append("<defs>") }
+            definitionCount += 1
+            appendGradientDefinition(gradient, number: definitionCount)
+        }
+        if definitionCount > 0 { content.append("</defs>") }
+    }
+
     /// A gradient across the page between its two points, the end colors carried on beyond them (SVG's `pad`).
-    private mutating func addGradientDefinition(_ gradient: DiagramLinearGradient) {
+    private mutating func appendGradientDefinition(_ gradient: DiagramLinearGradient, number: Int) {
         let start = paints.text(of: gradient.startPaint)
         let end = paints.text(of: gradient.endPaint)
-        definitions.append("<linearGradient id=\"")
-        Self.appendGradientIdentifier(prefix: identifierPrefix, number: gradientCount, into: &definitions)
-        definitions.append("\" gradientUnits=\"userSpaceOnUse\" x1=\"")
-        definitions.appendNumber(gradient.startPoint.x)
-        definitions.append("\" y1=\"")
-        definitions.appendNumber(gradient.startPoint.y)
-        definitions.append("\" x2=\"")
-        definitions.appendNumber(gradient.endPoint.x)
-        definitions.append("\" y2=\"")
-        definitions.appendNumber(gradient.endPoint.y)
-        definitions.append("\"><stop offset=\"0\" stop-color=\"")
-        definitions.append(start.color)
-        definitions.append("\"")
-        definitions.appendOpacity(start.opacity, attribute: "stop-opacity")
-        definitions.append("/><stop offset=\"1\" stop-color=\"")
-        definitions.append(end.color)
-        definitions.append("\"")
-        definitions.appendOpacity(end.opacity, attribute: "stop-opacity")
-        definitions.append("/></linearGradient>")
+        content.append("<linearGradient id=\"")
+        Self.appendGradientIdentifier(prefix: identifierPrefix, number: number, into: &content)
+        content.append("\" gradientUnits=\"userSpaceOnUse\" x1=\"")
+        content.appendNumber(gradient.startPoint.x)
+        content.append("\" y1=\"")
+        content.appendNumber(gradient.startPoint.y)
+        content.append("\" x2=\"")
+        content.appendNumber(gradient.endPoint.x)
+        content.append("\" y2=\"")
+        content.appendNumber(gradient.endPoint.y)
+        content.append("\"><stop offset=\"0\" stop-color=\"")
+        content.append(start.color)
+        content.append("\"")
+        content.appendOpacity(start.opacity, attribute: "stop-opacity")
+        content.append("/><stop offset=\"1\" stop-color=\"")
+        content.append(end.color)
+        content.append("\"")
+        content.appendOpacity(end.opacity, attribute: "stop-opacity")
+        content.append("/></linearGradient>")
     }
 
     /// One `text` per placed text, centered on each line's middle; several lines in `tspan`s. Each keeps its spaces
@@ -143,7 +156,6 @@ struct DiagramSVGBody {
     /// those at a line's ends, which moves centered text.
     private mutating func add(_ text: DiagramSceneText) {
         let paint = paints.text(of: text.paint)
-        let hasRuns = text.styledRuns != nil
         if let outline = text.outline {
             // The outline is a text of its own under the text, as Pele writes it: no fill, the stroke in the outline's paint.
             let outlinePaint = paints.text(of: outline.paint)
@@ -151,7 +163,7 @@ struct DiagramSVGBody {
                 body.content.append(" fill=\"none\" xml:space=\"preserve\"")
                 body.appendStrokeAttributes(outlinePaint, DiagramStroke(lineWidth: outline.lineWidth, lineJoin: .round))
             }
-            addLines(text.lines, hasRuns: hasRuns)
+            addLines(of: text.block)
         }
         appendTextOpening(text) { body in
             body.content.append(" fill=\"")
@@ -159,7 +171,7 @@ struct DiagramSVGBody {
             body.content.append("\" xml:space=\"preserve\"")
             body.content.appendOpacity(paint.opacity, attribute: "fill-opacity")
         }
-        addLines(text.lines, hasRuns: hasRuns)
+        addLines(of: text.block)
     }
 
     /// `<text` and its attributes: its class and size, its painting, then its emphasis and rotation.
@@ -191,54 +203,63 @@ struct DiagramSVGBody {
         content.append("\"")
     }
 
-    /// ` x="…" y="…"`: a line's middle and its baseline.
-    private mutating func appendPosition(_ line: DiagramSceneTextLine) {
+    /// ` x="…" y="…"`: a line's middle and its baseline, as `DiagramSceneText.lines` places them (the same arithmetic,
+    /// without making the lines).
+    private mutating func appendPosition(ofLine index: Int, in block: DiagramTextBlock, top: CGFloat) {
+        let middle = top + (CGFloat(index) + 0.5) * block.lineHeight
         content.append(" x=\"")
-        content.appendNumber(line.center.x)
+        content.appendNumber(block.center.x)
         content.append("\" y=\"")
-        content.appendNumber(line.baselineStart.y)
+        content.appendNumber(middle + block.fontSize * DiagramTextDrawing.baselineShiftRatio)
         content.append("\"")
     }
 
     /// The rest of a `text` whose opening is written: one line in the `text` itself, several in `tspan`s. A text whose
     /// lines have runs in their emphasis writes each line as Pele writes a label's spans: a `tspan` at the line's middle
     /// for its first run and one after it for each other run, with the run's weight, slant or font.
-    private mutating func addLines(_ lines: [DiagramSceneTextLine], hasRuns: Bool) {
-        if hasRuns {
-            content.append(" text-anchor=\"middle\">")
-            for line in lines {
-                guard !line.runs.isEmpty else {
-                    content.append("<tspan")
-                    appendPosition(line)
-                    content.append("></tspan>")
-                    continue
-                }
-                for (index, run) in line.runs.enumerated() {
-                    content.append("<tspan")
-                    if index == 0 { appendPosition(line) }
-                    appendRunAttributes(run.style)
-                    content.append(">")
-                    content.appendEscaped(run.text)
-                    content.append("</tspan>")
-                }
-            }
-            content.append("</text>")
+    private mutating func addLines(of block: DiagramTextBlock) {
+        let top = block.center.y - block.size.height / 2
+        if let lineRuns = block.lineRuns {
+            addLines(of: block, runs: lineRuns, top: top)
             return
         }
-        if lines.count == 1, let line = lines.first {
-            appendPosition(line)
+        if block.lines.count == 1 {
+            appendPosition(ofLine: 0, in: block, top: top)
             content.append(" text-anchor=\"middle\">")
-            content.appendEscaped(line.text)
+            content.appendEscaped(block.lines[0])
             content.append("</text>")
             return
         }
         content.append(" text-anchor=\"middle\">")
-        for line in lines {
+        for (index, line) in block.lines.enumerated() {
             content.append("<tspan")
-            appendPosition(line)
+            appendPosition(ofLine: index, in: block, top: top)
             content.append(">")
-            content.appendEscaped(line.text)
+            content.appendEscaped(line)
             content.append("</tspan>")
+        }
+        content.append("</text>")
+    }
+
+    /// The lines of a text whose lines have runs: each run a `tspan`, the first of a line at the line's middle.
+    private mutating func addLines(of block: DiagramTextBlock, runs lineRuns: [[DiagramTextRun]], top: CGFloat) {
+        content.append(" text-anchor=\"middle\">")
+        for lineIndex in block.lines.indices {
+            let runs = lineRuns[lineIndex]
+            guard !runs.isEmpty else {
+                content.append("<tspan")
+                appendPosition(ofLine: lineIndex, in: block, top: top)
+                content.append("></tspan>")
+                continue
+            }
+            for (index, run) in runs.enumerated() {
+                content.append("<tspan")
+                if index == 0 { appendPosition(ofLine: lineIndex, in: block, top: top) }
+                appendRunAttributes(run.style)
+                content.append(">")
+                content.appendEscaped(run.text)
+                content.append("</tspan>")
+            }
         }
         content.append("</text>")
     }

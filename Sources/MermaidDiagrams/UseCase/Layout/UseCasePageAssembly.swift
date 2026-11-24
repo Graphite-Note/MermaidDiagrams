@@ -7,8 +7,8 @@
  *              loops beside their nodes, and each node's texts placed.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -32,14 +32,17 @@ extension UseCaseLayoutPass {
             LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
         }
         let crossings = UseCaseBoundaryTitles.crossings(of: routes)
-        let laidOut = laidOutEdges
-        UseCaseEdgeEnds.attach(&routes, sources: laidOut.map(\.source), targets: laidOut.map(\.target), centers: centers, views: views)
+        UseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
         let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
-        let boundaries = views.indices.filter { place in views[place].node.isGroup }.map { place in
-            UseCaseBoundaryTitles.boundary(views[place], frame: frames[layoutPlaces[place]], crossings: crossings)
+        var boundaries: [UseCaseLayoutBoundary] = []
+        boundaries.reserveCapacity(frames.count)
+        for place in views.indices where views[place].node.isGroup {
+            boundaries.append(UseCaseBoundaryTitles.boundary(views[place], frame: frames[layoutPlaces[place]], crossings: crossings))
         }
         let edges = placedEdges(routes: routes, labelCenters: labelCenters, centers: centers, boundaries: boundaries)
-        let nodes = views.indices.filter { place in !views[place].node.isGroup }.map { place in placedNode(views[place], center: centers[place]) }
+        var nodes: [UseCaseLayoutNode] = []
+        nodes.reserveCapacity(views.count - boundaries.count)
+        for place in views.indices where !views[place].node.isGroup { nodes.append(placedNode(views[place], center: centers[place])) }
         return UseCaseLayout(size: size, font: font, title: title, boundaries: boundaries, edges: edges, nodes: nodes)
     }
 
@@ -50,6 +53,7 @@ extension UseCaseLayoutPass {
         var routeIndex = 0
         var loopsSeen: [Int: Int] = [:]
         var edges: [UseCaseLayoutEdge] = []
+        edges.reserveCapacity(drawnEdges.count)
         for drawn in drawnEdges {
             let edge = graph.edges[drawn.edge]
             let startTrim = Self.trim(of: edge.startMarker)

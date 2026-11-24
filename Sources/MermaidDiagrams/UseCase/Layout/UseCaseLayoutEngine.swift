@@ -6,8 +6,8 @@
  *              boxes of the layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -87,6 +87,8 @@ struct UseCaseLayoutPass {
     var drawnEdges: [(edge: Int, source: Int, target: Int, label: DiagramTextBlock)] = []
     /// For each node, its place among the layout's nodes, or among its clusters for a boundary.
     var layoutPlaces: [Int] = []
+    /// The drawn edges between two different nodes, which the layout routes, in the order drawn.
+    private(set) var laidOutEdges: [(edge: Int, source: Int, target: Int, label: DiagramTextBlock)] = []
 
     init<Measurer>(diagram: UseCaseDiagram, measurers: inout UseCaseTextMeasurers<Measurer>) {
         self.diagram = diagram
@@ -94,16 +96,24 @@ struct UseCaseLayoutPass {
         font = measurers.font
         fontSize = measurers.font.size
         isSideways = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
-        views = graph.nodes.map { node in UseCaseNodeMeasurement.view(of: node, size: fontSize, measurers: &measurers) }
-        layoutSizes = views.map(\.size)
+        views.reserveCapacity(graph.nodes.count)
+        layoutSizes.reserveCapacity(graph.nodes.count)
+        for node in graph.nodes {
+            let view = UseCaseNodeMeasurement.view(of: node, size: fontSize, measurers: &measurers)
+            layoutSizes.append(view.size)
+            views.append(view)
+        }
         measureEdges(measurers: &measurers)
     }
 
     /// Each edge's label, and each loop grown into its node's box: across the flow, by the loop and its label.
     private mutating func measureEdges<Measurer>(measurers: inout UseCaseTextMeasurers<Measurer>) {
         var places: [String: Int] = [:]
+        places.reserveCapacity(graph.nodes.count)
         for (place, node) in graph.nodes.enumerated() where places[node.identifier] == nil { places[node.identifier] = place }
         let labelMeasurer = measurers.measurer(size: UseCaseNodeMeasurement.smallSize(fontSize))
+        drawnEdges.reserveCapacity(graph.edges.count)
+        laidOutEdges.reserveCapacity(graph.edges.count)
         for (place, edge) in graph.edges.enumerated() {
             guard let source = places[edge.start], let target = places[edge.end] else { continue }
             let written = edge.isSemantic ? edge.label.map { label in "«\(label)»" } : edge.label
@@ -119,6 +129,7 @@ struct UseCaseLayoutPass {
                 }
             }
             drawnEdges.append((place, source, target, label))
+            if source != target { laidOutEdges.append((place, source, target, label)) }
         }
     }
 
@@ -127,7 +138,9 @@ struct UseCaseLayoutPass {
         var clusterPlaces: [String: Int] = [:]
         var clusters: [LayeredCluster] = []
         var nodeSizes: [CGSize] = []
+        nodeSizes.reserveCapacity(views.count)
         layoutPlaces = []
+        layoutPlaces.reserveCapacity(views.count)
         for (place, view) in views.enumerated() {
             if view.node.isGroup {
                 clusterPlaces[view.node.identifier] = clusters.count
@@ -138,7 +151,12 @@ struct UseCaseLayoutPass {
                 nodeSizes.append(layoutSizes[place])
             }
         }
-        let nodeClusters = views.filter { view in !view.node.isGroup }.map { view in view.node.parentIdentifier.flatMap { parent in clusterPlaces[parent] } }
+        // Every boundary is known by now, so that a node finds its boundary's cluster wherever the boundary was listed.
+        var nodeClusters: [Int?] = []
+        nodeClusters.reserveCapacity(nodeSizes.count)
+        for view in views where !view.node.isGroup {
+            nodeClusters.append(clusterPlaces.isEmpty ? nil : view.node.parentIdentifier.flatMap { parent in clusterPlaces[parent] })
+        }
         let edges = laidOutEdges.map { drawn in
             let labelSize = drawn.label.size.width > 0
                 ? CGSize(width: drawn.label.size.width + UseCaseLayoutEngine.edgeLabelRoom.width, height: drawn.label.size.height + UseCaseLayoutEngine.edgeLabelRoom.height)
@@ -148,10 +166,5 @@ struct UseCaseLayoutPass {
         }
         return LayeredClusterGraph(nodeSizes: nodeSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges,
                                    direction: UseCaseLayoutEngine.layeredDirection(of: diagram.direction))
-    }
-
-    /// The drawn edges between two different nodes, which the layout routes, in the order drawn.
-    var laidOutEdges: [(edge: Int, source: Int, target: Int, label: DiagramTextBlock)] {
-        drawnEdges.filter { drawn in drawn.source != drawn.target }
     }
 }

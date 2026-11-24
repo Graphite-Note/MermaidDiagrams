@@ -1,3 +1,15 @@
+/**
+ * File: XYChartValueScale.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: The values along an XY chart's value axis, as Pele finds them, the marks along an axis and the text of
+ *              their numbers.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -83,8 +95,18 @@ enum XYChartScaleMarks {
     /// The widest a mark's label is before it wraps: wide enough that it does not.
     static let unwrappedWidth: CGFloat = 4_000
 
+    /// Below this magnitude every whole double is an integer Int64 holds exactly, written in plain digits.
+    static let largestPlainWholeNumber = 1e15
+
     /// A number written as JavaScript writes it, measured on one line.
     static func numberLabel(_ value: Double, text: some DiagramTextMeasuring) -> DiagramTextBlock {
-        DiagramTextBlock(label: DiagramLabel(JavaScriptNumberText.text(value)), measurer: text, maximumWidth: unwrappedWidth)
+        DiagramTextBlock(label: DiagramLabel(numberText(value)), measurer: text, maximumWidth: unwrappedWidth)
+    }
+
+    /// A number as JavaScript writes it: a whole one below 10^15, as most marks are, as the integer's digits (JavaScript
+    /// writes plain digits up to 10^21, and zero, negative or not, as `0`), without finding its shortest digits.
+    static func numberText(_ value: Double) -> String {
+        if value.magnitude < largestPlainWholeNumber, value == value.rounded(.towardZero) { return String(Int64(value)) }
+        return JavaScriptNumberText.text(value)
     }
 }

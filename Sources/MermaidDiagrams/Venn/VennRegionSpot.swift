@@ -6,8 +6,8 @@
  *              circles and outside the others farthest from their outlines, by a grid of samples and an uphill walk.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -27,6 +27,11 @@ struct VennRegionSpot: Equatable {
     static let smallestStepShare = 1e-6
     /// Margins this share of the radius apart are equal, and the point nearer the middle wins.
     static let tieShare = 1e-9
+    /// The walk's eight directions, the cosine and sine of each eighth of a turn, found once for every walk.
+    private static let walkDirections: [(across: Double, down: Double)] = (0..<8).map { direction in
+        let angle = Double(direction) * 2 * Double.pi / 8
+        return (cos(angle), sin(angle))
+    }
 
     /// Samples the smallest of `inside` on a grid, then walks uphill from the best sample. Ties go to the point nearest the
     /// middle of the region's circles, so that a symmetric arrangement gets symmetric labels.
@@ -48,17 +53,17 @@ struct VennRegionSpot: Equatable {
         let radius = smallest.radius
         var search = Search(circles: circles, inside: inside, outside: outside, middleX: middleX, middleY: middleY, radius: radius)
         for gridY in -gridSteps...gridSteps {
+            let y = smallest.y + Double(gridY) * radius / Double(gridSteps)
             for gridX in -gridSteps...gridSteps where gridX * gridX + gridY * gridY <= gridSteps * gridSteps {
-                _ = search.consider(smallest.x + Double(gridX) * radius / Double(gridSteps), smallest.y + Double(gridY) * radius / Double(gridSteps))
+                _ = search.consider(smallest.x + Double(gridX) * radius / Double(gridSteps), y)
             }
         }
         var step = radius / Double(gridSteps)
         var round = 0
         while round < walkRoundCount && step > radius * smallestStepShare {
             var moved = false
-            for direction in 0..<8 {
-                let angle = Double(direction) * 2 * Double.pi / 8
-                if search.consider(search.best.x + cos(angle) * step, search.best.y + sin(angle) * step) { moved = true }
+            for direction in walkDirections {
+                if search.consider(search.best.x + direction.across * step, search.best.y + direction.down * step) { moved = true }
             }
             if !moved { step /= 2 }
             round += 1
@@ -68,29 +73,35 @@ struct VennRegionSpot: Equatable {
 
     /// The search's best point so far and its distance from the middle.
     private struct Search {
-        let circles: [VennCircle]
-        let inside: [Int]
-        let outside: [Int]
+        /// The circles the point must stay within, then those it must stay out of: their centers and radii alone, in
+        /// one list, so that weighing a point reads no identifiers.
+        private let rings: [(x: Double, y: Double, radius: Double)]
+        private let insideCount: Int
         let middleX: Double
         let middleY: Double
         let radius: Double
+        /// Margins this close are equal.
+        private let tolerance: Double
         var best: VennRegionSpot
         var distanceFromMiddle = 0.0
 
         init(circles: [VennCircle], inside: [Int], outside: [Int], middleX: Double, middleY: Double, radius: Double) {
-            self.circles = circles
-            self.inside = inside
-            self.outside = outside
+            var rings: [(x: Double, y: Double, radius: Double)] = []
+            rings.reserveCapacity(inside.count + outside.count)
+            for index in inside { rings.append((circles[index].x, circles[index].y, circles[index].radius)) }
+            for index in outside { rings.append((circles[index].x, circles[index].y, circles[index].radius)) }
+            self.rings = rings
+            insideCount = inside.count
             self.middleX = middleX
             self.middleY = middleY
             self.radius = radius
+            tolerance = radius * VennRegionSpot.tieShare
             best = VennRegionSpot(x: middleX, y: middleY, margin: 0)
             best.margin = margin(atX: middleX, y: middleY, floor: -.infinity)
         }
 
         /// Takes the point when it has more room, or as much and is nearer the middle.
         mutating func consider(_ x: Double, _ y: Double) -> Bool {
-            let tolerance = radius * VennRegionSpot.tieShare
             let room = margin(atX: x, y: y, floor: best.margin - tolerance)
             guard room > best.margin - tolerance else { return false }
             let distance = hypot(x - middleX, y - middleY)
@@ -104,16 +115,16 @@ struct VennRegionSpot: Equatable {
         /// soon as it cannot reach `floor`.
         func margin(atX x: Double, y: Double, floor: Double) -> Double {
             var best = Double.infinity
-            for index in inside {
-                let circle = circles[index]
+            for position in 0..<insideCount {
+                let circle = rings[position]
                 let room = circle.radius - Self.distance(x - circle.x, y - circle.y)
                 if room < best {
                     if room < floor { return room }
                     best = room
                 }
             }
-            for index in outside {
-                let circle = circles[index]
+            for position in insideCount..<rings.count {
+                let circle = rings[position]
                 let room = Self.distance(x - circle.x, y - circle.y) - circle.radius
                 if room < best {
                     if room < floor { return room }
