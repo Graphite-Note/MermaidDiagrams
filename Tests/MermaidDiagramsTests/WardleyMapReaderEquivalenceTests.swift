@@ -4,10 +4,10 @@
  * Layer: Tests
  * Description: The Wardley map reader gives the map 0.7.0's reader gave, or its error with its line, on every corpus
  *              input and spec text, thousands of them changed at random, random maps of every statement, and long,
- *              many and hostile ones.
+ *              many and hostile ones, and arrows and escapes whose signs a combining mark follows.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -62,6 +62,19 @@ final class WardleyMapReaderEquivalenceTests: XCTestCase {
                 }
             }
             assertReadAsTheReference(text)
+        }
+    }
+
+    /// A labelled arrow's `<`, `>`, `<>` or `-.->` and a note's backslash followed by a combining mark, which joins them
+    /// into one character: the byte search's Foundation fallback for text past ASCII finds or misses them as 0.7.0's
+    /// `contains` did, and an escape so joined is kept as it was.
+    func testArrowSignsAndEscapesJoinedByACombiningMarkReadAsTheFrozenReaderReadThem() {
+        let components = "wardley-beta\ncomponent A [0.5, 0.5]\ncomponent B [0.4, 0.4]\n"
+        let arrows = ["A +'<\u{301}'> B", "A +'x<\u{301}y'> B", "A +'é<'> B", "A +'-.\u{301}->'> B", "A +'-.->\u{301}'> B", "A +'<>\u{301}'< B",
+                      "A +'<\u{20D2}'> B", "A +'>\u{301}'< B", "A +'é'<> B"]
+        for arrow in arrows { XCTAssertTrue(assertReadAsTheReference(components + arrow + "\n"), arrow) }
+        for note in ["a\\\u{301}b", "a\\\u{301}nb\\n", "\\\u{301}\\\u{301}", "é\\\"x"] {
+            XCTAssertTrue(assertReadAsTheReference("wardley-beta\nnote \"\(note)\" [0.2, 0.3]\n"), note)
         }
     }
 
