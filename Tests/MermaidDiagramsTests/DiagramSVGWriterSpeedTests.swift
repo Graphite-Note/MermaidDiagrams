@@ -10,7 +10,7 @@
  *              end of the room grows it first.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -252,7 +252,13 @@ final class DiagramSVGWriterSpeedTests: XCTestCase {
         let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
         var channels: [Double] = (0...255).map { level in Double(level) / 255 } + [0, 1, -0.0, 0.5, 1e-300, 1 - 1e-16, -0.05, 1.06, 2, -1, .nan, .infinity, -.infinity]
         channels += (0..<2_000).map { _ in Double.random(in: 0...1, using: &generator) }
-        for index in 0..<20_000 {
+        // Each channel's rounding tie and the values beside it, where a conversion that moved a channel by its last bit
+        // would write another digit.
+        channels += (0..<255).flatMap { level in
+            let tie = (Double(level) + 0.5) / 255
+            return [tie, tie.nextUp, tie.nextDown]
+        }
+        for index in 0..<24_000 {
             let color = DiagramColor(red: channels[index % channels.count], green: channels[(index * 7 + 3) % channels.count],
                                      blue: channels[(index * 13 + 5) % channels.count])
             let converted = try XCTUnwrap(color.cgColor.converted(to: space, intent: .defaultIntent, options: nil))
