@@ -5,7 +5,7 @@
  * Description: Pele's layered (Sugiyama) layout of one flat graph, ported step for step from layout/layered.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -20,6 +20,8 @@ struct LayeredFlatLayout {
     var nodes: [LayeredFlatNode]
     var edges: [LayeredFlatEdge]
     let options: LayeredFlatOptions
+    /// The working lists, shared with the other flat layouts of one compound layout.
+    let workspace: LayeredFlatWorkspace
     /// 2 when every edge gets a middle rank of its own, for labels or parallel edges; else 1.
     let step: Int
     /// The ranks each edge passes, and whether it is drawn as one direct curve instead of through bends.
@@ -39,9 +41,11 @@ struct LayeredFlatLayout {
     var segmentToEnd: [LayeredSegmentEnd]?
 
     /// Lays `nodes` and `edges` out in place, or returns nil when the nodes and bends would be more than
-    /// `maximumVertexCount` (the nodes then ranked and the edges oriented, but neither placed).
+    /// `maximumVertexCount` (the nodes then ranked and the edges oriented, but neither placed). The working lists come
+    /// from `workspace`, which a compound layout hands to each of its flat layouts, and go back to it; without one, the
+    /// layout makes its own.
     static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
-                       maximumVertexCount: Int = .max) -> LayeredFlatResult? {
+                       maximumVertexCount: Int = .max, workspace givenWorkspace: LayeredFlatWorkspace? = nil) -> LayeredFlatResult? {
         if nodes.isEmpty { return LayeredFlatResult(width: 0, height: 0) }
         if nodes.count == 1 && edges.isEmpty && nodes[0].kind == .node {
             nodes[0].rank = 0
@@ -49,28 +53,49 @@ struct LayeredFlatLayout {
             nodes[0].y = nodes[0].height / 2
             return LayeredFlatResult(width: nodes[0].width, height: nodes[0].height)
         }
-        var layout = LayeredFlatLayout(nodes: [], edges: [], options: options, step: stepOf(nodeCount: nodes.count, edges: edges))
+        let workspace = givenWorkspace ?? LayeredFlatWorkspace()
+        var layout = LayeredFlatLayout(nodes: [], edges: [], options: options, workspace: workspace,
+                                       step: stepOf(nodeCount: nodes.count, edges: edges, workspace: workspace))
         // The lists move into the layout and back, so that ranking and routing change them in place, never copied.
         swap(&layout.nodes, &nodes)
         swap(&layout.edges, &edges)
-        LayeredFlatRanking.orient(nodes: layout.nodes, edges: &layout.edges)
-        LayeredFlatRanking.rank(nodes: &layout.nodes, edges: layout.edges, step: layout.step)
+        LayeredFlatRanking.orient(nodes: layout.nodes, edges: &layout.edges, workspace: workspace)
+        LayeredFlatRanking.rank(nodes: &layout.nodes, edges: layout.edges, step: layout.step, workspace: workspace)
         let result = layout.run(maximumVertexCount: maximumVertexCount)
         swap(&layout.nodes, &nodes)
         swap(&layout.edges, &edges)
+        layout.recycleLists()
         return result
     }
 
+    /// Gives the layout's own lists back to its workspace.
+    private consuming func recycleLists() {
+        workspace.recycle(edgeRankSpan)
+        workspace.recycle(isDirect)
+        workspace.recycle(firstBend)
+        workspace.recycle(labelVertex)
+        workspace.recycle(firstSegment)
+        workspace.recycle(lastSegment)
+        workspace.recycle(vertexHeight)
+        workspace.recycle(vertexKey)
+        if let segmentFromEnd { workspace.recycle(consume segmentFromEnd) }
+        if let segmentToEnd { workspace.recycle(consume segmentToEnd) }
+    }
+
     /// Every edge gets a middle rank of its own when an edge has a label or two edges join the same two nodes.
-    private static func stepOf(nodeCount: Int, edges: [LayeredFlatEdge]) -> Int {
+    private static func stepOf(nodeCount: Int, edges: [LayeredFlatEdge], workspace: LayeredFlatWorkspace) -> Int {
         if edges.contains(where: { edge in edge.labelWidth > 0 }) { return 2 }
         // Two edges join the same two nodes when their pairs, sorted, have two alike side by side.
-        var pairs: [Int] = []
-        pairs.reserveCapacity(edges.count)
+        var pairs = workspace.emptyIntegers(capacity: edges.count)
         for edge in edges { pairs.append(min(edge.tail, edge.head) * nodeCount + max(edge.tail, edge.head)) }
         pairs.sort()
-        for index in pairs.indices.dropFirst() where pairs[index] == pairs[index - 1] { return 2 }
-        return 1
+        var step = 1
+        for index in pairs.indices.dropFirst() where pairs[index] == pairs[index - 1] {
+            step = 2
+            break
+        }
+        workspace.recycle(consume pairs)
+        return step
     }
 
     private mutating func run(maximumVertexCount: Int) -> LayeredFlatResult? {
@@ -82,18 +107,20 @@ struct LayeredFlatLayout {
         // A graph with no rank of two vertices has one order: its reduction would find no crossing and change nothing.
         if graph.segmentCount > 0 && graph.maximumRank > 0 && LayeredFlatCrossingReduction.widestRank(of: graph) >= 2 {
             // The graph moves into the reduction and back, so that its order is changed in place and never copied.
-            var reduction = LayeredFlatCrossingReduction(graph: consume graph, nodes: nodes)
+            var reduction = LayeredFlatCrossingReduction(graph: consume graph, nodes: nodes, workspace: workspace)
             (result.crossings, result.declaredCrossings) = reduction.reduce()
-            graph = (consume reduction).graph
+            graph = (consume reduction).finished()
             graph.settlePositions()
         }
         if options.ordersOnly {
             writeOrderPositions(graph: &graph)
+            graph.recycle(into: workspace)
             return result
         }
         let placed = route(graph: &graph)
         result.width = placed.width
         result.height = placed.height
+        graph.recycle(into: workspace)
         return result
     }
 
@@ -101,9 +128,15 @@ struct LayeredFlatLayout {
     /// edge whose ends share a rank (only an edge from a node to itself, which callers lay out beside the node and Pele
     /// never hands its layout) is drawn direct too, so that every segment runs from one rank to the next.
     private mutating func chooseDirectEdges() -> Int {
-        edgeRankSpan = edges.map { edge in abs(nodes[edge.head].rank - nodes[edge.tail].rank) }
-        var bendCount = edgeRankSpan.reduce(0) { total, span in total + max(0, span - 1) }
-        isDirect = edgeRankSpan.map { span in span == 0 }
+        edgeRankSpan = workspace.emptyIntegers(capacity: edges.count)
+        isDirect = workspace.flags(count: edges.count, repeating: false)
+        var bendCount = 0
+        for edgeIndex in edges.indices {
+            let span = abs(nodes[edges[edgeIndex].head].rank - nodes[edges[edgeIndex].tail].rank)
+            edgeRankSpan.append(span)
+            bendCount += max(0, span - 1)
+            isDirect[edgeIndex] = span == 0
+        }
         guard bendCount > LayeredFlatConstants.maximumBends else { return bendCount }
         var longest = edges.indices.filter { edgeIndex in edgeRankSpan[edgeIndex] > 1 }
         longest.sortStably { first, second in Double(edgeRankSpan[second] - edgeRankSpan[first]) }
@@ -117,7 +150,7 @@ struct LayeredFlatLayout {
 
     /// With `ordersOnly`: each node's position across, and each edge's (rank, position) points.
     private mutating func writeOrderPositions(graph: inout LayeredFlatGraph) {
-        let across = LayeredFlatPositioning.positions(&graph, options: options)
+        let across = LayeredFlatPositioning.positions(&graph, options: options, workspace: workspace)
         for node in nodes.indices { nodes[node].x = across[node] }
         for edgeIndex in edges.indices {
             let edge = edges[edgeIndex]
@@ -132,5 +165,6 @@ struct LayeredFlatLayout {
             points.append(CGPoint(x: Double(graph.vertexRank[lower]), y: across[lower]))
             edges[edgeIndex].points = points
         }
+        workspace.recycle(consume across)
     }
 }

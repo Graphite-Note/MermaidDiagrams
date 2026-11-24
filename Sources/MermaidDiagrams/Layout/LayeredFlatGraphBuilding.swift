@@ -5,7 +5,7 @@
  * Description: Cuts the edges of Pele's layered layout into segments and gives every rank its first order.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -19,14 +19,14 @@ private struct LayeredSegmentList {
     var toEnd: [LayeredSegmentEnd] = []
     var hasOffsets = false
 
-    /// Room for `count` segments in each list.
-    mutating func reserve(_ count: Int) {
-        from.reserveCapacity(count)
-        to.reserveCapacity(count)
-        fromOffset.reserveCapacity(count)
-        toOffset.reserveCapacity(count)
-        fromEnd.reserveCapacity(count)
-        toEnd.reserveCapacity(count)
+    /// Empty lists from `workspace` with room for `count` segments each.
+    init(capacity count: Int, workspace: LayeredFlatWorkspace) {
+        from = workspace.emptyIntegers(capacity: count)
+        to = workspace.emptyIntegers(capacity: count)
+        fromOffset = workspace.emptyNumbers(capacity: count)
+        toOffset = workspace.emptyNumbers(capacity: count)
+        fromEnd = workspace.emptyEnds(capacity: count)
+        toEnd = workspace.emptyEnds(capacity: count)
     }
 
     mutating func append(from upper: Int, to lower: Int, fromOffset: Double, toOffset: Double,
@@ -43,11 +43,12 @@ private struct LayeredSegmentList {
 extension LayeredFlatLayout {
     mutating func buildGraph(vertexCount: Int) -> LayeredFlatGraph {
         let nodeCount = nodes.count
-        let maximumRank = nodes.map(\.rank).max() ?? 0
-        var widths = [Double](repeating: 0, count: vertexCount)
-        vertexHeight = [Double](repeating: 0, count: vertexCount)
-        var kinds = [LayeredVertexKind](repeating: .bend, count: vertexCount)
-        var ranks = [Int](repeating: 0, count: vertexCount)
+        var maximumRank = 0
+        for node in nodes { maximumRank = max(maximumRank, node.rank) }
+        var widths = workspace.numbers(count: vertexCount, repeating: 0)
+        vertexHeight = workspace.numbers(count: vertexCount, repeating: 0)
+        var kinds = workspace.kinds(count: vertexCount, repeating: .bend)
+        var ranks = workspace.integers(count: vertexCount, repeating: 0)
         for node in 0..<nodeCount {
             widths[node] = nodes[node].width
             vertexHeight[node] = nodes[node].height
@@ -56,20 +57,21 @@ extension LayeredFlatLayout {
         }
         labelHeadings = [UInt8](repeating: 0, count: maximumRank + 1)
         let spreads = nodes.contains { node in node.sideSpan > 0 && node.kind == .node }
-        vertexKey = [Double](repeating: .nan, count: vertexCount)
+        vertexKey = workspace.numbers(count: vertexCount, repeating: .nan)
         for node in 0..<nodeCount { vertexKey[node] = nodes[node].orderKey }
         let segments = cutEdges(widths: &widths, kinds: &kinds, ranks: &ranks, spreads: spreads)
         let groups = vertexGroups(vertexCount: vertexCount)
-        let adjacency = LayeredFlatGraph.adjacency(vertexCount: vertexCount, segmentFrom: segments.from, segmentTo: segments.to)
-        let rankStart = LayeredFlatGraph.rankStarts(vertexRank: ranks, maximumRank: maximumRank)
+        let adjacency = LayeredFlatGraph.adjacency(vertexCount: vertexCount, segmentFrom: segments.from, segmentTo: segments.to,
+                                                   workspace: workspace)
+        let rankStart = LayeredFlatGraph.rankStarts(vertexRank: ranks, maximumRank: maximumRank, workspace: workspace)
         var graph = LayeredFlatGraph(vertexCount: vertexCount, nodeCount: nodeCount, maximumRank: maximumRank, vertexWidth: widths,
                                      vertexKind: kinds, vertexRank: ranks, segmentFrom: segments.from, segmentTo: segments.to,
                                      segmentFromOffset: segments.fromOffset, segmentToOffset: segments.toOffset,
                                      successorStart: adjacency.successorStart, successorSegments: adjacency.successorSegments,
                                      predecessorStart: adjacency.predecessorStart, predecessorSegments: adjacency.predecessorSegments,
-                                     rankStart: rankStart, order: [Int](repeating: 0, count: vertexCount),
-                                     position: [Int](repeating: 0, count: vertexCount), hasOffsets: segments.hasOffsets,
-                                     isRankFixed: [Bool](repeating: false, count: maximumRank + 1), vertexGroup: groups,
+                                     rankStart: rankStart, order: workspace.integers(count: vertexCount, repeating: 0),
+                                     position: workspace.integers(count: vertexCount, repeating: 0), hasOffsets: segments.hasOffsets,
+                                     isRankFixed: workspace.flags(count: maximumRank + 1, repeating: false), vertexGroup: groups,
                                      parentOfGroup: options.parentOfGroup)
         orderInitially(&graph)
         return graph
@@ -90,19 +92,27 @@ extension LayeredFlatLayout {
     /// Every edge not drawn direct cut into segments, one per rank it passes, with a bend or its label in each rank
     /// between its ends.
     private mutating func cutEdges(widths: inout [Double], kinds: inout [LayeredVertexKind], ranks: inout [Int], spreads: Bool) -> LayeredSegmentList {
-        firstBend = [Int](repeating: -1, count: edges.count)
-        labelVertex = [Int](repeating: -1, count: edges.count)
-        firstSegment = [Int](repeating: -1, count: edges.count)
-        lastSegment = [Int](repeating: -1, count: edges.count)
-        var segments = LayeredSegmentList()
+        firstBend = workspace.integers(count: edges.count, repeating: -1)
+        labelVertex = workspace.integers(count: edges.count, repeating: -1)
+        firstSegment = workspace.integers(count: edges.count, repeating: -1)
+        lastSegment = workspace.integers(count: edges.count, repeating: -1)
         // An edge cut into n bends makes n + 1 segments: the bends are the vertices past the nodes.
-        segments.reserve(max(0, widths.count - nodes.count) + edges.count)
+        var segments = LayeredSegmentList(capacity: max(0, widths.count - nodes.count) + edges.count, workspace: workspace)
         var nextVertex = nodes.count
         for edgeIndex in edges.indices where !isDirect[edgeIndex] {
             cutEdge(edgeIndex, into: &segments, nextVertex: &nextVertex, widths: &widths, kinds: &kinds, ranks: &ranks)
         }
-        segmentFromEnd = spreads ? segments.fromEnd : nil
-        segmentToEnd = spreads ? segments.toEnd : nil
+        if spreads {
+            segmentFromEnd = segments.fromEnd
+            segmentToEnd = segments.toEnd
+        } else {
+            workspace.recycle(segments.fromEnd)
+            workspace.recycle(segments.toEnd)
+            segmentFromEnd = nil
+            segmentToEnd = nil
+        }
+        segments.fromEnd = []
+        segments.toEnd = []
         return segments
     }
 
@@ -148,7 +158,7 @@ extension LayeredFlatLayout {
     private func vertexGroups(vertexCount: Int) -> [Int]? {
         guard let groupOfNode = options.groupOfNode else { return nil }
         let parent = options.parentOfGroup
-        var groups = [Int](repeating: -1, count: vertexCount)
+        var groups = workspace.integers(count: vertexCount, repeating: -1)
         for node in nodes.indices { groups[node] = groupOfNode[node] }
         func depth(_ group: Int) -> Int {
             var depth = 0

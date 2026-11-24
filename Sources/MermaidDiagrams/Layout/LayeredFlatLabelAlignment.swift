@@ -5,7 +5,7 @@
  * Description: Brings the labels and bends of each edge of Pele's layered layout into line with one of its ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -13,9 +13,11 @@
 /// other, as far as what is beside its labels and bends leaves room, and turns once, at the other end. Bends in ranks
 /// that hold nothing else are left to straightening.
 struct LayeredFlatLabelAlignment {
-    let graph: LayeredFlatGraph
+    /// Moved in and back out by the caller, so that the graph is never copied.
+    var graph: LayeredFlatGraph
     let nodes: [LayeredFlatNode]
-    let free: [[Int]]
+    /// How many free ends each side of each vertex has, side 0 first (`LayeredFlatGraph.freeEnds`).
+    let free: [Int]
     let options: LayeredFlatOptions
     let emptyRanks: [Bool]?
 
@@ -27,7 +29,7 @@ struct LayeredFlatLabelAlignment {
     private func end(of segment: Int, side: Int, across: [Double]) -> (at: Double, sharing: Int) {
         let vertex = side == 0 ? graph.segmentFrom[segment] : graph.segmentTo[segment]
         let at = across[vertex] + (side == 0 ? graph.segmentFromOffset[segment] : graph.segmentToOffset[segment])
-        return (at, vertex < graph.nodeCount && nodes[vertex].kind == .node ? free[1 - side][vertex] : 0)
+        return (at, vertex < graph.nodeCount && nodes[vertex].kind == .node ? free[(1 - side) * graph.vertexCount + vertex] : 0)
     }
 
     /// The room the neighbours in its rank leave a label or bend: a full gap from a node or between two labels, half of
@@ -57,11 +59,11 @@ struct LayeredFlatLabelAlignment {
         return max(least, min(most, firstChoice))
     }
 
-    func align(_ across: inout [Double]) {
-        var isDone = [Bool](repeating: false, count: graph.vertexCount)
+    func align(_ across: inout [Double], workspace: LayeredFlatWorkspace) {
         guard graph.maximumRank > 1 else { return }
+        var isDone = workspace.flags(count: graph.vertexCount, repeating: false)
         // One list of an edge's labels and bends, refilled for each edge.
-        var chain: [Int] = []
+        var chain = workspace.emptyIntegers(capacity: 0)
         for rank in 1..<graph.maximumRank {
             for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] {
                 let vertex = graph.order[index]
@@ -69,6 +71,8 @@ struct LayeredFlatLabelAlignment {
                 alignChain(through: vertex, across: &across, isDone: &isDone, chain: &chain)
             }
         }
+        workspace.recycle(consume isDone)
+        workspace.recycle(consume chain)
     }
 
     private func upperSegment(of vertex: Int) -> Int { graph.predecessorSegments[graph.predecessorStart[vertex]] }

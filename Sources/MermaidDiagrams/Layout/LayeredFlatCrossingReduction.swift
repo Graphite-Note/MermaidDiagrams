@@ -5,7 +5,7 @@
  * Description: Orders the ranks of Pele's layered layout: barycenter sweeps, adjacent swaps, two attempts, the mirror.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -17,42 +17,53 @@ extension LayeredFlatCrossingReduction {
         if graph.vertexGroup != nil { prepareGroups() }
         var best = graph.vertexGroup != nil ? count() : declared
         if best == 0 { return (0, declared) }
-        var bestOrder = graph.order
         // Require improvements over both the grouped and ungrouped starting orders.
         let start = min(best, declared)
         // The sweeps are run twice from the same start, going down first and going up first; of two orders with as few
         // crossings, the one that keeps more nodes in the order they were given. Only for graphs small enough to be
-        // read node by node.
-        let initial = graph.order
+        // read node by node. The orders are kept in three lists of the workspace, copied into rather than shared.
+        var initial = workspace.emptyIntegers(capacity: graph.vertexCount)
+        initial.append(contentsOf: graph.order)
+        var chosen = workspace.emptyIntegers(capacity: graph.vertexCount)
+        chosen.append(contentsOf: graph.order)
+        var found = workspace.emptyIntegers(capacity: graph.vertexCount)
         let isSmall = graph.vertexCount <= LayeredFlatConstants.smallGraphVertexCount
-        var chosen = bestOrder
         var chosenOutOfOrder = Int.max
         for attempt in 0..<(isSmall ? 2 : 1) {
             if attempt > 0 {
-                graph.order = initial
+                Self.copy(initial, into: &graph.order)
                 graph.settlePositions()
             }
-            let (found, foundOrder) = attemptOrder(attempt: attempt, start: start, initial: initial, isSmall: isSmall)
+            let foundCrossings = attemptOrder(attempt: attempt, start: start, initial: initial, isSmall: isSmall, found: &found)
             let outOfOrder = isSmall ? outOfOrderPairs() : 0
-            if attempt == 0 || found < best || (found == best && outOfOrder < chosenOutOfOrder) {
-                best = found
-                chosen = foundOrder
+            if attempt == 0 || foundCrossings < best || (foundCrossings == best && outOfOrder < chosenOutOfOrder) {
+                best = foundCrossings
+                Self.copy(found, into: &chosen)
                 chosenOutOfOrder = outOfOrder
             }
         }
-        graph.order = chosen
+        Self.copy(chosen, into: &graph.order)
         graph.settlePositions()
-        bestOrder = chosen
         // The retained grouped order may exceed the ungrouped threshold; recount it.
         if graph.vertexGroup != nil { best = count() }
-        tryMirror(best: best, bestOrder: bestOrder, chosenOutOfOrder: chosenOutOfOrder, isSmall: isSmall)
+        tryMirror(best: best, bestOrder: chosen, chosenOutOfOrder: chosenOutOfOrder, isSmall: isSmall)
+        workspace.recycle(consume initial)
+        workspace.recycle(consume chosen)
+        workspace.recycle(consume found)
         return (best, declared)
     }
 
-    /// One attempt: sweeps until four in a row find nothing better, at most 24, then swaps for a small graph.
-    private mutating func attemptOrder(attempt: Int, start: Int, initial: [Int], isSmall: Bool) -> (Int, [Int]) {
+    /// `target` made a copy of `source`, in its own storage.
+    private static func copy(_ source: [Int], into target: inout [Int]) {
+        target.removeAll(keepingCapacity: true)
+        target.append(contentsOf: source)
+    }
+
+    /// One attempt: sweeps until four in a row find nothing better, at most 24, then swaps for a small graph. Returns
+    /// the crossings of the order it found, written to `foundOrder`.
+    private mutating func attemptOrder(attempt: Int, start: Int, initial: [Int], isSmall: Bool, found foundOrder: inout [Int]) -> Int {
         var found = start
-        var foundOrder = initial
+        Self.copy(initial, into: &foundOrder)
         var sweepIndex = 0
         var stale = 0
         while stale < 4 && sweepIndex < LayeredFlatConstants.maximumSweeps {
@@ -60,7 +71,7 @@ extension LayeredFlatCrossingReduction {
             let crossings = count()
             if crossings < found {
                 found = crossings
-                foundOrder = graph.order
+                Self.copy(graph.order, into: &foundOrder)
                 stale = 0
                 if crossings == 0 {
                     break
@@ -69,17 +80,17 @@ extension LayeredFlatCrossingReduction {
             sweepIndex += 1
             stale += 1
         }
-        graph.order = foundOrder
+        Self.copy(foundOrder, into: &graph.order)
         if isSmall && found > 0 {
             graph.settlePositions()
             transpose()
             let crossings = count()
             if crossings < found {
                 found = crossings
-                foundOrder = graph.order
+                Self.copy(graph.order, into: &foundOrder)
             }
         }
-        return (found, foundOrder)
+        return found
     }
 
     /// A drawing and its mirror image cross as often: of the two, the one keeping more nodes in their given order.
@@ -88,7 +99,7 @@ extension LayeredFlatCrossingReduction {
         if chosenOutOfOrder == 0 || graph.isRankFixed[0] || graph.isRankFixed[graph.maximumRank] { return }
         for rank in 0...graph.maximumRank { graph.order[graph.rankStart[rank]..<graph.rankStart[rank + 1]].reverse() }
         graph.settlePositions()
-        if count() > best || outOfOrderPairs() >= chosenOutOfOrder { graph.order = bestOrder }
+        if count() > best || outOfOrderPairs() >= chosenOutOfOrder { Self.copy(bestOrder, into: &graph.order) }
     }
 
     /// How many pairs of nodes in one rank are not in the order they were given.

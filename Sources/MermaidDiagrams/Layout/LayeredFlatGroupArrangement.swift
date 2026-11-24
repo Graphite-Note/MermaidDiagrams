@@ -5,7 +5,7 @@
  * Description: Keeps each group of Pele's layered layout contiguous in its ranks, ordering groups by their mean key.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -13,7 +13,8 @@ extension LayeredFlatCrossingReduction {
     /// The groups' depths, and each rank arranged by its present positions so that every group is contiguous.
     mutating func prepareGroups() {
         let groupTotal = graph.parentOfGroup.count
-        groupDepth = [Int](repeating: 0, count: groupTotal)
+        workspace.recycle(groupDepth)
+        groupDepth = workspace.integers(count: groupTotal, repeating: 0)
         for group in 0..<groupTotal {
             var parent = group
             while parent >= 0 {
@@ -21,14 +22,18 @@ extension LayeredFlatCrossingReduction {
                 parent = graph.parentOfGroup[parent]
             }
         }
-        groupSum = [Double](repeating: 0, count: groupTotal)
-        groupCount = [Int](repeating: 0, count: groupTotal)
-        groupFirst = [Int](repeating: 0, count: groupTotal)
-        var keys = [Double](repeating: 0, count: graph.vertexCount)
+        workspace.recycle(groupSum)
+        workspace.recycle(groupCount)
+        workspace.recycle(groupFirst)
+        groupSum = workspace.numbers(count: groupTotal, repeating: 0)
+        groupCount = workspace.integers(count: groupTotal, repeating: 0)
+        groupFirst = workspace.integers(count: groupTotal, repeating: 0)
+        var keys = workspace.numbers(count: graph.vertexCount, repeating: 0)
         for rank in 0...graph.maximumRank {
             for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] { keys[graph.order[index]] = Double(index - graph.rankStart[rank]) }
             arrange(rank: rank, keys: keys)
         }
+        workspace.recycle(consume keys)
     }
 
     /// Orders `rank` by `keys`, every group kept together and placed by the mean key of what it holds there: two
@@ -55,9 +60,19 @@ extension LayeredFlatCrossingReduction {
                 group = graph.parentOfGroup[group]
             }
         }
-        var row = Array(graph.order[start..<end])
-        row.sortStably { first, second in compareInGroups(first, second, keys: keys, rankStart: start, vertexGroup: vertexGroup) }
+        // The row and the merge sort's spare are lists of the reduction, moved out while the comparison reads it.
+        var row: [Int] = []
+        var spare: [Int] = []
+        swap(&row, &arrangedRow)
+        swap(&spare, &sortSpare)
+        row.removeAll(keepingCapacity: true)
+        row.append(contentsOf: graph.order[start..<end])
+        row.sortStably(spare: &spare) { first, second in
+            compareInGroups(first, second, keys: keys, rankStart: start, vertexGroup: vertexGroup) < 0
+        }
         graph.order.replaceSubrange(start..<end, with: row)
+        swap(&row, &arrangedRow)
+        swap(&spare, &sortSpare)
         for index in start..<end { graph.position[graph.order[index]] = index - start }
     }
 

@@ -5,7 +5,7 @@
  * Description: Keys the levels of Pele's compound layout from one flat layout of every node, groups kept contiguous.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -28,7 +28,8 @@ extension LayeredCompoundLayout {
         flatOptions.groupOfNode = groupOfNode
         flatOptions.parentOfGroup = parentOfGroup
         flatOptions.ordersOnly = true
-        let result = LayeredFlatLayout.layout(nodes: &flatNodes, edges: &flatEdges, options: flatOptions) ?? LayeredFlatResult(width: 0, height: 0)
+        let result = LayeredFlatLayout.layout(nodes: &flatNodes, edges: &flatEdges, options: flatOptions, workspace: workspace)
+            ?? LayeredFlatResult(width: 0, height: 0)
         flatCrossings = min(result.crossings, result.declaredCrossings)
         flatEdgePoints = flatEdges.map(\.points)
         keyNodes(leaf: leaf, flatNodes: flatNodes)

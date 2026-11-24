@@ -5,7 +5,7 @@
  * Description: The bands of Pele's layered layout along the flow: each rank's height and the gap under it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -32,11 +32,12 @@ struct LayeredFlatBands {
         let maximumRank = graph.maximumRank
         let options = layout.options
         let step = Double(layout.step)
+        let workspace = layout.workspace
         self.pieces = pieces
-        bandTop = [Double](repeating: 0, count: maximumRank + 1)
-        bandBottom = [Double](repeating: 0, count: maximumRank + 1)
-        below = [Int](repeating: 0, count: maximumRank + 1)
-        trackCount = [Int](repeating: 0, count: maximumRank + 1)
+        bandTop = workspace.numbers(count: maximumRank + 1, repeating: 0)
+        bandBottom = workspace.numbers(count: maximumRank + 1, repeating: 0)
+        below = workspace.integers(count: maximumRank + 1, repeating: 0)
+        trackCount = workspace.integers(count: maximumRank + 1, repeating: 0)
         margin = options.runsOnTracks ? LayeredFlatConstants.trackMargin : LayeredFlatConstants.levelMargin
         leastPitch = options.runsOnTracks ? LayeredFlatConstants.trackPitch : LayeredFlatConstants.levelPitch
         mostPitch = options.runsOnTracks ? LayeredFlatConstants.trackSpread : LayeredFlatConstants.levelPitch
@@ -44,21 +45,33 @@ struct LayeredFlatBands {
         let startRanks = Self.holdsOnly(.startPort, rank: 0, graph: graph) ? layout.step : 0
         let endRanks = Self.holdsOnly(.endPort, rank: maximumRank, graph: graph) ? layout.step : 0
         // The longest way across that any edge travels in the gap below each rank.
-        var run = [Double](repeating: 0, count: maximumRank + 1)
+        var run = workspace.numbers(count: maximumRank + 1, repeating: 0)
         for segment in 0..<graph.segmentCount {
             let distance = abs(across[graph.segmentFrom[segment]] + graph.segmentFromOffset[segment] - across[graph.segmentTo[segment]] - graph.segmentToOffset[segment])
             run[graph.vertexRank[graph.segmentFrom[segment]]] = max(run[graph.vertexRank[graph.segmentFrom[segment]]], distance)
         }
-        gapUnder = [Double](repeating: 0, count: maximumRank + 1)
+        gapUnder = workspace.numbers(count: maximumRank + 1, repeating: 0)
         for rank in 0..<maximumRank {
             let usual = (rank < startRanks || rank >= maximumRank - endRanks ? options.portSeparation : options.rankSeparation) / step
             gapUnder[rank] = pieces != nil ? usual
                 : max(usual, min(LayeredFlatConstants.maximumGapFactor * options.rankSeparation / step, run[rank] * LayeredFlatConstants.minimumSlope))
         }
-        isBetween = [Bool](repeating: true, count: maximumRank + 1)
+        workspace.recycle(consume run)
+        isBetween = workspace.flags(count: maximumRank + 1, repeating: true)
         for node in 0..<graph.nodeCount { isBetween[graph.vertexRank[node]] = false }
         moveHeadRoom(headings: layout.labelHeadings, options: options)
-        if pieces != nil { growForPieces(options: options, emptyRanks: emptyRanks) }
+        if pieces != nil { growForPieces(options: options, emptyRanks: emptyRanks, workspace: workspace) }
+    }
+
+    /// Gives the bands' lists, and their pieces', back to `workspace` once the routes are written.
+    consuming func recycle(into workspace: LayeredFlatWorkspace) {
+        workspace.recycle(gapUnder)
+        workspace.recycle(bandTop)
+        workspace.recycle(bandBottom)
+        workspace.recycle(below)
+        workspace.recycle(trackCount)
+        workspace.recycle(isBetween)
+        pieces?.recycle(into: workspace)
     }
 
     private static func holdsOnly(_ kind: LayeredVertexKind, rank: Int, graph: LayeredFlatGraph) -> Bool {
@@ -85,10 +98,48 @@ struct LayeredFlatBands {
 
     /// The gaps grown to hold their tracks or levels, kept `margin` from the ranks and `leastPitch` apart, or to the
     /// height that lets crossing curves cross at a clear angle.
-    private mutating func growForPieces(options: LayeredFlatOptions, emptyRanks: [Bool]?) {
-        guard var pieces else { return }
+    private mutating func growForPieces(options: LayeredFlatOptions, emptyRanks: [Bool]?, workspace: LayeredFlatWorkspace) {
+        guard var pieces = pieces.take() else { return }
         let maximumRank = gapUnder.count - 1
-        var room = [Double](repeating: 0, count: maximumRank + 1)
+        let room = roomBelow(emptyRanks: emptyRanks, workspace: workspace)
+        var isWide = workspace.flags(count: pieces.count, repeating: false)
+        for piece in 0..<pieces.count {
+            isWide[piece] = abs(pieces.from[piece] - pieces.to[piece]) > LayeredFlatConstants.levelWideFactor * room[pieces.rank[piece]]
+        }
+        pieces.isWide = isWide
+        // Only a piece that runs across its gap takes a track or a level: where none does, no track is given and no gap
+        // grows, as the tracks would find.
+        let runsAcross = (0..<pieces.count).contains { piece in abs(pieces.from[piece] - pieces.to[piece]) >= LayeredFlatConstants.inLine }
+        if !runsAcross {
+            pieces.track = workspace.integers(count: pieces.count, repeating: -1)
+            pieces.levels = workspace.integers(count: pieces.count, repeating: 0)
+            self.pieces = pieces
+            workspace.recycle(consume room)
+            return
+        }
+        var tracks = LayeredFlatTracks(pieces: pieces, isCurved: !options.runsOnTracks, room: room, rankCount: maximumRank + 1,
+                                       workspace: workspace)
+        tracks.assign()
+        self.pieces = tracks.pieces
+        workspace.recycle(trackCount)
+        trackCount = tracks.trackCount
+        for rank in 0..<maximumRank {
+            if trackCount[rank] > 0 {
+                gapUnder[rank] += max(0, 2 * margin + Double(trackCount[rank] - 1) * leastPitch - room[rank])
+            } else if tracks.tallGap[rank] > 0 {
+                gapUnder[rank] += max(0, min(LayeredFlatConstants.maximumGapFactor * options.rankSeparation, tracks.tallGap[rank]) - room[rank])
+            }
+        }
+        workspace.recycle(tracks.tallGap)
+        tracks.recycle()
+        workspace.recycle(consume room)
+    }
+
+    /// The room the pieces leaving each rank have, down to the next rank that holds more than bends, which `below`
+    /// records; in a list of `workspace`.
+    private mutating func roomBelow(emptyRanks: [Bool]?, workspace: LayeredFlatWorkspace) -> [Double] {
+        let maximumRank = gapUnder.count - 1
+        var room = workspace.numbers(count: maximumRank + 1, repeating: 0)
         for rank in 0..<maximumRank where !(emptyRanks?[rank] ?? false) {
             var next = rank + 1
             room[rank] = gapUnder[rank]
@@ -98,18 +149,7 @@ struct LayeredFlatBands {
             }
             below[rank] = next
         }
-        pieces.isWide = (0..<pieces.count).map { piece in abs(pieces.from[piece] - pieces.to[piece]) > LayeredFlatConstants.levelWideFactor * room[pieces.rank[piece]] }
-        var tracks = LayeredFlatTracks(pieces: pieces, isCurved: !options.runsOnTracks, room: room, rankCount: maximumRank + 1)
-        tracks.assign()
-        self.pieces = tracks.pieces
-        trackCount = tracks.trackCount
-        for rank in 0..<maximumRank {
-            if trackCount[rank] > 0 {
-                gapUnder[rank] += max(0, 2 * margin + Double(trackCount[rank] - 1) * leastPitch - room[rank])
-            } else if tracks.tallGap[rank] > 0 {
-                gapUnder[rank] += max(0, min(LayeredFlatConstants.maximumGapFactor * options.rankSeparation, tracks.tallGap[rank]) - room[rank])
-            }
-        }
+        return room
     }
 
     /// Each rank's band as tall as its tallest vertex, one after the other with their gaps.

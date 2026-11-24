@@ -5,7 +5,7 @@
  * Description: Writes where Pele's layered layout puts each node, and each edge's route and label, in flow space.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -24,8 +24,8 @@ extension LayeredFlatLayout {
             lowest = min(lowest, across[vertex] - graph.vertexWidth[vertex] / 2)
             highest = max(highest, across[vertex] + graph.vertexWidth[vertex] / 2)
         }
-        var arrives = [Bool](repeating: false, count: graph.maximumRank + 1)
-        var leaves = [Bool](repeating: false, count: graph.maximumRank + 1)
+        var arrives = workspace.flags(count: graph.maximumRank + 1, repeating: false)
+        var leaves = workspace.flags(count: graph.maximumRank + 1, repeating: false)
         for node in 0..<graph.nodeCount where graph.vertexKind[node] == .node && segmentFromEnd != nil {
             if graph.predecessorStart[node + 1] > graph.predecessorStart[node] { arrives[graph.vertexRank[node]] = true }
             if graph.successorStart[node + 1] > graph.successorStart[node] { leaves[graph.vertexRank[node]] = true }
@@ -41,6 +41,8 @@ extension LayeredFlatLayout {
                 nodes[node].y = (bands.bandTop[rank] + bands.bandBottom[rank]) / 2
             }
         }
+        workspace.recycle(consume arrives)
+        workspace.recycle(consume leaves)
         for edgeIndex in edges.indices {
             writeRoute(edgeIndex, graph: graph, across: across, bands: bands, pieceStart: pieceStart, isOnLine: isOnLine, leftmost: lowest)
         }
