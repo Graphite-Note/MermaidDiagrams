@@ -6,8 +6,8 @@
  *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -58,10 +58,11 @@ extension MermaidDiagramAccessibility {
     init(swimlane diagram: FlowchartDiagram) {
         let flowchart = MermaidDiagramAccessibility(flowchart: diagram)
         let nesting = FlowchartClusterNesting(diagram: diagram)
-        let laneTitles = diagram.subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
-            .map { subgraph in diagram.subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
-        let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
-        let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
+        let subgraphs = diagram.subgraphs
+        let laneTitles = subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
+            .map { subgraph in subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
+        let groupNodes = Set(subgraphs.compactMap(\.representingNodeIndex))
+        let nodeTexts = (0..<diagram.nodeCount).filter { node in !groupNodes.contains(node) }.map { node in diagram.nodeLabel(at: node).spokenText }
         self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description, summary: laneTitles + nodeTexts)
     }
 }

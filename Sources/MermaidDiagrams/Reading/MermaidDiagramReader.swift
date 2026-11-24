@@ -60,8 +60,9 @@ public enum MermaidDiagramReader {
         let frontEnd = try MermaidFrontEnd.read(source)
         let title = frontEnd.frontMatterTitle
         switch frontEnd.typeKeyword {
-        case .flowchart: return .flowchart(titled(FlowchartDiagram(reading: try FlowchartParser.parse(frontEnd, limits: limits)), frontMatterTitle: title))
-        case .swimlane: return .swimlane(titled(FlowchartDiagram(reading: try FlowchartParser.parse(frontEnd, limits: limits)), frontMatterTitle: title))
+        // A flowchart has no title statement of its own: its title is the front matter's.
+        case .flowchart: return .flowchart(try FlowchartParser.parse(frontEnd, limits: limits))
+        case .swimlane: return .swimlane(try FlowchartParser.parse(frontEnd, limits: limits))
         case .other: return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: title)
         }
     }

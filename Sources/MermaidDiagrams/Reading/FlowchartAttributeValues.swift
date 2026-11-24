@@ -14,19 +14,48 @@
 /// The values of the attributes the flowchart reads, as ranges of the text, from a one-line body Pele's YAML reader
 /// would read as a mapping of text (and of whole numbers for `w` and `h`). Nil for a body written otherwise.
 struct FlowchartAttributeValues {
-    var shape: Range<Int>?
-    var label: Range<Int>?
-    var labelType: Range<Int>?
-    var view: Range<Int>?
-    var icon: Range<Int>?
-    var image: Range<Int>?
-    var form: Range<Int>?
-    var position: Range<Int>?
-    var constraint: Range<Int>?
-    var width: Range<Int>?
-    var height: Range<Int>?
+    /// The values' ranges, by key, valid where `written` has the key's bit.
+    private var ranges = (MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty,
+                          MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty, MermaidTextRange.empty,
+                          MermaidTextRange.empty)
+    /// One bit for each key written, by `Key.rawValue`.
+    private var written: UInt16 = 0
 
-    private enum Key {
+    var shape: Range<Int>? { range(of: .shape) }
+    var label: Range<Int>? { range(of: .label) }
+    var labelType: Range<Int>? { range(of: .labelType) }
+    var view: Range<Int>? { range(of: .view) }
+    var icon: Range<Int>? { range(of: .icon) }
+    var image: Range<Int>? { range(of: .image) }
+    var form: Range<Int>? { range(of: .form) }
+    var position: Range<Int>? { range(of: .position) }
+    var constraint: Range<Int>? { range(of: .constraint) }
+    var width: Range<Int>? { range(of: .width) }
+    var height: Range<Int>? { range(of: .height) }
+
+    /// Whether any icon or picture attribute is written.
+    var hasAssetAttributes: Bool { written & 0b111_1111_0000 != 0 }
+
+    private func range(of key: Key) -> Range<Int>? {
+        guard written & (1 << key.rawValue) != 0 else { return nil }
+        let range: MermaidTextRange
+        switch key {
+        case .shape: range = ranges.0
+        case .label: range = ranges.1
+        case .labelType: range = ranges.2
+        case .view: range = ranges.3
+        case .icon: range = ranges.4
+        case .image: range = ranges.5
+        case .form: range = ranges.6
+        case .position: range = ranges.7
+        case .constraint: range = ranges.8
+        case .width: range = ranges.9
+        case .height, .other: range = ranges.10
+        }
+        return range.lowerBound..<range.upperBound
+    }
+
+    private enum Key: UInt16 {
         case shape, label, labelType, view, icon, image, form, position, constraint, width, height, other
     }
 
@@ -61,25 +90,26 @@ struct FlowchartAttributeValues {
 
     /// Records `value` for `key`; false when the key was written before or its value is one YAML may read otherwise.
     private mutating func set(_ value: Range<Int>, for key: Key, in bytes: FlowchartBytes) -> Bool {
-        func once(_ slot: inout Range<Int>?) -> Bool {
-            guard slot == nil else { return false }
-            slot = value
-            return true
-        }
+        guard key != .other else { return true }
+        let bit: UInt16 = 1 << key.rawValue
+        guard written & bit == 0 else { return false }
+        if key == .label, value.contains(where: { index in bytes.base[index] >= 0x80 }) { return false }
+        written |= bit
+        let range = MermaidTextRange(start: value.lowerBound, end: value.upperBound)
         switch key {
-        case .shape: return once(&shape)
-        case .label: return value.allSatisfy { index in bytes.base[index] < 0x80 } && once(&label)
-        case .labelType: return once(&labelType)
-        case .view: return once(&view)
-        case .icon: return once(&icon)
-        case .image: return once(&image)
-        case .form: return once(&form)
-        case .position: return once(&position)
-        case .constraint: return once(&constraint)
-        case .width: return once(&width)
-        case .height: return once(&height)
-        case .other: return true
+        case .shape: ranges.0 = range
+        case .label: ranges.1 = range
+        case .labelType: ranges.2 = range
+        case .view: ranges.3 = range
+        case .icon: ranges.4 = range
+        case .image: ranges.5 = range
+        case .form: ranges.6 = range
+        case .position: ranges.7 = range
+        case .constraint: ranges.8 = range
+        case .width: ranges.9 = range
+        case .height, .other: ranges.10 = range
         }
+        return true
     }
 
     private static func key(in bytes: FlowchartBytes, from start: Int, to end: Int) -> Key {

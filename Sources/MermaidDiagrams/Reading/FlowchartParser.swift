@@ -18,8 +18,13 @@ struct FlowchartParser {
     let bytes: FlowchartBytes
     var position: Int
     let limits: MermaidDiagramLimits
-    /// The thread's working lists, moved here for the reading and back after it.
-    var lists = FlowchartReadingLists()
+    /// The thread's working lists, lent for the reading (`FlowchartReadingScratch`): read and changed in place through
+    /// their address, so that the parser holds no list of its own to give back or release.
+    private let listsAddress: UnsafeMutablePointer<FlowchartReadingLists>
+    var lists: FlowchartReadingLists {
+        unsafeAddress { UnsafePointer(listsAddress) }
+        nonmutating unsafeMutableAddress { listsAddress }
+    }
     var parts = FlowchartModelParts()
     var direction = FlowchartDirection.topToBottom
     var accessibilityTitle: String?
@@ -27,20 +32,25 @@ struct FlowchartParser {
     var unappliedStatementCount = 0
     /// What the statements that style the diagram set, made when the first one is read.
     var styling: FlowchartStyling?
+    /// The icon or picture attributes the last attributes read wrote (`FlowchartNodeDefinition.hasAssetAttributes`).
+    var writtenAssetAttributes = FlowchartNodeAssetAttributes()
+    /// How many of `lists.chainNodes` the chain being read holds; the list keeps its room from chain to chain.
+    var chainLength = 0
     var openedGroupCount: Int32 = 0
     var endedGroupCount = 0
 
-    init(bytes: FlowchartBytes, position: Int, limits: MermaidDiagramLimits) {
+    init(bytes: FlowchartBytes, position: Int, limits: MermaidDiagramLimits, lists: UnsafeMutablePointer<FlowchartReadingLists>) {
         self.bytes = bytes
+        listsAddress = lists
         self.position = position
         self.limits = limits
-        let room = min(max(bytes.count / 24, 4), 1_024)
+        let room = min(max(bytes.count / 12, 4), 1_024)
         parts.nodes.reserveCapacity(room)
     }
 
-    /// Reads the flowchart whose keyword the front end found.
-    static func parse(_ frontEnd: MermaidFrontEndResult, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartReading {
-        let read: Result<FlowchartReading, MermaidDiagramReadError> = frontEnd.text.withBytes { buffer in
+    /// Reads the flowchart whose keyword the front end found, titled by its front matter.
+    static func parse(_ frontEnd: MermaidFrontEndResult, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartDiagram {
+        let read: Result<FlowchartDiagram, MermaidDiagramReadError> = frontEnd.text.withBytes { buffer in
             FlowchartReadingScratch.withLists { lists in
                 var lookAhead = FlowchartLookAheadLists()
                 swap(&lookAhead, &lists.lookAhead)
@@ -48,23 +58,23 @@ struct FlowchartParser {
                 lookAhead.build(over: buffer)
                 return lookAhead.withIndex { index in
                     guard let base = buffer.baseAddress else { return .failure(.noDiagram) }
-                    var parser = FlowchartParser(bytes: FlowchartBytes(base: base, count: buffer.count, lookAhead: index),
-                                                 position: frontEnd.keyword.upperBound, limits: limits)
-                    swap(&parser.lists, &lists)
-                    defer { swap(&parser.lists, &lists) }
-                    return Result { () throws(MermaidDiagramReadError) in try parser.read(text: frontEnd.text) }
+                    return withUnsafeMutablePointer(to: &lists) { listsAddress in
+                        var parser = FlowchartParser(bytes: FlowchartBytes(base: base, count: buffer.count, lookAhead: index),
+                                                     position: frontEnd.keyword.upperBound, limits: limits, lists: listsAddress)
+                        return Result { () throws(MermaidDiagramReadError) in try parser.read(text: frontEnd.text, title: frontEnd.frontMatterTitle) }
+                    }
                 }
             }
         }
         return try read.get()
     }
 
-    private mutating func read(text: MermaidSourceText) throws(MermaidDiagramReadError) -> FlowchartReading {
+    private mutating func read(text: MermaidSourceText, title: String?) throws(MermaidDiagramReadError) -> FlowchartDiagram {
         try readDirection()
         try readStatements()
         nestGroups()
         applyStyles()
-        return FlowchartReading(model: parts.model(text: text), direction: direction, accessibilityTitle: accessibilityTitle,
+        return FlowchartDiagram(direction: direction, model: parts.takeModel(text: text), title: title, accessibilityTitle: accessibilityTitle,
                                 accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
     }
 
@@ -133,7 +143,7 @@ struct FlowchartParser {
     /// `A & B --> C -->|text| D`: node groups joined by links, each link making an edge from every node before it to
     /// every node after it.
     private mutating func readChain() throws(MermaidDiagramReadError) {
-        lists.chainNodes.removeAll(keepingCapacity: true)
+        chainLength = 0
         guard try readNodeGroup() else { return }
         var previousStart = 0
         while true {
@@ -144,9 +154,9 @@ struct FlowchartParser {
                 lists.names.names[name].isEdgeIdentifier = true
             }
             skipSpaces()
-            let nextStart = lists.chainNodes.count
+            let nextStart = chainLength
             guard try readNodeGroup() else { throw .invalidSyntax(line: bytes.line(at: position), problem: .expectedNode) }
-            try addEdges(from: previousStart..<nextStart, to: nextStart..<lists.chainNodes.count, link: link)
+            try addEdges(from: previousStart..<nextStart, to: nextStart..<chainLength, link: link)
             previousStart = nextStart
         }
     }
@@ -169,10 +179,11 @@ struct FlowchartParser {
     /// in Pele's `node`, the `&` has spaces on both sides: written against a node it is part of the identifier, and
     /// after a shape (`A[x]&B`) or before a node (`A &B`) the statement is refused.
     private mutating func readNodeGroup() throws(MermaidDiagramReadError) -> Bool {
-        let start = lists.chainNodes.count
+        let start = chainLength
         while true {
-            guard let index = try readNode() else { return lists.chainNodes.count > start }
-            lists.chainNodes.append(index)
+            guard let index = try readNode() else { return chainLength > start }
+            if chainLength < lists.chainNodes.count { lists.chainNodes[chainLength] = index } else { lists.chainNodes.append(index) }
+            chainLength += 1
             var lookahead = position
             while MermaidByte.isSpace(bytes[lookahead]) { lookahead += 1 }
             guard lookahead > position, bytes[lookahead] == MermaidByte.ampersand, lookahead < bytes.count else { return true }
@@ -230,13 +241,4 @@ struct FlowchartParser {
     var isAtComment: Bool {
         bytes[position] == MermaidByte.percent && bytes[position + 1] == MermaidByte.percent
     }
-}
-
-/// What a flowchart's reading gives: its model and what the statements say of the whole diagram.
-struct FlowchartReading {
-    let model: FlowchartModel
-    let direction: FlowchartDirection
-    let accessibilityTitle: String?
-    let accessibilityDescription: String?
-    let unappliedStatementCount: Int
 }

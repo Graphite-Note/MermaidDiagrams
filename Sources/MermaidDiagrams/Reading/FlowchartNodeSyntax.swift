@@ -19,8 +19,9 @@ struct FlowchartNodeDefinition {
     var hasBlankWrittenLabel = true
     /// `view: collapsed`, which a group's identifier takes to be drawn as one node.
     var asksForCollapsedView = false
-    /// The icon and picture attributes written (`icon`, `img`, `form`, `pos`, `w`, `h`, `constraint`), or nil for none.
-    var assetAttributes: FlowchartNodeAssetAttributes?
+    /// Whether icon or picture attributes were written (`icon`, `img`, `form`, `pos`, `w`, `h`, `constraint`): they wait in
+    /// the parser's `writtenAssetAttributes`, so that a definition stays a few bytes to pass.
+    var hasAssetAttributes = false
 }
 
 extension FlowchartParser {
@@ -111,7 +112,8 @@ extension FlowchartParser {
         if let shape = definition.shape { parts.nodes[place].shape = shape }
         if let label = definition.label { parts.nodes[place].label = label }
         if definition.asksForCollapsedView { lists.names.names[name].isCollapsed = true }
-        guard let written = definition.assetAttributes, written != FlowchartNodeAssetAttributes() else { return }
+        guard definition.hasAssetAttributes else { return }
+        let written = writtenAssetAttributes
         var node = parts.nodes[place]
         if written.icon != nil || written.image != nil, definition.hasBlankWrittenLabel,
            parts.label(node.label, in: bytes) == DiagramLabel(parts.string(node.identifier, in: bytes)) {

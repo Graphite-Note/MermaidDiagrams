@@ -5,8 +5,8 @@
  * Description: A flowchart with its collapsed groups drawn as single nodes, as Pele's flowchart graph builds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Folds each collapsed group (`group@{ view: collapsed }`) into one node, as Pele's `buildFlowGraph` does
@@ -16,18 +16,18 @@
 /// is left out. The collapsed nodes come first, as Pele lists its groups (last ended first) before its nodes.
 enum FlowchartCollapsedGroups {
     static func collapsing(_ diagram: FlowchartDiagram) -> FlowchartDiagram {
-        guard diagram.subgraphs.contains(where: \.isCollapsed) else { return diagram }
+        guard diagram.hasCollapsedSubgraph else { return diagram }
         let folding = Folding(diagram: diagram)
-        var collapsed = diagram
-        collapsed.nodes = folding.nodes
-        collapsed.edges = diagram.edges.compactMap { edge in folding.edge(edge) }
-        collapsed.subgraphs = folding.subgraphs
-        return collapsed
+        return FlowchartDiagram(direction: diagram.direction, nodes: folding.nodes, edges: diagram.edges.compactMap { edge in folding.edge(edge) },
+                                subgraphs: folding.subgraphs, title: diagram.title, accessibilityTitle: diagram.accessibilityTitle,
+                                accessibilityDescription: diagram.accessibilityDescription, unappliedStatementCount: diagram.unappliedStatementCount)
     }
 
     /// Where each node and group of the diagram goes once its collapsed groups are folded.
     private struct Folding {
-        let diagram: FlowchartDiagram
+        /// The diagram's nodes and groups, made once.
+        let diagramNodes: [FlowchartNode]
+        let diagramSubgraphs: [FlowchartSubgraph]
         /// For each group, the outermost collapsed group around it, itself included, or nil.
         let outermostCollapsed: [Int?]
         /// For each node of the diagram, the collapsed group it is folded into, or nil.
@@ -41,23 +41,24 @@ enum FlowchartCollapsedGroups {
         private(set) var nodes: [FlowchartNode] = []
 
         init(diagram: FlowchartDiagram) {
-            self.diagram = diagram
+            diagramNodes = diagram.nodes
+            diagramSubgraphs = diagram.subgraphs
             let parents = FlowchartClusterNesting(diagram: diagram).subgraphParents
-            var outermost = [Int?](repeating: nil, count: diagram.subgraphs.count)
+            var outermost = [Int?](repeating: nil, count: diagramSubgraphs.count)
             // Groups are listed before the groups inside them, so a parent's outermost collapsed group is known first.
-            for (index, subgraph) in diagram.subgraphs.enumerated() {
+            for (index, subgraph) in diagramSubgraphs.enumerated() {
                 outermost[index] = parents[index].flatMap { parent in outermost[parent] } ?? (subgraph.isCollapsed ? index : nil)
             }
             outermostCollapsed = outermost
-            var folded = [Int?](repeating: nil, count: diagram.nodes.count)
-            for (index, subgraph) in diagram.subgraphs.enumerated() {
+            var folded = [Int?](repeating: nil, count: diagramNodes.count)
+            for (index, subgraph) in diagramSubgraphs.enumerated() {
                 guard let ancestor = outermost[index] else { continue }
                 for node in subgraph.nodeIndices { folded[node] = ancestor }
                 if let node = subgraph.representingNodeIndex { folded[node] = ancestor }
             }
             foldedInto = folded
-            nodeIndices = Array(repeating: nil, count: diagram.nodes.count)
-            subgraphIndices = Array(repeating: nil, count: diagram.subgraphs.count)
+            nodeIndices = Array(repeating: nil, count: diagramNodes.count)
+            subgraphIndices = Array(repeating: nil, count: diagramSubgraphs.count)
             placeNodes()
             placeSubgraphs()
         }
@@ -65,12 +66,12 @@ enum FlowchartCollapsedGroups {
         /// The collapsed groups' nodes first, in Pele's order: its groups in the reverse of the order they end, which for
         /// groups not inside each other is the reverse of the order they are written in; then the nodes still drawn.
         private mutating func placeNodes() {
-            for (index, subgraph) in diagram.subgraphs.enumerated().reversed() where outermostCollapsed[index] == index {
-                let style = subgraph.representingNodeIndex.flatMap { node in diagram.nodes[node].style }
+            for (index, subgraph) in diagramSubgraphs.enumerated().reversed() where outermostCollapsed[index] == index {
+                let style = subgraph.representingNodeIndex.flatMap { node in diagramNodes[node].style }
                 collapsedNodeIndices[index] = nodes.count
                 nodes.append(FlowchartNode(identifier: subgraph.identifier, label: subgraph.title, shape: .collapsedGroup, style: style))
             }
-            for (index, node) in diagram.nodes.enumerated() where foldedInto[index] == nil {
+            for (index, node) in diagramNodes.enumerated() where foldedInto[index] == nil {
                 nodeIndices[index] = nodes.count
                 nodes.append(node)
             }
@@ -78,7 +79,7 @@ enum FlowchartCollapsedGroups {
 
         private mutating func placeSubgraphs() {
             var count = 0
-            for index in diagram.subgraphs.indices where outermostCollapsed[index] == nil {
+            for index in diagramSubgraphs.indices where outermostCollapsed[index] == nil {
                 subgraphIndices[index] = count
                 count += 1
             }
@@ -86,9 +87,9 @@ enum FlowchartCollapsedGroups {
 
         /// The groups still drawn as boxes, holding their nodes, their groups and the collapsed groups directly inside them.
         var subgraphs: [FlowchartSubgraph] {
-            diagram.subgraphs.indices.compactMap { index in
+            diagramSubgraphs.indices.compactMap { index in
                 guard subgraphIndices[index] != nil else { return nil }
-                var subgraph = diagram.subgraphs[index]
+                var subgraph = diagramSubgraphs[index]
                 let children = subgraph.childSubgraphIndices
                 subgraph.nodeIndices = subgraph.nodeIndices.compactMap { node in nodeIndices[node] }
                     + children.compactMap { child in collapsedNodeIndices[child] }
@@ -118,7 +119,7 @@ enum FlowchartCollapsedGroups {
         /// Whether `node` stands for the collapsed group it is folded into, rather than sitting inside it.
         private func isRepresentingNode(_ node: Int) -> Bool {
             guard let group = foldedInto[node] else { return false }
-            return diagram.subgraphs[group].representingNodeIndex == node
+            return diagramSubgraphs[group].representingNodeIndex == node
         }
     }
 }

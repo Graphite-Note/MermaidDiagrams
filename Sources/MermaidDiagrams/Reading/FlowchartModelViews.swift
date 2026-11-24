@@ -42,6 +42,9 @@ extension FlowchartModel {
 
     var groupCount: Int { extras?.groups.count ?? 0 }
 
+    /// The direction of the group at `index`, or nil when it runs as the group around it does.
+    func subgraphDirection(at index: Int) -> FlowchartDirection? { extras?.groups[index].direction }
+
     /// What the statements that style the diagram set for the node at `index`, or nil.
     func nodeStyle(at index: Int) -> DiagramElementStyle? {
         guard let extras, !extras.nodeStyles.isEmpty else { return nil }
@@ -58,13 +61,4 @@ extension FlowchartModel {
     var materializedNodes: [FlowchartNode] { nodes.indices.map(node(at:)) }
     var materializedEdges: [FlowchartEdge] { edges.indices.map(edge(at:)) }
     var materializedSubgraphs: [FlowchartSubgraph] { (0..<groupCount).map(subgraph(at:)) }
-}
-
-extension FlowchartDiagram {
-    /// The flowchart a reading gives, its nodes, edges and groups made from the flat model.
-    init(reading: FlowchartReading) {
-        self.init(direction: reading.direction, nodes: reading.model.materializedNodes, edges: reading.model.materializedEdges,
-                  subgraphs: reading.model.materializedSubgraphs, accessibilityTitle: reading.accessibilityTitle,
-                  accessibilityDescription: reading.accessibilityDescription, unappliedStatementCount: reading.unappliedStatementCount)
-    }
 }

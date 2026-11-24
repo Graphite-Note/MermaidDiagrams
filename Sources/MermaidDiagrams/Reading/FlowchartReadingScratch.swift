@@ -93,8 +93,9 @@ final class FlowchartReadingScratch {
         let scratch = current
         var lists = scratch.lists.take() ?? FlowchartReadingLists()
         lists.reset()
-        defer { scratch.lists = lists }
-        return body(&lists)
+        let result = body(&lists)
+        scratch.lists = consume lists
+        return result
     }
 
     /// The scratch of the calling thread, made the first time the thread reads.

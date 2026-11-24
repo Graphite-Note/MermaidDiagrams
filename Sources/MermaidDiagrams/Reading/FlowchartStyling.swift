@@ -40,7 +40,10 @@ extension FlowchartParser {
             }
             if hasUnappliedDeclaration { unappliedStatementCount += 1 }
         case .classAssignment(let identifiers, let className):
-            for identifier in identifiers { styling?.classAssignments.append((Int32(lists.names.intern(Array(identifier.utf8), in: bytes)), className)) }
+            for identifier in identifiers {
+                let name = Int32(lists.names.intern(Array(identifier.utf8), in: bytes))
+                styling?.classAssignments.append((name, className))
+            }
         case .nodeStyle(let identifier, let declarations):
             let name = lists.names.intern(Array(identifier.utf8), in: bytes)
             addNodeNamedByStyle(name)

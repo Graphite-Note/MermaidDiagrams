@@ -6,8 +6,8 @@
  *              graph: the groups, the nodes, and a lane for the nodes outside every group.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -42,20 +42,18 @@ struct SwimlaneGraph {
         let nesting = FlowchartClusterNesting(diagram: diagram)
         self.nesting = nesting
         let padding = isTight ? Self.tightGroupPadding : Self.groupPadding
-        let titles = diagram.subgraphs.map { subgraph in
-            let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: titleWidth)
-            return title.lines.isEmpty ? nil : title
-        }
+        let subgraphs = diagram.subgraphs
+        let titles = Self.measuredTitles(of: subgraphs, titleText: titleText, titleWidth: titleWidth)
         self.titles = titles
         var boxes: [LaneLayoutBox] = []
-        var subgraphBoxes = [Int](repeating: 0, count: diagram.subgraphs.count)
-        for subgraph in Self.peleGroupOrder(diagram, parents: nesting.subgraphParents) {
+        var subgraphBoxes = [Int](repeating: 0, count: diagram.subgraphCount)
+        for subgraph in Self.peleGroupOrder(subgraphs, parents: nesting.subgraphParents) {
             subgraphBoxes[subgraph] = boxes.count
             boxes.append(Self.group(title: titles[subgraph], padding: padding))
         }
-        var nodeBoxes = [Int](repeating: 0, count: diagram.nodes.count)
+        var nodeBoxes = [Int](repeating: 0, count: diagram.nodeCount)
         var hasLooseNode = false
-        for node in diagram.nodes.indices {
+        for node in 0..<diagram.nodeCount {
             if let subgraph = nesting.representedSubgraphs[node] {
                 nodeBoxes[node] = subgraphBoxes[subgraph]
                 // A group has no size of its own, but its loops still widen it, which shows when it holds nothing.
@@ -69,14 +67,23 @@ struct SwimlaneGraph {
         }
         looseLaneBox = hasLooseNode ? boxes.count : nil
         if hasLooseNode { boxes.append(Self.group(title: nil, padding: padding)) }
-        for subgraph in diagram.subgraphs.indices { boxes[subgraphBoxes[subgraph]].parent = nesting.subgraphParents[subgraph].map { parent in subgraphBoxes[parent] } }
-        for node in diagram.nodes.indices where nesting.representedSubgraphs[node] == nil {
+        for subgraph in subgraphs.indices { boxes[subgraphBoxes[subgraph]].parent = nesting.subgraphParents[subgraph].map { parent in subgraphBoxes[parent] } }
+        for node in 0..<diagram.nodeCount where nesting.representedSubgraphs[node] == nil {
             boxes[nodeBoxes[node]].parent = nesting.nodeSubgraphs[node].map { subgraph in subgraphBoxes[subgraph] } ?? looseLaneBox
         }
         self.subgraphBoxes = subgraphBoxes
         self.nodeBoxes = nodeBoxes
         graph = LaneLayoutGraph(boxes: boxes, edges: Self.edges(of: diagram, measured: measured, nodeBoxes: nodeBoxes, edgeTextRoom: edgeTextRoom),
                                 direction: diagram.direction.layeredDirection, lanePadding: isTight ? 12 : 24)
+    }
+
+    /// Each group's title measured, or nil for a group without one.
+    private static func measuredTitles<Measurer: DiagramTextMeasuring>(of subgraphs: [FlowchartSubgraph], titleText: Measurer,
+                                                                       titleWidth: CGFloat) -> [DiagramTextBlock?] {
+        subgraphs.map { subgraph in
+            let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: titleWidth)
+            return title.lines.isEmpty ? nil : title
+        }
     }
 
     /// A node's size in its rank: `base`, its shape's or none for a group's, grown on both sides across the flow by the room
@@ -92,7 +99,7 @@ struct SwimlaneGraph {
 
     /// Every edge between the boxes of its nodes, with its text's room.
     private static func edges(of diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeBoxes: [Int], edgeTextRoom: CGSize) -> [LaneLayoutEdge] {
-        diagram.edges.enumerated().map { edgeIndex, edge in
+        diagram.edgeDrawings.enumerated().map { edgeIndex, edge in
             LaneLayoutEdge(source: nodeBoxes[edge.sourceIndex], target: nodeBoxes[edge.targetIndex], minimumRankSpan: edge.minimumRankSpan,
                            labelSize: measured.edgeTexts[edgeIndex].map { text in
                                CGSize(width: text.size.width + edgeTextRoom.width, height: text.size.height + edgeTextRoom.height)
@@ -111,13 +118,13 @@ struct SwimlaneGraph {
 
     /// The groups in the order of Pele's flowchart graph: Mermaid lists a group when it ends, so a group after the groups
     /// inside it, and Pele's graph lists them from the last to the first.
-    static func peleGroupOrder(_ diagram: FlowchartDiagram, parents: [Int?]) -> [Int] {
+    static func peleGroupOrder(_ subgraphs: [FlowchartSubgraph], parents: [Int?]) -> [Int] {
         var ended: [Int] = []
         var stack: [(subgraph: Int, nextChild: Int)] = []
-        for root in diagram.subgraphs.indices where parents[root] == nil {
+        for root in subgraphs.indices where parents[root] == nil {
             stack.append((root, 0))
             while let top = stack.last {
-                let children = diagram.subgraphs[top.subgraph].childSubgraphIndices
+                let children = subgraphs[top.subgraph].childSubgraphIndices
                 if top.nextChild < children.count {
                     stack[stack.count - 1].nextChild += 1
                     stack.append((children[top.nextChild], 0))

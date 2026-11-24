@@ -65,6 +65,7 @@ extension FlowchartParser {
             definition.hasBlankWrittenLabel = label.allSatisfy { index in Self.isASCIIWhitespace(bytes.base[index]) }
         }
         if let view = values.view { definition.asksForCollapsedView = bytes.string(from: view.lowerBound, to: view.upperBound) == "collapsed" }
+        guard values.hasAssetAttributes else { return definition }
         func text(_ range: Range<Int>?) -> String? {
             guard let range, !range.isEmpty else { return nil }
             return bytes.string(from: range.lowerBound, to: range.upperBound)
@@ -76,7 +77,10 @@ extension FlowchartParser {
         let attributes = FlowchartNodeAssetAttributes(icon: text(values.icon), image: text(values.image), form: text(values.form),
                                                       position: text(values.position), width: number(values.width), height: number(values.height),
                                                       constraint: text(values.constraint))
-        if attributes != FlowchartNodeAssetAttributes() { definition.assetAttributes = attributes }
+        if attributes != FlowchartNodeAssetAttributes() {
+            writtenAssetAttributes = attributes
+            definition.hasAssetAttributes = true
+        }
         return definition
     }
 
@@ -102,7 +106,10 @@ extension FlowchartParser {
         if let view = entries["view"] { definition.asksForCollapsedView = view == .text("collapsed") }
         var attributes = FlowchartNodeAssetAttributes()
         Self.readAssetAttributes(entries, into: &attributes)
-        if attributes != FlowchartNodeAssetAttributes() { definition.assetAttributes = attributes }
+        if attributes != FlowchartNodeAssetAttributes() {
+            writtenAssetAttributes = attributes
+            definition.hasAssetAttributes = true
+        }
         return definition
     }
 

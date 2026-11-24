@@ -22,14 +22,22 @@ struct FlowchartModelParts {
     var edgeStyles: [DiagramElementStyle?] = []
     var sideBytes: [UInt8] = []
 
-    /// The model over `text`.
-    func model(text: MermaidSourceText) -> FlowchartModel {
+    /// The model over `text`, its lists moved out of these parts, which are left empty.
+    mutating func takeModel(text: MermaidSourceText) -> FlowchartModel {
         let hasExtras = !groups.isEmpty || !decodedLabels.isEmpty || !assetAttributes.isEmpty || !nodeStyles.isEmpty || !edgeStyles.isEmpty
             || !sideBytes.isEmpty
-        let extras = hasExtras ? FlowchartModelExtras(groups: groups, groupMembers: groupMembers, decodedLabels: decodedLabels,
-                                                      assetAttributes: assetAttributes, nodeStyles: nodeStyles, edgeStyles: edgeStyles,
-                                                      sideBytes: sideBytes) : nil
-        return FlowchartModel(text: text, nodes: nodes, edges: edges, extras: extras)
+        let extras = hasExtras ? FlowchartModelExtras(groups: Self.taken(&groups), groupMembers: Self.taken(&groupMembers),
+                                                      decodedLabels: Self.taken(&decodedLabels), assetAttributes: Self.taken(&assetAttributes),
+                                                      nodeStyles: Self.taken(&nodeStyles), edgeStyles: Self.taken(&edgeStyles),
+                                                      sideBytes: Self.taken(&sideBytes)) : nil
+        return FlowchartModel(text: text, nodes: Self.taken(&nodes), edges: Self.taken(&edges), extras: extras)
+    }
+
+    /// The list, moved out, and an empty one left in its place.
+    private static func taken<Element>(_ list: inout [Element]) -> [Element] {
+        var moved: [Element] = []
+        swap(&moved, &list)
+        return moved
     }
 
     /// The text of `range`, of the text read or of the side bytes.
