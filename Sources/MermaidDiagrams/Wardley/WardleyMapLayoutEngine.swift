@@ -6,8 +6,8 @@
  *              or the options', the stages and axes, everything at its coordinates, then the title and the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -169,7 +169,9 @@ struct WardleyMapPlacement<Measurer: DiagramTextMeasuring> {
         let right = max(canvas.maximumX, canvas.plotWidth / 2 + titleWidth / 2)
         let padding = WardleyMapLayoutEngine.padding
         let offset = CGVector(dx: padding - left, dy: padding + titleHeight - canvas.minimumY)
-        var finished = layout.translated(by: offset)
+        // Moved where the placement keeps it, which ends here, so that the layout's lists are not copied.
+        layout.translate(by: offset)
+        var finished = layout
         finished.size = CGSize(width: (right - left + 2 * padding).rounded(.up), height: (canvas.maximumY - canvas.minimumY + titleHeight + 2 * padding).rounded(.up))
         finished.title = title.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: offset.dx + canvas.plotWidth / 2, y: padding + block.size.height / 2)) }
         return finished
