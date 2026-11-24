@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: The bytes of an SVG document as the writer builds it: room made sure of once for a piece or a whole
  *              element, then literals, escaped text, compact numbers and path elements written unchecked through a
- *              cursor over one block of memory, the thread's scratch block or one of the buffer's own.
+ *              cursor over one block of memory, the thread's scratch block or one of the buffer's own; a run of path
+ *              elements written by a writer handed the cursor.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -176,6 +177,16 @@ struct DiagramSVGBuffer: ~Copyable {
     mutating func write(pathElement verb: DiagramPathVerb, _ points: UnsafePointer<CGPoint>) {
         assertReserved(DiagramSVGNumberWriting.largestPathElementByteCount)
         count &+= DiagramSVGNumberWriting.writePathElement(verb, points, to: cursor)
+    }
+
+    /// Path elements written at the cursor by `body` in one go, `byteCount` bytes reserved for them: `body` writes at
+    /// the pointer it is given and returns how many bytes it wrote, at most `byteCount`.
+    @inline(__always)
+    mutating func write(reserving byteCount: Int, _ body: (UnsafeMutablePointer<UInt8>) -> Int) {
+        reserve(byteCount)
+        let written = body(cursor)
+        assert(written <= byteCount, "a write past the room reserved for it")
+        count &+= written
     }
 
     /// One element of a Core Graphics path.

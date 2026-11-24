@@ -5,13 +5,13 @@
  * Description: The outline and inner lines of each flowchart node shape, Pele's, as Core Graphics paths in a frame.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// The outline of each node shape, Pele's, as Core Graphics paths in a frame: the filled outline, and the lines
+/// The outline of each node shape, Pele's, as Core Graphics paths or lanes in a frame: the filled outline, and the lines
 /// drawn over it (a subroutine's inner sides, a cylinder's front rim, a double circle's inner circle). The classic
 /// shapes are drawn here, the others by `FlowchartExtendedShapeDrawing`; the shapes painted piece by piece have
 /// `layers` instead of an outline.
@@ -27,20 +27,25 @@ enum FlowchartShapeDrawing {
 
     /// The filled and stroked outline, or nil for a shape drawn as text alone, as lines alone or piece by piece.
     static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+        outline(of: shape, in: frame, making: DiagramCoreGraphicsPaths())?.path
+    }
+
+    /// The outline made by `maker`: a Core Graphics path or a lane.
+    static func outline<Maker: DiagramPathMaking>(of shape: FlowchartNodeShape, in frame: CGRect, making maker: Maker) -> Maker.Path? {
         let width = frame.width
         let height = frame.height
         switch shape {
-        case .rectangle, .subroutine: return CGPath(roundedRect: frame, cornerWidth: rectangleCornerRadius, cornerHeight: rectangleCornerRadius, transform: nil)
+        case .rectangle, .subroutine: return maker.roundedRectangle(frame, cornerWidth: rectangleCornerRadius, cornerHeight: rectangleCornerRadius)
         case .roundedRectangle:
             let radius = min(roundedCornerRadius, height / 2)
-            return CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
-        case .stadium: return CGPath(roundedRect: frame, cornerWidth: min(height, width) / 2, cornerHeight: height / 2, transform: nil)
-        case .circle, .doubleCircle: return CGPath(ellipseIn: frame, transform: nil)
-        case .cylinder: return cylinderBody(in: frame)
+            return maker.roundedRectangle(frame, cornerWidth: radius, cornerHeight: radius)
+        case .stadium: return maker.roundedRectangle(frame, cornerWidth: min(height, width) / 2, cornerHeight: height / 2)
+        case .circle, .doubleCircle: return maker.ellipse(in: frame)
+        case .cylinder: return cylinderBody(in: frame, making: maker)
         case .text: return nil
         case .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid:
-            return polygon(corners(of: shape, width: width, height: height), around: CGPoint(x: frame.midX, y: frame.midY))
-        default: return FlowchartExtendedShapeDrawing.outline(of: shape, in: frame)
+            return polygon(corners(of: shape, width: width, height: height), around: CGPoint(x: frame.midX, y: frame.midY), making: maker)
+        default: return FlowchartExtendedShapeDrawing.outline(of: shape, in: frame, making: maker)
         }
     }
 
@@ -51,9 +56,14 @@ enum FlowchartShapeDrawing {
 
     /// The lines drawn over the filled outline, or nil.
     static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+        innerLines(of: shape, in: frame, making: DiagramCoreGraphicsPaths())?.path
+    }
+
+    /// The lines made by `maker`: a Core Graphics path or a lane.
+    static func innerLines<Maker: DiagramPathMaking>(of shape: FlowchartNodeShape, in frame: CGRect, making maker: Maker) -> Maker.Path? {
         switch shape {
         case .subroutine:
-            let path = CGMutablePath()
+            let path = maker.makePath()
             for x in [frame.minX + subroutineInset, frame.maxX - subroutineInset] {
                 path.move(to: CGPoint(x: x, y: frame.minY))
                 path.addLine(to: CGPoint(x: x, y: frame.maxY))
@@ -61,16 +71,16 @@ enum FlowchartShapeDrawing {
             return path
         case .cylinder:
             let capDepth = FlowchartShapeGeometry.cylinderCapDepth(width: frame.width)
-            let path = CGMutablePath()
+            let path = maker.makePath()
             addHalfEllipse(to: path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: frame.width / 2, radiusY: capDepth, lowerHalf: true,
                            startingOnLeft: true)
             return path
         case .doubleCircle:
-            return CGPath(ellipseIn: frame.insetBy(dx: doubleCircleGap, dy: doubleCircleGap), transform: nil)
+            return maker.ellipse(in: frame.insetBy(dx: doubleCircleGap, dy: doubleCircleGap))
         case .rectangle, .roundedRectangle, .stadium, .circle, .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid,
              .invertedTrapezoid, .text:
             return nil
-        default: return FlowchartExtendedShapeDrawing.innerLines(of: shape, in: frame)
+        default: return FlowchartExtendedShapeDrawing.innerLines(of: shape, in: frame, making: maker)
         }
     }
 
@@ -96,18 +106,18 @@ enum FlowchartShapeDrawing {
         }
     }
 
-    private static func polygon(_ corners: [CGPoint], around center: CGPoint) -> CGPath {
-        let path = CGMutablePath()
+    private static func polygon<Maker: DiagramPathMaking>(_ corners: [CGPoint], around center: CGPoint, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         path.addLines(between: corners.map { corner in CGPoint(x: center.x + corner.x, y: center.y + corner.y) })
         path.closeSubpath()
         return path
     }
 
     /// A cylinder's body: the top cap's far half, the right side, the bottom cap's near half, the left side.
-    static func cylinderBody(in frame: CGRect) -> CGPath {
+    static func cylinderBody<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
         let capDepth = FlowchartShapeGeometry.cylinderCapDepth(width: frame.width)
         let radiusX = frame.width / 2
-        let path = CGMutablePath()
+        let path = maker.makePath()
         path.move(to: CGPoint(x: frame.minX, y: frame.minY + capDepth))
         addHalfEllipse(to: path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: radiusX, radiusY: capDepth, lowerHalf: false,
                        startingOnLeft: true)
@@ -119,7 +129,7 @@ enum FlowchartShapeDrawing {
     }
 
     /// Half an ellipse from one end of its horizontal axis to the other, as two quarter arcs (cubic approximations).
-    private static func addHalfEllipse(to path: CGMutablePath, center: CGPoint, radiusX: CGFloat, radiusY: CGFloat, lowerHalf: Bool, startingOnLeft: Bool) {
+    private static func addHalfEllipse<Path: DiagramPathRecording>(to path: Path, center: CGPoint, radiusX: CGFloat, radiusY: CGFloat, lowerHalf: Bool, startingOnLeft: Bool) {
         // The control-point distance that makes a cubic follow a quarter circle closely.
         let quarterCircleControl: CGFloat = 0.5523
         let vertical = lowerHalf ? radiusY : -radiusY

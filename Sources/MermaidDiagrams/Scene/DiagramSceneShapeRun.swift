@@ -2,59 +2,113 @@
  * File: DiagramSceneShapeRun.swift
  * --------------------------------
  * Layer: Core
- * Description: Shapes painted alike one after the other, opaque and apart, kept as a list and merged into one path once,
- *              when the run ends; a fill followed by the stroke of its own path becomes one shape filled and stroked.
+ * Description: Shapes painted alike one after the other, opaque and apart, joined as Core Graphics joins paths into one
+ *              when the run ends; a fill followed by the stroke of its own path becomes one shape filled and stroked. Its
+ *              paths are lanes, joined in the builder's run lane as they come, or Core Graphics paths kept as a list.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// The shapes a scene builder is merging into one: their paths, kept as they are given and joined into one path only when
-/// the run ends, so that a run of any length costs its paths' elements once, not once per shape added.
+/// The shapes a scene builder is merging into one. A run of lanes joins each lane into the builder's run lane as it is
+/// added (`DiagramPathLane.addPath`, Core Graphics' rule), so that the lanes given may be given back at once; a run of Core
+/// Graphics paths keeps them and joins them once, when the run ends. Bounds are worked out only when a shape comes that
+/// may be merged, so that a shape painted unlike the one before it never has its bounds asked.
 struct DiagramSceneShapeRun {
     private(set) var painting: DiagramShapePainting
     let part: DiagramScenePart
-    private var paths: [CGPath]
-    /// The paths' bounds together, which is what a shape added must stay apart from.
-    private var bounds: CGRect
+    /// The run's Core Graphics paths, as they were given; empty for a run of lanes.
+    private var coreGraphicsPaths: [CGPath]
+    /// The lane the run's lanes are joined into; nil for a run of Core Graphics paths.
+    private let runLane: DiagramPathLane?
+    private var pathCount = 1
+    /// The paths' bounds together, once asked, which is what a shape added must stay apart from.
+    private var bounds: CGRect?
 
     init(path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) {
         self.painting = painting
         self.part = part
-        paths = [path]
-        bounds = path.boundingBoxOfPath
+        coreGraphicsPaths = [path]
+        runLane = nil
     }
 
-    /// The run as one shape: its one path as it was given, or its paths joined into one.
-    var shape: DiagramSceneShape {
-        guard paths.count > 1 else { return DiagramSceneShape(unchangedPath: paths[0], painting: painting, part: part) }
+    /// A run whose first shape is `lane`, copied into `runLane`, which is emptied first.
+    init(lane: DiagramPathLane, into runLane: DiagramPathLane, painting: DiagramShapePainting, part: DiagramScenePart) {
+        self.painting = painting
+        self.part = part
+        runLane.state.pointee.removeAll()
+        runLane.addPath(lane)
+        coreGraphicsPaths = []
+        self.runLane = runLane
+    }
+
+    /// Appends the run's elements, joined as Core Graphics joins its paths, to `buffers`.
+    func appendElements(to buffers: DiagramSceneRecordBuffers) {
+        if let runLane { return buffers.appendElements(of: runLane) }
+        guard coreGraphicsPaths.count > 1 else { return buffers.appendElements(of: coreGraphicsPaths[0]) }
         let merged = CGMutablePath()
-        for path in paths { merged.addPath(path) }
-        return DiagramSceneShape(unchangedPath: merged, painting: painting, part: part)
+        for path in coreGraphicsPaths { merged.addPath(path) }
+        buffers.appendElements(of: merged)
     }
 
-    /// Adds `path` to the run when it is painted as the run, of the same part, in paints at full opacity, apart from the
-    /// run's shapes; else leaves the run as it is and says so.
+    // MARK: Core Graphics paths
+
+    /// Adds `path` to a run of Core Graphics paths when it is painted as the run, of the same part, in paints at full
+    /// opacity, apart from the run's shapes; else leaves the run as it is and says so.
     mutating func merge(_ path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard runLane == nil, mayMerge(painting: painting, part: part) else { return false }
+        let runBounds = bounds ?? coreGraphicsPaths[0].boundingBoxOfPath
         let pathBounds = path.boundingBoxOfPath
-        guard painting == self.painting, part == self.part, Self.isOpaque(painting), !Self.mayTouch(bounds, pathBounds, painting: painting) else {
-            return false
-        }
-        paths.append(path)
-        bounds = bounds.union(pathBounds)
+        bounds = runBounds
+        guard !Self.mayTouch(runBounds, pathBounds, painting: painting) else { return false }
+        coreGraphicsPaths.append(path)
+        pathCount += 1
+        bounds = runBounds.union(pathBounds)
         return true
     }
 
-    /// Turns a run of one filled path into that path filled and then stroked, when `path` is that same path stroked in
-    /// the same part: painted as one shape, it is painted exactly as the fill and the stroke one after the other.
+    /// Turns a run of one filled Core Graphics path into that path filled and then stroked, when `path` is that same
+    /// path stroked in the same part.
     mutating func outline(_ path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
-        guard part == self.part, paths.count == 1, case .fill(let fill) = self.painting, case .stroke(let paint, let stroke) = painting,
-              paths[0] === path || paths[0] == path else { return false }
+        guard runLane == nil, pathCount == 1, coreGraphicsPaths[0] === path || coreGraphicsPaths[0] == path else { return false }
+        return outline(painting: painting, part: part)
+    }
+
+    // MARK: Lanes
+
+    /// Joins `lane` into the run lane when it is painted as the run, of the same part, opaque and apart from the run's shapes.
+    mutating func merge(_ lane: DiagramPathLane, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard let runLane, mayMerge(painting: painting, part: part) else { return false }
+        let runBounds = bounds ?? runLane.boundsOfPath
+        let laneBounds = lane.boundsOfPath
+        bounds = runBounds
+        guard !Self.mayTouch(runBounds, laneBounds, painting: painting) else { return false }
+        runLane.addPath(lane)
+        pathCount += 1
+        bounds = runBounds.union(laneBounds)
+        return true
+    }
+
+    /// Turns a run of one filled lane into it filled and then stroked, when `lane` holds the same path, as Core Graphics
+    /// compares paths: the same shape held whole, or the same elements.
+    mutating func outline(_ lane: DiagramPathLane, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard let runLane, pathCount == 1, runLane.state.pointee.holdsSamePath(as: lane.state.pointee) else { return false }
+        return outline(painting: painting, part: part)
+    }
+
+    // MARK: Rules
+
+    private mutating func outline(painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard part == self.part, case .fill(let fill) = self.painting, case .stroke(let paint, let stroke) = painting else { return false }
         self.painting = .fillAndStroke(fill, paint, stroke)
         return true
+    }
+
+    private func mayMerge(painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        part == self.part && painting == self.painting && Self.isOpaque(painting)
     }
 
     /// How far beyond a path's bounds its edge's smoothing may reach, in points: a pixel at a scale of one half.
@@ -85,6 +139,18 @@ struct DiagramSceneShapeRun {
     private static func isOpaque(_ paint: DiagramPaint) -> Bool {
         guard paint.opacity == 1 else { return false }
         if case .color(let color) = paint.source { return color.alpha == 1 }
+        return true
+    }
+}
+
+extension DiagramPathLaneState {
+    /// Whether `other` holds the path this lane holds, as Core Graphics compares two paths: the same shape held whole, or
+    /// the same elements, a shape held whole never equal to elements.
+    func holdsSamePath(as other: borrowing DiagramPathLaneState) -> Bool {
+        if let shape = held { return other.held == shape }
+        guard other.held == nil, verbCount == other.verbCount, pointCount == other.pointCount else { return false }
+        for index in 0..<verbCount where verbs[index] != other.verbs[index] { return false }
+        for index in 0..<pointCount where points[index] != other.points[index] { return false }
         return true
     }
 }

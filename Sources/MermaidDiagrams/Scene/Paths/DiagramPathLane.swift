@@ -7,7 +7,7 @@
  *              object, an allocation per path or a retain.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -79,6 +79,31 @@ struct DiagramPathLane {
             return withExtendedLifetime(copy) { lane.pointee.addPath(copy.state.pointee) }
         }
         lane.pointee.addPath(other.checked.pointee)
+    }
+
+    /// `other`'s elements after this lane's and after `second`'s, as two calls of `addPath(_:)` add them, a shape `other`
+    /// holds whole worked out once: when both lanes hold elements and end otherwise than with a move, Core Graphics adds
+    /// the same elements to each, which are copied from this lane to `second`.
+    func addPath(_ other: DiagramPathLane, alsoTo second: DiagramPathLane) {
+        let lane = checked
+        let secondLane = second.checked
+        guard other.state.pointee.held != nil, other.state != lane, other.state != secondLane, lane != secondLane,
+              Self.endsWithElementsOtherThanAMove(lane), Self.endsWithElementsOtherThanAMove(secondLane) else {
+            addPath(other)
+            second.addPath(other)
+            return
+        }
+        let verbStart = lane.pointee.verbCount
+        let pointStart = lane.pointee.pointCount
+        lane.pointee.addPath(other.checked.pointee)
+        secondLane.pointee.appendElements(of: lane.pointee, fromVerb: verbStart, point: pointStart)
+    }
+
+    /// Whether a lane has elements, holds no shape whole and does not end with a move, which a shape's first move
+    /// would take the place of.
+    private static func endsWithElementsOtherThanAMove(_ state: UnsafeMutablePointer<DiagramPathLaneState>) -> Bool {
+        guard state.pointee.held == nil, let last = state.pointee.lastVerb else { return false }
+        return last != .move
     }
 
     /// `other`'s elements through `transform` after this lane's, as `CGMutablePath.addPath(_:transform:)` adds them.
