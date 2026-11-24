@@ -6,10 +6,10 @@
  *              included; its fast reading and its compatibility views agree; builders record into their thread's blocks,
  *              a builder made while another records gets blocks of its own, large blocks are freed, and scenes built on
  *              many threads at once are those built alone; paths longer than the SVG writer's room made at once are
- *              written as 0.7.0 wrote them.
+ *              written as 0.7.0 wrote them; a shape's view kept after its scene still reads its elements.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -103,6 +103,32 @@ final class DiagramSceneStorageTests: XCTestCase {
         XCTAssertEqual(shapeIndex, paths.count)
         for (shape, path) in zip(scene.shapes, paths) {
             XCTAssertEqual(elements(of: shape.path), elements(of: path), "a path made again from the elements has them all, a move after a move too")
+        }
+    }
+
+    /// A shape's view kept after `forEachItem` returned and after its scene is gone still reads its own elements: it
+    /// holds the scene's storage instead of pointers into it, which would point at freed memory once the scene went.
+    func testAShapeViewKeptAfterItsSceneReadsItsElements() throws {
+        let paths = samplePaths()
+        var views: [DiagramSceneShapeView] = []
+        do {
+            let items = paths.enumerated().map { index, path in DiagramSceneItem.shape(DiagramSceneShape(path: path, painting: .fill(.series(index)), part: .node)) }
+            DiagramScene(size: CGSize(width: 200, height: 50), font: font, items: items).forEachItem { item in
+                if case .shape(let view) = item { views.append(view) }
+            }
+        }
+        // Scenes made and dropped meanwhile reuse freed memory, which a view pointing into its scene's block would read.
+        for _ in 0..<20 {
+            let other = CGPath(rect: CGRect(x: 7, y: 7, width: 3, height: 3), transform: nil)
+            _ = DiagramScene(size: .zero, font: font, items: Array(repeating: .shape(DiagramSceneShape(path: other, painting: .fill(.accent), part: .edge)),
+                                                                count: 40))
+        }
+        XCTAssertEqual(views.count, paths.count)
+        for (index, (view, path)) in zip(views, paths).enumerated() {
+            XCTAssertEqual(elements(of: view), elements(of: path), "path \(index)")
+            XCTAssertEqual(view.elementCount, elements(of: path).count)
+            XCTAssertEqual(elements(of: view.makePath()), elements(of: path))
+            XCTAssertEqual(view.painting, .fill(.series(index)))
         }
     }
 

@@ -6,7 +6,7 @@
  *              the points and the verbs of every shape's path, as Core Graphics gives a path's elements out.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -49,9 +49,16 @@ struct DiagramSceneStorageWord {
 struct DiagramSceneStorage: @unchecked Sendable {
     private let block: ManagedBuffer<DiagramSceneStorageHeader, DiagramSceneStorageWord>
 
+    /// The most items, verbs or points a storage holds: its records keep their offsets in 32 bits.
+    static let largestCount = Int(Int32.max)
+
     /// A storage with room for exactly these counts, its regions bound to their types and left for `fill` to write.
+    /// Counts past `largestCount` trap rather than make records whose truncated offsets would read outside the block;
+    /// the lanes' element limit and the diagram limits keep a scene far below them.
     static func make(itemCount: Int, verbCount: Int, pointCount: Int,
                      fill: (DiagramSceneStorageContents) -> Void) -> DiagramSceneStorage {
+        precondition(itemCount <= largestCount && verbCount <= largestCount && pointCount <= largestCount,
+                     "a scene's records keep their offsets in 32 bits")
         let verbWords = (verbCount + MemoryLayout<DiagramSceneStorageWord>.stride - 1) / MemoryLayout<DiagramSceneStorageWord>.stride
         let block = ManagedBuffer<DiagramSceneStorageHeader, DiagramSceneStorageWord>.create(minimumCapacity: itemCount + pointCount + verbWords) { _ in
             DiagramSceneStorageHeader(itemCount: itemCount, verbCount: verbCount, pointCount: pointCount)

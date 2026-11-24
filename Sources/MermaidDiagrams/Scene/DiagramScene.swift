@@ -7,7 +7,7 @@
  *              as their elements in one block, and a Core Graphics path is made only for a reader that asks for one.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 24/11/2026
  */
 
@@ -65,14 +65,15 @@ public struct DiagramScene: Sendable {
     public var itemCount: Int { storage.itemCount }
 
     /// Calls `body` with each item, back to front, where the scene keeps it: a shape's elements are read without a Core
-    /// Graphics path, and are valid only inside `body`.
+    /// Graphics path. A shape's view keeps the scene's storage, so that it stays valid wherever it is kept.
     public func forEachItem(_ body: (DiagramSceneItemView) throws -> Void) rethrows {
+        let storage = storage
         try storage.withContents { contents in
             for index in 0..<contents.itemCount {
                 let record = contents.records[index]
                 switch record.kind {
                 case .shape:
-                    try body(.shape(DiagramSceneShapeView(contents: contents, index: index, painting: paintings[Int(record.index)], part: record.part)))
+                    try body(.shape(DiagramSceneShapeView(storage: storage, index: index, painting: paintings[Int(record.index)], part: record.part)))
                 case .text:
                     try body(.text(texts[Int(record.index)]))
                 }
@@ -111,31 +112,32 @@ public enum DiagramSceneItem: Sendable {
 }
 
 /// One thing a scene paints, read where the scene keeps it (`DiagramScene.forEachItem`).
-public enum DiagramSceneItemView {
+public enum DiagramSceneItemView: Sendable {
     case shape(DiagramSceneShapeView)
     case text(DiagramSceneText)
 }
 
-/// A shape of a scene read where the scene keeps it: its painting, its part and its path's elements, valid only inside
-/// the `forEachItem` call that gave it.
-public struct DiagramSceneShapeView {
-    let contents: DiagramSceneStorageContents
+/// A shape of a scene read where the scene keeps it: its painting, its part and its path's elements. It holds the scene's
+/// storage, which nothing changes once made, so that it may be kept after the `forEachItem` call that gave it and even
+/// after its scene; only the points `forEachElement` hands out are valid only inside that call.
+public struct DiagramSceneShapeView: Sendable {
+    let storage: DiagramSceneStorage
     let index: Int
     public let painting: DiagramShapePainting
     public let part: DiagramScenePart
 
     /// Calls `body` with each element of the shape's path and its points (a curve's control points before its end), as
-    /// Core Graphics gives a path's elements out.
+    /// Core Graphics gives a path's elements out; the points are valid only inside `body`.
     public func forEachElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) throws -> Void) rethrows {
-        try contents.forEachElement(ofItemAt: index, body)
+        try storage.withContents { contents in try contents.forEachElement(ofItemAt: index, body) }
     }
 
     /// How many elements the shape's path has.
-    public var elementCount: Int { contents.verbRange(ofItemAt: index).count }
+    public var elementCount: Int { storage.withContents { contents in contents.verbRange(ofItemAt: index).count } }
 
     /// A Core Graphics path of the shape's elements.
     public func makePath() -> CGPath {
-        contents.makePath(ofItemAt: index)
+        storage.withContents { contents in contents.makePath(ofItemAt: index) }
     }
 }
 
