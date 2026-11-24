@@ -36,33 +36,39 @@ enum TreeViewByteBoxDrawing {
         }
         let segmentWidth = content.lazy.compactMap { line in TreeViewBoxDrawingReader.branchColumn(in: line) }.first { column in column > 0 } ?? 4
         for (offset, index) in kept.enumerated().dropFirst() {
-            let writtenLine = keywordLine + index
+            let line = text[lines[index]]
             if unchanged[offset] {
-                output.append(text[lines[index]], writtenLine: writtenLine)
-                continue
-            }
-            if !isContent[offset] { continue }
-            let normalized = expandingTabs(units[offset])
-            if let column = TreeViewBoxDrawingReader.branchColumn(in: normalized) {
-                let depth = Int((Double(column) / Double(segmentWidth)).rounded()) + 1
-                var start = column + 1
-                while start < normalized.count, TreeViewBoxDrawingReader.isDash(normalized[start]) { start += 1 }
-                while start < normalized.count, normalized[start] == TreeViewBoxDrawingReader.space { start += 1 }
-                var end = normalized.count
-                while end > start, isASCIIWhitespace(normalized[end - 1]) { end -= 1 }
-                guard end > start else { throw .invalidSyntax(line: writtenLine, problem: .treeViewEntryWithoutName) }
-                output.appendBranch(depth: depth, name: normalized[start..<end], writtenLine: writtenLine)
-            } else if normalized.allSatisfy({ unit in TreeViewBoxDrawingReader.isBoxCharacter(unit) || TreeViewBoxDrawingReader.isWhitespace(unit) }) {
-                continue
-            } else if normalized.contains(where: TreeViewBoxDrawingReader.isBoxCharacter) {
-                output.append(text[lines[index]], writtenLine: writtenLine)
-            } else if let first = normalized.first, TreeViewBoxDrawingReader.isWhitespace(first) {
-                throw .invalidSyntax(line: writtenLine, problem: .treeViewIndentationWithoutBoxDrawing)
-            } else {
-                output.append(text[lines[index]], writtenLine: writtenLine)
+                output.append(line, writtenLine: keywordLine + index)
+            } else if isContent[offset] {
+                try addConverted(expandingTabs(units[offset]), written: line, writtenLine: keywordLine + index, segmentWidth: segmentWidth, to: &output)
             }
         }
         return output.source
+    }
+
+    /// A line neither passed unchanged nor of decoration alone, its tabs expanded (`normalized`): a branch's name set at
+    /// its level, a line of box drawing and blanks left out, any other line as written; an indented line without box
+    /// drawing, or a branch without a name, refused.
+    private static func addConverted(_ normalized: [UInt16], written: Slice<UnsafeBufferPointer<UInt8>>, writtenLine: Int, segmentWidth: Int,
+                                     to output: inout TreeViewSourceBuilder) throws(MermaidDiagramReadError) {
+        if let column = TreeViewBoxDrawingReader.branchColumn(in: normalized) {
+            let depth = Int((Double(column) / Double(segmentWidth)).rounded()) + 1
+            var start = column + 1
+            while start < normalized.count, TreeViewBoxDrawingReader.isDash(normalized[start]) { start += 1 }
+            while start < normalized.count, normalized[start] == TreeViewBoxDrawingReader.space { start += 1 }
+            var end = normalized.count
+            while end > start, isASCIIWhitespace(normalized[end - 1]) { end -= 1 }
+            guard end > start else { throw .invalidSyntax(line: writtenLine, problem: .treeViewEntryWithoutName) }
+            output.appendBranch(depth: depth, name: normalized[start..<end], writtenLine: writtenLine)
+        } else if normalized.allSatisfy({ unit in TreeViewBoxDrawingReader.isBoxCharacter(unit) || TreeViewBoxDrawingReader.isWhitespace(unit) }) {
+            return
+        } else if normalized.contains(where: TreeViewBoxDrawingReader.isBoxCharacter) {
+            output.append(written, writtenLine: writtenLine)
+        } else if let first = normalized.first, TreeViewBoxDrawingReader.isWhitespace(first) {
+            throw .invalidSyntax(line: writtenLine, problem: .treeViewIndentationWithoutBoxDrawing)
+        } else {
+            output.append(written, writtenLine: writtenLine)
+        }
     }
 
     /// The line's UTF-16 units, nil when a character of it is neither ASCII nor box drawing.
