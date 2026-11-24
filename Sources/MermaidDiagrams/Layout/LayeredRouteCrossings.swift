@@ -5,8 +5,8 @@
  * Description: Counts how often the drawn routes of Pele's compound layout cross (compound.ts routeCrossings).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -14,19 +14,31 @@ import CoreGraphics
 /// The straight pieces the drawn routes are cut into to count their crossings: each from its left end (`startX`,
 /// `startY`) to its right end, its extent down, its edge, and whether it is the first (1) or last (2) of its edge.
 struct LayeredRouteSegments {
-    var startX: [Double] = []
-    var startY: [Double] = []
-    var endX: [Double] = []
-    var endY: [Double] = []
-    var low: [Double] = []
-    var high: [Double] = []
-    var owner: [Int] = []
-    var ends: [UInt8] = []
+    var startX: ScratchList<Double>
+    var startY: ScratchList<Double>
+    var endX: ScratchList<Double>
+    var endY: ScratchList<Double>
+    var low: ScratchList<Double>
+    var high: ScratchList<Double>
+    var owner: ScratchList<Int>
+    var ends: ScratchList<UInt8>
     var top = Double.infinity
     var bottom = -Double.infinity
     /// The last piece added, to join a straight piece onto the one before it.
     private var lastFrom = CGPoint(x: Double.nan, y: Double.nan)
     private var lastTo = CGPoint(x: Double.nan, y: Double.nan)
+
+    /// Empty lists of `arena`, with room for `capacity` pieces before they grow.
+    init(capacity: Int, arena: DiagramScratchArena) {
+        startX = arena.list(capacity: capacity, of: Double.self)
+        startY = arena.list(capacity: capacity, of: Double.self)
+        endX = arena.list(capacity: capacity, of: Double.self)
+        endY = arena.list(capacity: capacity, of: Double.self)
+        low = arena.list(capacity: capacity, of: Double.self)
+        high = arena.list(capacity: capacity, of: Double.self)
+        owner = arena.list(capacity: capacity, of: Int.self)
+        ends = arena.list(capacity: capacity, of: UInt8.self)
+    }
 
     var count: Int { owner.count }
 
@@ -54,8 +66,8 @@ struct LayeredRouteSegments {
     }
 
     private mutating func removeLast() {
-        startX.removeLast(); startY.removeLast(); endX.removeLast(); endY.removeLast()
-        low.removeLast(); high.removeLast(); owner.removeLast(); ends.removeLast()
+        _ = startX.removeLast(); _ = startY.removeLast(); _ = endX.removeLast(); _ = endY.removeLast()
+        _ = low.removeLast(); _ = high.removeLast(); _ = owner.removeLast(); _ = ends.removeLast()
     }
 }
 
@@ -64,17 +76,28 @@ struct LayeredRouteSegments {
 /// in or out at a shared node or merge into a shared run of their ends.
 enum LayeredRouteCrossings {
     static func count(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], style: LayeredRouteStyle) -> Int {
-        var segments = LayeredRouteSegments()
-        for (edgeIndex, edge) in edges.enumerated() where edge.source != edge.target {
-            cut(edge.route, edge: edgeIndex, style: style, into: &segments)
+        #if DEBUG
+        LayeredLayoutRecording.current?.routeCrossings.append((nodes, edges, style))
+        #endif
+        return DiagramScratchArena.withCurrentThread { arena in
+            var pointCount = 0
+            for edge in edges { pointCount += edge.route.count }
+            var segments = LayeredRouteSegments(capacity: 4 * pointCount, arena: arena)
+            for (edgeIndex, edge) in edges.enumerated() where edge.source != edge.target {
+                cut(edge.route, edge: edgeIndex, style: style, into: &segments)
+            }
+            // The straight runs at the ends of each route, four points an edge; an edge of fewer than two points has none.
+            let runs: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: 4 * edges.count)
+            let hasRuns: ScratchSpan<Bool> = arena.uninitializedSpan(count: edges.count)
+            for (edgeIndex, edge) in edges.enumerated() { hasRuns[edgeIndex] = writeEndRuns(of: edge.route, into: runs.part((4 * edgeIndex)..<(4 * edgeIndex + 4))) }
+            return countCrossings(segments, nodes: nodes, edges: edges, runs: LayeredRouteEndRuns(points: runs, hasRuns: hasRuns), arena: arena)
         }
-        let runs = edges.map { edge in endRuns(of: edge.route) }
-        return countCrossings(segments, nodes: nodes, edges: edges, runs: runs)
     }
 
-    /// The straight run at each end of a route: its first point to where it leaves that line, and the last likewise.
-    private static func endRuns(of route: [LayeredRoutePoint]) -> [CGPoint] {
-        guard route.count >= 2 else { return [] }
+    /// The straight run at each end of a route: its first point to where it leaves that line, and the last likewise,
+    /// written to `runs`; whether the route has them (two points or more).
+    private static func writeEndRuns(of route: [LayeredRoutePoint], into runs: ScratchSpan<CGPoint>) -> Bool {
+        guard route.count >= 2 else { return false }
         func inLine(_ first: Int, _ second: Int, _ third: Int) -> Bool {
             let points = (route[first].point, route[second].point, route[third].point)
             return (abs(points.0.x - points.1.x) < LayeredCompoundConstants.inLine && abs(points.0.x - points.2.x) < LayeredCompoundConstants.inLine)
@@ -85,18 +108,29 @@ enum LayeredRouteCrossings {
         let last = route.count - 1
         var backward = last - 1
         while backward >= 1 && inLine(last, backward, backward - 1) { backward -= 1 }
-        return [route[0].point, route[forward].point, route[backward].point, route[last].point]
+        runs[0] = route[0].point
+        runs[1] = route[forward].point
+        runs[2] = route[backward].point
+        runs[3] = route[last].point
+        return true
     }
 
-    /// Whether (x, y) lies on the run at the start (`end` 1) or end of an edge's route.
-    static func isOnRun(_ runs: [CGPoint], end: UInt8, x: Double, y: Double) -> Bool {
-        guard runs.count == 4 else { return false }
-        let start = runs[end == 1 ? 0 : 2]
-        let finish = runs[end == 1 ? 1 : 3]
+    /// Whether (x, y) lies on the run at the start (`end` 1) or end of the route of `edge`.
+    static func isOnRun(_ runs: LayeredRouteEndRuns, edge: Int, end: UInt8, x: Double, y: Double) -> Bool {
+        guard runs.hasRuns[edge] else { return false }
+        let start = runs.points[4 * edge + (end == 1 ? 0 : 2)]
+        let finish = runs.points[4 * edge + (end == 1 ? 1 : 3)]
         let deltaX = finish.x - start.x
         let deltaY = finish.y - start.y
         let lengthSquared = deltaX * deltaX + deltaY * deltaY
         let along = lengthSquared > 0 ? max(0, min(1, ((x - start.x) * deltaX + (y - start.y) * deltaY) / lengthSquared)) : 0
         return hypot(x - start.x - along * deltaX, y - start.y - along * deltaY) < LayeredCompoundConstants.inLine
     }
+}
+
+/// The straight runs at the ends of every edge's route, four points an edge (start, where the first run ends, where the
+/// last starts, end), and whether each edge has them.
+struct LayeredRouteEndRuns {
+    let points: ScratchSpan<CGPoint>
+    let hasRuns: ScratchSpan<Bool>
 }

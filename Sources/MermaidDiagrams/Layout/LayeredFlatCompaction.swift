@@ -3,77 +3,57 @@
  * ---------------------------------
  * Layer: Core
  * Description: Aligns and compacts the blocks of Brandes and Köpf's four alignments (layered.ts position), with one set
- *              of working lists that the four reuse, held in two buffers.
+ *              of working spans of the scratch arena that the four reuse.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
-/// The working lists of one alignment and its compaction, made once and refilled for each of the four: every list of
-/// integers is a part of one buffer and every list of positions a part of another, so that the four alignments cost two
-/// allocations and their loops write without checks of uniqueness. Every index is a vertex, a block edge (at most one
-/// per vertex) or a place in a list of vertices, all below the vertex count the buffers were made for.
-final class LayeredPositioningWork {
-    private let integers: UnsafeMutableBufferPointer<Int>
-    private let positions: UnsafeMutableBufferPointer<Double>
+/// The working spans of one alignment and its compaction, taken once from the arena and refilled for each of the four.
+/// Every index is a vertex, a block edge (at most one per vertex) or a place in a list of vertices, all below the vertex
+/// count the spans were made for.
+struct LayeredPositioningWork {
     let vertexCount: Int
     /// Each vertex's block root and the vertex it is aligned to.
-    let root: UnsafeMutableBufferPointer<Int>
-    let align: UnsafeMutableBufferPointer<Int>
+    let root: ScratchSpan<Int>
+    let align: ScratchSpan<Int>
     /// Offset of each vertex from its block's root, so that aligned edges meet at their attachment points.
-    let shift: UnsafeMutableBufferPointer<Double>
+    let shift: ScratchSpan<Double>
     /// The blocks as a graph: an edge from each block to the next in every rank, as wide as the room the two vertices
     /// need, and each block's edges out. A rank of n vertices gives n - 1 edges: at most one edge per vertex.
     private var edgeCount = 0
-    private let edgeFrom: UnsafeMutableBufferPointer<Int>
-    private let edgeTo: UnsafeMutableBufferPointer<Int>
-    private let edgeWidth: UnsafeMutableBufferPointer<Double>
-    private let remainingIn: UnsafeMutableBufferPointer<Int>
+    private let edgeFrom: ScratchSpan<Int>
+    private let edgeTo: ScratchSpan<Int>
+    private let edgeWidth: ScratchSpan<Double>
+    private let remainingIn: ScratchSpan<Int>
     /// Where each block's edges out start in `outEdges`, with the end of the last after them.
-    private let outStart: UnsafeMutableBufferPointer<Int>
-    private let outFill: UnsafeMutableBufferPointer<Int>
-    private let outEdges: UnsafeMutableBufferPointer<Int>
-    private let across: UnsafeMutableBufferPointer<Double>
+    private let outStart: ScratchSpan<Int>
+    private let outFill: ScratchSpan<Int>
+    private let outEdges: ScratchSpan<Int>
+    private let across: ScratchSpan<Double>
     /// The blocks in topological order, each once.
-    private let topological: UnsafeMutableBufferPointer<Int>
+    private let topological: ScratchSpan<Int>
 
-    init(vertexCount: Int) {
+    init(vertexCount: Int, arena: DiagramScratchArena) {
         self.vertexCount = vertexCount
-        let integers = UnsafeMutableBufferPointer<Int>.allocate(capacity: 9 * vertexCount + 1)
-        integers.initialize(repeating: 0)
-        let positions = UnsafeMutableBufferPointer<Double>.allocate(capacity: 3 * vertexCount)
-        positions.initialize(repeating: 0)
-        func integerList(_ index: Int, extra: Int = 0) -> UnsafeMutableBufferPointer<Int> {
-            UnsafeMutableBufferPointer(rebasing: integers[(index * vertexCount)..<((index + 1) * vertexCount + extra)])
-        }
-        func positionList(_ index: Int) -> UnsafeMutableBufferPointer<Double> {
-            UnsafeMutableBufferPointer(rebasing: positions[(index * vertexCount)..<((index + 1) * vertexCount)])
-        }
-        self.integers = integers
-        self.positions = positions
-        root = integerList(0)
-        align = integerList(1)
-        edgeFrom = integerList(2)
-        edgeTo = integerList(3)
-        remainingIn = integerList(4)
-        outFill = integerList(5)
-        outEdges = integerList(6)
-        topological = integerList(7)
-        outStart = integerList(8, extra: 1)
-        shift = positionList(0)
-        edgeWidth = positionList(1)
-        across = positionList(2)
-    }
-
-    deinit {
-        integers.deallocate()
-        positions.deallocate()
+        root = arena.span(count: vertexCount, repeating: 0)
+        align = arena.span(count: vertexCount, repeating: 0)
+        edgeFrom = arena.span(count: vertexCount, repeating: 0)
+        edgeTo = arena.span(count: vertexCount, repeating: 0)
+        remainingIn = arena.span(count: vertexCount, repeating: 0)
+        outFill = arena.span(count: vertexCount, repeating: 0)
+        outEdges = arena.span(count: vertexCount, repeating: 0)
+        topological = arena.span(count: vertexCount, repeating: 0)
+        outStart = arena.span(count: vertexCount + 1, repeating: 0)
+        shift = arena.span(count: vertexCount, repeating: 0.0)
+        edgeWidth = arena.span(count: vertexCount, repeating: 0.0)
+        across = arena.span(count: vertexCount, repeating: 0.0)
     }
 
     /// Aligns each vertex with its median neighbour above (upward) or below, sweeping each rank left to right or right
     /// to left.
-    func align(_ graph: LayeredFlatGraph, conflict: [Bool], isUpward: Bool, isRightward: Bool) {
+    func align(_ graph: LayeredFlatGraph, conflict: ScratchSpan<Bool>, isUpward: Bool, isRightward: Bool) {
         resetAlignment()
         let starts = isUpward ? graph.predecessorStart : graph.successorStart
         let list = isUpward ? graph.predecessorSegments : graph.successorSegments
@@ -122,7 +102,7 @@ final class LayeredPositioningWork {
 
     /// The positions of the present alignment, written to `results` from `base`: its block graph laid out longest path
     /// first, then each block pulled towards its successors.
-    func compact(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool, into results: inout [Double], at base: Int) {
+    mutating func compact(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool, into results: ScratchSpan<Double>, at base: Int) {
         buildBlockGraph(graph, gap: gap, isRightward: isRightward)
         var topologicalCount = 0
         for vertex in 0..<vertexCount {
@@ -147,7 +127,7 @@ final class LayeredPositioningWork {
                 }
             }
         }
-        for block in topological[0..<topologicalCount].reversed() {
+        for block in topological.part(0..<topologicalCount).reversed() {
             var least = Double.infinity
             for position in outStart[block]..<outStart[block + 1] {
                 let edge = outEdges[position]
@@ -161,7 +141,7 @@ final class LayeredPositioningWork {
     }
 
     /// The block graph of the present alignment: an edge from each block to the next in every rank.
-    private func buildBlockGraph(_ graph: LayeredFlatGraph, gap: [Double], isRightward: Bool) {
+    private mutating func buildBlockGraph(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool) {
         edgeCount = 0
         for vertex in 0..<vertexCount { remainingIn[vertex] = 0 }
         for vertex in 0...vertexCount { outStart[vertex] = 0 }

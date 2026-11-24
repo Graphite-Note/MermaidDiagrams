@@ -5,28 +5,28 @@
  * Description: Brings the labels and bends of each edge of Pele's layered layout into line with one of its ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// Pele's `alignLabels` (layout/layered.ts): an edge runs straight from the end with fewer edges beside it, or else the
 /// other, as far as what is beside its labels and bends leaves room, and turns once, at the other end. Bends in ranks
 /// that hold nothing else are left to straightening.
 struct LayeredFlatLabelAlignment {
-    /// Moved in and back out by the caller, so that the graph is never copied.
+    /// The graph's spans, whose labels and bends the alignment moves across.
     var graph: LayeredFlatGraph
-    let nodes: [LayeredFlatNode]
+    let nodes: ScratchSpan<LayeredFlatNode>
     /// How many free ends each side of each vertex has, side 0 first (`LayeredFlatGraph.freeEnds`).
-    let free: [Int]
+    let free: ScratchSpan<Int>
     let options: LayeredFlatOptions
-    let emptyRanks: [Bool]?
+    let emptyRanks: ScratchSpan<Bool>?
 
     private func isPlaced(_ vertex: Int) -> Bool {
         graph.vertexKind[vertex] == .label || (graph.vertexKind[vertex] == .bend && !(emptyRanks?[graph.vertexRank[vertex]] ?? false))
     }
 
     /// Where `segment` ends on the way up (side 0) or down, and how many ends share that side of the node there.
-    private func end(of segment: Int, side: Int, across: [Double]) -> (at: Double, sharing: Int) {
+    private func end(of segment: Int, side: Int, across: ScratchSpan<Double>) -> (at: Double, sharing: Int) {
         let vertex = side == 0 ? graph.segmentFrom[segment] : graph.segmentTo[segment]
         let at = across[vertex] + (side == 0 ? graph.segmentFromOffset[segment] : graph.segmentToOffset[segment])
         return (at, vertex < graph.nodeCount && nodes[vertex].kind == .node ? free[(1 - side) * graph.vertexCount + vertex] : 0)
@@ -34,7 +34,7 @@ struct LayeredFlatLabelAlignment {
 
     /// The room the neighbours in its rank leave a label or bend: a full gap from a node or between two labels, half of
     /// one between a label and a line that passes it.
-    private func room(of vertex: Int, across: [Double]) -> (least: Double, most: Double) {
+    private func room(of vertex: Int, across: ScratchSpan<Double>) -> (least: Double, most: Double) {
         let start = graph.rankStart[graph.vertexRank[vertex]]
         let index = start + graph.position[vertex]
         let separation = options.edgeSeparation
@@ -59,20 +59,20 @@ struct LayeredFlatLabelAlignment {
         return max(least, min(most, firstChoice))
     }
 
-    func align(_ across: inout [Double], workspace: LayeredFlatWorkspace) {
+    func align(_ across: ScratchSpan<Double>, arena: DiagramScratchArena) {
         guard graph.maximumRank > 1 else { return }
-        var isDone = workspace.flags(count: graph.vertexCount, repeating: false)
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        let isDone = arena.span(count: graph.vertexCount, repeating: false)
         // One list of an edge's labels and bends, refilled for each edge.
-        var chain = workspace.emptyIntegers(capacity: 0)
+        var chain = arena.list(capacity: 8, of: Int.self)
         for rank in 1..<graph.maximumRank {
             for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] {
                 let vertex = graph.order[index]
                 if !isPlaced(vertex) || isDone[vertex] { continue }
-                alignChain(through: vertex, across: &across, isDone: &isDone, chain: &chain)
+                alignChain(through: vertex, across: across, isDone: isDone, chain: &chain)
             }
         }
-        workspace.recycle(consume isDone)
-        workspace.recycle(consume chain)
     }
 
     private func upperSegment(of vertex: Int) -> Int { graph.predecessorSegments[graph.predecessorStart[vertex]] }
@@ -80,13 +80,13 @@ struct LayeredFlatLabelAlignment {
 
     /// The edge's labels and bends from its first node to its last, and the room they share: all on one line when there
     /// is one, else each in line with the nearest point above or below that is held in place.
-    private func alignChain(through vertex: Int, across: inout [Double], isDone: inout [Bool], chain: inout [Int]) {
+    private func alignChain(through vertex: Int, across: ScratchSpan<Double>, isDone: ScratchSpan<Bool>, chain: inout ScratchList<Int>) {
         var top = vertex
         while graph.vertexKind[graph.segmentFrom[upperSegment(of: top)]].isPassingPoint { top = graph.segmentFrom[upperSegment(of: top)] }
         var bottom = top
         var least = -Double.infinity
         var most = Double.infinity
-        chain.removeAll(keepingCapacity: true)
+        chain.removeAll()
         var current = top
         while graph.vertexKind[current].isPassingPoint {
             bottom = current

@@ -5,8 +5,8 @@
  * Description: A level of Pele's compound layout as a box: its size around its content and its turn onto the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -39,8 +39,11 @@ struct LayeredCompoundBox {
         return CGPoint(x: offsetX + (isVertical ? flow.x : along), y: offsetY + (isVertical ? along : flow.x))
     }
 
-    func route(_ points: [CGPoint]) -> [LayeredRoutePoint] {
-        points.map { point in LayeredRoutePoint(point: pagePoint(point), runsHorizontally: !direction.runsVertically) }
+    func route(_ points: ScratchSpan<CGPoint>) -> [LayeredRoutePoint] {
+        var route: [LayeredRoutePoint] = []
+        route.reserveCapacity(points.count)
+        for point in points { route.append(LayeredRoutePoint(point: pagePoint(point), runsHorizontally: !direction.runsVertically)) }
+        return route
     }
 
     /// The point on `side` of the box in line with `point`.
