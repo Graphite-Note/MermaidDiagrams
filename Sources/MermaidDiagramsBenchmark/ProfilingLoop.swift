@@ -30,6 +30,88 @@ enum ProfilingLoop {
         case preparation
         case narrow
         case painting
+        /// The design prototype's flat reading (FlatMermaidReadingPrototype), and the same made into the present model.
+        case flat
+        case flatMaterialized = "flatmaterialized"
+        case frontEnd = "frontend"
+        case flatFrontEnd = "flatfrontend"
+        /// The prototype's reading made into the present model, then laid out as `reading` lays it out.
+        case flatLayout = "flatlayout"
+    }
+
+    /// `--flat-pairs <case> <seconds> <pairs>`: alternates rounds of the present reader and of the prototype in this one
+    /// process, `seconds` each, and prints each pair's two times an input and their ratio, then the medians.
+    static func runPairs(arguments: [String]) throws {
+        let caseName = arguments.first ?? "docs: all examples"
+        let seconds = arguments.dropFirst().first.flatMap(Double.init) ?? 0.5
+        let pairs = arguments.dropFirst(2).first.flatMap(Int.init) ?? 7
+        let sources = try sources(of: caseName)
+        func timed(_ round: () -> Void) -> Double {
+            let clock = ContinuousClock()
+            let start = clock.now
+            let end = start + .milliseconds(Int(seconds * 1_000))
+            var rounds = 0
+            while clock.now < end {
+                round()
+                rounds += 1
+            }
+            let elapsed = clock.now - start
+            let microseconds = Double(elapsed.components.seconds) * 1e6 + Double(elapsed.components.attoseconds) / 1e12
+            return microseconds / Double(max(rounds * sources.count, 1))
+        }
+        var present: [Double] = []
+        var flat: [Double] = []
+        var materialized: [Double] = []
+        for pair in 0..<pairs {
+            let presentTime = timed { FlatMermaidReadingPrototype.readAllWithPresentReader(sources) }
+            let flatTime = timed { FlatMermaidReadingPrototype.readAll(sources) }
+            let materializedTime = timed { FlatMermaidReadingPrototype.readAndMaterializeAll(sources) }
+            present.append(presentTime)
+            flat.append(flatTime)
+            materialized.append(materializedTime)
+            print(String(format: "%@ pair %d: present %.3f µs, flat %.3f µs (%.2fx), flat made into the present model %.3f µs (%.2fx)", caseName, pair,
+                         presentTime, flatTime, presentTime / flatTime, materializedTime, presentTime / materializedTime))
+        }
+        func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
+        let ratios = zip(present, flat).map { pair in pair.0 / pair.1 }
+        print(String(format: "%@ medians: present %.3f µs, flat %.3f µs, flat made into the present model %.3f µs, median ratio %.2fx", caseName,
+                     median(present), median(flat), median(materialized), median(ratios)))
+    }
+
+    /// `--flat-each <case> <rounds>`: each input's time with the present reader and with the prototype, median of
+    /// `rounds` alternating measurements of 2,000 readings each, one line per input, then the totals.
+    static func runEach(arguments: [String]) throws {
+        let caseName = arguments.first ?? "docs: all examples"
+        let rounds = arguments.dropFirst().first.flatMap(Int.init) ?? 5
+        let sources = try sources(of: caseName)
+        let clock = ContinuousClock()
+        func time(_ body: () -> Void) -> Double {
+            let start = clock.now
+            for _ in 0..<2_000 { body() }
+            let elapsed = clock.now - start
+            return (Double(elapsed.components.seconds) * 1e6 + Double(elapsed.components.attoseconds) / 1e12) / 2_000
+        }
+        var presentTotal = 0.0
+        var flatTotal = 0.0
+        var flatTimes: [Double] = []
+        for source in sources {
+            var present: [Double] = []
+            var flat: [Double] = []
+            for _ in 0..<rounds {
+                present.append(time { FlatMermaidReadingPrototype.readAllWithPresentReader([source]) })
+                flat.append(time { FlatMermaidReadingPrototype.readAll([source]) })
+            }
+            let presentMedian = present.sorted()[rounds / 2]
+            let flatMedian = flat.sorted()[rounds / 2]
+            presentTotal += presentMedian
+            flatTotal += flatMedian
+            flatTimes.append(flatMedian)
+            let firstLine = source.split(separator: "\n").prefix(3).joined(separator: " / ").prefix(70)
+            print(String(format: "%8.3f %8.3f %5.1fx %5d B  ", presentMedian, flatMedian, presentMedian / flatMedian, source.utf8.count) + firstLine)
+        }
+        let sorted = flatTimes.sorted()
+        print(String(format: "mean present %.3f µs, mean flat %.3f µs, median input flat %.3f µs", presentTotal / Double(sources.count),
+                     flatTotal / Double(sources.count), sorted[sorted.count / 2]))
     }
 
     static func run(arguments: [String], typography: DiagramTypography) throws {
@@ -55,8 +137,11 @@ enum ProfilingLoop {
         print("\(caseName), \(work.rawValue): \(roundCount) rounds of \(sources.count) inputs in \(seconds) s, \(String(format: "%.3f", perInput)) µs an input")
     }
 
-    private static func sources(of caseName: String) throws -> [String] {
+    static func sources(of caseName: String) throws -> [String] {
         if caseName == "docs: all examples" { return try FlowchartCorpus.documentationExamples() }
+        if caseName.hasPrefix("file:") {
+            return try JSONDecoder().decode([String].self, from: Data(contentsOf: URL(fileURLWithPath: String(caseName.dropFirst(5)))))
+        }
         let generated = PeleResults.generatedBenchmarkInputs.filter { input in input.name == caseName }.map(\.source)
         return generated.isEmpty ? try PeleResults.sources(ofCorpus: caseName) : generated
     }
@@ -92,6 +177,20 @@ enum ProfilingLoop {
             }
         case .painting:
             return paintingRound(sources: sources, typography: typography)
+        case .flat:
+            return { FlatMermaidReadingPrototype.readAll(sources) }
+        case .flatMaterialized:
+            return { FlatMermaidReadingPrototype.readAndMaterializeAll(sources) }
+        case .frontEnd:
+            return { FlatMermaidReadingPrototype.presentFrontEnd(sources) }
+        case .flatFrontEnd:
+            return { FlatMermaidReadingPrototype.flatFrontEnd(sources) }
+        case .flatLayout:
+            return {
+                for source in sources {
+                    _ = FlatMermaidReadingPrototype.readMaterialized(source).map { diagram in DiagramSceneBenchmark.laidOut(diagram, typography: typography) }
+                }
+            }
         }
     }
 

@@ -43,6 +43,30 @@ struct MermaidDiagramsBenchmark {
     /// the README's pictures of every type (`ReadmePictures`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
+        if let eachIndex = CommandLine.arguments.firstIndex(of: "--flat-each") {
+            return try ProfilingLoop.runEach(arguments: Array(CommandLine.arguments[(eachIndex + 1)...]))
+        }
+        if let pairsIndex = CommandLine.arguments.firstIndex(of: "--flat-pairs") {
+            return try ProfilingLoop.runPairs(arguments: Array(CommandLine.arguments[(pairsIndex + 1)...]))
+        }
+        if let checkIndex = CommandLine.arguments.firstIndex(of: "--flat-check") {
+            for caseName in CommandLine.arguments[(checkIndex + 1)...] {
+                FlatMermaidReadingPrototype.resetCounts()
+                let sources: [String]
+                if caseName == "flowchart-spec-texts" {
+                    sources = try PeleResults.flowchartSpecTexts().map(\.source)
+                } else if caseName == "random-flat" {
+                    sources = try PeleResults.sources(ofCorpus: "random-flat")
+                } else {
+                    sources = try ProfilingLoop.sources(of: caseName)
+                }
+                let result = FlatMermaidReadingPrototype.check(sources)
+                print("\(caseName): \(sources.count) inputs: \(result)")
+                for different in result.different.prefix(5) { print("  different: \(different.debugDescription.prefix(300))") }
+                for different in result.errorsDisagreeing.prefix(5) { print("  error differs: \(different.debugDescription.prefix(300))") }
+            }
+            return
+        }
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
