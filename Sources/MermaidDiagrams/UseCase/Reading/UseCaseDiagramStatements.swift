@@ -7,13 +7,14 @@
  *              and classes and styles.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension UseCaseDiagramBuilder {
     /// The boundaries' places and the JSON tables, in the order first mentioned.
     mutating func publishBoundariesAndJSON() {
+        guard !drafts.jsons.isEmpty else { return }
         let jsonPlaces = Dictionary(drafts.jsons.enumerated().map { place, json in (json.identifier, place) }, uniquingKeysWith: { first, _ in first })
         diagram.jsonNodes = inMentionOrder(drafts.jsons.map(\.identifier)).compactMap { identifier in
             jsonPlaces[identifier].map { place in
@@ -51,11 +52,11 @@ extension UseCaseDiagramBuilder {
 
     /// The kinds a relationship's ends and its type allow.
     private func check(_ draft: UseCaseDraftRelationship, sourceKind: UseCaseSymbolKind, targetKind: UseCaseSymbolKind) throws(UseCaseBuildFailure) {
-        let related: Set<UseCaseSymbolKind> = [.actor, .useCase, .json]
-        if !related.contains(sourceKind) {
+        func isRelated(_ kind: UseCaseSymbolKind) -> Bool { kind == .actor || kind == .useCase || kind == .json }
+        if !isRelated(sourceKind) {
             throw contradiction(.relationshipEndpointKind(identifier: draft.source.name.identifier, isSource: true, kind: sourceKind), at: draft.source.name.start)
         }
-        if !related.contains(targetKind) {
+        if !isRelated(targetKind) {
             throw contradiction(.relationshipEndpointKind(identifier: draft.target.name.identifier, isSource: false, kind: targetKind), at: draft.target.name.start)
         }
         if draft.type == .include || draft.type == .extend, sourceKind != .useCase || targetKind != .useCase {

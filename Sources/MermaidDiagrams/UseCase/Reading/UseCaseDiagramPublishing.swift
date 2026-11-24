@@ -7,8 +7,8 @@
  *              definitions, classes and styles given to their targets.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension UseCaseDiagramBuilder {
@@ -53,14 +53,18 @@ extension UseCaseDiagramBuilder {
 
     /// Each boundary with the elements declared in it, in the order written, and its type.
     private mutating func publishBoundaries() {
+        // Without boundaries no element has a parent, and there is nothing to publish.
+        guard !drafts.boundaries.isEmpty else { return }
         let declarations = drafts.elements.enumerated().sorted { first, second in
             first.element.name.start != second.element.name.start ? first.element.name.start < second.element.name.start : first.offset < second.offset
         }
-        var placed: Set<[String]> = []
+        var placed: Set<Membership> = []
         for (_, draft) in declarations {
             guard let parent = namedParent(draft.parent) else { continue }
             let boundary = drafts.boundaries[parent].name.identifier
-            if placed.insert([boundary, draft.name.identifier]).inserted { boundaries[boundary]?.members.append(draft.name.identifier) }
+            if placed.insert(Membership(boundary: boundary, element: draft.name.identifier)).inserted {
+                boundaries[boundary]?.members.append(draft.name.identifier)
+            }
         }
         diagram.systemBoundaries = inMentionOrder(boundaryOrder).compactMap { identifier in
             boundaries[identifier].map { state in
@@ -94,6 +98,8 @@ extension UseCaseDiagramBuilder {
                 }
             }
         }
+        // Only `class` and `style` statements look anything up.
+        guard !drafts.classAssignments.isEmpty || !drafts.styles.isEmpty else { return }
         let places = StylablePlaces(diagram: diagram)
         for assignment in drafts.classAssignments {
             for target in assignment.targets {
@@ -121,6 +127,12 @@ extension UseCaseDiagramBuilder {
             boundaries = places(diagram.systemBoundaries.map(\.identifier))
             jsonNodes = places(diagram.jsonNodes.map(\.identifier))
         }
+    }
+
+    /// An element placed in a boundary.
+    private struct Membership: Hashable {
+        let boundary: String
+        let element: String
     }
 
     /// The classes and styles of what `identifier` names changed by `change`: an actor, a use case, a boundary or a

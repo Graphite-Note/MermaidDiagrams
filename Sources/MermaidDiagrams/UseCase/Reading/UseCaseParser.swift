@@ -7,7 +7,7 @@
  *              then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -30,7 +30,7 @@ struct UseCaseParser {
     private static let forbiddenWords: Set<String> = ["allowmixing", "newpage", "package", "rectangle", "skinparam"]
 
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> UseCaseDiagram {
-        let written = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
+        let written = Self.codeUnits(of: cursor.bytes[(cursor.position - keyword.utf8.count)...])
         let text = UseCaseSourcePreparation.prepared(written)
         let tokens: UseCaseTokens
         do {
@@ -53,6 +53,13 @@ struct UseCaseParser {
             case .tooManyNodes: throw .tooManyNodes(limit: limits.maximumNodeCount)
             }
         }
+    }
+
+    /// The text's UTF-16 code units, which Pele's lexer reads: in ASCII a unit per byte, of its value, made without
+    /// making the bytes a string first.
+    static func codeUnits(of bytes: ArraySlice<UInt8>) -> [UInt16] {
+        guard bytes.allSatisfy({ byte in byte < 0x80 }) else { return Array(String(decoding: bytes, as: UTF8.self).utf16) }
+        return bytes.map(UInt16.init)
     }
 
     /// The largest spacing Pele takes from the options.
