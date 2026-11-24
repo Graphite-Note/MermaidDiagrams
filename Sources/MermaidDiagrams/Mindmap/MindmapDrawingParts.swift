@@ -3,11 +3,11 @@
  * -------------------------------
  * Layer: Core
  * Description: A laid-out mindmap's geometry grouped by how it is painted: each branch's links and nodes, the root,
- *              the text, the title.
+ *              the text, the title; as Core Graphics paths for a host, or recorded into a scene's lanes.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -42,26 +42,50 @@ public struct MindmapDrawingParts {
     public static let nodeFillOpacity: CGFloat = 0.22
 
     public init(layout: MindmapLayout) {
-        let links = (0..<MindmapNode.branchCount).map { _ in CGMutablePath() }
-        let outlines = (0..<MindmapNode.branchCount).map { _ in CGMutablePath() }
-        let rootOutline = CGMutablePath()
+        let paths = MindmapPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        branches = (0..<MindmapNode.branchCount).compactMap { branchIndex in
+            paths.hasPaint(branchIndex: branchIndex)
+                ? Branch(branchIndex: branchIndex, links: paths.links[branchIndex].path, nodeOutlines: paths.outlines[branchIndex].path) : nil
+        }
+        rootOutline = paths.rootOutline.path
+        nodeTexts = layout.nodes.flatMap { node in node.isTextLeftAligned ? node.text.leftAlignedLines() : [node.text] }
+        title = layout.title
+    }
+}
+
+/// A mindmap's links and node outlines grouped by branch number, and the root's outline, in any kind a drawing records:
+/// the drawing parts' Core Graphics paths, or a scene's lanes.
+struct MindmapPaths<Path: DiagramPathRecording> {
+    /// By branch number (`MindmapNode.branchIndex` modulo `MindmapNode.branchCount`).
+    let links: [Path]
+    let outlines: [Path]
+    let rootOutline: Path
+
+    init<Maker: DiagramPathMaking>(layout: MindmapLayout, making maker: Maker) where Maker.Path == Path {
+        links = (0..<MindmapNode.branchCount).map { _ in maker.makePath() }
+        outlines = (0..<MindmapNode.branchCount).map { _ in maker.makePath() }
+        rootOutline = maker.makePath()
         for edge in layout.edges {
-            links[edge.branchIndex % MindmapNode.branchCount].addPath(DiagramEdgeDrawing.path(edge.path))
+            let madeCount = maker.madePathCount
+            let line = maker.makePath()
+            DiagramEdgeDrawing.record(edge.path, into: line)
+            links[edge.branchIndex % MindmapNode.branchCount].addPath(line)
+            maker.givePathsBack(downTo: madeCount)
         }
         for node in layout.nodes {
-            guard let outline = MindmapShapeDrawing.outline(of: node.outline, in: node.frame) else { continue }
+            let madeCount = maker.madePathCount
+            defer { maker.givePathsBack(downTo: madeCount) }
+            guard let outline = MindmapShapeDrawing.outline(of: node.outline, in: node.frame, making: maker) else { continue }
             if let branchIndex = node.branchIndex {
                 outlines[branchIndex % MindmapNode.branchCount].addPath(outline)
             } else {
                 rootOutline.addPath(outline)
             }
         }
-        branches = (0..<MindmapNode.branchCount).compactMap { branchIndex in
-            links[branchIndex].isEmpty && outlines[branchIndex].isEmpty ? nil
-                : Branch(branchIndex: branchIndex, links: links[branchIndex], nodeOutlines: outlines[branchIndex])
-        }
-        self.rootOutline = rootOutline
-        nodeTexts = layout.nodes.flatMap { node in node.isTextLeftAligned ? node.text.leftAlignedLines() : [node.text] }
-        title = layout.title
+    }
+
+    /// Whether the branch `branchIndex` has links or node outlines to paint.
+    func hasPaint(branchIndex: Int) -> Bool {
+        !links[branchIndex].isEmpty || !outlines[branchIndex].isEmpty
     }
 }

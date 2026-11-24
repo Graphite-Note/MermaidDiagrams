@@ -6,8 +6,8 @@
  *              matter, and the icon they give a file, as Pele's detectIcon finds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// The icons a tree view's options give files by name and by extension, as Pele's `iconConfig` keeps them: only the
@@ -27,11 +27,11 @@ public struct TreeViewIconMaps: Equatable, Sendable {
 
     /// The maps in the front matter at the start of `bytes`, none without one.
     init(frontMatterOf bytes: [UInt8]) {
-        // A text without `Icons` or a backslash anywhere has none in its front matter's lines either.
+        // A text without either map's name or a backslash anywhere has none in its front matter's lines either.
         guard Self.mayNameAnIconMap(bytes[...]) else { return }
         var keys: [(indentation: Int, key: String)] = []
         let lines = Self.frontMatterLines(of: bytes)
-        // The two maps' keys can only be written with `Icons` in them, or with an escape, which takes a backslash.
+        // The two maps' keys can only be written with their names in them, or with an escape, which takes a backslash.
         guard lines.contains(where: { line in Self.mayNameAnIconMap(ArraySlice(line.utf8)) }) else { return }
         for line in lines {
             let indentation = line.prefix { character in character == " " }.count
@@ -48,18 +48,22 @@ public struct TreeViewIconMaps: Equatable, Sendable {
         }
     }
 
-    /// Whether bytes hold `Icons` or a backslash, without which no key of them is `filenameIcons` or `extensionIcons`.
+    /// Whether bytes hold `filenameIcons`, `extensionIcons` or a backslash, without which no key of them is either map's
+    /// name: a key is written plain, or quoted with an escape only after a backslash (`''` gives a quotation mark).
     private static func mayNameAnIconMap(_ bytes: ArraySlice<UInt8>) -> Bool {
         guard !bytes.contains(UInt8(ascii: "\\")) else { return true }
         var searchStart = bytes.startIndex
         while let candidate = bytes[searchStart...].firstIndex(of: iconsWord[0]) {
-            if bytes[candidate...].starts(with: iconsWord) { return true }
+            for mapName in mapNames where candidate - bytes.startIndex >= mapName.count - iconsWord.count {
+                if bytes[(candidate - (mapName.count - iconsWord.count))...].starts(with: mapName) { return true }
+            }
             searchStart = candidate + 1
         }
         return false
     }
 
     private static let iconsWord = Array("Icons".utf8)
+    private static let mapNames = [Array("filenameIcons".utf8), Array("extensionIcons".utf8)]
 
     /// The icon a file is mapped to, or nil: by its whole name first, else by its last extension in lower case, with or
     /// without its dot. A name starting with its only dot (`.env`) has no extension. An empty icon is none found.

@@ -7,8 +7,8 @@
  *              unconnected parts arranged in rows that keep the whole roughly square.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 extension ArchitectureGridPlacement {
@@ -17,14 +17,15 @@ extension ArchitectureGridPlacement {
     mutating func layOut(_ container: Int) {
         let items = children[container]
         guard !items.isEmpty else { return }
-        order = []
+        order.removeAll(keepingCapacity: true)
         var starts: [Int] = []
         for start in items where !isPlaced[start] {
             partStart = order.count
             starts.append(partStart)
-            cells = [:]
-            largeItems = []
-            reaches = [:]
+            // Emptied, their room kept for the next part.
+            cells.removeAll(keepingCapacity: true)
+            largeItems.removeAll(keepingCapacity: true)
+            reaches.removeAll(keepingCapacity: true)
             put(start, column: 0, row: 0)
             followLinks()
         }
@@ -41,17 +42,17 @@ extension ArchitectureGridPlacement {
             if hintAt < order.count {
                 let from = order[hintAt]
                 hintAt += 1
-                for link in links.hintLinksByItem[from] ?? [] { follow(from: from, link: link) }
+                for link in links.hintLinks(of: from) { follow(from: from, link: link) }
                 continue
             }
             guard edgeAt < order.count else { return }
-            let list = links.edgeLinksByItem[order[edgeAt]] ?? []
+            let list = links.edgeLinks(of: order[edgeAt])
             guard linkAt < list.count else {
                 edgeAt += 1
                 linkAt = 0
                 continue
             }
-            follow(from: order[edgeAt], link: list[linkAt])
+            follow(from: order[edgeAt], link: list[list.startIndex + linkAt])
             linkAt += 1
         }
     }
@@ -122,7 +123,8 @@ extension ArchitectureGridPlacement {
     /// When several placed items reach `to` through the same pair of sides, the middle of the places they ask for, so
     /// that it lines up with the middle one and not with whichever was visited first; nil for fewer than two.
     private func middleOfFacing(_ to: Int, leaving: ArchitectureSide, entering: ArchitectureSide, alongRows: Bool) -> Int? {
-        guard let list = links.edgeLinksByItem[to], list.count > 1 else { return nil }
+        let list = links.edgeLinks(of: to)
+        guard list.count > 1 else { return nil }
         var wanted: [Int] = []
         for index in list {
             let link = links.all[index]

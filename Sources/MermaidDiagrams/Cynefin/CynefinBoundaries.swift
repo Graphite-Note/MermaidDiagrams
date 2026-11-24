@@ -6,8 +6,8 @@
  *              wavy lines between the domains (one step of mulberry32 per point) and the S-shaped cliff.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -69,6 +69,8 @@ enum CynefinBoundaries {
         let step = (to - from) / Double(count)
         var along: [Double] = []
         var across: [Double] = []
+        along.reserveCapacity(count + 1)
+        across.reserveCapacity(count + 1)
         for index in 0...count {
             let isPinned = (index == 0 && shape.pinsStart) || (index == count && shape.pinsEnd)
             along.append(from + Double(index) * step)
@@ -78,6 +80,7 @@ enum CynefinBoundaries {
             shape.isVertical ? CGPoint(x: offset, y: position) : CGPoint(x: position, y: offset)
         }
         var segments: [DiagramPathSegment] = []
+        segments.reserveCapacity(count)
         for index in 0..<count {
             let middle = (along[index] + along[index + 1]) / 2
             let swing = amplitude * 1.5 * (index % 2 == 0 ? 1 : -1) * seededRandom(seed + Double(index) * shape.controlStep + shape.controlShift)
@@ -109,12 +112,14 @@ enum CynefinBoundaries {
     /// `path` run backwards, from its end to its start.
     static func reversed(_ path: DiagramPath) -> DiagramPath {
         var points = [path.start]
+        points.reserveCapacity(path.segments.count + 1)
         for segment in path.segments {
             switch segment {
             case .line(let end), .curve(let end, _, _): points.append(end)
             }
         }
         var segments: [DiagramPathSegment] = []
+        segments.reserveCapacity(path.segments.count)
         for index in path.segments.indices.reversed() {
             switch path.segments[index] {
             case .line: segments.append(.line(to: points[index]))
