@@ -9,7 +9,7 @@ It was written for [Graphite](https://github.com/Graphite-Note/Graphite), whose 
 Add the package to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/Graphite-Note/MermaidDiagrams.git", exact: "0.1.0")
+.package(url: "https://github.com/Graphite-Note/MermaidDiagrams.git", exact: "0.7.0")
 ```
 
 and the product `MermaidDiagrams` to your target's dependencies.
@@ -1019,7 +1019,7 @@ agentflow-beta TB
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/pictures/info-dark.png">
-  <img alt="Info diagram, drawn by the package" width="200" src="docs/pictures/info-light.png">
+  <img alt="Info diagram, drawn by the package" width="201" src="docs/pictures/info-light.png">
 </picture>
 
 <details><summary>Source</summary>
@@ -1173,66 +1173,153 @@ otherwise.
 
 `--readme-pictures <folder>` paints the Gallery's pictures and prints its section (Gallery). `--profile <case> [reading|preparation|narrow|painting] [seconds]` repeats one case (a name of Pele's benchmark, `tree: 500 nodes`, or a corpus, `treemap-docs`) for a sampler such as `sample(1)` or Instruments' Time Profiler (`ProfilingLoop`): `preparation` prepares with the SVG and no narrow scene, as the comparison times it, `narrow` with the narrow scene for Graphite's narrowest column, read so that it is laid out, and no SVG, as Graphite prepares a diagram it shows in a narrow column. `--output-digest [folder]` prepares every input Pele's runner drew (its 765 corpus inputs and the 60 random flat flowcharts) as Graphite prepares it and prints one line per input with a digest (64-bit FNV-1a) of its regular SVG with Pele's variables and with a fixed palette, what a screen reader says, and its narrow scene's SVG at 280, 390 and 600 points, or of why it is refused, then a digest of every line (`OutputDigest`); with a folder it writes the SVGs there too. A change meant to leave the output as it is (a speed change) is checked by running it on both builds and comparing the output with `diff`. `--layout-memory` prints, per case of the comparison with Pele, the heap one layout holds and the heap one preparation holds without its narrow scene, with it not read yet and with it read, median and largest per diagram (`LayoutMemoryBenchmark`; Graphite's target is 64 kB of layout data for a typical diagram); `--scenes` runs only `DiagramSceneBenchmark`. `--check-targets` exits with status 1 after a line `missed target: …` for each median that misses a target of Graphite's plan (`Docs/Native-diagrams-todo.md`, Performance targets) on documentation examples: reading and layout at most 30 µs a diagram, and ten times faster than Pele on the same inputs. The default run only reports.
 
-Measured 2026-11-23 on an Apple M5 Max (128 GB, macOS 27.2.1), release build, the machine otherwise quiet (load average about 2, under the 8 waited for), Pele 1.13.0's own run of 2026-11-20 (`pele-bench.json`); of three runs of the comparison one after the other, the run with the middle median of each case; per diagram, median / 99th percentile in µs:
+Measured 2026-11-24 for 0.7.0 on an Apple M5 Max (128 GB, macOS 27.2.1), release build (`swift build -c release`), the machine otherwise quiet (no Swift or Xcode build or test running, load average 3.0 to 3.5, under the 8 waited for), Pele 1.13.0's own run of 2026-11-20 (`pele-bench.json`); of three runs of the comparison one after the other, for each case and each of the package's columns the run with the middle median; per diagram, median / 99th percentile in µs, and each speed-up Pele's median divided by the package's:
 
-| Inputs | Diagrams | Pele 1.13.0, render | Package, read and layout | Speed-up | Package, prepared with SVG |
-|---|---:|---:|---:|---:|---:|
-| docs: all examples | 114 | 22.13 / 54.76 | 14.59 / 16.64 | 1.5× | 28.26 / 29.57 |
-| tree: 50 nodes | 1 | 152.67 / 253.46 | 130.38 / 158.21 | 1.2× | 326.08 / 362.79 |
-| mesh: 50 nodes, 20 extra labelled edges | 1 | 398.58 / 1225.08 | 360.21 / 417.38 | 1.1× | 675.46 / 728.17 |
-| tree: 500 nodes | 1 | 1485.92 / 2229.25 | 1190.42 / 1269.83 | 1.2× | 1615.62 / 1706.00 |
-| mesh: 500 nodes, 200 extra labelled edges | 1 | 5740.42 / 8791.00 | 5036.12 / 5206.62 | 1.1× | 5646.38 / 5847.96 |
-| agentflow-docs | 12 | 45.72 / 116.59 | 51.51 / 60.49 | 0.9× | 86.53 / 93.83 |
-| architecture-docs | 6 | 26.86 / 48.68 | 14.39 / 17.81 | 1.9× | 63.72 / 71.06 |
-| block-docs | 30 | 5.85 / 10.64 | 8.02 / 9.35 | 0.7× | 26.00 / 34.39 |
-| c4-docs | 6 | 73.37 / 129.24 | 67.74 / 76.67 | 1.1× | 199.92 / 216.56 |
-| class-docs | 38 | 23.28 / 48.76 | 15.59 / 17.94 | 1.5× | 44.90 / 47.55 |
-| cynefin-docs | 3 | 22.68 / 43.07 | 13.60 / 16.82 | 1.7× | 77.39 / 89.22 |
-| er-docs | 25 | 24.43 / 44.42 | 21.70 / 24.04 | 1.1× | 65.26 / 70.13 |
-| eventmodeling-docs | 12 | 13.29 / 21.01 | 10.22 / 12.32 | 1.3× | 52.45 / 56.71 |
-| flowchart-docs | 114 | 17.74 / 24.02 | 14.62 / 16.24 | 1.2× | 28.40 / 29.81 |
-| gantt-docs | 11 | 23.28 / 38.06 | 21.13 / 24.65 | 1.1× | 59.55 / 65.29 |
-| git-docs | 35 | 24.63 / 36.85 | 14.99 / 16.95 | 1.6× | 95.96 / 99.72 |
-| info-docs | 2 | 1.17 / 1.85 | 0.42 / 0.46 | 2.8× | 2.79 / 3.54 |
-| ishikawa-docs | 1 | 11.54 / 33.71 | 11.29 / 13.17 | 1.0× | 56.21 / 68.96 |
-| journey-docs | 1 | 9.54 / 23.00 | 7.12 / 9.08 | 1.3× | 85.42 / 103.50 |
-| kanban-docs | 3 | 16.79 / 29.01 | 14.31 / 18.39 | 1.2× | 48.75 / 58.10 |
-| mindmap-docs | 13 | 6.38 / 12.76 | 3.13 / 3.87 | 2.0× | 17.94 / 20.70 |
-| packet-docs | 4 | 9.39 / 14.72 | 7.12 / 9.52 | 1.3× | 40.25 / 47.73 |
-| pie-docs | 2 | 9.14 / 18.17 | 5.71 / 7.33 | 1.6× | 34.00 / 42.92 |
-| quadrant-docs | 3 | 13.01 / 36.22 | 14.92 / 18.68 | 0.9× | 48.25 / 58.21 |
-| radar-docs | 3 | 17.64 / 31.99 | 8.00 / 10.32 | 2.2× | 46.97 / 55.93 |
-| railroad-docs | 14 | 15.73 / 23.23 | 14.24 / 16.70 | 1.1× | 86.97 / 92.47 |
-| requirement-docs | 9 | 27.71 / 47.99 | 28.35 / 32.60 | 1.0× | 75.41 / 82.47 |
-| sankey-docs | 8 | 36.56 / 90.20 | 31.55 / 36.18 | 1.2× | 104.90 / 117.71 |
-| sequence-docs | 38 | 10.25 / 19.91 | 8.80 / 9.90 | 1.2× | 43.52 / 46.48 |
-| state-docs | 22 | 44.40 / 102.87 | 26.11 / 28.97 | 1.7× | 55.72 / 60.20 |
-| swimlane-docs | 13 | 35.45 / 83.06 | 32.44 / 36.32 | 1.1× | 69.25 / 75.54 |
-| timeline-docs | 14 | 13.77 / 21.90 | 9.85 / 11.87 | 1.4× | 76.71 / 81.68 |
-| treemap-docs | 8 | 16.11 / 26.23 | 9.76 / 11.86 | 1.7× | 44.99 / 50.55 |
-| treeview-docs | 13 | 9.27 / 15.58 | 10.32 / 12.50 | 0.9× | 24.47 / 27.63 |
-| usecase-docs | 24 | 49.54 / 104.63 | 44.22 / 53.49 | 1.1× | 78.86 / 85.09 |
-| venn-docs | 8 | 92.08 / 132.47 | 20.08 / 24.26 | 4.6× | 36.39 / 41.35 |
-| wardley-docs | 19 | 11.77 / 19.95 | 9.60 / 11.28 | 1.2× | 39.73 / 42.11 |
-| xychart-docs | 8 | 12.30 / 27.29 | 12.54 / 16.03 | 1.0× | 57.49 / 64.12 |
+| Inputs | Diagrams | Pele 1.13.0, render | Package, read and layout | Speed-up | Package, prepared with SVG | Speed-up |
+|---|---:|---:|---:|---:|---:|---:|
+| docs: all examples | 114 | 22.13 / 54.76 | 10.63 / 12.38 | 2.1× | 16.12 / 17.95 | 1.4× |
+| tree: 50 nodes | 1 | 152.67 / 253.46 | 108.71 / 128.75 | 1.4× | 173.50 / 203.75 | 0.9× |
+| mesh: 50 nodes, 20 extra labelled edges | 1 | 398.58 / 1225.08 | 269.17 / 342.46 | 1.5× | 360.58 / 416.62 | 1.1× |
+| tree: 500 nodes | 1 | 1485.92 / 2229.25 | 1001.00 / 1132.71 | 1.5× | 1439.00 / 1522.38 | 1.0× |
+| mesh: 500 nodes, 200 extra labelled edges | 1 | 5740.42 / 8791.00 | 3478.04 / 3732.04 | 1.7× | 4173.75 / 4460.96 | 1.4× |
+| agentflow-docs | 12 | 45.72 / 116.59 | 37.13 / 45.18 | 1.2× | 47.01 / 52.50 | 1.0× |
+| architecture-docs | 6 | 26.86 / 48.68 | 12.80 / 14.94 | 2.1× | 30.03 / 35.65 | 0.9× |
+| block-docs | 30 | 5.85 / 10.64 | 7.42 / 8.76 | 0.8× | 12.84 / 14.28 | 0.5× |
+| c4-docs | 6 | 73.37 / 129.24 | 48.04 / 56.93 | 1.5× | 81.58 / 90.98 | 0.9× |
+| class-docs | 38 | 23.28 / 48.76 | 12.25 / 14.28 | 1.9× | 21.44 / 23.97 | 1.1× |
+| cynefin-docs | 3 | 22.68 / 43.07 | 13.01 / 15.83 | 1.7× | 27.61 / 32.90 | 0.8× |
+| er-docs | 25 | 24.43 / 44.42 | 17.75 / 20.04 | 1.4× | 31.38 / 62.36 | 0.8× |
+| eventmodeling-docs | 12 | 13.29 / 21.01 | 10.18 / 12.28 | 1.3× | 21.80 / 24.67 | 0.6× |
+| flowchart-docs | 114 | 17.74 / 24.02 | 10.68 / 12.76 | 1.7× | 15.96 / 17.35 | 1.1× |
+| gantt-docs | 11 | 23.28 / 38.06 | 16.21 / 19.02 | 1.4× | 27.73 / 31.23 | 0.8× |
+| git-docs | 35 | 24.63 / 36.85 | 11.77 / 13.73 | 2.1× | 33.00 / 36.65 | 0.7× |
+| info-docs | 2 | 1.17 / 1.85 | 0.33 / 0.38 | 3.5× | 1.04 / 1.17 | 1.1× |
+| ishikawa-docs | 1 | 11.54 / 33.71 | 10.54 / 12.08 | 1.1× | 23.83 / 26.62 | 0.5× |
+| journey-docs | 1 | 9.54 / 23.00 | 6.79 / 8.42 | 1.4× | 25.42 / 34.83 | 0.4× |
+| kanban-docs | 3 | 16.79 / 29.01 | 8.51 / 9.75 | 2.0× | 17.22 / 18.88 | 1.0× |
+| mindmap-docs | 13 | 6.38 / 12.76 | 3.22 / 3.97 | 2.0× | 8.45 / 10.50 | 0.8× |
+| packet-docs | 4 | 9.39 / 14.72 | 5.77 / 7.50 | 1.6× | 14.56 / 17.44 | 0.6× |
+| pie-docs | 2 | 9.14 / 18.17 | 4.23 / 5.21 | 2.2× | 12.31 / 16.50 | 0.7× |
+| quadrant-docs | 3 | 13.01 / 36.22 | 10.24 / 14.14 | 1.3× | 19.33 / 25.43 | 0.7× |
+| radar-docs | 3 | 17.64 / 31.99 | 7.62 / 10.36 | 2.3× | 16.76 / 20.67 | 1.1× |
+| railroad-docs | 14 | 15.73 / 23.23 | 14.19 / 16.72 | 1.1× | 33.15 / 37.70 | 0.5× |
+| requirement-docs | 9 | 27.71 / 47.99 | 21.17 / 25.21 | 1.3× | 34.77 / 39.60 | 0.8× |
+| sankey-docs | 8 | 36.56 / 90.20 | 21.31 / 25.25 | 1.7× | 38.23 / 43.85 | 1.0× |
+| sequence-docs | 38 | 10.25 / 19.91 | 8.74 / 10.34 | 1.2× | 19.60 / 22.09 | 0.5× |
+| state-docs | 22 | 44.40 / 102.87 | 18.20 / 23.70 | 2.4× | 28.63 / 32.28 | 1.6× |
+| swimlane-docs | 13 | 35.45 / 83.06 | 33.56 / 37.21 | 1.1× | 46.93 / 52.97 | 0.8× |
+| timeline-docs | 14 | 13.77 / 21.90 | 8.15 / 9.74 | 1.7× | 27.28 / 30.42 | 0.5× |
+| treemap-docs | 8 | 16.11 / 26.23 | 9.79 / 12.22 | 1.6× | 21.10 / 24.20 | 0.8× |
+| treeview-docs | 13 | 9.27 / 15.58 | 7.50 / 9.00 | 1.2× | 12.85 / 15.49 | 0.7× |
+| usecase-docs | 24 | 49.54 / 104.63 | 31.91 / 41.60 | 1.6× | 43.33 / 51.38 | 1.1× |
+| venn-docs | 8 | 92.08 / 132.47 | 17.17 / 20.44 | 5.4× | 21.56 / 25.34 | 4.3× |
+| wardley-docs | 19 | 11.77 / 19.95 | 9.19 / 10.80 | 1.3× | 16.60 / 18.89 | 0.7× |
+| xychart-docs | 8 | 12.30 / 27.29 | 11.41 / 12.73 | 1.1× | 22.08 / 34.39 | 0.6× |
 
-On the same Mac at the start of this measurement's work (main at ac087d6, 2026-11-23, load about 3), reading and layout per diagram were, in µs: flowchart examples 18.62, tree of 50 nodes 153.38, mesh of 50 nodes 412.33, tree of 500 nodes 1385.58, mesh of 500 nodes 5353.67, agent flow 78.48, architecture 42.03, block 10.63, C4 196.88, class 20.62, Cynefin 31.97, entity relationship 25.52, event model 15.64, Gantt 37.50, Git graph 34.31, info 0.42, Ishikawa 14.96, journey 7.79, kanban 32.97, mindmap 8.15, packet 40.92, pie 27.60, quadrant 32.38, radar 30.17, railroad 17.80, requirement 78.00, Sankey 47.73, sequence 23.49, state 28.92, swimlane 36.44, timeline 21.00, treemap 72.97, tree view 47.61, use case 74.29, Venn 23.73, Wardley 10.49, XY chart 31.64 (this section's table of 2026-11-20 had the flowchart examples at 8.6 µs: the grammar and layered layout branches merged since then read and lay out as Pele does, and cost more). Sampling the benchmark (`--profile`, `sample(1)`) found the time in making Core Text fonts again for sizes already made, laying out Core Text lines for the same text beyond ASCII, reading the front matter's YAML twice, writing numbers through `String(format:)`, Foundation's regular expressions and string searches through characters where the bytes answer, strings built a scalar at a time, copies of cursors, measurers and frames, and arrays grown an element at a time; each was changed only where its result is the same, the slow path kept for the rest, and kept only where it measured faster.
+Against 0.6.1 (this section's table of 2026-11-23, the same Mac), reading and layout are up to 1.7 times as fast: kanban 1.68×, Sankey 1.48×, quadrant 1.46×, Pele's 500-node mesh 1.45×, state 1.43×, C4 1.41×, agent flow, use case and tree view 1.39×, Pele's flowchart examples 1.37×, requirement 1.34×, Gantt 1.30×; event model, railroad, treemap and sequence are as they were, and mindmap and swimlane 3 % slower, which was not traced. The whole preparation with its SVG is 1.1 to 3.4 times as fast: journey 3.36×, Git graph 2.91×, kanban 2.83×, timeline 2.81×, Cynefin and radar 2.80×, packet and pie 2.76×, Sankey 2.74×, C4 2.45×, Pele's flowchart examples 1.75×, swimlane 1.48×, the 500-node tree 1.12×. What 0.7.0 changed: a prepared diagram lays out its narrow scene only when it is first read (`PreparedMermaidDiagram.narrowScene`, `showsNarrowScene(inColumnWidth:scale:)`), so preparing a diagram that fits its column costs no second layout; the SVG writer writes each document front to back into one block of memory reserved from its scene; the front matter and its YAML, and the readers of C4, kanban, quadrant, tree view, agent flow, use case, requirement, Git graph, Gantt, XY chart, architecture and radar diagrams, compare, split and trim the text's bytes; the layered layout under flowcharts, state, class, ER, requirement, use case and agent flow diagrams allocates and copies less and works in one reused workspace; the Sankey, Venn, use case, block, C4 and XY chart layouts sort, copy and allocate less; labels are wrapped, decoded and spoken on their UTF-8 bytes. Each of these merges checked that `--output-digest` gives the same 826 lines as the build before it, so every SVG, narrow scene and spoken text is that of 0.6.1 but the info diagram's version.
 
-Missed today: the ten-times target on every documentation corpus (the package's reading and layout is 0.7 to 4.6 times Pele's speed, 1.5 times on Pele's flowchart examples), and the 30 µs target on the examples of agent flows, C4 diagrams, Sankey diagrams, swimlane diagrams and use case diagrams. Six types are still slower than Pele on their examples: agent flows (51.5 against 45.7 µs), block diagrams (8.0 against 5.9), quadrant charts (14.9 against 13.0), requirement diagrams (28.4 against 27.7), tree views (10.3 against 9.3) and XY charts (12.5 against 12.3); the time left there is spread over their lexers, the YAML reader and the layered layout, with no single place to take it from. The whole preparation with its SVG is slower than Pele's `render` for every type but the Venn diagram and Pele's 500-node mesh: making the scene, what a screen reader says and the SVG costs more than reading and laying out. The 500-node mesh is past the drawing limit (Pele draws it 22,433 points wide), so its preparation is refused once its scene is made. Painting is not faster: Core Graphics paints a merged path over the whole of its bounds, so a 500-node tree's scene (49,082 points wide) takes about 0.2 s to paint at two pixels a point and the 500-node mesh about 1 s, nearly all of it in two paths (the edges and the nodes); painting them cut into pieces that share no pixel was tried and changes the edges' smoothing in a few hundred pixels, so it was left out.
+Graphite's targets (`Docs/Native-diagrams-todo.md`, Performance targets), on this Mac:
 
-Pele in JavaScriptCore on the same Mac (`--pele-javascriptcore`, 2026-11-23, load about 3, the package's columns as above
-within a few per cent), per diagram, median in µs: compiled (the benchmark signed with `com.apple.security.cs.allow-jit`),
-JavaScriptCore runs Pele faster than Deno's V8 does, so the package is about as fast as that Pele rather than faster;
-interpreted (the benchmark as `swift build` signs it), it is about ten times slower. Pele's flowchart examples: 15.83
-compiled, 158.46 interpreted, against 22.13 in Deno (package 15.63); agent flows 31.78 / 334.49 (package 52.54); block
-diagrams 5.71 / 71.99 (8.41); C4 56.72 / 671.99 (71.54); requirement diagrams 20.79 / 261.69 (29.66); use case diagrams
-26.12 / 346.38 (45.75); Venn diagrams 44.98 / 648.06 (21.17); the 500-node mesh 5,145.58 / 87,741.33 (5,304.42). Every
-documentation example was drawn as in Deno.
+- Reading and layout ten times as fast as Pele: missed on every case. The package is 0.8 (block diagrams) to 5.4 (Venn diagrams) times Pele's speed, 2.1 times on Pele's flowchart examples. Block diagrams are the one type still slower than Pele (7.42 against 5.85 µs); XY charts, Ishikawa diagrams, railroad diagrams and swimlanes are 1.1 times as fast.
+- Reading and layout in at most 30 µs a diagram: met on 29 of the 33 documentation corpora; missed on agent flows (37.1 µs), C4 diagrams (48.0), swimlanes (33.6) and use case diagrams (31.9).
+- The whole preparation with its SVG ten times as fast as Pele's `render`: missed on every case. It is 0.4 (journey) to 4.3 (Venn) times Pele's speed, and 27 of the 38 cases are still slower than Pele: making the scene, what a screen reader says and the SVG costs more than reading and laying out.
+- At most 64 kB of layout data for a typical diagram (`--layout-memory`): met. Every documentation corpus holds at most 17.1 kB a layout (median, C4) and 22.5 kB (largest, C4); only Pele's generated mesh of 50 nodes (65.4 kB) and the 500-node tree and mesh hold more.
+- A width change laid out again without reading again, within one frame: met for the one narrow column the package lays out (`narrowestColumnWidth`), which is laid out from the read diagram when it is first read; reading it added 0.5 µs (state) to 128 µs (Sankey) a diagram on the documentation examples when last measured (main at 3015de9, 2026-11-23), far under a frame's 16 ms. Any other width is drawn by scaling a scene; the package has no layout for an arbitrary width.
 
-Not measured on the devices yet: on 2026-11-23, from about 17:00 to 18:50, neither the iPad Pro 11-inch (3rd generation,
-iPad13,6) nor the iPhone 13 Pro (iPhone14,2), both paired with the Mac over the network, opened a connection to Xcode
-(`devicectl`: "The tunnel connection failed while the system tried to connect to the device"; `xcodebuild`: timed out
-waiting for the destination) in 36 attempts, nor in four more from about 18:55 to 19:15 with the test built anew for iOS
-in Release (each device listed as available at times, but no tunnel opened), so the test never started on either; it ran on an iOS simulator (whose
-numbers say nothing of a device and are not given). The command above, run with a device unlocked and reachable, fills
-in the device's table.
+Painting is not faster: Core Graphics paints a merged path over the whole of its bounds, so a 500-node tree's scene (49,082 points wide) takes about 0.2 s to paint at two pixels a point and the 500-node mesh about 1 s, nearly all of it in two paths (the edges and the nodes); painting them cut into pieces that share no pixel was tried and changes the edges' smoothing in a few hundred pixels, so it was left out.
+
+Pele in JavaScriptCore on the same Mac (`--pele-javascriptcore`, 2026-11-23, against 0.6.1, load about 3), per diagram, median in µs: compiled (the benchmark signed with `com.apple.security.cs.allow-jit`), JavaScriptCore runs Pele faster than Deno's V8 does; interpreted (the benchmark as `swift build` signs it), it is about ten times slower. Pele's flowchart examples: 15.83 compiled, 158.46 interpreted, against 22.13 in Deno (0.6.1's package 15.63, 0.7.0's 10.68 above); agent flows 31.78 / 334.49 (0.6.1 52.54, 0.7.0 37.13); block diagrams 5.71 / 71.99 (8.41, 7.42); C4 56.72 / 671.99 (71.54, 48.04); requirement diagrams 20.79 / 261.69 (29.66, 21.17); use case diagrams 26.12 / 346.38 (45.75, 31.91); Venn diagrams 44.98 / 648.06 (21.17, 17.17); the 500-node mesh 5,145.58 / 87,741.33 (5,304.42, 3,478.04). Every documentation example was drawn as in Deno.
+
+#### In the iOS simulators
+
+Not a device's speed: a simulator runs the iOS app on the Mac's own processor (here the M5 Max), so these numbers say how the package and Pele compare under iOS's frameworks and WebKit, not how fast an iPad or an iPhone is. Measured 2026-11-24 for 0.7.0 with Xcode 27.2 (27B52), `xcodebuild test -scheme MermaidDiagramsDeviceBenchmark -configuration Release -enableCodeCoverage NO -destination id=<simulator>` (the command above), in a simulator of each made for the run on the iOS 27.2 runtime (24B8117), one after the other, the Mac otherwise quiet (load average 4 to 5, under the 5 waited for; a first run of each, right after the build, with the load at 8 to 16, is not given). Every documentation example was drawn by Pele in the JSContext and in the page as in Deno, but the page's Gantt charts, which it writes in the Mac's time zone (UTC+1) and were not compared. In a simulator Pele in the JSContext runs about as fast as in the page (0.95 to 1.6 times its time), so it appears to be compiled there, as it is not on a device. The page's clock moves by whole milliseconds, which shows in Pele's 99th percentiles. The first case, Pele's 114 examples, has a high 99th percentile for the package in both: it runs first, while the app is still starting. Per diagram, median / 99th percentile in µs; the speed-up is against Pele in the page.
+
+iPad Pro 13-inch (M5) simulator:
+
+| Inputs | Diagrams | Pele in WebKit, render | Pele in a JSContext, render | Package, read and layout | Speed-up | Package, prepared with SVG |
+|---|---:|---:|---:|---:|---:|---:|
+| docs: all examples | 114 | 30.15 / 49.89 | 65.09 / 2953.99 | 19.70 / 283.35 | 1.5× | 29.05 / 199.40 |
+| tree: 50 nodes | 1 | 195.31 / 425.78 | 432.88 / 27992.54 | 157.75 / 348.33 | 1.2× | 240.08 / 482.46 |
+| mesh: 50 nodes, 20 extra labelled edges | 1 | 500.00 / 695.31 | 880.42 / 3455.54 | 363.25 / 616.75 | 1.4× | 520.42 / 883.96 |
+| tree: 500 nodes | 1 | 2093.75 / 3937.50 | 2700.71 / 15997.38 | 1440.83 / 1977.75 | 1.5× | 2309.29 / 4605.33 |
+| mesh: 500 nodes, 200 extra labelled edges | 1 | 7000.00 / 7875.00 | 10433.67 / 14457.62 | 5254.17 / 11020.25 | 1.3× | 6030.29 / 11004.33 |
+| agentflow-docs | 12 | 35.16 / 61.85 | 43.11 / 202.15 | 46.05 / 110.14 | 0.8× | 57.39 / 122.36 |
+| architecture-docs | 6 | 25.07 / 26.69 | 25.61 / 157.64 | 14.49 / 37.09 | 1.7× | 35.90 / 91.95 |
+| block-docs | 30 | 7.03 / 8.20 | 7.50 / 45.50 | 8.29 / 17.97 | 0.8× | 15.61 / 36.13 |
+| c4-docs | 6 | 66.41 / 91.15 | 95.58 / 413.31 | 57.45 / 123.72 | 1.2× | 116.81 / 331.41 |
+| class-docs | 38 | 18.91 / 22.62 | 23.43 / 86.48 | 12.33 / 21.41 | 1.5× | 30.88 / 56.20 |
+| cynefin-docs | 3 | 23.44 / 31.90 | 23.74 / 228.03 | 12.74 / 16.19 | 1.8× | 31.01 / 47.01 |
+| er-docs | 25 | 17.50 / 19.69 | 18.75 / 99.97 | 17.14 / 20.96 | 1.0× | 32.03 / 38.16 |
+| eventmodeling-docs | 12 | 12.70 / 14.00 | 12.65 / 57.17 | 10.03 / 12.23 | 1.3× | 23.13 / 28.13 |
+| flowchart-docs | 114 | 12.34 / 14.53 | 13.85 / 59.42 | 10.55 / 12.60 | 1.2× | 16.17 / 18.73 |
+| gantt-docs | 11 | 23.44 / 37.64 | 24.23 / 83.42 | 15.69 / 19.00 | 1.5× | 29.32 / 34.90 |
+| git-docs | 35 | 20.98 / 28.12 | 21.66 / 53.98 | 11.47 / 18.11 | 1.8× | 36.20 / 51.46 |
+| info-docs | 2 | 0.85 / 0.92 | 1.15 / 3.88 | 0.33 / 0.50 | 2.6× | 1.00 / 1.25 |
+| ishikawa-docs | 1 | 10.01 / 10.38 | 11.71 / 33.83 | 10.12 / 13.42 | 1.0× | 25.33 / 34.17 |
+| journey-docs | 1 | 10.25 / 12.45 | 13.12 / 42.50 | 6.79 / 9.88 | 1.5× | 27.33 / 37.75 |
+| kanban-docs | 3 | 13.83 / 14.16 | 15.60 / 30.12 | 8.50 / 10.40 | 1.6× | 18.12 / 25.19 |
+| mindmap-docs | 13 | 4.21 / 5.11 | 4.51 / 15.31 | 3.10 / 4.02 | 1.4× | 8.45 / 11.13 |
+| packet-docs | 4 | 8.79 / 9.03 | 9.60 / 17.98 | 5.71 / 7.78 | 1.5× | 16.33 / 26.97 |
+| pie-docs | 2 | 8.30 / 8.79 | 9.79 / 23.25 | 4.12 / 4.79 | 2.0× | 12.71 / 19.25 |
+| quadrant-docs | 3 | 11.72 / 13.51 | 14.43 / 57.18 | 10.71 / 14.89 | 1.1× | 20.53 / 26.18 |
+| radar-docs | 3 | 15.95 / 16.60 | 16.69 / 36.72 | 7.39 / 8.61 | 2.2× | 19.06 / 22.11 |
+| railroad-docs | 14 | 15.07 / 17.30 | 14.92 / 63.51 | 13.89 / 16.24 | 1.1× | 34.96 / 39.82 |
+| requirement-docs | 9 | 21.70 / 29.95 | 21.56 / 98.81 | 21.40 / 25.76 | 1.0× | 37.25 / 43.56 |
+| sankey-docs | 8 | 30.76 / 33.20 | 32.41 / 140.40 | 21.51 / 28.69 | 1.4× | 40.21 / 53.89 |
+| sequence-docs | 38 | 10.49 / 13.36 | 10.96 / 42.14 | 8.47 / 10.01 | 1.2× | 20.16 / 24.53 |
+| state-docs | 22 | 25.21 / 30.18 | 25.35 / 84.64 | 17.76 / 21.02 | 1.4× | 28.75 / 33.91 |
+| swimlane-docs | 13 | 30.05 / 39.66 | 29.62 / 129.92 | 32.50 / 37.94 | 0.9× | 47.21 / 53.16 |
+| timeline-docs | 14 | 13.11 / 14.51 | 13.16 / 59.29 | 7.84 / 9.66 | 1.7× | 29.53 / 39.22 |
+| treemap-docs | 8 | 14.65 / 15.62 | 15.30 / 34.36 | 9.49 / 11.98 | 1.5× | 22.78 / 29.94 |
+| treeview-docs | 13 | 8.26 / 9.77 | 9.17 / 20.41 | 7.36 / 9.48 | 1.1× | 13.44 / 17.07 |
+| usecase-docs | 24 | 27.34 / 31.90 | 28.60 / 87.26 | 31.41 / 39.42 | 0.9× | 46.44 / 87.72 |
+| venn-docs | 8 | 44.92 / 45.90 | 46.55 / 98.72 | 17.03 / 22.65 | 2.6× | 22.73 / 40.26 |
+| wardley-docs | 19 | 10.90 / 13.57 | 12.07 / 49.85 | 9.11 / 11.19 | 1.2× | 18.11 / 21.58 |
+| xychart-docs | 8 | 11.47 / 14.89 | 12.82 / 44.74 | 11.20 / 13.82 | 1.0× | 24.16 / 29.06 |
+
+iPhone 17 Pro simulator:
+
+| Inputs | Diagrams | Pele in WebKit, render | Pele in a JSContext, render | Package, read and layout | Speed-up | Package, prepared with SVG |
+|---|---:|---:|---:|---:|---:|---:|
+| docs: all examples | 114 | 30.15 / 59.76 | 209.82 / 1341.85 | 18.39 / 1849.57 | 1.6× | 38.03 / 1085.00 |
+| tree: 50 nodes | 1 | 226.56 / 429.69 | 607.67 / 107925.38 | 156.46 / 423.58 | 1.4× | 261.71 / 587.79 |
+| mesh: 50 nodes, 20 extra labelled edges | 1 | 593.75 / 710.94 | 1888.33 / 42280.54 | 459.75 / 788.46 | 1.3× | 491.21 / 879.71 |
+| tree: 500 nodes | 1 | 2343.75 / 4687.50 | 2840.71 / 8774.12 | 1546.71 / 2594.08 | 1.5× | 2337.58 / 3031.00 |
+| mesh: 500 nodes, 200 extra labelled edges | 1 | 8125.00 / 8750.00 | 11464.71 / 23700.58 | 5750.46 / 6929.12 | 1.4× | 7249.00 / 8622.12 |
+| agentflow-docs | 12 | 41.02 / 59.24 | 64.41 / 276.25 | 56.43 / 149.73 | 0.7× | 60.98 / 103.24 |
+| architecture-docs | 6 | 26.37 / 30.92 | 27.53 / 160.94 | 13.10 / 32.15 | 2.0× | 34.44 / 43.91 |
+| block-docs | 30 | 6.25 / 7.29 | 6.82 / 37.22 | 7.46 / 9.03 | 0.8× | 13.29 / 15.48 |
+| c4-docs | 6 | 61.20 / 84.64 | 63.56 / 241.39 | 50.15 / 64.27 | 1.2× | 88.43 / 106.52 |
+| class-docs | 38 | 16.24 / 17.89 | 18.79 / 63.68 | 12.03 / 14.96 | 1.4× | 22.12 / 28.51 |
+| cynefin-docs | 3 | 21.81 / 27.67 | 21.65 / 159.32 | 12.86 / 16.21 | 1.7× | 30.43 / 37.85 |
+| er-docs | 25 | 17.50 / 20.62 | 18.85 / 63.03 | 17.39 / 20.82 | 1.0× | 32.07 / 36.54 |
+| eventmodeling-docs | 12 | 12.86 / 14.16 | 13.01 / 60.10 | 9.83 / 11.63 | 1.3× | 22.98 / 26.75 |
+| flowchart-docs | 114 | 12.47 / 15.08 | 14.19 / 29.79 | 10.53 / 13.17 | 1.2× | 16.13 / 17.79 |
+| gantt-docs | 11 | 23.44 / 36.22 | 24.66 / 85.84 | 15.75 / 18.66 | 1.5× | 29.46 / 42.02 |
+| git-docs | 35 | 20.98 / 27.23 | 22.05 / 57.75 | 11.61 / 13.32 | 1.8× | 34.83 / 39.53 |
+| info-docs | 2 | 0.85 / 0.92 | 1.17 / 4.92 | 0.35 / 0.52 | 2.4× | 1.00 / 1.12 |
+| ishikawa-docs | 1 | 10.01 / 10.25 | 11.67 / 32.79 | 10.17 / 13.21 | 1.0× | 25.33 / 35.88 |
+| journey-docs | 1 | 10.13 / 12.57 | 13.29 / 42.08 | 6.75 / 8.46 | 1.5× | 26.29 / 35.38 |
+| kanban-docs | 3 | 13.83 / 14.32 | 16.08 / 38.50 | 8.74 / 10.99 | 1.6× | 18.54 / 23.64 |
+| mindmap-docs | 13 | 4.28 / 4.96 | 4.54 / 10.14 | 3.07 / 4.05 | 1.4× | 8.44 / 11.39 |
+| packet-docs | 4 | 8.79 / 9.03 | 9.96 / 18.45 | 5.57 / 7.42 | 1.6× | 16.34 / 21.57 |
+| pie-docs | 2 | 8.30 / 9.40 | 10.40 / 24.56 | 4.15 / 5.21 | 2.0× | 12.56 / 16.96 |
+| quadrant-docs | 3 | 11.56 / 13.35 | 14.49 / 44.07 | 10.72 / 14.51 | 1.1× | 20.46 / 26.11 |
+| radar-docs | 3 | 15.95 / 16.60 | 17.56 / 38.53 | 7.38 / 9.26 | 2.2× | 18.03 / 22.46 |
+| railroad-docs | 14 | 15.07 / 17.02 | 16.04 / 68.75 | 14.34 / 19.58 | 1.1× | 35.51 / 40.39 |
+| requirement-docs | 9 | 21.70 / 30.82 | 22.26 / 101.81 | 21.96 / 26.33 | 1.0× | 38.13 / 48.68 |
+| sankey-docs | 8 | 31.25 / 32.71 | 32.68 / 120.22 | 22.56 / 28.96 | 1.4× | 40.57 / 47.33 |
+| sequence-docs | 38 | 10.49 / 13.57 | 11.12 / 49.55 | 9.47 / 11.37 | 1.1× | 21.63 / 26.19 |
+| state-docs | 22 | 25.21 / 27.34 | 26.53 / 80.54 | 19.59 / 24.06 | 1.3× | 30.98 / 42.14 |
+| swimlane-docs | 13 | 30.05 / 39.66 | 31.14 / 291.73 | 34.26 / 45.61 | 0.9× | 48.49 / 58.71 |
+| timeline-docs | 14 | 13.11 / 15.62 | 12.93 / 54.78 | 8.26 / 10.01 | 1.6× | 30.14 / 36.54 |
+| treemap-docs | 8 | 14.89 / 16.85 | 15.07 / 29.13 | 10.30 / 12.91 | 1.4× | 23.78 / 41.69 |
+| treeview-docs | 13 | 8.11 / 9.31 | 9.06 / 22.20 | 7.93 / 9.82 | 1.0× | 13.96 / 16.99 |
+| usecase-docs | 24 | 26.69 / 31.90 | 29.56 / 120.24 | 31.76 / 39.12 | 0.8× | 44.74 / 53.95 |
+| venn-docs | 8 | 45.41 / 46.39 | 43.05 / 89.38 | 16.95 / 20.02 | 2.7× | 22.19 / 28.00 |
+| wardley-docs | 19 | 10.69 / 13.16 | 11.56 / 49.86 | 9.05 / 10.97 | 1.2× | 18.07 / 22.15 |
+| xychart-docs | 8 | 11.47 / 16.11 | 12.78 / 49.45 | 11.33 / 15.47 | 1.0× | 24.36 / 35.13 |
+
+In both simulators reading and layout are 0.7 (agent flows) to 2.7 (Venn diagrams) times as fast as Pele in the page and the whole preparation with its SVG 0.4 (journey) to 2.0 (Venn) times; agent flows, block diagrams, use case diagrams and swimlanes read and lay out more slowly than Pele there, and only Venn diagrams and Pele's 500-node mesh prepare with their SVG faster than Pele in both (on the iPad also Pele's 114 examples, 1.04 times; on the iPhone also the 50-node mesh and, level, the 500-node tree). WebKit's compiled JavaScriptCore runs Pele faster than Deno does on the Mac for several types (Venn diagrams 45 against 92 µs, use case diagrams 27 against 50), so the speed-ups here are lower than the Mac's. The ten-times targets are missed on every case in both, and the 30 µs target on agent flows, C4 diagrams, swimlanes and use case diagrams.
+
+Not measured on the devices yet: on 2026-11-23, from about 17:00 to 19:15, neither the iPad Pro 11-inch (3rd generation, iPad13,6) nor the iPhone 13 Pro (iPhone14,2), both paired with the Mac over the network, opened a connection to Xcode (`devicectl`: "The tunnel connection failed while the system tried to connect to the device"; `xcodebuild`: timed out waiting for the destination) in 40 attempts, so the test never started on either. The command above, run with a device unlocked and reachable, gives the device's table.
