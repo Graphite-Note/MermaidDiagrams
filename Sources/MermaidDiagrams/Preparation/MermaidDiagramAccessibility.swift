@@ -4,10 +4,10 @@
  * Layer: Core
  * Description: What a screen reader says of a prepared diagram: its label, the title or the type's name, and its value,
  *              the description or a summary of what it shows, made the first time it is read; the summary's parts each
- *              built in one string.
+ *              built in one string, and how the types' summaries write numbers and texts.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -74,5 +74,18 @@ extension MermaidDiagramAccessibility {
         text.reserveCapacity(parts.reduce(0) { total, part in total + part.utf8.count })
         for part in parts { text += part }
         return text
+    }
+
+    /// 2⁵³: past it, a double holds no fraction and not every whole number.
+    private static let largestExactWholeNumber = 9_007_199_254_740_992.0
+
+    /// A number as it is written: a whole number without a fraction (`5`), else with its fraction (`3.5`).
+    static func written(_ value: Double) -> String {
+        value == value.rounded() && value.magnitude < largestExactWholeNumber ? String(Int64(value)) : String(value)
+    }
+
+    /// A text as it is drawn, its lines joined by spaces.
+    static func spoken(_ text: String) -> String {
+        DiagramLabelDecoder.label(from: text, form: .plain).spokenText
     }
 }
