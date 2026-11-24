@@ -63,11 +63,18 @@ struct LayeredClusterPlacementBits: Equatable {
     var error: LayeredClusterLayoutError?
 
     init(_ input: LayeredLayoutRecording.ClusterPlacement, isCompound: Bool) {
-        let placement: LayeredClusterPlacement
-        do {
-            placement = isCompound
+        self.init { () throws(LayeredClusterLayoutError) in
+            isCompound
                 ? try LayeredClusterLayout.placeInCompoundLayout(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
                 : try LayeredClusterLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
+        }
+    }
+
+    /// The bits of what `placing` gives.
+    init(placing: () throws(LayeredClusterLayoutError) -> LayeredClusterPlacement) {
+        let placement: LayeredClusterPlacement
+        do {
+            placement = try placing()
         } catch {
             self.error = error
             return

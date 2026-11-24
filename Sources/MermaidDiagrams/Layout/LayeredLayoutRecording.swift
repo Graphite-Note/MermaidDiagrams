@@ -43,6 +43,8 @@ final class LayeredLayoutRecording: @unchecked Sendable {
 
     var placements: [Placement] = []
     var clusterPlacements: [ClusterPlacement] = []
+    /// The routes a compound layout counted the crossings of with `LayeredRouteCrossings.count`.
+    var routeCrossings: [(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], style: LayeredRouteStyle)] = []
     var flatLayouts: [FlatLayout] = []
     /// The nodes and edges a compound layout ranked with `LayeredFlatRanking.orient` and `rank`.
     var rankings: [(nodes: [LayeredFlatNode], edges: [LayeredFlatEdge])] = []
