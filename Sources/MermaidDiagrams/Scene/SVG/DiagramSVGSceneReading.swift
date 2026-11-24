@@ -14,12 +14,15 @@
 import CoreGraphics
 
 extension DiagramSVGBody {
-    /// Whether any shape of `items` is filled with a gradient, which needs `<defs>`.
+    /// Whether any shape of `items` is filled with a gradient, which needs `<defs>`; each item is read where the array
+    /// holds it, without a copy.
     static func hasGradientFills(_ items: [DiagramSceneItem]) -> Bool {
-        for item in items {
-            if case .shape(let shape) = item, case .gradientFill = shape.painting { return true }
+        items.withUnsafeBufferPointer { items in
+            for index in items.indices {
+                if case .shape(let shape) = items[index], case .gradientFill = shape.painting { return true }
+            }
+            return false
         }
-        return false
     }
 
     /// `<defs>` with a definition of each gradient fill of `items`, numbered in their order as `add(_:)` numbers their
