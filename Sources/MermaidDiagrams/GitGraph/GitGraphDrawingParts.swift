@@ -5,7 +5,7 @@
  * Description: A laid-out Git graph's geometry grouped by how it is painted, with the paints of its branch names.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -21,36 +21,49 @@ public struct GitGraphDrawingParts {
     public struct ColorGroup {
         public let seriesIndex: Int
         /// The lanes' lines, stroked `laneLineWidth` wide, dashed with `laneDashLengths`.
-        public let laneLines: CGPath
+        public var laneLines: CGPath { laneLinesScenePath.coreGraphicsPath }
+        let laneLinesScenePath: DiagramScenePath
         /// The boxes behind branch names, filled.
-        public let nameBoxes: CGPath
+        public var nameBoxes: CGPath { nameBoxesScenePath.coreGraphicsPath }
+        let nameBoxesScenePath: DiagramScenePath
         /// The lines between lanes, stroked `connectorLineWidth` wide with round caps.
-        public let curves: CGPath
+        public var curves: CGPath { curvesScenePath.coreGraphicsPath }
+        let curvesScenePath: DiagramScenePath
         /// The lines to cherry-picks, stroked like `curves` and dashed with `cherryPickDashLengths`.
-        public let cherryPickCurves: CGPath
+        public var cherryPickCurves: CGPath { cherryPickCurvesScenePath.coreGraphicsPath }
+        let cherryPickCurvesScenePath: DiagramScenePath
         /// The lines along lanes, stroked like `curves`, over them.
-        public let straightLines: CGPath
+        public var straightLines: CGPath { straightLinesScenePath.coreGraphicsPath }
+        let straightLinesScenePath: DiagramScenePath
         /// Merges' rings: filled in the background color, then stroked `ringLineWidth` wide in the group's color.
-        public let rings: CGPath
+        public var rings: CGPath { ringsScenePath.coreGraphicsPath }
+        let ringsScenePath: DiagramScenePath
         /// Dots, squares and the small dots inside rings, filled, over the rings.
-        public let symbols: CGPath
+        public var symbols: CGPath { symbolsScenePath.coreGraphicsPath }
+        let symbolsScenePath: DiagramScenePath
     }
 
     public let colorGroups: [ColorGroup]
     /// The crosses on reverse commits, stroked `crossLineWidth` wide in the background color with round caps.
-    public let reverseCrosses: CGPath
+    public var reverseCrosses: CGPath { reverseCrossesScenePath.coreGraphicsPath }
+    let reverseCrossesScenePath: DiagramScenePath
     /// The cherries' stems, stroked `cherryStemLineWidth` wide in the background color with round joins.
-    public let cherryStems: CGPath
+    public var cherryStems: CGPath { cherryStemsScenePath.coreGraphicsPath }
+    let cherryStemsScenePath: DiagramScenePath
     /// The cherries' two fruits, filled in the background color.
-    public let cherryFruits: CGPath
+    public var cherryFruits: CGPath { cherryFruitsScenePath.coreGraphicsPath }
+    let cherryFruitsScenePath: DiagramScenePath
     /// The patches behind ids, turned with them, filled in the background color.
-    public let labelPatches: CGPath
+    public var labelPatches: CGPath { labelPatchesScenePath.coreGraphicsPath }
+    let labelPatchesScenePath: DiagramScenePath
     /// The ids, each drawn turned by its angle about its center, in the muted color.
     public let labels: [GitGraphLayoutCommitLabel]
     /// The tags' boxes, filled in the surface color and stroked `tagLineWidth` wide in the border color with round joins.
-    public let tagBoxes: CGPath
+    public var tagBoxes: CGPath { tagBoxesScenePath.coreGraphicsPath }
+    let tagBoxesScenePath: DiagramScenePath
     /// The tags' holes, filled in the border color.
-    public let tagHoles: CGPath
+    public var tagHoles: CGPath { tagHolesScenePath.coreGraphicsPath }
+    let tagHolesScenePath: DiagramScenePath
     /// The tags' text, in the foreground color.
     public let tagTexts: [DiagramTextBlock]
     /// The branch names, in the background color on their boxes.
@@ -78,7 +91,7 @@ public struct GitGraphDrawingParts {
 
     public init(layout: GitGraphLayout) {
         let groups = (0..<Self.seriesColorCount).map { _ in GroupPaths() }
-        let marks = GitGraphSymbolDrawing()
+        var marks = GitGraphSymbolDrawing()
         for (laneIndex, lane) in layout.lanes.enumerated() {
             let paths = groups[laneIndex % Self.seriesColorCount]
             paths.laneLines.addLines(between: [lane.lineStart, lane.lineEnd])
@@ -89,28 +102,28 @@ public struct GitGraphDrawingParts {
         for connector in layout.connectors {
             let paths = groups[connector.laneIndex % Self.seriesColorCount]
             switch connector.style {
-            case .alongLane: paths.straightLines.addPath(DiagramEdgeDrawing.path(connector.path))
-            case .acrossLanes: paths.curves.addPath(DiagramEdgeDrawing.path(connector.path))
-            case .cherryPick: paths.cherryPickCurves.addPath(DiagramEdgeDrawing.path(connector.path))
+            case .alongLane: paths.straightLines.addEdgePath(connector.path)
+            case .acrossLanes: paths.curves.addEdgePath(connector.path)
+            case .cherryPick: paths.cherryPickCurves.addEdgePath(connector.path)
             }
         }
-        let labelPatches = CGMutablePath()
-        let tagBoxes = CGMutablePath()
-        let tagHoles = CGMutablePath()
+        var labelPatches = DiagramScenePath()
+        var tagBoxes = DiagramScenePath()
+        var tagHoles = DiagramScenePath()
         for commit in layout.commits {
             let paths = groups[commit.laneIndex % Self.seriesColorCount]
-            marks.add(commit.symbol, at: commit.center, symbols: paths.symbols, rings: paths.rings)
-            if let label = commit.label { Self.addPatch(of: label, to: labelPatches) }
-            for tag in commit.tags { Self.addTag(tag.frame, box: tagBoxes, hole: tagHoles) }
+            marks.add(commit.symbol, at: commit.center, symbols: &paths.symbols, rings: &paths.rings)
+            if let label = commit.label { Self.addPatch(of: label, to: &labelPatches) }
+            for tag in commit.tags { Self.addTag(tag.frame, box: &tagBoxes, hole: &tagHoles) }
         }
         colorGroups = groups.enumerated().compactMap { seriesIndex, paths in paths.group(seriesIndex: seriesIndex) }
-        reverseCrosses = marks.reverseCrosses
-        cherryStems = marks.cherryStems
-        cherryFruits = marks.cherryFruits
-        self.labelPatches = labelPatches
+        reverseCrossesScenePath = marks.reverseCrosses
+        cherryStemsScenePath = marks.cherryStems
+        cherryFruitsScenePath = marks.cherryFruits
+        self.labelPatchesScenePath = labelPatches
         labels = layout.commits.compactMap(\.label)
-        self.tagBoxes = tagBoxes
-        self.tagHoles = tagHoles
+        self.tagBoxesScenePath = tagBoxes
+        self.tagHolesScenePath = tagHoles
         tagTexts = layout.commits.flatMap { commit in commit.tags.map(\.text) }
         names = layout.lanes.compactMap(\.name)
         namePaints = Self.namePaints(layout)
@@ -125,7 +138,7 @@ public struct GitGraphDrawingParts {
     }
 
     /// The rounded patch behind an id, centered on its text and turned with it.
-    private static func addPatch(of label: GitGraphLayoutCommitLabel, to patches: CGMutablePath) {
+    private static func addPatch(of label: GitGraphLayoutCommitLabel, to patches: inout DiagramScenePath) {
         let center = label.text.center
         let frame = CGRect(x: center.x - label.patchSize.width / 2, y: center.y - label.patchSize.height / 2, width: label.patchSize.width,
                            height: label.patchSize.height)
@@ -134,7 +147,7 @@ public struct GitGraphDrawingParts {
     }
 
     /// A tag's box, its point at the middle of its left side, and the hole at the point's base.
-    private static func addTag(_ frame: CGRect, box: CGMutablePath, hole: CGMutablePath) {
+    private static func addTag(_ frame: CGRect, box: inout DiagramScenePath, hole: inout DiagramScenePath) {
         let pointBase = frame.minX + GitGraphGeometry.tagPointLength
         box.addLines(between: [CGPoint(x: frame.minX, y: frame.midY), CGPoint(x: pointBase, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
                                CGPoint(x: frame.maxX, y: frame.maxY), CGPoint(x: pointBase, y: frame.maxY)])
@@ -142,21 +155,22 @@ public struct GitGraphDrawingParts {
         hole.addEllipse(in: CGRect(x: pointBase - tagHoleRadius, y: frame.midY - tagHoleRadius, width: 2 * tagHoleRadius, height: 2 * tagHoleRadius))
     }
 
-    /// Core Graphics paths are references: a copy of these adds to the same paths.
-    private struct GroupPaths {
-        let laneLines = CGMutablePath()
-        let nameBoxes = CGMutablePath()
-        let curves = CGMutablePath()
-        let cherryPickCurves = CGMutablePath()
-        let straightLines = CGMutablePath()
-        let rings = CGMutablePath()
-        let symbols = CGMutablePath()
+    /// The paths of one lane color, which every use of the color adds to.
+    private final class GroupPaths {
+        var laneLines = DiagramScenePath()
+        var nameBoxes = DiagramScenePath()
+        var curves = DiagramScenePath()
+        var cherryPickCurves = DiagramScenePath()
+        var straightLines = DiagramScenePath()
+        var rings = DiagramScenePath()
+        var symbols = DiagramScenePath()
 
         /// The group, or nil when nothing takes its color: no lane, and no commit when lanes are hidden.
         func group(seriesIndex: Int) -> ColorGroup? {
             guard !laneLines.isEmpty || !symbols.isEmpty || !rings.isEmpty else { return nil }
-            return ColorGroup(seriesIndex: seriesIndex, laneLines: laneLines, nameBoxes: nameBoxes, curves: curves, cherryPickCurves: cherryPickCurves,
-                              straightLines: straightLines, rings: rings, symbols: symbols)
+            return ColorGroup(seriesIndex: seriesIndex, laneLinesScenePath: laneLines, nameBoxesScenePath: nameBoxes, curvesScenePath: curves,
+                              cherryPickCurvesScenePath: cherryPickCurves, straightLinesScenePath: straightLines, ringsScenePath: rings,
+                              symbolsScenePath: symbols)
         }
     }
 }

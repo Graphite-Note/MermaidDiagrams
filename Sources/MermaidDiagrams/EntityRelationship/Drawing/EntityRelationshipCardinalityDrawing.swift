@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationshipCardinalityDrawing.swift
+ * ------------------------------------------------
+ * Layer: Core
+ * Description: The crow's foot marks of an entity relationship diagram's cardinalities, Pele's: bars, rings and feet
+ *              at a line's end.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// The crow's foot marks of the cardinalities, Pele's, drawn over the end of a line where it meets a box: one bar
@@ -25,7 +37,7 @@ enum EntityRelationshipCardinalityDrawing {
     static let ringBehindFootSetback: CGFloat = 14
 
     /// Adds a mark to the paths filled with the background (rings, the diamond) and stroked in the line color.
-    static func addMark(_ mark: EntityRelationshipCardinalityMark, fills: CGMutablePath, outlines: CGMutablePath) {
+    static func addMark(_ mark: EntityRelationshipCardinalityMark, fills: inout DiagramScenePath, outlines: inout DiagramScenePath) {
         // `back` runs from the box along the line, `side` across it.
         func point(back: CGFloat, side: CGFloat) -> CGPoint {
             CGPoint(x: mark.tip.x - mark.direction.dx * back - mark.direction.dy * side, y: mark.tip.y - mark.direction.dy * back + mark.direction.dx * side)

@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -31,17 +31,17 @@ extension GanttDrawingParts {
     /// Lines have butt caps and round joins.
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke(lineWidth: Self.lineWidth, lineJoin: .round)
-        builder.fill(sectionBands, .surface, part: .cluster)
-        builder.fill(excludedDays, .alternateSurface, part: .axis)
-        builder.stroke(gridLines, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.gridDashLengths, lineJoin: .round), part: .axis)
-        builder.stroke(axisLines, .border, line, part: .axis)
-        builder.stroke(verticalMarkerLines, .line, DiagramStroke(lineWidth: Self.verticalMarkerLineWidth, dashLengths: Self.verticalMarkerDashLengths),
+        builder.fill(sectionBandsScenePath, .surface, part: .cluster)
+        builder.fill(excludedDaysScenePath, .alternateSurface, part: .axis)
+        builder.stroke(gridLinesScenePath, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.gridDashLengths, lineJoin: .round), part: .axis)
+        builder.stroke(axisLinesScenePath, .border, line, part: .axis)
+        builder.stroke(verticalMarkerLinesScenePath, .line, DiagramStroke(lineWidth: Self.verticalMarkerLineWidth, dashLengths: Self.verticalMarkerDashLengths),
                        part: .marker)
-        builder.stroke(todayLine, todayLinePaint, todayLineStroke, part: .marker)
-        builder.fill(todayMark, .accent, part: .marker)
-        for taskFill in Self.taskFillOrder { if let path = taskFills[taskFill] { builder.fill(path, Self.paint(of: taskFill), part: .node) } }
+        builder.stroke(todayLineScenePath, todayLinePaint, todayLineStroke, part: .marker)
+        builder.fill(todayMarkScenePath, .accent, part: .marker)
+        for taskFill in Self.taskFillOrder { if let path = taskFillsScenePaths[taskFill] { builder.fill(path, Self.paint(of: taskFill), part: .node) } }
         for taskStroke in Self.taskStrokeOrder {
-            if let path = taskOutlines[taskStroke] { builder.stroke(path, Self.paint(of: taskStroke), line, part: .node) }
+            if let path = taskOutlinesScenePaths[taskStroke] { builder.stroke(path, Self.paint(of: taskStroke), line, part: .node) }
         }
         for labelColor in Self.labelColorOrder { builder.texts(taskTexts[labelColor] ?? [], Self.paint(of: labelColor), part: .label) }
         builder.texts(sectionNames, .foreground, part: .clusterLabel)

@@ -5,7 +5,7 @@
  * Description: A laid-out pie chart's geometry grouped by how it is painted, with the paints of its percentages.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -18,13 +18,16 @@ public struct PieChartDrawingParts {
     /// For each series color, the slices and legend swatches filled in it: entry `k` is filled in
     /// `DiagramPalette.seriesColor(at: k)` and holds the slices and swatches whose index leaves `k` when divided by the
     /// number of series colors. As many entries as the chart has slices, up to that number.
-    public let seriesFills: [CGPath]
+    public var seriesFills: [CGPath] { seriesFillsScenePaths.map(\.coreGraphicsPath) }
+    let seriesFillsScenePaths: [DiagramScenePath]
     /// The edges of the slices drawn, stroked one point wide in the background color with round joins, so that
     /// neighbouring slices stand apart.
-    public let sliceEdges: CGPath
+    public var sliceEdges: CGPath { sliceEdgesScenePath.coreGraphicsPath }
+    let sliceEdgesScenePath: DiagramScenePath
     /// The pie's circle when no slice is drawn (no slices, or none with a share), stroked one point wide in the border
     /// color; empty otherwise.
-    public let emptyPieOutline: CGPath
+    public var emptyPieOutline: CGPath { emptyPieOutlineScenePath.coreGraphicsPath }
+    let emptyPieOutlineScenePath: DiagramScenePath
     /// The percentages inside their slices, drawn in the background color.
     public let insidePercentages: [DiagramTextBlock]
     /// The paint of each of `insidePercentages`: the background color, or Pele's ink on its slice's color where the chart's
@@ -47,8 +50,8 @@ public struct PieChartDrawingParts {
         // One fill per series colour in use, counted from the slices and the legend: a pie drawn without a legend
         // (legendPosition: none) still paints its slices.
         let seriesCount = (layout.slices.map(\.seriesIndex) + layout.legend.map(\.seriesIndex)).max().map { $0 + 1 } ?? 0
-        let fills = (0..<min(seriesCount, Self.seriesColorCount)).map { _ in CGMutablePath() }
-        let edges = CGMutablePath()
+        var fills = (0..<min(seriesCount, Self.seriesColorCount)).map { _ in DiagramScenePath() }
+        var edges = DiagramScenePath()
         for slice in layout.slices {
             let wedge = Self.wedge(slice, center: layout.center, radius: layout.radius, innerRadius: layout.innerRadius)
             fills[slice.seriesIndex % Self.seriesColorCount].addPath(wedge)
@@ -58,10 +61,10 @@ public struct PieChartDrawingParts {
             fills[entry.seriesIndex % Self.seriesColorCount].addRoundedRect(in: entry.swatch, cornerWidth: Self.swatchCornerRadius,
                                                                             cornerHeight: Self.swatchCornerRadius)
         }
-        seriesFills = fills
-        sliceEdges = edges
+        seriesFillsScenePaths = fills
+        sliceEdgesScenePath = edges
         let pieFrame = CGRect(x: layout.center.x - layout.radius, y: layout.center.y - layout.radius, width: 2 * layout.radius, height: 2 * layout.radius)
-        emptyPieOutline = layout.slices.isEmpty ? CGPath(ellipseIn: pieFrame, transform: nil) : CGMutablePath()
+        emptyPieOutlineScenePath = layout.slices.isEmpty ? DiagramScenePath(ellipseIn: pieFrame) : DiagramScenePath()
         let insideSlices = layout.slices.filter { slice in slice.percentagePlacement == .insideSlice }
         insidePercentages = insideSlices.map(\.percentage)
         insidePercentagePaints = insideSlices.map { slice in layout.seriesColors.ink(ofSeries: slice.seriesIndex).map(DiagramPaint.color) ?? .background }
@@ -72,15 +75,15 @@ public struct PieChartDrawingParts {
 
     /// A slice from the center (or the hole's rim, for a donut) out to the rim and back, or the whole circle (ring) for a
     /// slice that is the whole pie.
-    static func wedge(_ slice: PieChartLayoutSlice, center: CGPoint, radius: CGFloat, innerRadius: CGFloat = 0) -> CGPath {
-        let path = CGMutablePath()
+    static func wedge(_ slice: PieChartLayoutSlice, center: CGPoint, radius: CGFloat, innerRadius: CGFloat = 0) -> DiagramScenePath {
+        var path = DiagramScenePath()
         // Core Graphics measures angles from the x axis toward the y axis, which runs down here: a quarter turn
         // before the top, and with increasing angles, which turn clockwise on this page.
         let start = slice.startAngle - .pi / 2
         let end = slice.isWholePie ? start + 2 * .pi : slice.endAngle - .pi / 2
         guard innerRadius > 0 else {
             guard !slice.isWholePie else {
-                return CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius), transform: nil)
+                return DiagramScenePath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
             }
             path.move(to: center)
             path.addLine(to: PieChartSlicePlacement.point(at: slice.startAngle, distance: radius, from: center))

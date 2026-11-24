@@ -5,8 +5,8 @@
  * Description: A laid-out packet diagram's geometry grouped by how it is painted.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,8 @@ import CoreGraphics
 /// the fields' boxes, their labels, the bit numbers, the title.
 public struct PacketDiagramDrawingParts {
     /// The fields' boxes with rounded corners, filled in the surface color and outlined in the border color.
-    public let fieldBoxes: CGPath
+    public var fieldBoxes: CGPath { fieldBoxesScenePath.coreGraphicsPath }
+    let fieldBoxesScenePath: DiagramScenePath
     /// The fields' labels, drawn in the text color.
     public let fieldLabels: [DiagramTextBlock]
     /// The bit numbers, drawn in the muted color.
@@ -27,12 +28,12 @@ public struct PacketDiagramDrawingParts {
     public static let lineWidth: CGFloat = 1
 
     public init(layout: PacketDiagramLayout) {
-        let boxes = CGMutablePath()
+        var boxes = DiagramScenePath()
         for field in layout.fields {
             let radius = min(PacketDiagramLayoutEngine.cornerRadius, field.frame.width / 2, field.frame.height / 2)
             boxes.addRoundedRect(in: field.frame, cornerWidth: radius, cornerHeight: radius)
         }
-        fieldBoxes = boxes
+        fieldBoxesScenePath = boxes
         fieldLabels = layout.fields.compactMap(\.label)
         bitNumbers = layout.bitNumbers
         title = layout.title

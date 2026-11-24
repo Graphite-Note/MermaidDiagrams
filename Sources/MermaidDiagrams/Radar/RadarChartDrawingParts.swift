@@ -5,8 +5,8 @@
  * Description: A laid-out radar chart's geometry grouped by how it is painted.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,9 +16,11 @@ import CoreGraphics
 /// graticule, the spokes, the curves, the axes' labels, the legend.
 public struct RadarChartDrawingParts {
     /// The rings, circles or polygons, stroked in the second surface color.
-    public let graticule: CGPath
+    public var graticule: CGPath { graticuleScenePath.coreGraphicsPath }
+    let graticuleScenePath: DiagramScenePath
     /// The spokes from the center, stroked in the border color.
-    public let spokes: CGPath
+    public var spokes: CGPath { spokesScenePath.coreGraphicsPath }
+    let spokesScenePath: DiagramScenePath
     /// The curves, each filled and stroked in its series color.
     public let curves: [RadarChartCurveParts]
     public let axisLabels: [DiagramTextBlock]
@@ -40,25 +42,25 @@ public struct RadarChartDrawingParts {
     static let swatchCornerRadius: CGFloat = 2
 
     public init(layout: RadarChartLayout) {
-        graticule = Self.graticule(of: layout)
-        spokes = Self.spokes(of: layout)
+        graticuleScenePath = Self.graticule(of: layout)
+        spokesScenePath = Self.spokes(of: layout)
         curves = layout.curves.map { curve in
             let path = curve.isRounded ? RadarCurveSpline.closedPath(through: curve.points, tension: curve.tension)
                 : RadarCurveSpline.closedPolygon(through: curve.points)
-            return RadarChartCurveParts(seriesIndex: curve.seriesIndex, path: path)
+            return RadarChartCurveParts(seriesIndex: curve.seriesIndex, pathScenePath: path)
         }
         axisLabels = layout.axisLabels
         legendSwatches = layout.legend.map { entry in
-            let path = CGMutablePath()
+            var path = DiagramScenePath()
             path.addRoundedRect(in: entry.swatch, cornerWidth: Self.swatchCornerRadius, cornerHeight: Self.swatchCornerRadius)
-            return RadarChartSwatchParts(seriesIndex: entry.seriesIndex, path: path)
+            return RadarChartSwatchParts(seriesIndex: entry.seriesIndex, pathScenePath: path)
         }
         legendTexts = layout.legend.map(\.text)
         title = layout.title
     }
 
-    private static func graticule(of layout: RadarChartLayout) -> CGPath {
-        let path = CGMutablePath()
+    private static func graticule(of layout: RadarChartLayout) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for ringRadius in layout.ringRadii {
             switch layout.graticule {
             case .circle:
@@ -73,8 +75,8 @@ public struct RadarChartDrawingParts {
         return path
     }
 
-    private static func spokes(of layout: RadarChartLayout) -> CGPath {
-        let path = CGMutablePath()
+    private static func spokes(of layout: RadarChartLayout) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for direction in layout.axisDirections {
             path.move(to: layout.center)
             path.addLine(to: CGPoint(x: layout.center.x + direction.x * layout.spokeLength, y: layout.center.y + direction.y * layout.spokeLength))
@@ -86,11 +88,13 @@ public struct RadarChartDrawingParts {
 /// A curve's outline in the page's coordinates, with the series that picks its color.
 public struct RadarChartCurveParts {
     public let seriesIndex: Int
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
 }
 
 /// A legend swatch's outline, with the series that picks its color.
 public struct RadarChartSwatchParts {
     public let seriesIndex: Int
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
 }

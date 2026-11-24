@@ -6,7 +6,7 @@
  *              its stroke), a text per placed text, and the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -50,7 +50,7 @@ struct DiagramSVGBody {
         content.append("<path class=\"pele-")
         content.append(shape.part.rawValue)
         content.append("\" d=\"")
-        content.appendPathData(shape.path)
+        content.appendPathData(shape.scenePath)
         content.append("\"")
         switch shape.painting {
         case .fill(let paint):

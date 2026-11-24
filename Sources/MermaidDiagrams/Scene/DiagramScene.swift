@@ -6,11 +6,12 @@
  *              palette, the one form every diagram type is drawn, exported and themed from.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
 import CoreGraphics
+import Foundation
 
 /// A laid-out diagram's painting, whatever its type: the page it was laid out on and what is painted on it, back to front.
 /// Shapes and text name their colors by `DiagramPalette`'s roles (`DiagramPaint`), so a change of theme paints the same
@@ -74,27 +75,47 @@ public struct DiagramSceneShape: Sendable {
 
     /// A shape of a copy of `path`, which no later change to `path` reaches.
     public init(path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) {
-        self.init(unchangedPath: path.copy() ?? path, painting: painting, part: part)
-    }
-
-    /// A shape of `unchangedPath` itself, which nothing changes afterwards: a drawing part's finished path.
-    init(unchangedPath: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) {
-        storage = DiagramPathStorage(path: unchangedPath)
+        let copy = path.copy() ?? path
+        storage = DiagramPathStorage(scenePath: DiagramScenePath(copy), path: copy)
         self.painting = painting
         self.part = part
     }
 
-    /// In the scene's coordinates. Its subpaths are filled together by the nonzero rule.
+    /// A shape of a drawing part's finished path.
+    init(scenePath: DiagramScenePath, painting: DiagramShapePainting, part: DiagramScenePart) {
+        storage = DiagramPathStorage(scenePath: scenePath, path: nil)
+        self.painting = painting
+        self.part = part
+    }
+
+    /// In the scene's coordinates. Its subpaths are filled together by the nonzero rule. Made from the shape's elements
+    /// the first time it is read.
     public var path: CGPath { storage.path }
+
+    /// The shape's elements, which the scene's painter and SVG writer read without a Core Graphics path.
+    var scenePath: DiagramScenePath { storage.scenePath }
 }
 
-/// Holds a path no one changes once it is made, so that a scene can be handed from the thread that made it to the one that
-/// paints it. Core Graphics does not mark its paths sendable, as a mutable path is not; one never changed is only read.
+/// Holds a shape's elements and the Core Graphics path made of them once someone asks for it, so that a scene can be
+/// handed from the thread that made it to the one that paints it. The path is made once, under one lock all shapes share,
+/// as hosts seldom read it and a lock per shape would cost each shape an object.
 private final class DiagramPathStorage: @unchecked Sendable {
-    let path: CGPath
+    let scenePath: DiagramScenePath
+    private static let lock = NSLock()
+    private var madePath: CGPath?
 
-    init(path: CGPath) {
-        self.path = path
+    init(scenePath: DiagramScenePath, path: CGPath?) {
+        self.scenePath = scenePath
+        madePath = path
+    }
+
+    var path: CGPath {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        if let madePath { return madePath }
+        let path = scenePath.coreGraphicsPath
+        madePath = path
+        return path
     }
 }
 

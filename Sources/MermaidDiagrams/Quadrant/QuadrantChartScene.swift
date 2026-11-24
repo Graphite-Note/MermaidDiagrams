@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -28,13 +28,13 @@ extension QuadrantChartDrawingParts {
     static let turnedTextRotation: CGFloat = -.pi / 2
 
     func addScene(to builder: inout DiagramSceneBuilder) {
-        builder.fillAndStroke(quadrants, fill: .surface, stroke: .border, DiagramStroke(lineWidth: Self.lineWidth), part: .cluster)
+        builder.fillAndStroke(quadrantsScenePath, fill: .surface, stroke: .border, DiagramStroke(lineWidth: Self.lineWidth), part: .cluster)
         builder.texts(quadrantTexts, .foreground, part: .clusterLabel)
         builder.texts(axisTexts, .muted, part: .axisLabel)
         for turnedText in turnedAxisTexts { builder.text(turnedText, .muted, rotation: Self.turnedTextRotation, part: .axisLabel) }
         for group in pointGroups {
-            builder.fill(group.circles, Self.paint(group.fill), part: .node)
-            if let stroke = group.stroke { builder.stroke(group.circles, Self.paint(stroke.paint), DiagramStroke(lineWidth: stroke.width), part: .node) }
+            builder.fill(group.circlesScenePath, Self.paint(group.fill), part: .node)
+            if let stroke = group.stroke { builder.stroke(group.circlesScenePath, Self.paint(stroke.paint), DiagramStroke(lineWidth: stroke.width), part: .node) }
         }
         builder.texts(pointTexts, .foreground, part: .label)
         builder.title(title)

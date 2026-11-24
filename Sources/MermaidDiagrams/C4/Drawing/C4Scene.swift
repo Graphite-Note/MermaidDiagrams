@@ -6,8 +6,8 @@
  *              casings, the relations' lines and arrowheads, the shapes with their texts, then the relations' labels.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -44,7 +44,7 @@ enum C4ScenePainting {
 
     static func add(_ boundary: C4LayoutBoundary, to builder: inout DiagramSceneBuilder) {
         let look = boundary.look
-        let frame = CGPath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let frame = DiagramScenePath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         let stroke = DiagramStroke(lineWidth: lineWidth, dashLengths: boundary.isDeploymentNode ? [] : boundaryDashes)
         let strokePaint = look.stroke.map(DiagramPaint.color) ?? .border
         if let fill = look.fill {
@@ -71,10 +71,10 @@ enum C4ScenePainting {
         builder.fill(arrowheads(of: relation), paint, part: .marker)
     }
 
-    private static func arrowheads(of relation: C4LayoutRelation) -> CGPath {
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        for mark in [relation.startMark, relation.endMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
+    private static func arrowheads(of relation: C4LayoutRelation) -> DiagramScenePath {
+        var filled = DiagramScenePath()
+        var stroked = DiagramScenePath()
+        for mark in [relation.startMark, relation.endMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: &filled, stroked: &stroked) }
         return filled
     }
 
@@ -88,7 +88,7 @@ enum C4ScenePainting {
         if let layers = FlowchartShapeDrawing.layers(of: flowchartShape, in: shape.frame) {
             for layer in layers {
                 builder.keepNextShapeApart()
-                builder.fillAndStroke(layer.path, fill: fill, stroke: strokePaint, stroke, part: .node)
+                builder.fillAndStroke(layer.pathScenePath, fill: fill, stroke: strokePaint, stroke, part: .node)
             }
         } else if let outline = FlowchartShapeDrawing.outline(of: flowchartShape, in: shape.frame) {
             builder.fillAndStroke(outline, fill: fill, stroke: strokePaint, stroke, part: .node)
@@ -102,7 +102,7 @@ enum C4ScenePainting {
 
     static func addLabel(of relation: C4LayoutRelation, to builder: inout DiagramSceneBuilder) {
         guard let frame = relation.labelFrame else { return }
-        builder.fill(CGPath(roundedRect: frame, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius, transform: nil), .background,
+        builder.fill(DiagramScenePath(roundedRect: frame, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius), .background,
                      part: .labelBackground)
         let textColor = relation.textColor.map(DiagramPaint.color)
         builder.text(relation.label, textColor ?? .foreground, part: .edgeLabel)

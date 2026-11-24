@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -28,19 +28,19 @@ extension UserJourneyDrawingParts {
     /// round caps.
     func addScene(to builder: inout DiagramSceneBuilder) {
         let roundJoin = DiagramStroke(lineWidth: Self.lineWidth, lineJoin: .round)
-        builder.stroke(scaleLines, .alternateSurface, DiagramStroke(lineWidth: Self.lineWidth), part: .axis)
+        builder.stroke(scaleLinesScenePath, .alternateSurface, DiagramStroke(lineWidth: Self.lineWidth), part: .axis)
         builder.texts(scaleTexts, .muted, part: .axisLabel)
-        builder.stroke(stems, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.stemDashLengths), part: .edge)
-        builder.stroke(scoreLine, .line, roundJoin, part: .edge)
-        builder.fillAndStroke(faces, fill: .background, stroke: .line, roundJoin, part: .node)
-        builder.fill(eyes, .line, part: .node)
-        builder.stroke(mouths, .line, .rounded(lineWidth: Self.lineWidth), part: .node)
-        builder.fill(sectionBands, .alternateSurface, part: .cluster)
+        builder.stroke(stemsScenePath, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.stemDashLengths), part: .edge)
+        builder.stroke(scoreLineScenePath, .line, roundJoin, part: .edge)
+        builder.fillAndStroke(facesScenePath, fill: .background, stroke: .line, roundJoin, part: .node)
+        builder.fill(eyesScenePath, .line, part: .node)
+        builder.stroke(mouthsScenePath, .line, .rounded(lineWidth: Self.lineWidth), part: .node)
+        builder.fill(sectionBandsScenePath, .alternateSurface, part: .cluster)
         builder.texts(sectionTexts, .foreground, isBold: true, part: .clusterLabel)
-        builder.fillAndStroke(cards, fill: .surface, stroke: .border, roundJoin, part: .node)
+        builder.fillAndStroke(cardsScenePath, fill: .surface, stroke: .border, roundJoin, part: .node)
         builder.texts(taskTexts, .foreground, part: .label)
-        for (index, dots) in cardDotsBySeries.enumerated() { builder.fillAndStroke(dots, fill: .series(index), stroke: .surface, roundJoin, part: .marker) }
-        for (index, dots) in legendDotsBySeries.enumerated() { builder.fill(dots, .series(index), part: .legend) }
+        for (index, dots) in cardDotsBySeriesScenePaths.enumerated() { builder.fillAndStroke(dots, fill: .series(index), stroke: .surface, roundJoin, part: .marker) }
+        for (index, dots) in legendDotsBySeriesScenePaths.enumerated() { builder.fill(dots, .series(index), part: .legend) }
         builder.texts(legendTexts, .foreground, part: .legend)
         builder.title(title)
     }

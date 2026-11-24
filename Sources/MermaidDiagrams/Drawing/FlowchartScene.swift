@@ -5,8 +5,8 @@
  * Description: A laid-out flowchart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -27,22 +27,22 @@ extension FlowchartDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         clusters.addBoxes(to: &builder)
-        builder.stroke(solidEdges, .line, line, part: .edge)
-        builder.stroke(thickEdges, .line, .rounded(lineWidth: Self.thickLineWidth), part: .edge)
-        builder.stroke(dottedEdges, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
-        builder.fill(filledMarks, .line, part: .marker)
-        builder.stroke(strokedMarks, .line, line, part: .marker)
+        builder.stroke(solidEdgesScenePath, .line, line, part: .edge)
+        builder.stroke(thickEdgesScenePath, .line, .rounded(lineWidth: Self.thickLineWidth), part: .edge)
+        builder.stroke(dottedEdgesScenePath, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
+        builder.fill(filledMarksScenePath, .line, part: .marker)
+        builder.stroke(strokedMarksScenePath, .line, line, part: .marker)
         for edge in styledEdges {
             let paint = edge.style.stroke.map(DiagramPaint.color) ?? .line
-            builder.stroke(edge.line, paint, .rounded(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths), part: .edge)
-            builder.fill(edge.filledMarks, paint, part: .marker)
-            builder.stroke(edge.strokedMarks, paint, line, part: .marker)
+            builder.stroke(edge.lineScenePath, paint, .rounded(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths), part: .edge)
+            builder.fill(edge.filledMarksScenePath, paint, part: .marker)
+            builder.stroke(edge.strokedMarksScenePath, paint, line, part: .marker)
         }
         clusters.addCrossedTitles(to: &builder)
-        builder.fill(edgeTextPatches, .background, part: .labelBackground)
+        builder.fill(edgeTextPatchesScenePath, .background, part: .labelBackground)
         builder.texts(edgeTexts, .foreground, part: .edgeLabel)
-        builder.fill(nodeFills, .surface, part: .node)
-        builder.stroke(nodeOutlines, .border, line, part: .node)
+        builder.fill(nodeFillsScenePath, .surface, part: .node)
+        builder.stroke(nodeOutlinesScenePath, .border, line, part: .node)
         for layer in layeredNodeShapes { layer.add(to: &builder, style: nil, stroke: line) }
         for node in styledNodes {
             if !node.layers.isEmpty {
@@ -50,8 +50,8 @@ extension FlowchartDrawingParts {
                 for layer in node.layers { layer.add(to: &builder, style: node.style, stroke: stroke) }
                 continue
             }
-            if let shape = node.fill { builder.fill(shape, node.style.fill.map(DiagramPaint.color) ?? .surface, part: .node) }
-            builder.stroke(node.outline, node.style.stroke.map(DiagramPaint.color) ?? .border,
+            if let shape = node.fillScenePath { builder.fill(shape, node.style.fill.map(DiagramPaint.color) ?? .surface, part: .node) }
+            builder.stroke(node.outlineScenePath, node.style.stroke.map(DiagramPaint.color) ?? .border,
                            .rounded(lineWidth: node.lineWidth, dashLengths: node.style.strokeDashLengths ?? []), part: .node)
         }
         builder.texts(nodeTexts, .foreground, part: .label)
@@ -68,12 +68,12 @@ extension FlowchartShapeLayer {
         let fillPaint = style?.fill.map(DiagramPaint.color) ?? .surface
         let strokePaint = style?.stroke.map(DiagramPaint.color) ?? .border
         switch painting {
-        case .filledAndOutlined: builder.fillAndStroke(path, fill: fillPaint, stroke: strokePaint, stroke, part: .node)
-        case .outlined: builder.stroke(path, strokePaint, stroke, part: .node)
-        case .filledInLineColorAndOutlined: builder.fillAndStroke(path, fill: .line, stroke: strokePaint, stroke, part: .node)
+        case .filledAndOutlined: builder.fillAndStroke(pathScenePath, fill: fillPaint, stroke: strokePaint, stroke, part: .node)
+        case .outlined: builder.stroke(pathScenePath, strokePaint, stroke, part: .node)
+        case .filledInLineColorAndOutlined: builder.fillAndStroke(pathScenePath, fill: .line, stroke: strokePaint, stroke, part: .node)
         case .filledOnly:
-            builder.fill(path, fillPaint, part: .node)
-            if let color = style?.stroke { builder.stroke(path, .color(color), stroke, part: .node) }
+            builder.fill(pathScenePath, fillPaint, part: .node)
+            if let color = style?.stroke { builder.stroke(pathScenePath, .color(color), stroke, part: .node) }
         }
     }
 }
@@ -84,15 +84,15 @@ extension FlowchartClusterDrawingParts {
 
     /// The boxes behind everything: their fills depth by depth, their outlines and the titles no edge crosses.
     func addBoxes(to builder: inout DiagramSceneBuilder) {
-        for depthFill in fillsByDepth { builder.fill(depthFill, Self.boxPaint, part: .cluster) }
-        builder.stroke(outlines, .border, .rounded(lineWidth: FlowchartDrawingParts.lineWidth), part: .cluster)
+        for depthFill in fillsByDepthScenePaths { builder.fill(depthFill, Self.boxPaint, part: .cluster) }
+        builder.stroke(outlinesScenePath, .border, .rounded(lineWidth: FlowchartDrawingParts.lineWidth), part: .cluster)
         builder.texts(titles, .muted, part: .clusterLabel)
     }
 
     /// The titles edges run through, over the edges, each on a patch painted as its box is where it sits: the background,
     /// then the box's paint once for each box it is inside and its own.
     func addCrossedTitles(to builder: inout DiagramSceneBuilder) {
-        for (depth, patches) in crossedTitlePatchesByDepth.enumerated() where !patches.isEmpty {
+        for (depth, patches) in crossedTitlePatchesByDepthScenePaths.enumerated() where !patches.isEmpty {
             builder.fill(patches, .background, part: .labelBackground)
             for _ in 0...depth { builder.fill(patches, Self.boxPaint, part: .labelBackground) }
         }

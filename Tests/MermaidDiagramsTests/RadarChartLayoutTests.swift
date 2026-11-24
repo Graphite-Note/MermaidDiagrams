@@ -44,13 +44,13 @@ final class RadarChartLayoutTests: XCTestCase {
         }
         let square = [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 100), CGPoint(x: 0, y: 100)]
         // No tension: every control point sits on an end point, a polygon drawn as curves.
-        XCTAssertEqual(segments(RadarCurveSpline.closedPath(through: square, tension: 0))[1], [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 0)])
-        let round = segments(RadarCurveSpline.closedPath(through: square, tension: 0.5))
+        XCTAssertEqual(segments(RadarCurveSpline.closedPath(through: square, tension: 0).coreGraphicsPath)[1], [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 0)])
+        let round = segments(RadarCurveSpline.closedPath(through: square, tension: 0.5).coreGraphicsPath)
         XCTAssertEqual(round[1], [CGPoint(x: 50, y: -50), CGPoint(x: 50, y: -50), CGPoint(x: 100, y: 0)])
         XCTAssertEqual(round[2], [CGPoint(x: 150, y: 50), CGPoint(x: 150, y: 50), CGPoint(x: 100, y: 100)])
         XCTAssertEqual(round[4], [CGPoint(x: -50, y: 50), CGPoint(x: -50, y: 50), CGPoint(x: 0, y: 0)])
         XCTAssertEqual(round.count, 6, "A move, four curves and the close")
-        let two = segments(RadarCurveSpline.closedPath(through: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 100)], tension: 0.5))
+        let two = segments(RadarCurveSpline.closedPath(through: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 100)], tension: 0.5).coreGraphicsPath)
         XCTAssertEqual(two[1], [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 100), CGPoint(x: 100, y: 100)])
         XCTAssertTrue(RadarCurveSpline.closedPath(through: [], tension: 0.5).isEmpty)
     }

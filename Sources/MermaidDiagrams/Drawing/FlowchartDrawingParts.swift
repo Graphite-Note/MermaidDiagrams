@@ -5,7 +5,7 @@
  * Description: A laid-out flowchart's geometry grouped by how it is painted.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -19,22 +19,30 @@ public struct FlowchartDrawingParts {
     /// The boxes of the flowchart's groups; empty parts for a flowchart without groups.
     public let clusters: FlowchartClusterDrawingParts
     /// Solid edges, stroked one point wide with round caps.
-    public let solidEdges: CGPath
+    public var solidEdges: CGPath { solidEdgesScenePath.coreGraphicsPath }
+    let solidEdgesScenePath: DiagramScenePath
     /// Thick edges, stroked 2.5 points wide.
-    public let thickEdges: CGPath
+    public var thickEdges: CGPath { thickEdgesScenePath.coreGraphicsPath }
+    let thickEdgesScenePath: DiagramScenePath
     /// Dotted edges, stroked one point wide in dashes of 3 and gaps of 4.
-    public let dottedEdges: CGPath
+    public var dottedEdges: CGPath { dottedEdgesScenePath.coreGraphicsPath }
+    let dottedEdgesScenePath: DiagramScenePath
     /// Arrows and circles at the ends of edges, filled in the line color.
-    public let filledMarks: CGPath
+    public var filledMarks: CGPath { filledMarksScenePath.coreGraphicsPath }
+    let filledMarksScenePath: DiagramScenePath
     /// Crosses at the ends of edges, stroked one point wide in the line color.
-    public let strokedMarks: CGPath
+    public var strokedMarks: CGPath { strokedMarksScenePath.coreGraphicsPath }
+    let strokedMarksScenePath: DiagramScenePath
     /// The patches behind edge text, filled in the background color.
-    public let edgeTextPatches: CGPath
+    public var edgeTextPatches: CGPath { edgeTextPatchesScenePath.coreGraphicsPath }
+    let edgeTextPatchesScenePath: DiagramScenePath
     public let edgeTexts: [DiagramTextBlock]
     /// The node shapes, filled in the surface color.
-    public let nodeFills: CGPath
+    public var nodeFills: CGPath { nodeFillsScenePath.coreGraphicsPath }
+    let nodeFillsScenePath: DiagramScenePath
     /// The node shapes' outlines and inner lines, stroked one point wide in the border color.
-    public let nodeOutlines: CGPath
+    public var nodeOutlines: CGPath { nodeOutlinesScenePath.coreGraphicsPath }
+    let nodeOutlinesScenePath: DiagramScenePath
     /// The shapes painted piece by piece (a person, stacked documents, a fork's bar), each piece in turn, after the
     /// node shapes above.
     public let layeredNodeShapes: [FlowchartShapeLayer]
@@ -59,15 +67,15 @@ public struct FlowchartDrawingParts {
         let edges = EdgePaths(edges: layout.edges)
         let nodes = NodePaths(nodes: layout.nodes)
         clusters = FlowchartClusterDrawingParts(clusters: layout.clusters)
-        solidEdges = edges.solid
-        thickEdges = edges.thick
-        dottedEdges = edges.dotted
-        filledMarks = edges.filledMarks
-        strokedMarks = edges.strokedMarks
-        edgeTextPatches = edges.textPatches
+        solidEdgesScenePath = edges.solid
+        thickEdgesScenePath = edges.thick
+        dottedEdgesScenePath = edges.dotted
+        filledMarksScenePath = edges.filledMarks
+        strokedMarksScenePath = edges.strokedMarks
+        edgeTextPatchesScenePath = edges.textPatches
         edgeTexts = layout.edges.compactMap(\.text)
-        nodeFills = nodes.fills
-        nodeOutlines = nodes.outlines
+        nodeFillsScenePath = nodes.fills
+        nodeOutlinesScenePath = nodes.outlines
         layeredNodeShapes = nodes.layered
         nodeTexts = nodes.texts
         styledEdges = edges.styled
@@ -77,12 +85,12 @@ public struct FlowchartDrawingParts {
 
     /// The edges' lines by stroke, their marks, and the patches behind their text.
     private struct EdgePaths {
-        let solid = CGMutablePath()
-        let thick = CGMutablePath()
-        let dotted = CGMutablePath()
-        let filledMarks = CGMutablePath()
-        let strokedMarks = CGMutablePath()
-        let textPatches = CGMutablePath()
+        var solid = DiagramScenePath()
+        var thick = DiagramScenePath()
+        var dotted = DiagramScenePath()
+        var filledMarks = DiagramScenePath()
+        var strokedMarks = DiagramScenePath()
+        var textPatches = DiagramScenePath()
         var styled: [FlowchartStyledEdgeParts] = []
 
         init(edges: [FlowchartLayoutEdge]) {
@@ -91,21 +99,21 @@ public struct FlowchartDrawingParts {
                     styled.append(FlowchartStyledEdgeParts(edge: edge, style: style))
                 } else {
                     switch edge.stroke {
-                    case .solid: solid.addPath(DiagramEdgeDrawing.path(edge.path))
-                    case .thick: thick.addPath(DiagramEdgeDrawing.path(edge.path))
-                    case .dotted: dotted.addPath(DiagramEdgeDrawing.path(edge.path))
+                    case .solid: solid.addEdgePath(edge.path)
+                    case .thick: thick.addEdgePath(edge.path)
+                    case .dotted: dotted.addEdgePath(edge.path)
                     case .invisible: break
                     }
                     if edge.stroke != .invisible {
                         for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) {
-                            DiagramEdgeDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks)
+                            DiagramEdgeDrawing.addMark(mark, filled: &filledMarks, stroked: &strokedMarks)
                         }
                     }
                 }
                 if let text = edge.text {
-                    textPatches.addPath(CGPath(roundedRect: text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
+                    textPatches.addPathOfRoundedRect(text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
                                                cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
-                                               cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius, transform: nil))
+                                               cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius)
                 }
             }
         }
@@ -113,8 +121,8 @@ public struct FlowchartDrawingParts {
 
     /// The node shapes to fill, and their outlines and inner lines to stroke.
     private struct NodePaths {
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
+        var fills = DiagramScenePath()
+        var outlines = DiagramScenePath()
         var layered: [FlowchartShapeLayer] = []
         var texts: [DiagramTextBlock] = []
         var styled: [FlowchartStyledNodeParts] = []

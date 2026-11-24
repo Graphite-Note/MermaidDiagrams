@@ -34,7 +34,7 @@ final class PieChartDrawingPartsTests: XCTestCase {
 
     func testAWholePieIsACircleWithoutALineToItsCenter() throws {
         let (layout, parts) = try parts("pie\n\"only\" : 1")
-        let wedge = PieChartDrawingParts.wedge(layout.slices[0], center: layout.center, radius: layout.radius)
+        let wedge = PieChartDrawingParts.wedge(layout.slices[0], center: layout.center, radius: layout.radius).coreGraphicsPath
         XCTAssertTrue(wedge.contains(CGPoint(x: layout.center.x, y: layout.center.y - 100)))
         XCTAssertEqual(parts.sliceEdges.boundingBoxOfPath.width, 2 * layout.radius, accuracy: 0.001)
         var segmentCount = 0

@@ -5,7 +5,7 @@
  * Description: A laid-out state diagram's geometry grouped by how it is painted, back to front as Pele draws it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -21,33 +21,45 @@ public struct StateDiagramDrawingParts {
     public let composites: FlowchartClusterDrawingParts
     /// The line under each named composite's title band, across its box, stroked one point wide in the border color
     /// (Pele's state/render.ts draws it with the box, before the name).
-    public let compositeTitleRules: CGPath
+    public var compositeTitleRules: CGPath { compositeTitleRulesScenePath.coreGraphicsPath }
+    let compositeTitleRulesScenePath: DiagramScenePath
     /// The lines between concurrent regions, stroked one point wide in the border color in dashes of 3 and gaps of 4.
-    public let regionDividers: CGPath
+    public var regionDividers: CGPath { regionDividersScenePath.coreGraphicsPath }
+    let regionDividersScenePath: DiagramScenePath
     /// The transitions' lines, stroked one point wide with round caps in the line color.
-    public let transitionLines: CGPath
+    public var transitionLines: CGPath { transitionLinesScenePath.coreGraphicsPath }
+    let transitionLinesScenePath: DiagramScenePath
     /// The lines from states to their notes, stroked one point wide in dashes of 3 and gaps of 4 in the border color.
-    public let noteConnectors: CGPath
+    public var noteConnectors: CGPath { noteConnectorsScenePath.coreGraphicsPath }
+    let noteConnectorsScenePath: DiagramScenePath
     /// The arrows at the ends of transitions, filled in the line color.
-    public let arrows: CGPath
+    public var arrows: CGPath { arrowsScenePath.coreGraphicsPath }
+    let arrowsScenePath: DiagramScenePath
     /// The patches behind transition text, filled in the background color.
-    public let transitionTextPatches: CGPath
+    public var transitionTextPatches: CGPath { transitionTextPatchesScenePath.coreGraphicsPath }
+    let transitionTextPatchesScenePath: DiagramScenePath
     public let transitionTexts: [DiagramTextBlock]
     /// The boxes and the choices' diamonds, filled in the surface color.
-    public let stateFills: CGPath
+    public var stateFills: CGPath { stateFillsScenePath.coreGraphicsPath }
+    let stateFillsScenePath: DiagramScenePath
     /// The boxes' and diamonds' outlines, and the lines under the names of boxes with several descriptions, stroked one
     /// point wide in the border color.
-    public let stateOutlines: CGPath
+    public var stateOutlines: CGPath { stateOutlinesScenePath.coreGraphicsPath }
+    let stateOutlinesScenePath: DiagramScenePath
     /// The rings of ends, filled in the background color and stroked one point wide in the line color.
-    public let endRings: CGPath
+    public var endRings: CGPath { endRingsScenePath.coreGraphicsPath }
+    let endRingsScenePath: DiagramScenePath
     /// Starts, the dots of ends, and the bars of forks and joins, filled in the line color.
-    public let solidMarks: CGPath
+    public var solidMarks: CGPath { solidMarksScenePath.coreGraphicsPath }
+    let solidMarksScenePath: DiagramScenePath
     /// The states' names, and the descriptions under them in smaller type.
     public let stateTexts: [DiagramTextBlock]
     /// The notes' sheets, filled in the background color and stroked one point wide in the border color, with the folds
     /// of their corners (`noteFolds`) stroked the same.
-    public let noteSheets: CGPath
-    public let noteFolds: CGPath
+    public var noteSheets: CGPath { noteSheetsScenePath.coreGraphicsPath }
+    let noteSheetsScenePath: DiagramScenePath
+    public var noteFolds: CGPath { noteFoldsScenePath.coreGraphicsPath }
+    let noteFoldsScenePath: DiagramScenePath
     /// The notes' text, in a color between the background and the text (`DiagramPalette.noteText`).
     public let noteTexts: [DiagramTextBlock]
     /// The title, drawn bold, or nil.
@@ -63,65 +75,65 @@ public struct StateDiagramDrawingParts {
 
     public init(layout: StateDiagramLayout) {
         composites = FlowchartClusterDrawingParts(clusters: layout.composites)
-        let rules = CGMutablePath()
+        var rules = DiagramScenePath()
         for composite in layout.composites {
             guard let title = composite.title else { continue }
             let band = composite.frame.minY + title.size.height + StateDiagramClusterGraph.titleRoom
             rules.move(to: CGPoint(x: composite.frame.minX, y: band))
             rules.addLine(to: CGPoint(x: composite.frame.maxX, y: band))
         }
-        compositeTitleRules = rules
-        let dividers = CGMutablePath()
-        for divider in layout.regionDividers { dividers.addPath(DiagramEdgeDrawing.path(divider)) }
-        regionDividers = dividers
+        compositeTitleRulesScenePath = rules
+        var dividers = DiagramScenePath()
+        for divider in layout.regionDividers { dividers.addEdgePath(divider) }
+        regionDividersScenePath = dividers
         let transitions = TransitionPaths(transitions: layout.transitions, notes: layout.notes)
         let states = StatePaths(states: layout.states)
         let notes = NotePaths(notes: layout.notes)
-        transitionLines = transitions.lines
-        noteConnectors = transitions.noteConnectors
-        arrows = transitions.arrows
-        transitionTextPatches = transitions.textPatches
+        transitionLinesScenePath = transitions.lines
+        noteConnectorsScenePath = transitions.noteConnectors
+        arrowsScenePath = transitions.arrows
+        transitionTextPatchesScenePath = transitions.textPatches
         transitionTexts = layout.transitions.compactMap(\.text)
-        stateFills = states.fills
-        stateOutlines = states.outlines
-        endRings = states.endRings
-        solidMarks = states.solidMarks
+        stateFillsScenePath = states.fills
+        stateOutlinesScenePath = states.outlines
+        endRingsScenePath = states.endRings
+        solidMarksScenePath = states.solidMarks
         stateTexts = layout.states.flatMap { state in [state.name, state.details].compactMap { text in text } }
-        noteSheets = notes.sheets
-        noteFolds = notes.folds
+        noteSheetsScenePath = notes.sheets
+        noteFoldsScenePath = notes.folds
         noteTexts = layout.notes.map(\.text)
         title = layout.title
     }
 
     /// The transitions' lines and arrows, the patches behind their text, and the lines to the notes.
     private struct TransitionPaths {
-        let lines = CGMutablePath()
-        let noteConnectors = CGMutablePath()
-        let arrows = CGMutablePath()
-        let textPatches = CGMutablePath()
+        var lines = DiagramScenePath()
+        var noteConnectors = DiagramScenePath()
+        var arrows = DiagramScenePath()
+        var textPatches = DiagramScenePath()
 
         init(transitions: [StateDiagramLayoutTransition], notes: [StateDiagramLayoutNote]) {
             // A transition's arrow is only filled: nothing is ever stroked.
-            let strokedMarks = CGMutablePath()
+            var strokedMarks = DiagramScenePath()
             for transition in transitions {
-                lines.addPath(DiagramEdgeDrawing.path(transition.path))
-                DiagramEdgeDrawing.addMark(transition.arrow, filled: arrows, stroked: strokedMarks)
+                lines.addEdgePath(transition.path)
+                DiagramEdgeDrawing.addMark(transition.arrow, filled: &arrows, stroked: &strokedMarks)
                 if let text = transition.text {
                     let patch = text.frame.insetBy(dx: -StateDiagramDrawingParts.transitionTextPatchExtraWidth / 2, dy: 0)
-                    textPatches.addPath(CGPath(roundedRect: patch, cornerWidth: StateDiagramDrawingParts.transitionTextPatchCornerRadius,
-                                               cornerHeight: StateDiagramDrawingParts.transitionTextPatchCornerRadius, transform: nil))
+                    textPatches.addPathOfRoundedRect(patch, cornerWidth: StateDiagramDrawingParts.transitionTextPatchCornerRadius,
+                                               cornerHeight: StateDiagramDrawingParts.transitionTextPatchCornerRadius)
                 }
             }
-            for note in notes { noteConnectors.addPath(DiagramEdgeDrawing.path(note.connector)) }
+            for note in notes { noteConnectors.addEdgePath(note.connector) }
         }
     }
 
     /// The states' shapes, by how each part is painted.
     private struct StatePaths {
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
-        let endRings = CGMutablePath()
-        let solidMarks = CGMutablePath()
+        var fills = DiagramScenePath()
+        var outlines = DiagramScenePath()
+        var endRings = DiagramScenePath()
+        var solidMarks = DiagramScenePath()
 
         init(states: [StateDiagramLayoutState]) {
             for state in states {
@@ -148,8 +160,8 @@ public struct StateDiagramDrawingParts {
 
     /// The notes' sheets and folds.
     private struct NotePaths {
-        let sheets = CGMutablePath()
-        let folds = CGMutablePath()
+        var sheets = DiagramScenePath()
+        var folds = DiagramScenePath()
 
         init(notes: [StateDiagramLayoutNote]) {
             for note in notes {

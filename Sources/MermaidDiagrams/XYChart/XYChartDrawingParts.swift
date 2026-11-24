@@ -5,8 +5,8 @@
  * Description: A laid-out XY chart's geometry grouped by how it is painted.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,15 +16,18 @@ import CoreGraphics
 /// the bars, the lines with their dots, the axes, then the text.
 public struct XYChartDrawingParts {
     /// The grid lines, stroked `lineWidth` wide in the alternate surface color.
-    public let gridLines: CGPath
+    public var gridLines: CGPath { gridLinesScenePath.coreGraphicsPath }
+    let gridLinesScenePath: DiagramScenePath
     /// For each series color, the bars and the legend's bar swatches filled in it: entry `k` is filled in
     /// `DiagramPalette.seriesColor(at: k)` and holds those of the series whose index leaves `k` when divided by the
     /// number of series colors.
-    public let barFills: [CGPath]
+    public var barFills: [CGPath] { barFillsScenePaths.map(\.coreGraphicsPath) }
+    let barFillsScenePaths: [DiagramScenePath]
     /// Each line series in the order it is written, drawn over the bars.
     public let lines: [XYChartLineDrawing]
     /// The axes, their ticks and the line bars stand on, stroked `lineWidth` wide in the border color.
-    public let axisLines: CGPath
+    public var axisLines: CGPath { axisLinesScenePath.coreGraphicsPath }
+    let axisLinesScenePath: DiagramScenePath
     /// The marks' labels, in the muted color.
     public let axisLabels: [DiagramTextBlock]
     /// The bottom axis' title, the bars' values, the point labels and the legend's titles, in the text color.
@@ -44,17 +47,17 @@ public struct XYChartDrawingParts {
     public static let seriesColorCount = DiagramPalette.peleSeries.count
 
     public init(layout: XYChartLayout) {
-        gridLines = Self.path(of: layout.gridLines)
-        axisLines = Self.path(of: layout.axisLines)
+        gridLinesScenePath = Self.path(of: layout.gridLines)
+        axisLinesScenePath = Self.path(of: layout.axisLines)
         let barSwatches = layout.legend.filter { entry in entry.kind == .bar }
         let colorCount = min(Self.seriesColorCount, ((layout.bars.map(\.seriesIndex) + barSwatches.map(\.seriesIndex)).max() ?? -1) + 1)
-        let fills = (0..<colorCount).map { _ in CGMutablePath() }
+        var fills = (0..<colorCount).map { _ in DiagramScenePath() }
         for bar in layout.bars { fills[bar.seriesIndex % Self.seriesColorCount].addRect(bar.frame) }
         for entry in barSwatches {
             fills[entry.seriesIndex % Self.seriesColorCount].addRoundedRect(in: entry.swatch, cornerWidth: Self.swatchCornerRadius,
                                                                             cornerHeight: Self.swatchCornerRadius)
         }
-        barFills = fills
+        barFillsScenePaths = fills
         lines = layout.lines.map { line in
             XYChartLineDrawing(line: line, swatches: layout.legend.filter { entry in entry.kind == .line && entry.seriesIndex == line.seriesIndex })
         }
@@ -64,8 +67,8 @@ public struct XYChartDrawingParts {
         title = layout.title
     }
 
-    private static func path(of segments: [XYChartSegment]) -> CGPath {
-        let path = CGMutablePath()
+    private static func path(of segments: [XYChartSegment]) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for segment in segments {
             path.move(to: segment.start)
             path.addLine(to: segment.end)
@@ -78,21 +81,22 @@ public struct XYChartDrawingParts {
 /// and joins in its series color, and its dots filled in the same color.
 public struct XYChartLineDrawing {
     public let seriesIndex: Int
-    public let stroke: CGPath
-    public let dots: CGPath
-
+    public var stroke: CGPath { strokeScenePath.coreGraphicsPath }
+    let strokeScenePath: DiagramScenePath
+    public var dots: CGPath { dotsScenePath.coreGraphicsPath }
+    let dotsScenePath: DiagramScenePath
     init(line: XYChartLine, swatches: [XYChartLegendEntry]) {
         seriesIndex = line.seriesIndex
-        let stroke = CGMutablePath()
+        var stroke = DiagramScenePath()
         for run in line.runs where !run.isEmpty { stroke.addLines(between: run) }
         for swatch in swatches {
             stroke.move(to: CGPoint(x: swatch.swatch.minX, y: swatch.swatch.midY))
             stroke.addLine(to: CGPoint(x: swatch.swatch.maxX, y: swatch.swatch.midY))
         }
-        self.stroke = stroke
-        let dots = CGMutablePath()
+        self.strokeScenePath = stroke
+        var dots = DiagramScenePath()
         let radius = XYChartDrawingParts.dotRadius
         for dot in line.dots { dots.addEllipse(in: CGRect(x: dot.x - radius, y: dot.y - radius, width: 2 * radius, height: 2 * radius)) }
-        self.dots = dots
+        self.dotsScenePath = dots
     }
 }

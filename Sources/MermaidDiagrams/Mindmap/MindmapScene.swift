@@ -5,7 +5,7 @@
  * Description: A laid-out mindmap's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -26,10 +26,10 @@ extension MindmapDrawingParts {
         let outline = DiagramStroke(lineWidth: Self.outlineLineWidth)
         for branch in branches {
             let paint = DiagramPaint.series(branch.branchIndex)
-            builder.stroke(branch.links, paint, DiagramStroke(lineWidth: Self.linkLineWidth), part: .edge)
-            builder.fillAndStroke(branch.nodeOutlines, fill: paint.atOpacity(Self.nodeFillOpacity), stroke: paint, outline, part: .node)
+            builder.stroke(branch.linksScenePath, paint, DiagramStroke(lineWidth: Self.linkLineWidth), part: .edge)
+            builder.fillAndStroke(branch.nodeOutlinesScenePath, fill: paint.atOpacity(Self.nodeFillOpacity), stroke: paint, outline, part: .node)
         }
-        builder.fillAndStroke(rootOutline, fill: .surface, stroke: .border, outline, part: .node)
+        builder.fillAndStroke(rootOutlineScenePath, fill: .surface, stroke: .border, outline, part: .node)
         builder.texts(nodeTexts, .foreground, part: .label)
         builder.title(title)
     }

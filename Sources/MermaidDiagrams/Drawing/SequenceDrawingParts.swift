@@ -5,8 +5,8 @@
  * Description: A laid-out sequence diagram's geometry grouped by how it is painted, back to front as Pele draws it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -26,52 +26,70 @@ public struct SequenceDrawingParts {
     /// half opacity.
     public let highlights: [SequenceDrawingHighlight]
     /// Stroked one point wide in the border color.
-    public let lifelines: CGPath
+    public var lifelines: CGPath { lifelinesScenePath.coreGraphicsPath }
+    let lifelinesScenePath: DiagramScenePath
     /// Activation bars, back to front, each filled with the surface and outlined in the border color.
-    public let activations: [CGPath]
+    public var activations: [CGPath] { activationsScenePaths.map(\.coreGraphicsPath) }
+    let activationsScenePaths: [DiagramScenePath]
     /// The blocks' frames, stroked in the border color; their section lines, dashed.
-    public let blockOutlines: CGPath
-    public let blockSectionLines: CGPath
+    public var blockOutlines: CGPath { blockOutlinesScenePath.coreGraphicsPath }
+    let blockOutlinesScenePath: DiagramScenePath
+    public var blockSectionLines: CGPath { blockSectionLinesScenePath.coreGraphicsPath }
+    let blockSectionLinesScenePath: DiagramScenePath
     /// The patches behind block texts a lifeline crosses, filled in the background color.
-    public let blockTextPatches: CGPath
+    public var blockTextPatches: CGPath { blockTextPatchesScenePath.coreGraphicsPath }
+    let blockTextPatchesScenePath: DiagramScenePath
     /// The blocks' titles and section texts, in the muted color, or in the color `blockTextInks` gives one on a colored
     /// `rect` or box.
     public let blockTexts: [DiagramTextBlock]
     public let blockTextInks: [DiagramColor?]
     /// The tabs, filled with the surface and outlined in the border color, and their keywords, bold and muted.
-    public let blockTabs: CGPath
+    public var blockTabs: CGPath { blockTabsScenePath.coreGraphicsPath }
+    let blockTabsScenePath: DiagramScenePath
     public let blockKeywords: [DiagramTextBlock]
     /// Messages' lines in the line color, one point wide with round caps; dotted ones dashed.
-    public let solidMessageLines: CGPath
-    public let dottedMessageLines: CGPath
+    public var solidMessageLines: CGPath { solidMessageLinesScenePath.coreGraphicsPath }
+    let solidMessageLinesScenePath: DiagramScenePath
+    public var dottedMessageLines: CGPath { dottedMessageLinesScenePath.coreGraphicsPath }
+    let dottedMessageLinesScenePath: DiagramScenePath
     /// Arrowheads and solid half heads, filled in the line color; crosses, open heads and stick half heads, stroked one
     /// point wide with round joins.
-    public let filledHeads: CGPath
-    public let strokedHeads: CGPath
+    public var filledHeads: CGPath { filledHeadsScenePath.coreGraphicsPath }
+    let filledHeadsScenePath: DiagramScenePath
+    public var strokedHeads: CGPath { strokedHeadsScenePath.coreGraphicsPath }
+    let strokedHeadsScenePath: DiagramScenePath
     /// Central connections' circles on the lifelines, filled in the line color.
-    public let centralConnections: CGPath
+    public var centralConnections: CGPath { centralConnectionsScenePath.coreGraphicsPath }
+    let centralConnectionsScenePath: DiagramScenePath
     /// The lines, heads and circles of the messages over a colored `rect` or box, painted as those above but in the
     /// text color that contrasts with that color, one group per color.
     public let inkedMessageLines: [SequenceDrawingMessageLines]
     /// The crosses that end destroyed lifelines, stroked in the line color `destructionLineWidth` wide, round capped.
-    public let destructions: CGPath
+    public var destructions: CGPath { destructionsScenePath.coreGraphicsPath }
+    let destructionsScenePath: DiagramScenePath
     /// The numbers' badges, filled in the line color, and the numbers on them, in the background color.
-    public let numberBadges: CGPath
+    public var numberBadges: CGPath { numberBadgesScenePath.coreGraphicsPath }
+    let numberBadgesScenePath: DiagramScenePath
     public let numberTexts: [DiagramTextBlock]
     /// The patches behind messages' texts a lifeline crosses, in the background color, and the texts.
-    public let messageTextPatches: CGPath
+    public var messageTextPatches: CGPath { messageTextPatchesScenePath.coreGraphicsPath }
+    let messageTextPatchesScenePath: DiagramScenePath
     public let messageTexts: [DiagramTextBlock]
     /// For each of `messageTexts`, the color it takes on a colored `rect` or box, or nil for the text color.
     public let messageTextInks: [DiagramColor?]
     /// Notes, filled with the second surface and outlined in the border color, and their text.
-    public let notes: CGPath
+    public var notes: CGPath { notesScenePath.coreGraphicsPath }
+    let notesScenePath: DiagramScenePath
     public let noteTexts: [DiagramTextBlock]
     /// Participants' shapes and figures' circles, filled with the surface and outlined in the border color; figures'
     /// lines (an actor's limbs, a boundary's bar, a control's arrowhead, an entity's base, a cylinder's rim), stroked in
     /// the border color; the front cards of collections, filled and outlined after them.
-    public let participantShapes: CGPath
-    public let participantFigureLines: CGPath
-    public let participantFrontShapes: CGPath
+    public var participantShapes: CGPath { participantShapesScenePath.coreGraphicsPath }
+    let participantShapesScenePath: DiagramScenePath
+    public var participantFigureLines: CGPath { participantFigureLinesScenePath.coreGraphicsPath }
+    let participantFigureLinesScenePath: DiagramScenePath
+    public var participantFrontShapes: CGPath { participantFrontShapesScenePath.coreGraphicsPath }
+    let participantFrontShapesScenePath: DiagramScenePath
     public let participantTexts: [DiagramTextBlock]
     /// For each of `participantTexts`, the color a figure's text takes on its box's color, or nil for the text color.
     public let participantTextInks: [DiagramColor?]
@@ -97,58 +115,58 @@ public struct SequenceDrawingParts {
 
     public init(layout: SequenceLayout) {
         boxes = layout.boxes.map { box in
-            SequenceDrawingBox(path: Self.roundedRectangle(box.frame), color: box.color, title: box.title, titleInk: SequenceTextInk.ink(on: box.color))
+            SequenceDrawingBox(pathScenePath: Self.roundedRectangle(box.frame), color: box.color, title: box.title, titleInk: SequenceTextInk.ink(on: box.color))
         }
-        highlights = layout.highlights.map { highlight in SequenceDrawingHighlight(path: Self.roundedRectangle(highlight.frame), color: highlight.color) }
-        lifelines = Self.lifelinePath(layout.lifelines)
-        activations = layout.activations.map { activation in
-            CGPath(roundedRect: activation, cornerWidth: Self.activationCornerRadius, cornerHeight: Self.activationCornerRadius, transform: nil)
+        highlights = layout.highlights.map { highlight in SequenceDrawingHighlight(pathScenePath: Self.roundedRectangle(highlight.frame), color: highlight.color) }
+        lifelinesScenePath = Self.lifelinePath(layout.lifelines)
+        activationsScenePaths = layout.activations.map { activation in
+            DiagramScenePath(roundedRect: activation, cornerWidth: Self.activationCornerRadius, cornerHeight: Self.activationCornerRadius)
         }
         let blocks = BlockPaths(blocks: layout.blocks)
-        blockOutlines = blocks.outlines
-        blockSectionLines = blocks.sectionLines
-        blockTextPatches = blocks.textPatches
+        blockOutlinesScenePath = blocks.outlines
+        blockSectionLinesScenePath = blocks.sectionLines
+        blockTextPatchesScenePath = blocks.textPatches
         blockTexts = blocks.texts
         blockTextInks = blocks.textInks
-        blockTabs = blocks.tabs
+        blockTabsScenePath = blocks.tabs
         blockKeywords = layout.blocks.map(\.keyword)
         let messages = SequenceMessagePaths(messages: layout.messages)
-        solidMessageLines = messages.lines.solidLines
-        dottedMessageLines = messages.lines.dottedLines
-        filledHeads = messages.lines.filledHeads
-        strokedHeads = messages.lines.strokedHeads
-        centralConnections = messages.lines.centralConnections
+        solidMessageLinesScenePath = messages.lines.solidLinesScenePath
+        dottedMessageLinesScenePath = messages.lines.dottedLinesScenePath
+        filledHeadsScenePath = messages.lines.filledHeadsScenePath
+        strokedHeadsScenePath = messages.lines.strokedHeadsScenePath
+        centralConnectionsScenePath = messages.lines.centralConnectionsScenePath
         inkedMessageLines = messages.inkedLines
-        destructions = Self.crosses(at: layout.destructions)
-        numberBadges = messages.numberBadges
+        destructionsScenePath = Self.crosses(at: layout.destructions)
+        numberBadgesScenePath = messages.numberBadges
         numberTexts = layout.messages.compactMap { message in message.number?.text }
-        messageTextPatches = messages.textPatches
+        messageTextPatchesScenePath = messages.textPatches
         messageTexts = layout.messages.compactMap(\.text)
         messageTextInks = layout.messages.compactMap { message in message.text.map { _ in SequenceTextInk.ink(on: message.textBackground) } }
-        notes = Self.roundedRectangles(layout.notes.map(\.frame))
+        notesScenePath = Self.roundedRectangles(layout.notes.map(\.frame))
         noteTexts = layout.notes.map(\.text)
         let participants = SequenceParticipantShapeDrawing(participants: layout.participants)
-        participantShapes = participants.shapes
-        participantFigureLines = participants.lines
-        participantFrontShapes = participants.frontShapes
+        participantShapesScenePath = participants.shapes
+        participantFigureLinesScenePath = participants.lines
+        participantFrontShapesScenePath = participants.frontShapes
         participantTexts = layout.participants.map(\.text)
         participantTextInks = layout.participants.map { participant in participant.kind.isFigure ? SequenceTextInk.ink(on: participant.boxColor) : nil }
         title = layout.title
     }
 
-    static func roundedRectangle(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    static func roundedRectangle(_ frame: CGRect) -> DiagramScenePath {
+        DiagramScenePath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
     }
 
-    private static func roundedRectangles(_ frames: [CGRect]) -> CGPath {
-        let path = CGMutablePath()
-        for frame in frames { path.addPath(roundedRectangle(frame)) }
+    private static func roundedRectangles(_ frames: [CGRect]) -> DiagramScenePath {
+        var path = DiagramScenePath()
+        for frame in frames { path.addPathOfRoundedRect(frame, cornerWidth: SequenceDrawingParts.cornerRadius, cornerHeight: SequenceDrawingParts.cornerRadius) }
         return path
     }
 
     /// Each lifeline that runs down at all, as a vertical line.
-    private static func lifelinePath(_ lifelines: [SequenceLayoutLifeline]) -> CGPath {
-        let path = CGMutablePath()
+    private static func lifelinePath(_ lifelines: [SequenceLayoutLifeline]) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for lifeline in lifelines where lifeline.bottom > lifeline.top {
             path.move(to: CGPoint(x: lifeline.x, y: lifeline.top))
             path.addLine(to: CGPoint(x: lifeline.x, y: lifeline.bottom))
@@ -157,8 +175,8 @@ public struct SequenceDrawingParts {
     }
 
     /// A cross of two diagonals at each center, `SequenceSpacing.destructionHalfSize` from it each way.
-    private static func crosses(at centers: [CGPoint]) -> CGPath {
-        let path = CGMutablePath()
+    private static func crosses(at centers: [CGPoint]) -> DiagramScenePath {
+        var path = DiagramScenePath()
         let halfSize = SequenceSpacing.destructionHalfSize
         for center in centers {
             path.addLines(between: [CGPoint(x: center.x - halfSize, y: center.y - halfSize), CGPoint(x: center.x + halfSize, y: center.y + halfSize)])
@@ -169,10 +187,10 @@ public struct SequenceDrawingParts {
 
     /// The blocks' frames, section lines, text patches and tabs, and their titles and section texts with their colors.
     private struct BlockPaths {
-        let outlines = CGMutablePath()
-        let sectionLines = CGMutablePath()
-        let textPatches = CGMutablePath()
-        let tabs = CGMutablePath()
+        var outlines = DiagramScenePath()
+        var sectionLines = DiagramScenePath()
+        var textPatches = DiagramScenePath()
+        var tabs = DiagramScenePath()
         private(set) var texts: [DiagramTextBlock] = []
         private(set) var textInks: [DiagramColor?] = []
 
@@ -187,13 +205,13 @@ public struct SequenceDrawingParts {
                     texts.append(text)
                     textInks.append(SequenceTextInk.ink(on: section.textBackground))
                 }
-                outlines.addPath(SequenceDrawingParts.roundedRectangle(block.frame))
+                outlines.addPathOfRoundedRect(block.frame, cornerWidth: SequenceDrawingParts.cornerRadius, cornerHeight: SequenceDrawingParts.cornerRadius)
                 for section in block.sections {
                     sectionLines.move(to: CGPoint(x: block.frame.minX, y: section.lineY))
                     sectionLines.addLine(to: CGPoint(x: block.frame.maxX, y: section.lineY))
                 }
-                for patch in block.textPatches { textPatches.addPath(SequenceDrawingParts.roundedRectangle(patch)) }
-                tabs.addPath(SequenceDrawingParts.roundedRectangle(block.tab))
+                for patch in block.textPatches { textPatches.addPathOfRoundedRect(patch, cornerWidth: SequenceDrawingParts.cornerRadius, cornerHeight: SequenceDrawingParts.cornerRadius) }
+                tabs.addPathOfRoundedRect(block.tab, cornerWidth: SequenceDrawingParts.cornerRadius, cornerHeight: SequenceDrawingParts.cornerRadius)
             }
         }
     }
@@ -201,13 +219,15 @@ public struct SequenceDrawingParts {
 
 /// A `rect` background's shape and its color, or nil for the default shade.
 public struct SequenceDrawingHighlight {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     public let color: SequenceHighlightColor?
 }
 
 /// A box's shape, its color (nil for the default shade), its title and the color Pele picks for the title on that color.
 public struct SequenceDrawingBox {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     public let color: SequenceHighlightColor?
     public let title: DiagramTextBlock?
     /// The title's color on the box's color, or nil for the muted text color.

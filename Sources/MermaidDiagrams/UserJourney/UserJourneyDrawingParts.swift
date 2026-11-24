@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyDrawingParts.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: A laid-out user journey's geometry grouped by how it is painted: scale, stems, score line, faces,
+ *              bands, cards and dots.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out user journey's geometry grouped by how it is painted, so that drawing it in any colors is a few fills
@@ -6,27 +18,37 @@ import CoreGraphics
 /// legend, the title.
 public struct UserJourneyDrawingParts {
     /// The scale's lines, stroked `lineWidth` wide in the second surface.
-    public let scaleLines: CGPath
+    public var scaleLines: CGPath { scaleLinesScenePath.coreGraphicsPath }
+    let scaleLinesScenePath: DiagramScenePath
     /// The dashed stems from the cards to the faces, stroked `lineWidth` wide in the border color, `stemDashLengths`.
-    public let stems: CGPath
+    public var stems: CGPath { stemsScenePath.coreGraphicsPath }
+    let stemsScenePath: DiagramScenePath
     /// The line from face to face, stroked `lineWidth` wide in the line color with round joins; empty for one task.
-    public let scoreLine: CGPath
+    public var scoreLine: CGPath { scoreLineScenePath.coreGraphicsPath }
+    let scoreLineScenePath: DiagramScenePath
     /// The faces' circles, filled in the background color and stroked `lineWidth` wide in the line color.
-    public let faces: CGPath
+    public var faces: CGPath { facesScenePath.coreGraphicsPath }
+    let facesScenePath: DiagramScenePath
     /// The faces' eyes, filled in the line color.
-    public let eyes: CGPath
+    public var eyes: CGPath { eyesScenePath.coreGraphicsPath }
+    let eyesScenePath: DiagramScenePath
     /// The faces' mouths, stroked `lineWidth` wide in the line color with round caps.
-    public let mouths: CGPath
+    public var mouths: CGPath { mouthsScenePath.coreGraphicsPath }
+    let mouthsScenePath: DiagramScenePath
     /// The sections' bands, filled in the second surface.
-    public let sectionBands: CGPath
+    public var sectionBands: CGPath { sectionBandsScenePath.coreGraphicsPath }
+    let sectionBandsScenePath: DiagramScenePath
     /// The cards, filled in the surface color and stroked `lineWidth` wide in the border color.
-    public let cards: CGPath
+    public var cards: CGPath { cardsScenePath.coreGraphicsPath }
+    let cardsScenePath: DiagramScenePath
     /// For each series color, the actors' dots on the cards in it: entry `k` is filled in
     /// `DiagramPalette.seriesColor(at: k)` and stroked `lineWidth` wide in the surface color, and holds the dots of the
     /// actors whose index leaves `k` when divided by the number of series colors.
-    public let cardDotsBySeries: [CGPath]
+    public var cardDotsBySeries: [CGPath] { cardDotsBySeriesScenePaths.map(\.coreGraphicsPath) }
+    let cardDotsBySeriesScenePaths: [DiagramScenePath]
     /// For each series color, the legend's dots in it, filled only.
-    public let legendDotsBySeries: [CGPath]
+    public var legendDotsBySeries: [CGPath] { legendDotsBySeriesScenePaths.map(\.coreGraphicsPath) }
+    let legendDotsBySeriesScenePaths: [DiagramScenePath]
     /// The scale's numbers, in the muted color.
     public let scaleTexts: [DiagramTextBlock]
     /// The bands' headings, drawn bold in the foreground color.
@@ -46,35 +68,35 @@ public struct UserJourneyDrawingParts {
     static let cornerRadius: CGFloat = 4
 
     public init(layout: UserJourneyLayout) {
-        let faces = CGMutablePath()
-        let eyes = CGMutablePath()
-        let mouths = CGMutablePath()
-        let stems = CGMutablePath()
-        let cards = CGMutablePath()
+        var faces = DiagramScenePath()
+        var eyes = DiagramScenePath()
+        var mouths = DiagramScenePath()
+        var stems = DiagramScenePath()
+        var cards = DiagramScenePath()
         let actorCount = layout.legend.count
-        let cardDots = (0..<min(actorCount, Self.seriesColorCount)).map { _ in CGMutablePath() }
+        var cardDots = (0..<min(actorCount, Self.seriesColorCount)).map { _ in DiagramScenePath() }
         for task in layout.tasks {
-            UserJourneyFaceShape.add(task.mood, at: task.faceCenter, circles: faces, eyes: eyes, mouths: mouths)
-            stems.addPath(DiagramEdgeDrawing.path(task.stem))
+            UserJourneyFaceShape.add(task.mood, at: task.faceCenter, circles: &faces, eyes: &eyes, mouths: &mouths)
+            stems.addEdgePath(task.stem)
             cards.addPath(Self.roundedRectangle(task.frame))
-            for dot in task.actorDots { Self.add(dot, to: cardDots) }
+            for dot in task.actorDots { Self.add(dot, to: &cardDots) }
         }
-        let legendDots = (0..<min(actorCount, Self.seriesColorCount)).map { _ in CGMutablePath() }
-        for entry in layout.legend { Self.add(entry.dot, to: legendDots) }
-        let scaleLines = CGMutablePath()
-        for level in layout.scaleLevels { scaleLines.addPath(DiagramEdgeDrawing.path(level.line)) }
-        let bands = CGMutablePath()
+        var legendDots = (0..<min(actorCount, Self.seriesColorCount)).map { _ in DiagramScenePath() }
+        for entry in layout.legend { Self.add(entry.dot, to: &legendDots) }
+        var scaleLines = DiagramScenePath()
+        for level in layout.scaleLevels { scaleLines.addEdgePath(level.line) }
+        var bands = DiagramScenePath()
         for section in layout.sections { bands.addPath(Self.roundedRectangle(section.frame)) }
-        self.scaleLines = scaleLines
-        self.stems = stems
-        scoreLine = layout.scoreLine.map(DiagramEdgeDrawing.path) ?? CGMutablePath()
-        self.faces = faces
-        self.eyes = eyes
-        self.mouths = mouths
-        sectionBands = bands
-        self.cards = cards
-        cardDotsBySeries = cardDots
-        legendDotsBySeries = legendDots
+        self.scaleLinesScenePath = scaleLines
+        self.stemsScenePath = stems
+        scoreLineScenePath = layout.scoreLine.map(DiagramEdgeDrawing.path) ?? DiagramScenePath()
+        self.facesScenePath = faces
+        self.eyesScenePath = eyes
+        self.mouthsScenePath = mouths
+        sectionBandsScenePath = bands
+        self.cardsScenePath = cards
+        cardDotsBySeriesScenePaths = cardDots
+        legendDotsBySeriesScenePaths = legendDots
         scaleTexts = layout.scaleLevels.map(\.text)
         sectionTexts = layout.sections.map(\.text)
         taskTexts = layout.tasks.map(\.text)
@@ -82,13 +104,13 @@ public struct UserJourneyDrawingParts {
         title = layout.title
     }
 
-    private static func add(_ dot: UserJourneyActorDot, to dotsBySeries: [CGMutablePath]) {
+    private static func add(_ dot: UserJourneyActorDot, to dotsBySeries: inout [DiagramScenePath]) {
         let radius = UserJourneyGeometry.dotRadius
         dotsBySeries[dot.seriesIndex % seriesColorCount].addEllipse(in: CGRect(x: dot.center.x - radius, y: dot.center.y - radius,
                                                                                width: 2 * radius, height: 2 * radius))
     }
 
-    private static func roundedRectangle(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    private static func roundedRectangle(_ frame: CGRect) -> DiagramScenePath {
+        DiagramScenePath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
     }
 }

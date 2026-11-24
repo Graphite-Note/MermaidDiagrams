@@ -5,8 +5,8 @@
  * Description: A laid-out Gantt chart's geometry grouped by how it is painted.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,27 +16,36 @@ import CoreGraphics
 /// bands, the excluded days, the grid and the axis' line, today's line, the tasks' shapes, then the text.
 public struct GanttDrawingParts {
     /// The bands behind every other section, filled in the surface color.
-    public let sectionBands: CGPath
+    public var sectionBands: CGPath { sectionBandsScenePath.coreGraphicsPath }
+    let sectionBandsScenePath: DiagramScenePath
     /// The runs of excluded days, filled in the alternate surface color.
-    public let excludedDays: CGPath
+    public var excludedDays: CGPath { excludedDaysScenePath.coreGraphicsPath }
+    let excludedDaysScenePath: DiagramScenePath
     /// The grid lines at the axis' dates, stroked one point wide in dots of 1 and gaps of 3, in the border color.
-    public let gridLines: CGPath
+    public var gridLines: CGPath { gridLinesScenePath.coreGraphicsPath }
+    let gridLinesScenePath: DiagramScenePath
     /// The axis' line under the rows, and above them with `topAxis`, stroked one point wide in the border color.
-    public let axisLines: CGPath
+    public var axisLines: CGPath { axisLinesScenePath.coreGraphicsPath }
+    let axisLinesScenePath: DiagramScenePath
     /// Today's line, stroked two points wide in the accent color (or as `todayLineStyle` says); empty when it is not drawn.
-    public let todayLine: CGPath
+    public var todayLine: CGPath { todayLineScenePath.coreGraphicsPath }
+    let todayLineScenePath: DiagramScenePath
     /// How `todayMarker` restyles today's line, or nil for the standard line.
     public let todayLineStyle: GanttTodayLineStyle?
     /// The small triangle on top of today's line, filled in the accent color; empty for a restyled line.
-    public let todayMark: CGPath
+    public var todayMark: CGPath { todayMarkScenePath.coreGraphicsPath }
+    let todayMarkScenePath: DiagramScenePath
     /// The vertical markers' lines, stroked 1.5 points wide in dashes of 4 and gaps of 3, in the line color.
-    public let verticalMarkerLines: CGPath
+    public var verticalMarkerLines: CGPath { verticalMarkerLinesScenePath.coreGraphicsPath }
+    let verticalMarkerLinesScenePath: DiagramScenePath
     /// The vertical markers' texts under the axis, in the text color.
     public let verticalMarkerTexts: [DiagramTextBlock]
     /// The tasks' bars and milestones, by fill; a faint fill is its color at a quarter of its opacity.
-    public let taskFills: [GanttTaskFill: CGPath]
+    public var taskFills: [GanttTaskFill: CGPath] { taskFillsScenePaths.mapValues(\.coreGraphicsPath) }
+    let taskFillsScenePaths: [GanttTaskFill: DiagramScenePath]
     /// The tasks' bars and milestones, by outline color, stroked one point wide with round joins.
-    public let taskOutlines: [GanttTaskStroke: CGPath]
+    public var taskOutlines: [GanttTaskStroke: CGPath] { taskOutlinesScenePaths.mapValues(\.coreGraphicsPath) }
+    let taskOutlinesScenePaths: [GanttTaskStroke: DiagramScenePath]
     /// Task text by its color.
     public let taskTexts: [GanttLabelColor: [DiagramTextBlock]]
     /// The sections' names, in the text color.
@@ -63,39 +72,39 @@ public struct GanttDrawingParts {
         title = layout.title
         let frame = layout.plot?.frame ?? .zero
         let todayOffsets = layout.plot?.todayOffset.map { offset in [offset] } ?? []
-        sectionBands = Self.rectangles(layout.plot?.sectionBands ?? [])
-        excludedDays = Self.rectangles(layout.plot?.excludedDays ?? [])
+        sectionBandsScenePath = Self.rectangles(layout.plot?.sectionBands ?? [])
+        excludedDaysScenePath = Self.rectangles(layout.plot?.excludedDays ?? [])
         let gridTop = layout.plot?.gridTop ?? frame.minY
-        gridLines = Self.verticalLines(at: layout.plot?.gridLineOffsets ?? [], from: gridTop, to: frame.maxY)
-        let axes = CGMutablePath()
+        gridLinesScenePath = Self.verticalLines(at: layout.plot?.gridLineOffsets ?? [], from: gridTop, to: frame.maxY)
+        var axes = DiagramScenePath()
         let axisHeights = layout.plot.map { plot in [frame.maxY] + (plot.showsTopAxis ? [gridTop] : []) } ?? []
         for height in axisHeights {
             axes.move(to: CGPoint(x: frame.minX, y: height))
             axes.addLine(to: CGPoint(x: frame.maxX, y: height))
         }
-        axisLines = axes
-        todayLine = Self.verticalLines(at: todayOffsets, from: gridTop, to: frame.maxY)
+        axisLinesScenePath = axes
+        todayLineScenePath = Self.verticalLines(at: todayOffsets, from: gridTop, to: frame.maxY)
         todayLineStyle = layout.plot?.todayStyle
-        let mark = CGMutablePath()
+        var mark = DiagramScenePath()
         if layout.plot?.todayStyle == nil { for offset in todayOffsets { mark.addPath(Self.todayMark(at: offset, top: gridTop)) } }
-        todayMark = mark
-        verticalMarkerLines = Self.verticalLines(at: layout.plot?.verticalMarkers.map(\.offset) ?? [], from: gridTop, to: frame.maxY)
+        todayMarkScenePath = mark
+        verticalMarkerLinesScenePath = Self.verticalLines(at: layout.plot?.verticalMarkers.map(\.offset) ?? [], from: gridTop, to: frame.maxY)
         verticalMarkerTexts = layout.plot?.verticalMarkers.map(\.label) ?? []
         let tasks = layout.plot?.tasks ?? []
-        (taskFills, taskOutlines) = Self.taskShapes(tasks)
+        (taskFillsScenePaths, taskOutlinesScenePaths) = Self.taskShapes(tasks)
         taskTexts = Dictionary(grouping: tasks, by: \.labelColor).mapValues { grouped in grouped.map(\.label) }
         sectionNames = layout.plot?.sectionNames ?? []
         axisDates = layout.plot?.axisDates ?? []
     }
 
     /// A task's outline: a bar with Pele's rounded corners, or a milestone's diamond; nil for a task without one.
-    static func outline(of shape: GanttTaskShape) -> CGPath? {
+    static func outline(of shape: GanttTaskShape) -> DiagramScenePath? {
         switch shape {
         case .bar(let frame):
             let radius = min(GanttLayoutEngine.barCornerRadius, frame.width / 2, frame.height / 2)
-            return CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+            return DiagramScenePath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius)
         case .milestone(let frame):
-            let diamond = CGMutablePath()
+            var diamond = DiagramScenePath()
             diamond.addLines(between: [CGPoint(x: frame.midX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.midY), CGPoint(x: frame.midX, y: frame.maxY),
                                        CGPoint(x: frame.minX, y: frame.midY)])
             diamond.closeSubpath()
@@ -104,30 +113,25 @@ public struct GanttDrawingParts {
         }
     }
 
-    private static func taskShapes(_ tasks: [GanttLayoutTask]) -> ([GanttTaskFill: CGPath], [GanttTaskStroke: CGPath]) {
-        var fills: [GanttTaskFill: CGMutablePath] = [:]
-        var outlines: [GanttTaskStroke: CGMutablePath] = [:]
+    private static func taskShapes(_ tasks: [GanttLayoutTask]) -> ([GanttTaskFill: DiagramScenePath], [GanttTaskStroke: DiagramScenePath]) {
+        var fills: [GanttTaskFill: DiagramScenePath] = [:]
+        var outlines: [GanttTaskStroke: DiagramScenePath] = [:]
         for task in tasks {
             guard let outline = outline(of: task.shape) else { continue }
-            // The paths are references: each is stored when first made, then added to.
-            let fill = fills[task.paint.fill] ?? CGMutablePath()
-            fills[task.paint.fill] = fill
-            fill.addPath(outline)
-            let stroke = outlines[task.paint.stroke] ?? CGMutablePath()
-            outlines[task.paint.stroke] = stroke
-            stroke.addPath(outline)
+            fills[task.paint.fill, default: DiagramScenePath()].addPath(outline)
+            outlines[task.paint.stroke, default: DiagramScenePath()].addPath(outline)
         }
         return (fills, outlines)
     }
 
-    private static func rectangles(_ frames: [CGRect]) -> CGPath {
-        let path = CGMutablePath()
+    private static func rectangles(_ frames: [CGRect]) -> DiagramScenePath {
+        var path = DiagramScenePath()
         path.addRects(frames)
         return path
     }
 
-    private static func verticalLines(at offsets: [CGFloat], from top: CGFloat, to bottom: CGFloat) -> CGPath {
-        let path = CGMutablePath()
+    private static func verticalLines(at offsets: [CGFloat], from top: CGFloat, to bottom: CGFloat) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for offset in offsets {
             path.move(to: CGPoint(x: offset, y: top))
             path.addLine(to: CGPoint(x: offset, y: bottom))
@@ -136,8 +140,8 @@ public struct GanttDrawingParts {
     }
 
     /// Pele's triangle pointing down onto the top of today's line.
-    private static func todayMark(at offset: CGFloat, top: CGFloat) -> CGPath {
-        let mark = CGMutablePath()
+    private static func todayMark(at offset: CGFloat, top: CGFloat) -> DiagramScenePath {
+        var mark = DiagramScenePath()
         let markTop = top - todayMarkRise
         mark.addLines(between: [CGPoint(x: offset - todayMarkHalfWidth, y: markTop), CGPoint(x: offset + todayMarkHalfWidth, y: markTop),
                                 CGPoint(x: offset, y: top + todayMarkReach)])

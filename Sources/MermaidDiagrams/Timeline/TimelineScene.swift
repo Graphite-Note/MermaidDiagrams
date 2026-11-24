@@ -5,7 +5,7 @@
  * Description: A laid-out timeline's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -25,14 +25,14 @@ extension DiagramScene {
 extension TimelineDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke(lineWidth: Self.lineWidth)
-        builder.stroke(axis, .line, line, part: .axis)
-        builder.fill(axisArrow, .line, part: .axis)
-        builder.stroke(connectors, .border, line, part: .edge)
+        builder.stroke(axisScenePath, .line, line, part: .axis)
+        builder.fill(axisArrowScenePath, .line, part: .axis)
+        builder.stroke(connectorsScenePath, .border, line, part: .edge)
         for group in colorGroups {
             let paint = Self.paint(group.color)
-            builder.fill(group.boxes, paint, part: .node)
-            builder.fill(group.eventBoxes, paint.atOpacity(Self.eventFillOpacity), part: .node)
-            builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: Self.dotOutlineWidth), part: .marker)
+            builder.fill(group.boxesScenePath, paint, part: .node)
+            builder.fill(group.eventBoxesScenePath, paint.atOpacity(Self.eventFillOpacity), part: .node)
+            builder.fillAndStroke(group.dotsScenePath, fill: paint, stroke: .background, DiagramStroke(lineWidth: Self.dotOutlineWidth), part: .marker)
         }
         for (text, paint) in zip(sectionTexts, sectionTextPaints) { builder.text(text, paint, isBold: true, part: .clusterLabel) }
         for (text, paint) in zip(periodTexts, periodTextPaints) { builder.text(text, paint, part: .label) }

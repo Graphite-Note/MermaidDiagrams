@@ -5,8 +5,8 @@
  * Description: A laid-out kanban board's scene, back to front in Pele's colors, and its renderer, which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -34,8 +34,8 @@ enum KanbanScene {
     static let cardOutlineWidth: CGFloat = 1
     static let priorityMarkWidth: CGFloat = 3
 
-    static func roundedBox(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: min(cornerRadius, frame.width / 2), cornerHeight: min(cornerRadius, frame.height / 2), transform: nil)
+    static func roundedBox(_ frame: CGRect) -> DiagramScenePath {
+        DiagramScenePath(roundedRect: frame, cornerWidth: min(cornerRadius, frame.width / 2), cornerHeight: min(cornerRadius, frame.height / 2))
     }
 
     /// The paint Pele marks a priority in: the critical color for the high ones, muted for the low ones, the nearer to

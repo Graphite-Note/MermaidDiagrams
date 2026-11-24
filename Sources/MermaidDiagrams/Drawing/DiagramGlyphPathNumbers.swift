@@ -6,8 +6,8 @@
  *              from its end points turned into cubic curves.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -94,7 +94,7 @@ struct DiagramGlyphArc {
     let sweepsPositively: Bool
 
     /// Adds the arc to `path`, whose current point is `start`, as cubic curves of at most a quarter turn each.
-    func add(to path: CGMutablePath) {
+    func add(to path: inout DiagramScenePath) {
         var radiusAcross = abs(radii.width)
         var radiusDown = abs(radii.height)
         guard radiusAcross > 0, radiusDown > 0, start != end else {
@@ -126,11 +126,11 @@ struct DiagramGlyphArc {
         var sweep = atan2((-turnedDown - centerDown) / radiusDown, (-turnedAcross - centerAcross) / radiusAcross) - startAngle
         if sweepsPositively, sweep < 0 { sweep += 2 * .pi }
         if !sweepsPositively, sweep > 0 { sweep -= 2 * .pi }
-        addCurves(to: path, center: center, radii: CGSize(width: radiusAcross, height: radiusDown), axisTurn: (cosine, sine),
+        addCurves(to: &path, center: center, radii: CGSize(width: radiusAcross, height: radiusDown), axisTurn: (cosine, sine),
                   startAngle: startAngle, sweep: sweep)
     }
 
-    private func addCurves(to path: CGMutablePath, center: CGPoint, radii: CGSize, axisTurn: (cosine: CGFloat, sine: CGFloat),
+    private func addCurves(to path: inout DiagramScenePath, center: CGPoint, radii: CGSize, axisTurn: (cosine: CGFloat, sine: CGFloat),
                            startAngle: CGFloat, sweep: CGFloat) {
         let curveCount = max(1, Int((abs(sweep) / (.pi / 2)).rounded(.up)))
         let curveSweep = sweep / CGFloat(curveCount)

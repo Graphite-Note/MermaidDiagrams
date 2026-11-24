@@ -5,8 +5,8 @@
  * Description: The outline and inner lines of each flowchart node shape, Pele's, as Core Graphics paths in a frame.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -26,16 +26,16 @@ enum FlowchartShapeDrawing {
     static let doubleCircleGap: CGFloat = 5
 
     /// The filled and stroked outline, or nil for a shape drawn as text alone, as lines alone or piece by piece.
-    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         let width = frame.width
         let height = frame.height
         switch shape {
-        case .rectangle, .subroutine: return CGPath(roundedRect: frame, cornerWidth: rectangleCornerRadius, cornerHeight: rectangleCornerRadius, transform: nil)
+        case .rectangle, .subroutine: return DiagramScenePath(roundedRect: frame, cornerWidth: rectangleCornerRadius, cornerHeight: rectangleCornerRadius)
         case .roundedRectangle:
             let radius = min(roundedCornerRadius, height / 2)
-            return CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
-        case .stadium: return CGPath(roundedRect: frame, cornerWidth: min(height, width) / 2, cornerHeight: height / 2, transform: nil)
-        case .circle, .doubleCircle: return CGPath(ellipseIn: frame, transform: nil)
+            return DiagramScenePath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius)
+        case .stadium: return DiagramScenePath(roundedRect: frame, cornerWidth: min(height, width) / 2, cornerHeight: height / 2)
+        case .circle, .doubleCircle: return DiagramScenePath(ellipseIn: frame)
         case .cylinder: return cylinderBody(in: frame)
         case .text: return nil
         case .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid:
@@ -50,10 +50,10 @@ enum FlowchartShapeDrawing {
     }
 
     /// The lines drawn over the filled outline, or nil.
-    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         switch shape {
         case .subroutine:
-            let path = CGMutablePath()
+            var path = DiagramScenePath()
             for x in [frame.minX + subroutineInset, frame.maxX - subroutineInset] {
                 path.move(to: CGPoint(x: x, y: frame.minY))
                 path.addLine(to: CGPoint(x: x, y: frame.maxY))
@@ -61,12 +61,12 @@ enum FlowchartShapeDrawing {
             return path
         case .cylinder:
             let capDepth = FlowchartShapeGeometry.cylinderCapDepth(width: frame.width)
-            let path = CGMutablePath()
-            addHalfEllipse(to: path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: frame.width / 2, radiusY: capDepth, lowerHalf: true,
+            var path = DiagramScenePath()
+            addHalfEllipse(to: &path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: frame.width / 2, radiusY: capDepth, lowerHalf: true,
                            startingOnLeft: true)
             return path
         case .doubleCircle:
-            return CGPath(ellipseIn: frame.insetBy(dx: doubleCircleGap, dy: doubleCircleGap), transform: nil)
+            return DiagramScenePath(ellipseIn: frame.insetBy(dx: doubleCircleGap, dy: doubleCircleGap))
         case .rectangle, .roundedRectangle, .stadium, .circle, .asymmetric, .diamond, .hexagon, .leanRight, .leanLeft, .trapezoid,
              .invertedTrapezoid, .text:
             return nil
@@ -96,30 +96,30 @@ enum FlowchartShapeDrawing {
         }
     }
 
-    private static func polygon(_ corners: [CGPoint], around center: CGPoint) -> CGPath {
-        let path = CGMutablePath()
+    private static func polygon(_ corners: [CGPoint], around center: CGPoint) -> DiagramScenePath {
+        var path = DiagramScenePath()
         path.addLines(between: corners.map { corner in CGPoint(x: center.x + corner.x, y: center.y + corner.y) })
         path.closeSubpath()
         return path
     }
 
     /// A cylinder's body: the top cap's far half, the right side, the bottom cap's near half, the left side.
-    static func cylinderBody(in frame: CGRect) -> CGPath {
+    static func cylinderBody(in frame: CGRect) -> DiagramScenePath {
         let capDepth = FlowchartShapeGeometry.cylinderCapDepth(width: frame.width)
         let radiusX = frame.width / 2
-        let path = CGMutablePath()
+        var path = DiagramScenePath()
         path.move(to: CGPoint(x: frame.minX, y: frame.minY + capDepth))
-        addHalfEllipse(to: path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: radiusX, radiusY: capDepth, lowerHalf: false,
+        addHalfEllipse(to: &path, center: CGPoint(x: frame.midX, y: frame.minY + capDepth), radiusX: radiusX, radiusY: capDepth, lowerHalf: false,
                        startingOnLeft: true)
         path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY - capDepth))
-        addHalfEllipse(to: path, center: CGPoint(x: frame.midX, y: frame.maxY - capDepth), radiusX: radiusX, radiusY: capDepth, lowerHalf: true,
+        addHalfEllipse(to: &path, center: CGPoint(x: frame.midX, y: frame.maxY - capDepth), radiusX: radiusX, radiusY: capDepth, lowerHalf: true,
                        startingOnLeft: false)
         path.closeSubpath()
         return path
     }
 
     /// Half an ellipse from one end of its horizontal axis to the other, as two quarter arcs (cubic approximations).
-    private static func addHalfEllipse(to path: CGMutablePath, center: CGPoint, radiusX: CGFloat, radiusY: CGFloat, lowerHalf: Bool, startingOnLeft: Bool) {
+    private static func addHalfEllipse(to path: inout DiagramScenePath, center: CGPoint, radiusX: CGFloat, radiusY: CGFloat, lowerHalf: Bool, startingOnLeft: Bool) {
         // The control-point distance that makes a cubic follow a quarter circle closely.
         let quarterCircleControl: CGFloat = 0.5523
         let vertical = lowerHalf ? radiusY : -radiusY

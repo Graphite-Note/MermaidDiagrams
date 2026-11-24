@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyFaceShape.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Pele's face for a user journey's score: a circle, two eyes, and a mouth that smiles, stays straight or
+ *              frowns.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -18,7 +30,7 @@ enum UserJourneyFaceShape {
     static let straightMouthDepth: CGFloat = 4.5
 
     /// Adds the face's circle at `center` to `circles`, its eyes to `eyes` and its mouth to `mouths`.
-    static func add(_ mood: UserJourneyMood, at center: CGPoint, circles: CGMutablePath, eyes: CGMutablePath, mouths: CGMutablePath) {
+    static func add(_ mood: UserJourneyMood, at center: CGPoint, circles: inout DiagramScenePath, eyes: inout DiagramScenePath, mouths: inout DiagramScenePath) {
         let radius = UserJourneyGeometry.faceRadius
         circles.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
         for side in [-1.0, 1.0] {
@@ -26,8 +38,8 @@ enum UserJourneyFaceShape {
             eyes.addEllipse(in: CGRect(x: eye.x - eyeRadius, y: eye.y - eyeRadius, width: 2 * eyeRadius, height: 2 * eyeRadius))
         }
         switch mood {
-        case .happy: addCurvedMouth(at: center, cornerDepth: smileCornerDepth, bulgesDown: true, to: mouths)
-        case .sad: addCurvedMouth(at: center, cornerDepth: frownCornerDepth, bulgesDown: false, to: mouths)
+        case .happy: addCurvedMouth(at: center, cornerDepth: smileCornerDepth, bulgesDown: true, to: &mouths)
+        case .sad: addCurvedMouth(at: center, cornerDepth: frownCornerDepth, bulgesDown: false, to: &mouths)
         case .neutral:
             mouths.move(to: CGPoint(x: center.x - straightMouthHalfWidth, y: center.y + straightMouthDepth))
             mouths.addLine(to: CGPoint(x: center.x + straightMouthHalfWidth, y: center.y + straightMouthDepth))
@@ -35,7 +47,7 @@ enum UserJourneyFaceShape {
     }
 
     /// The shorter arc between the corners, below them for a smile and above them for a frown, from left to right.
-    private static func addCurvedMouth(at center: CGPoint, cornerDepth: CGFloat, bulgesDown: Bool, to mouths: CGMutablePath) {
+    private static func addCurvedMouth(at center: CGPoint, cornerDepth: CGFloat, bulgesDown: Bool, to mouths: inout DiagramScenePath) {
         let rise = (curvedMouthRadius * curvedMouthRadius - curvedMouthHalfWidth * curvedMouthHalfWidth).squareRoot()
         let arcCenter = CGPoint(x: center.x, y: center.y + cornerDepth + (bulgesDown ? -rise : rise))
         let cornerAngle = atan2(bulgesDown ? rise : -rise, curvedMouthHalfWidth)

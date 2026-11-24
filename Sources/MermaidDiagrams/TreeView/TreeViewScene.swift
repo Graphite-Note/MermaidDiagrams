@@ -6,8 +6,8 @@
  *              and its renderer, which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -20,8 +20,8 @@ extension DiagramScene {
         var builder = DiagramSceneBuilder()
         let glyphs = TreeViewGlyphs()
         builder.title(layout.title)
-        let guides = CGMutablePath()
-        for guide in layout.guides { guides.addPath(DiagramEdgeDrawing.path(guide)) }
+        var guides = DiagramScenePath()
+        for guide in layout.guides { guides.addEdgePath(guide) }
         builder.stroke(guides, .border, DiagramStroke(lineWidth: layout.guideLineWidth), part: .treeGuides)
         for row in layout.rows {
             if let highlight = row.highlight {
@@ -49,7 +49,7 @@ struct TreeViewGlyphs {
     private let folder = DiagramGlyphPath(pathData: folderPathData)
     private let file = DiagramGlyphPath(pathData: filePathData)
 
-    func path(of glyph: TreeViewGlyph, in frame: CGRect) -> CGPath? {
+    func path(of glyph: TreeViewGlyph, in frame: CGRect) -> DiagramScenePath? {
         (glyph == .folder ? folder : file)?.path(in: frame)
     }
 

@@ -6,8 +6,8 @@
  *              Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -28,15 +28,15 @@ extension EntityRelationshipDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         subgraphs.addBoxes(to: &builder)
-        builder.stroke(identifyingLines, .line, line, part: .edge)
-        builder.stroke(nonIdentifyingLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.nonIdentifyingDashLengths), part: .edge)
-        builder.fill(markFills, .background, part: .marker)
-        builder.stroke(markOutlines, .line, line, part: .marker)
-        builder.fill(labelPatches, .background, part: .labelBackground)
+        builder.stroke(identifyingLinesScenePath, .line, line, part: .edge)
+        builder.stroke(nonIdentifyingLinesScenePath, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.nonIdentifyingDashLengths), part: .edge)
+        builder.fill(markFillsScenePath, .background, part: .marker)
+        builder.stroke(markOutlinesScenePath, .line, line, part: .marker)
+        builder.fill(labelPatchesScenePath, .background, part: .labelBackground)
         builder.texts(labels, .foreground, part: .edgeLabel)
-        builder.fill(boxFills, .surface, part: .node)
-        builder.fill(rowStripes, .background, part: .node)
-        builder.stroke(boxOutlines, .border, line, part: .node)
+        builder.fill(boxFillsScenePath, .surface, part: .node)
+        builder.fill(rowStripesScenePath, .background, part: .node)
+        builder.stroke(boxOutlinesScenePath, .border, line, part: .node)
         builder.texts(entityTexts, .foreground, part: .label)
         builder.texts(attributeDetails, DiagramPaint.foreground.atOpacity(Self.mutedTextOpacity), part: .label)
         builder.title(title)

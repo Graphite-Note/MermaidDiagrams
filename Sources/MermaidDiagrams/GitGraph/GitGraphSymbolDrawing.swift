@@ -1,12 +1,24 @@
+/**
+ * File: GitGraphSymbolDrawing.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: The geometry of a git graph's commit symbols, Pele's: dots, squares, rings, and the cross and cherry
+ *              marks drawn on them.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// The geometry of commits' symbols, Pele's: a dot 7 points in radius; a square a point wider than the dot on each
 /// side with rounded corners; a ring 6 points in radius around a dot of 2.5; and the marks drawn on a dot in the
 /// background color, a cross on a reverse commit and a cherry on a cherry-pick. The marks of every commit gather here.
 struct GitGraphSymbolDrawing {
-    let reverseCrosses = CGMutablePath()
-    let cherryStems = CGMutablePath()
-    let cherryFruits = CGMutablePath()
+    var reverseCrosses = DiagramScenePath()
+    var cherryStems = DiagramScenePath()
+    var cherryFruits = DiagramScenePath()
 
     static let squareCornerRadius: CGFloat = 2
     static let ringRadius: CGFloat = GitGraphGeometry.dotRadius - 1
@@ -19,7 +31,7 @@ struct GitGraphSymbolDrawing {
     static let cherryFruitRadius: CGFloat = 1.8
 
     /// Adds `symbol` at `center`: its fills to `symbols`, a merge's ring to `rings`, its marks to the shared paths.
-    func add(_ symbol: GitGraphCommitSymbol, at center: CGPoint, symbols: CGMutablePath, rings: CGMutablePath) {
+    mutating func add(_ symbol: GitGraphCommitSymbol, at center: CGPoint, symbols: inout DiagramScenePath, rings: inout DiagramScenePath) {
         switch symbol {
         case .normal:
             symbols.addEllipse(in: Self.circle(at: center, radius: GitGraphGeometry.dotRadius))

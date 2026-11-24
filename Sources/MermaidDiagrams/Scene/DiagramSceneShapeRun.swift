@@ -6,53 +6,51 @@
  *              when the run ends; a fill followed by the stroke of its own path becomes one shape filled and stroked.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
 
-/// The shapes a scene builder is merging into one: their paths, kept as they are given and joined into one path only when
-/// the run ends, so that a run of any length costs its paths' elements once, not once per shape added.
+/// The shapes a scene builder is merging into one: the first path as it was given, the others' elements added after it
+/// as Core Graphics adds one path to another, so that a run of any length costs its paths' elements once.
 struct DiagramSceneShapeRun {
     private(set) var painting: DiagramShapePainting
     let part: DiagramScenePart
-    private var paths: [CGPath]
+    private var path: DiagramScenePath
+    private var pathCount = 1
     /// The paths' bounds together, which is what a shape added must stay apart from.
     private var bounds: CGRect
 
-    init(path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) {
+    init(path: DiagramScenePath, painting: DiagramShapePainting, part: DiagramScenePart) {
         self.painting = painting
         self.part = part
-        paths = [path]
+        self.path = path
         bounds = path.boundingBoxOfPath
     }
 
     /// The run as one shape: its one path as it was given, or its paths joined into one.
     var shape: DiagramSceneShape {
-        guard paths.count > 1 else { return DiagramSceneShape(unchangedPath: paths[0], painting: painting, part: part) }
-        let merged = CGMutablePath()
-        for path in paths { merged.addPath(path) }
-        return DiagramSceneShape(unchangedPath: merged, painting: painting, part: part)
+        DiagramSceneShape(scenePath: path.compacted(), painting: painting, part: part)
     }
 
     /// Adds `path` to the run when it is painted as the run, of the same part, in paints at full opacity, apart from the
     /// run's shapes; else leaves the run as it is and says so.
-    mutating func merge(_ path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+    mutating func merge(_ path: DiagramScenePath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard painting == self.painting, part == self.part, Self.isOpaque(painting) else { return false }
         let pathBounds = path.boundingBoxOfPath
-        guard painting == self.painting, part == self.part, Self.isOpaque(painting), !Self.mayTouch(bounds, pathBounds, painting: painting) else {
-            return false
-        }
-        paths.append(path)
+        guard !Self.mayTouch(bounds, pathBounds, painting: painting) else { return false }
+        self.path.addPath(path)
+        pathCount += 1
         bounds = bounds.union(pathBounds)
         return true
     }
 
     /// Turns a run of one filled path into that path filled and then stroked, when `path` is that same path stroked in
     /// the same part: painted as one shape, it is painted exactly as the fill and the stroke one after the other.
-    mutating func outline(_ path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
-        guard part == self.part, paths.count == 1, case .fill(let fill) = self.painting, case .stroke(let paint, let stroke) = painting,
-              paths[0] === path || paths[0] == path else { return false }
+    mutating func outline(_ path: DiagramScenePath, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
+        guard part == self.part, pathCount == 1, case .fill(let fill) = self.painting, case .stroke(let paint, let stroke) = painting,
+              self.path == path else { return false }
         self.painting = .fillAndStroke(fill, paint, stroke)
         return true
     }

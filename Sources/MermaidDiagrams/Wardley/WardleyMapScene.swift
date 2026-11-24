@@ -6,8 +6,8 @@
  *              pipelines, the links, the evolutions, the nodes with their labels, the annotations, notes and forces.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -43,8 +43,8 @@ extension DiagramScene {
         WardleyMapScenePaths.addAnnotations(of: layout, to: &builder)
         for note in layout.notes { builder.texts(note, .foreground, isBold: true, part: .wardleyNote) }
         for force in layout.forces {
-            let outline = CGMutablePath()
-            outline.addPath(DiagramEdgeDrawing.path(force.outline))
+            var outline = DiagramScenePath()
+            outline.addEdgePath(force.outline)
             outline.closeSubpath()
             let part: DiagramScenePart = force.isAccelerator ? .wardleyAccelerator : .wardleyDeaccelerator
             builder.fillAndStroke(outline, fill: .surface, stroke: .line, DiagramStroke(lineWidth: 1), part: part)
@@ -61,27 +61,27 @@ enum WardleyMapScenePaths {
     /// Pele's `--pele-radius`.
     static let cornerRadius: CGFloat = 4
 
-    static func rounded(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    static func rounded(_ frame: CGRect) -> DiagramScenePath {
+        DiagramScenePath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
     }
 
-    static func circle(_ center: CGPoint, radius: CGFloat) -> CGPath {
-        CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius), transform: nil)
+    static func circle(_ center: CGPoint, radius: CGFloat) -> DiagramScenePath {
+        DiagramScenePath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
     }
 
-    static func arrows(_ marks: [DiagramEdgeMark]) -> CGPath {
-        let filled = CGMutablePath()
-        for mark in marks { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: CGMutablePath()) }
+    static func arrows(_ marks: [DiagramEdgeMark]) -> DiagramScenePath {
+        var filled = DiagramScenePath()
+        for mark in marks { DiagramEdgeDrawing.addMark(mark, filled: &filled) }
         return filled
     }
 
     /// The stages' lines, the grid, the axes, the stages' names and the axes' titles.
     static func addFrame(of layout: WardleyMapLayout, to builder: inout DiagramSceneBuilder) {
-        let stages = CGMutablePath()
-        for line in layout.stageLines { stages.addPath(DiagramEdgeDrawing.path(line)) }
+        var stages = DiagramScenePath()
+        for line in layout.stageLines { stages.addEdgePath(line) }
         builder.stroke(stages, .border, DiagramStroke(lineWidth: 1, dashLengths: [4, 4]), part: .wardleyStage)
-        let grid = CGMutablePath()
-        for line in layout.gridLines { grid.addPath(DiagramEdgeDrawing.path(line)) }
+        var grid = DiagramScenePath()
+        for line in layout.gridLines { grid.addEdgePath(line) }
         builder.stroke(grid, .border, DiagramStroke(lineWidth: 1, dashLengths: [2, 6]), part: .wardleyGrid)
         builder.stroke(DiagramEdgeDrawing.path(layout.axes), .line, DiagramStroke(lineWidth: 1), part: .wardleyAxis)
         builder.texts(layout.stageLabels, .muted, part: .wardleyStageLabel)
@@ -105,12 +105,12 @@ enum WardleyMapScenePaths {
         if node.sourcing == .market { addMarket(at: center, to: &builder) }
         switch node.shape {
         case .square:
-            let square = CGPath(rect: CGRect(x: center.x - squareSide / 2, y: center.y - squareSide / 2, width: squareSide, height: squareSide), transform: nil)
+            let square = DiagramScenePath(rect: CGRect(x: center.x - squareSide / 2, y: center.y - squareSide / 2, width: squareSide, height: squareSide))
             builder.fillAndStroke(square, fill: .background, stroke: .line, DiagramStroke(lineWidth: 1), part: .node)
         case .circle: builder.fillAndStroke(circle(center, radius: radius), fill: .background, stroke: .line, DiagramStroke(lineWidth: 1), part: .node)
         case .none: break
         }
-        if let inertia = node.inertia { builder.fill(CGPath(rect: inertia, transform: nil), .line, part: .wardleyInertia) }
+        if let inertia = node.inertia { builder.fill(DiagramScenePath(rect: inertia), .line, part: .wardleyInertia) }
         builder.texts(node.label, .foreground, isBold: node.isAnchor, part: .label)
     }
 
@@ -120,7 +120,7 @@ enum WardleyMapScenePaths {
         let across = reach * cos(CGFloat.pi / 6)
         let bottom = center.y + reach * sin(CGFloat.pi / 6)
         let corners = [CGPoint(x: center.x, y: center.y - reach), CGPoint(x: center.x - across, y: bottom), CGPoint(x: center.x + across, y: bottom)]
-        let triangle = CGMutablePath()
+        var triangle = DiagramScenePath()
         triangle.addLines(between: corners)
         triangle.closeSubpath()
         builder.stroke(triangle, .line, DiagramStroke(lineWidth: 1), part: .node)

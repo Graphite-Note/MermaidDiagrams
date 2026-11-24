@@ -6,8 +6,8 @@
  *              folder, a bucket, a cloud, a display, stored data and braces.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,7 @@ import CoreGraphics
 /// `svg/shapes.ts` reads, from the shape's center.
 enum FlowchartCurvedShapeDrawing {
     /// The filled and stroked outline, or nil for a shape drawn otherwise.
-    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
         var pen = FlowchartShapePen(center: CGPoint(x: frame.midX, y: frame.midY))
@@ -121,7 +121,7 @@ enum FlowchartCurvedShapeDrawing {
     }
 
     /// The lines drawn over the outline (or alone, for braces), or nil.
-    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
         var pen = FlowchartShapePen(center: CGPoint(x: frame.midX, y: frame.midY))

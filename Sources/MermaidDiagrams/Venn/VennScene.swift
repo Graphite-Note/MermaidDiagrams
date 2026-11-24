@@ -6,7 +6,7 @@
  *              fifth of their opacity, the overlaps a style outlines, then each region's text.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -20,8 +20,8 @@ extension DiagramScene {
         var builder = DiagramSceneBuilder()
         builder.title(layout.title)
         for set in layout.sets {
-            let circle = CGPath(ellipseIn: CGRect(x: set.center.x - set.radius, y: set.center.y - set.radius, width: 2 * set.radius,
-                                                  height: 2 * set.radius), transform: nil)
+            let circle = DiagramScenePath(ellipseIn: CGRect(x: set.center.x - set.radius, y: set.center.y - set.radius, width: 2 * set.radius,
+                                                  height: 2 * set.radius))
             let appearance = set.appearance
             builder.fillAndStroke(circle, fill: VennScenePaint.fill(appearance, usual: .series(set.seriesIndex), usualOpacity: VennScenePaint.setFillOpacity),
                                   stroke: VennScenePaint.stroke(appearance, usual: .series(set.seriesIndex)), VennScenePaint.stroke(of: appearance),

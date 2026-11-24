@@ -6,7 +6,7 @@
  *              painter of every diagram type.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -35,46 +35,59 @@ public enum DiagramSceneRenderer {
     private static func paint(_ shape: DiagramSceneShape, colors: inout DiagramPaintColors, in context: CGContext) {
         switch shape.painting {
         case .fill(let paint):
-            fill(shape.path, with: paint, colors: &colors, in: context)
+            fill(shape.scenePath, with: paint, colors: &colors, in: context)
         case .stroke(let paint, let stroke):
-            self.stroke(shape.path, with: paint, stroke, colors: &colors, in: context)
+            self.stroke(shape.scenePath, with: paint, stroke, colors: &colors, in: context)
         case .fillAndStroke(let fillPaint, let strokePaint, let stroke):
-            fill(shape.path, with: fillPaint, colors: &colors, in: context)
-            self.stroke(shape.path, with: strokePaint, stroke, colors: &colors, in: context)
+            fill(shape.scenePath, with: fillPaint, colors: &colors, in: context)
+            self.stroke(shape.scenePath, with: strokePaint, stroke, colors: &colors, in: context)
         case .gradientFill(let gradient):
-            fill(shape.path, with: gradient, colors: &colors, in: context)
+            fill(shape.scenePath, with: gradient, colors: &colors, in: context)
         }
     }
 
-    private static func fill(_ path: CGPath, with paint: DiagramPaint, colors: inout DiagramPaintColors, in context: CGContext) {
+    private static func fill(_ path: DiagramScenePath, with paint: DiagramPaint, colors: inout DiagramPaintColors, in context: CGContext) {
         context.setFillColor(colors.color(of: paint))
-        context.addPath(path)
+        addElements(of: path, to: context)
         context.fillPath()
     }
 
-    private static func stroke(_ path: CGPath, with paint: DiagramPaint, _ stroke: DiagramStroke, colors: inout DiagramPaintColors,
+    private static func stroke(_ path: DiagramScenePath, with paint: DiagramPaint, _ stroke: DiagramStroke, colors: inout DiagramPaintColors,
                                in context: CGContext) {
         context.setStrokeColor(colors.color(of: paint))
         context.setLineWidth(stroke.lineWidth)
         context.setLineDash(phase: 0, lengths: stroke.dashLengths)
         context.setLineCap(stroke.lineCap)
         context.setLineJoin(stroke.lineJoin)
-        context.addPath(path)
+        addElements(of: path, to: context)
         context.strokePath()
     }
 
     /// The path filled with the gradient at its opacity, the end colors carried on past the gradient's ends.
-    private static func fill(_ path: CGPath, with gradient: DiagramLinearGradient, colors: inout DiagramPaintColors, in context: CGContext) {
+    private static func fill(_ path: DiagramScenePath, with gradient: DiagramLinearGradient, colors: inout DiagramPaintColors, in context: CGContext) {
         let ends = [colors.color(of: gradient.startPaint), colors.color(of: gradient.endPaint)]
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let coreGraphicsGradient = CGGradient(colorsSpace: space, colors: ends as CFArray, locations: [0, 1]) else { return }
         context.saveGState()
-        context.addPath(path)
+        addElements(of: path, to: context)
         context.clip()
         context.setAlpha(gradient.opacity)
         context.drawLinearGradient(coreGraphicsGradient, start: gradient.startPoint, end: gradient.endPoint,
                                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
         context.restoreGState()
+    }
+
+    /// The path's elements added to the context's path, as `addPath` adds a Core Graphics path with the same elements.
+    private static func addElements(of path: DiagramScenePath, to context: CGContext) {
+        path.forEachElement { element, points in
+            switch element {
+            case .move: context.move(to: points[0])
+            case .line: context.addLine(to: points[0])
+            case .quadCurve: context.addQuadCurve(to: points[1], control: points[0])
+            case .curve: context.addCurve(to: points[2], control1: points[0], control2: points[1])
+            case .close: context.closePath()
+            }
+        }
     }
 
     /// The text where it lies, or turned by its rotation about its block's center.

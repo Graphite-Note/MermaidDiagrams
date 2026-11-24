@@ -5,7 +5,7 @@
  * Description: A laid-out pie chart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -25,9 +25,9 @@ extension PieChartDrawingParts {
     /// Lines have butt caps and round joins.
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke(lineWidth: Self.lineWidth, lineJoin: .round)
-        for (index, seriesFill) in seriesFills.enumerated() { builder.fill(seriesFill, .series(index), part: .node) }
-        builder.stroke(sliceEdges, .background, line, part: .node)
-        builder.stroke(emptyPieOutline, .border, line, part: .node)
+        for (index, seriesFill) in seriesFillsScenePaths.enumerated() { builder.fill(seriesFill, .series(index), part: .node) }
+        builder.stroke(sliceEdgesScenePath, .background, line, part: .node)
+        builder.stroke(emptyPieOutlineScenePath, .border, line, part: .node)
         for (percentage, paint) in zip(insidePercentages, insidePercentagePaints) { builder.text(percentage, paint, part: .label) }
         builder.texts(outsidePercentages, .foreground, part: .label)
         builder.texts(legendTexts, .foreground, part: .legend)

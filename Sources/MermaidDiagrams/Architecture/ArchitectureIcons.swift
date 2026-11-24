@@ -6,8 +6,8 @@
  *              and an icon's text cut down to its square with an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -28,7 +28,7 @@ enum ArchitectureIcons {
     ]
 
     /// The outline of the icon `name` in `frame`'s square, or nil for a name Pele has no outline for.
-    static func outline(named name: String, in frame: CGRect) -> CGPath? {
+    static func outline(named name: String, in frame: CGRect) -> DiagramScenePath? {
         guard let data = pathDataByName[name], let glyph = DiagramGlyphPath(pathData: data) else { return nil }
         return glyph.path(in: frame)
     }

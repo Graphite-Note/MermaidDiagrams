@@ -6,7 +6,7 @@
  *              where the icon goes, as Pele draws an icon node's form.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -19,16 +19,16 @@ enum FlowchartNodeAssetDrawing {
     /// Pele's corner radius of a rounded icon frame.
     static let roundedCornerRadius: CGFloat = 8
 
-    static func frame(of asset: FlowchartNodeAsset, in node: FlowchartLayoutNode) -> CGPath? {
+    static func frame(of asset: FlowchartNodeAsset, in node: FlowchartLayoutNode) -> DiagramScenePath? {
         guard case .icon = asset.kind else { return nil }
         let box = asset.box(in: node.frame, hasLabel: !node.text.lines.isEmpty)
         switch asset.form {
         case .none: return nil
-        case .square: return CGPath(rect: box, transform: nil)
-        case .circle: return CGPath(ellipseIn: box, transform: nil)
+        case .square: return DiagramScenePath(rect: box)
+        case .circle: return DiagramScenePath(ellipseIn: box)
         case .rounded:
             let radius = min(roundedCornerRadius, box.width / 2, box.height / 2)
-            return CGPath(roundedRect: box, cornerWidth: radius, cornerHeight: radius, transform: nil)
+            return DiagramScenePath(roundedRect: box, cornerWidth: radius, cornerHeight: radius)
         }
     }
 }

@@ -88,7 +88,7 @@ final class FlowchartExtendedShapeTests: XCTestCase {
             // Pele's cloud draws arcs whose radii SVG widens to reach their ends, about 5 points past its box on the left and right (Pele draws it so).
             let reach: CGFloat = shape == .cloud ? 6 : 0.5
             let paths = [FlowchartShapeDrawing.outline(of: shape, in: frame), FlowchartShapeDrawing.innerLines(of: shape, in: frame)].compactMap { path in path }
-                + (FlowchartShapeDrawing.layers(of: shape, in: frame) ?? []).map(\.path)
+                + (FlowchartShapeDrawing.layers(of: shape, in: frame) ?? []).map(\.pathScenePath)
             XCTAssertFalse(paths.isEmpty, "\(shape) draws nothing")
             for path in paths {
                 let bounds = path.boundingBoxOfPath

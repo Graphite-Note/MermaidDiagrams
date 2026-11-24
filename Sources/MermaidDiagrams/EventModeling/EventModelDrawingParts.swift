@@ -6,8 +6,8 @@
  *              its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,23 +18,32 @@ import CoreGraphics
 /// kind's series color over it at `seriesFillOpacity` and outlined in it, a user interface outlined in the border
 /// color), their names, numbers and data, then the notes' and specifications' cards, and the title.
 public struct EventModelDrawingParts {
-    public let laneBands: CGPath
+    public var laneBands: CGPath { laneBandsScenePath.coreGraphicsPath }
+    let laneBandsScenePath: DiagramScenePath
     public let laneNames: [DiagramTextBlock]
-    public let relationLines: CGPath
-    public let arrows: CGPath
+    public var relationLines: CGPath { relationLinesScenePath.coreGraphicsPath }
+    let relationLinesScenePath: DiagramScenePath
+    public var arrows: CGPath { arrowsScenePath.coreGraphicsPath }
+    let arrowsScenePath: DiagramScenePath
     /// The boxes filled in the background color and outlined in the border color: a user interface's across, every
     /// box down a column.
-    public let outlinedBoxes: CGPath
+    public var outlinedBoxes: CGPath { outlinedBoxesScenePath.coreGraphicsPath }
+    let outlinedBoxesScenePath: DiagramScenePath
     /// The boxes of the other kinds filled in the background color, under their series color, across.
-    public let plainBoxes: CGPath
+    public var plainBoxes: CGPath { plainBoxesScenePath.coreGraphicsPath }
+    let plainBoxesScenePath: DiagramScenePath
     /// For each series index used, the boxes filled in it at `seriesFillOpacity` and outlined in it.
-    public let seriesBoxes: [(seriesIndex: Int, boxes: CGPath)]
+    public var seriesBoxes: [(seriesIndex: Int, boxes: CGPath)] {
+        seriesBoxesScenePaths.map { series in (series.seriesIndex, series.boxes.coreGraphicsPath) }
+    }
+    let seriesBoxesScenePaths: [(seriesIndex: Int, boxes: DiagramScenePath)]
     public let names: [DiagramTextBlock]
     /// The frames' numbers down a column, in the muted color.
     public let numbers: [DiagramTextBlock]
     /// Drawn in the system's monospaced font.
     public let dataLines: [DiagramTextBlock]
-    public let cards: CGPath
+    public var cards: CGPath { cardsScenePath.coreGraphicsPath }
+    let cardsScenePath: DiagramScenePath
     public let cardHeadings: [DiagramTextBlock]
     public let cardLines: [DiagramTextBlock]
     public let title: DiagramTextBlock?
@@ -47,33 +56,33 @@ public struct EventModelDrawingParts {
     static let cornerRadius: CGFloat = 4
 
     public init(layout: EventModelLayout) {
-        laneBands = Self.roundedRectangles(layout.laneBands)
+        laneBandsScenePath = Self.roundedRectangles(layout.laneBands)
         laneNames = layout.laneNames
-        let lines = CGMutablePath()
-        let arrows = CGMutablePath()
-        let unused = CGMutablePath()
+        var lines = DiagramScenePath()
+        var arrows = DiagramScenePath()
+        var unused = DiagramScenePath()
         for relation in layout.relations {
-            lines.addPath(DiagramEdgeDrawing.path(relation.path))
-            DiagramEdgeDrawing.addMark(relation.arrow, filled: arrows, stroked: unused)
+            lines.addEdgePath(relation.path)
+            DiagramEdgeDrawing.addMark(relation.arrow, filled: &arrows, stroked: &unused)
         }
-        relationLines = lines
-        self.arrows = arrows
-        outlinedBoxes = Self.roundedRectangles(layout.frames.filter { frame in frame.isOutlinedInBorder || frame.seriesIndex == nil }.map(\.frame))
-        plainBoxes = Self.roundedRectangles(layout.frames.filter { frame in !frame.isOutlinedInBorder && frame.seriesIndex != nil }.map(\.frame))
+        relationLinesScenePath = lines
+        self.arrowsScenePath = arrows
+        outlinedBoxesScenePath = Self.roundedRectangles(layout.frames.filter { frame in frame.isOutlinedInBorder || frame.seriesIndex == nil }.map(\.frame))
+        plainBoxesScenePath = Self.roundedRectangles(layout.frames.filter { frame in !frame.isOutlinedInBorder && frame.seriesIndex != nil }.map(\.frame))
         let seriesIndices = Set(layout.frames.compactMap(\.seriesIndex)).sorted()
-        seriesBoxes = seriesIndices.map { index in (index, Self.roundedRectangles(layout.frames.filter { frame in frame.seriesIndex == index }.map(\.frame))) }
+        seriesBoxesScenePaths = seriesIndices.map { index in (index, Self.roundedRectangles(layout.frames.filter { frame in frame.seriesIndex == index }.map(\.frame))) }
         names = layout.frames.map(\.name)
         numbers = layout.frames.compactMap(\.number)
         dataLines = layout.frames.flatMap(\.dataLines)
-        cards = Self.roundedRectangles(layout.cards.map(\.frame))
+        cardsScenePath = Self.roundedRectangles(layout.cards.map(\.frame))
         cardHeadings = layout.cards.map(\.heading)
         cardLines = layout.cards.flatMap(\.lines)
         title = layout.title
         runsDown = layout.runsDown
     }
 
-    private static func roundedRectangles(_ frames: [CGRect]) -> CGPath {
-        let path = CGMutablePath()
+    private static func roundedRectangles(_ frames: [CGRect]) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for frame in frames { path.addRoundedRect(in: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius) }
         return path
     }
@@ -92,20 +101,20 @@ extension EventModelDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke(lineWidth: 1)
         builder.title(title)
-        builder.fill(laneBands, .surface, part: .cluster)
+        builder.fill(laneBandsScenePath, .surface, part: .cluster)
         if !runsDown { builder.texts(laneNames, .muted, isBold: true, part: .clusterLabel) }
-        builder.stroke(relationLines, .line, line, part: .edge)
-        builder.fill(arrows, .line, part: .marker)
+        builder.stroke(relationLinesScenePath, .line, line, part: .edge)
+        builder.fill(arrowsScenePath, .line, part: .marker)
         if runsDown { builder.texts(laneNames, .muted, isBold: true, part: .clusterLabel) }
-        builder.fillAndStroke(outlinedBoxes, fill: .background, stroke: .border, line, part: .node)
-        builder.fill(plainBoxes, .background, part: .node)
-        for (seriesIndex, boxes) in seriesBoxes {
+        builder.fillAndStroke(outlinedBoxesScenePath, fill: .background, stroke: .border, line, part: .node)
+        builder.fill(plainBoxesScenePath, .background, part: .node)
+        for (seriesIndex, boxes) in seriesBoxesScenePaths {
             builder.fillAndStroke(boxes, fill: DiagramPaint.series(seriesIndex).atOpacity(Self.seriesFillOpacity), stroke: .series(seriesIndex), line, part: .node)
         }
         builder.texts(names, .foreground, isBold: true, part: .label)
         builder.texts(numbers, .muted, part: .label)
         builder.texts(dataLines, .foreground, isMonospaced: true, part: .label)
-        builder.fillAndStroke(cards, fill: .background, stroke: .border, line, part: .note)
+        builder.fillAndStroke(cardsScenePath, fill: .background, stroke: .border, line, part: .note)
         builder.texts(cardHeadings, .foreground, isBold: true, part: .note)
         builder.texts(cardLines, .foreground, part: .note)
     }

@@ -5,7 +5,7 @@
  * Description: A laid-out treemap's geometry grouped by how it is painted.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -14,7 +14,8 @@ import CoreGraphics
 /// A box of a treemap with how it is painted: its rounded outline, its fill and its outline's paint, either of which a
 /// class may take away or change.
 public struct TreemapBoxParts {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     /// The inside's paint, or nil for none.
     public let fill: DiagramPaint?
     /// The outline's paint, or nil for none, and its stroke.
@@ -94,13 +95,13 @@ public struct TreemapDrawingParts {
     /// A section's box: a tint of its series color and an outline in it, unless its class gives a fill or an outline.
     private static func sectionBox(_ box: TreemapLayoutBox) -> TreemapBoxParts {
         let series = DiagramPaint.series(box.seriesIndex)
-        return TreemapBoxParts(path: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? series.atOpacity(sectionFillOpacity),
+        return TreemapBoxParts(pathScenePath: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? series.atOpacity(sectionFillOpacity),
                                outline: box.style.stroke.map(DiagramPaint.color) ?? series, stroke: stroke(of: box.style))
     }
 
     /// A leaf's box: its series color, with an outline only where its class gives one.
     private static func leafBox(_ box: TreemapLayoutBox) -> TreemapBoxParts {
-        TreemapBoxParts(path: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? .series(box.seriesIndex),
+        TreemapBoxParts(pathScenePath: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? .series(box.seriesIndex),
                         outline: box.style.stroke.map(DiagramPaint.color), stroke: stroke(of: box.style))
     }
 
@@ -108,9 +109,9 @@ public struct TreemapDrawingParts {
         DiagramStroke(lineWidth: style.strokeWidth ?? lineWidth, dashLengths: style.strokeDashLengths ?? [])
     }
 
-    private static func roundedPath(_ box: TreemapLayoutBox) -> CGPath {
+    private static func roundedPath(_ box: TreemapLayoutBox) -> DiagramScenePath {
         let radius = min(box.cornerRadius, box.frame.width / 2, box.frame.height / 2)
-        return CGPath(roundedRect: box.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        return DiagramScenePath(roundedRect: box.frame, cornerWidth: radius, cornerHeight: radius)
     }
 }
 

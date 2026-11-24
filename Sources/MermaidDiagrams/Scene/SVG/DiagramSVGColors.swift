@@ -6,7 +6,7 @@
  *              colors as their fallbacks; each paint's text worked out once per document.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -45,7 +45,7 @@ extension DiagramSVGColors {
                 let percentage = DiagramSVGSyntax.number(share * 100)
                 return DiagramSVGPaintText(color: "color-mix(in srgb,\(Self.variable(from)),\(Self.variable(to)) \(percentage)%)", opacity: paint.opacity)
             case .color(let written):
-                return DiagramSVGPaintText(color: Self.hexadecimal(written.cgColor), opacity: CGFloat(written.alpha) * paint.opacity)
+                return DiagramSVGPaintText(color: Self.hexadecimal(written), opacity: CGFloat(written.alpha) * paint.opacity)
             }
         }
     }
@@ -88,9 +88,13 @@ extension DiagramSVGColors {
         case .critical: "var(--pele-critical,#e45756)"
         case .muted: "var(--_m)"
         case .alternateSurface: "var(--_a)"
-        case .series(let index):
-            "var(--pele-series-\(seriesSlot(index) + 1),\(hexadecimal(DiagramPalette.peleSeries[seriesSlot(index)])))"
+        case .series(let index): seriesVariables[seriesSlot(index)]
         }
+    }
+
+    /// Pele's eight series variables with Pele's colors as their fallbacks (`var(--pele-series-1,#…)`), spelled out once.
+    private static let seriesVariables: [String] = DiagramPalette.peleSeries.indices.map { slot in
+        "var(--pele-series-\(slot + 1),\(hexadecimal(DiagramPalette.peleSeries[slot])))"
     }
 
     /// Which of Pele's eight series variables a series index takes, the colors taken in turn.
@@ -103,13 +107,27 @@ extension DiagramSVGColors {
         hexadecimal(components: sRGBComponents(of: color))
     }
 
+    /// `#rrggbb` of a written color, whose components are already sRGB's: Core Graphics gives a color made in sRGB the
+    /// same components back when it converts it to sRGB.
+    static func hexadecimal(_ color: DiagramColor) -> String {
+        hexadecimal(red: color.red, green: color.green, blue: color.blue)
+    }
+
     /// `#rrggbb` of the first three of sRGB components, each clamped to 0...1.
     private static func hexadecimal(components: [CGFloat]) -> String {
-        let channels = components.prefix(3).map { component in Int((min(1, max(0, component)) * 255).rounded()) }
-        return "#" + channels.map { channel in
-            let digits = String(channel, radix: 16)
-            return digits.count == 1 ? "0" + digits : digits
-        }.joined()
+        hexadecimal(red: components[0], green: components[1], blue: components[2])
+    }
+
+    /// `#rrggbb` of three sRGB components, each clamped to 0...1 and rounded to a byte, in lowercase digits.
+    private static func hexadecimal(red: CGFloat, green: CGFloat, blue: CGFloat) -> String {
+        let digits: StaticString = "0123456789abcdef"
+        var text = [UInt8](repeating: UInt8(ascii: "#"), count: 7)
+        for (index, component) in [red, green, blue].enumerated() {
+            let channel = Int((min(1, max(0, component)) * 255).rounded())
+            text[1 + 2 * index] = digits.utf8Start[channel >> 4]
+            text[2 + 2 * index] = digits.utf8Start[channel & 0xF]
+        }
+        return String(decoding: text, as: UTF8.self)
     }
 
     /// The sRGB color space every color is converted to, made once.

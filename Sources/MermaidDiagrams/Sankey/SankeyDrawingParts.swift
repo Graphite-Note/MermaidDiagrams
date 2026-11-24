@@ -5,7 +5,7 @@
  * Description: A laid-out Sankey diagram's geometry grouped by how it is painted: bands, bars, labels and title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -20,7 +20,8 @@ public struct SankeyDrawingParts {
     public let bands: [SankeyBandDrawing]
     /// For each series color, the bars filled in it: entry `k` is filled in `DiagramPalette.seriesColor(at: k)` and
     /// holds the bars of the nodes whose index leaves `k` when divided by the number of series colors.
-    public let nodeFills: [CGPath]
+    public var nodeFills: [CGPath] { nodeFillsScenePaths.map(\.coreGraphicsPath) }
+    let nodeFillsScenePaths: [DiagramScenePath]
     /// The bars of the nodes the options give a color of their own, each in it.
     public let coloredNodeFills: [SankeyColoredFill]
     /// The bars of the nodes the options paint in a role of the palette, each in it.
@@ -49,24 +50,24 @@ public struct SankeyDrawingParts {
     public init(layout: SankeyLayout) {
         let nodes = layout.nodes
         bands = layout.links.map { link in SankeyBandDrawing(link: link, source: nodes[link.sourceSeriesIndex], target: nodes[link.targetSeriesIndex]) }
-        let fills = (0..<min(layout.nodes.count, Self.seriesColorCount)).map { _ in CGMutablePath() }
+        var fills = (0..<min(layout.nodes.count, Self.seriesColorCount)).map { _ in DiagramScenePath() }
         var coloredFills: [SankeyColoredFill] = []
         var paintedFills: [SankeyPaintedFill] = []
         for node in layout.nodes {
             let radius = min(Self.barCornerRadius, node.frame.height / 2)
             if let paint = node.paint {
-                let path = CGMutablePath()
+                var path = DiagramScenePath()
                 path.addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
                 if let color = node.color {
-                    coloredFills.append(SankeyColoredFill(path: path, color: color))
+                    coloredFills.append(SankeyColoredFill(pathScenePath: path, color: color))
                 } else {
-                    paintedFills.append(SankeyPaintedFill(path: path, paint: paint))
+                    paintedFills.append(SankeyPaintedFill(pathScenePath: path, paint: paint))
                 }
             } else {
                 fills[node.seriesIndex % Self.seriesColorCount].addRoundedRect(in: node.frame, cornerWidth: radius, cornerHeight: radius)
             }
         }
-        nodeFills = fills
+        nodeFillsScenePaths = fills
         coloredNodeFills = coloredFills
         paintedNodeFills = paintedFills
         linkColor = layout.linkColor
@@ -80,13 +81,15 @@ public struct SankeyDrawingParts {
 
 /// A bar filled in a color of its own.
 public struct SankeyColoredFill {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     public let color: DiagramColor
 }
 
 /// A bar filled in a role of the palette the options name with a CSS variable (`var(--pele-accent)`).
 public struct SankeyPaintedFill {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     public let paint: DiagramPaint
 }
 
@@ -94,7 +97,8 @@ public struct SankeyPaintedFill {
 public struct SankeyBandDrawing {
     /// From the top of its start, an S-curve to the top of its end, down its end, and an S-curve back, the curves'
     /// control points halfway across.
-    public let outline: CGPath
+    public var outline: CGPath { outlineScenePath.coreGraphicsPath }
+    let outlineScenePath: DiagramScenePath
     /// Where the gradient starts, in the source's color, and ends, in the target's, across.
     public let startX: CGFloat
     public let endX: CGFloat
@@ -114,7 +118,7 @@ public struct SankeyBandDrawing {
         targetPaint = target.paint ?? .series(link.targetSeriesIndex)
         let middleX = (link.startX + link.endX) / 2
         let half = link.halfThickness
-        let path = CGMutablePath()
+        var path = DiagramScenePath()
         path.move(to: CGPoint(x: link.startX, y: link.sourceY - half))
         path.addCurve(to: CGPoint(x: link.endX, y: link.targetY - half), control1: CGPoint(x: middleX, y: link.sourceY - half),
                       control2: CGPoint(x: middleX, y: link.targetY - half))
@@ -122,7 +126,7 @@ public struct SankeyBandDrawing {
         path.addCurve(to: CGPoint(x: link.startX, y: link.sourceY + half), control1: CGPoint(x: middleX, y: link.targetY + half),
                       control2: CGPoint(x: middleX, y: link.sourceY + half))
         path.closeSubpath()
-        outline = path
+        outlineScenePath = path
         startX = link.startX
         endX = link.endX
         sourceSeriesIndex = link.sourceSeriesIndex

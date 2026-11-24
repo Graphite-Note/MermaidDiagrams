@@ -1,3 +1,15 @@
+/**
+ * File: ClassDiagramMarkDrawing.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: The geometry of a class diagram relation's marks, Pele's: a hollow triangle, a diamond filled or
+ *              hollow, the flowchart's arrow and a hollow ring, added to scene paths.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// The geometry of a relation's marks, Pele's: a hollow triangle, a diamond filled for composition and hollow for
@@ -5,7 +17,7 @@ import CoreGraphics
 enum ClassDiagramMarkDrawing {
     /// Adds a mark to the paths that are filled in the line color (an arrow, a composition's diamond) and those
     /// stroked in it (a triangle, both diamonds, a ring).
-    static func addMark(_ mark: ClassDiagramRelationMark, filled: CGMutablePath, stroked: CGMutablePath) {
+    static func addMark(_ mark: ClassDiagramRelationMark, filled: inout DiagramScenePath, stroked: inout DiagramScenePath) {
         let direction = mark.direction
         let normal = CGVector(dx: -direction.dy, dy: direction.dx)
         let tip = mark.tip
@@ -26,7 +38,7 @@ enum ClassDiagramMarkDrawing {
         case .aggregation:
             stroked.addPath(diamondPath(tip: tip, point: point))
         case .arrow:
-            DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: .arrow, tip: tip, direction: direction), filled: filled, stroked: stroked)
+            DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: .arrow, tip: tip, direction: direction), filled: &filled, stroked: &stroked)
         case .lollipop:
             let radius = ClassDiagramMarkGeometry.ringRadius
             let center = point(back: radius, across: 0)
@@ -35,10 +47,10 @@ enum ClassDiagramMarkDrawing {
     }
 
     /// A diamond from the tip back along the line, its widest at half its length.
-    private static func diamondPath(tip: CGPoint, point: (_ distance: CGFloat, _ offset: CGFloat) -> CGPoint) -> CGPath {
+    private static func diamondPath(tip: CGPoint, point: (_ distance: CGFloat, _ offset: CGFloat) -> CGPoint) -> DiagramScenePath {
         let length = ClassDiagramMarkGeometry.diamondLength
         let halfWidth = ClassDiagramMarkGeometry.diamondHalfWidth
-        let diamond = CGMutablePath()
+        var diamond = DiagramScenePath()
         diamond.addLines(between: [tip, point(length / 2, halfWidth), point(length, 0), point(length / 2, -halfWidth)])
         diamond.closeSubpath()
         return diamond

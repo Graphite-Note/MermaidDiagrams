@@ -1,3 +1,15 @@
+/**
+ * File: MindmapShapeDrawing.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: The outline of each mindmap node, Pele's, as a scene path in a frame: the flowchart's shapes, a pill, a
+ *              cloud and a bang.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -10,11 +22,11 @@ enum MindmapShapeDrawing {
     static let bangNotchRatio: CGFloat = 0.82
 
     /// The outline to fill and stroke, or nil for a node drawn as its text alone.
-    static func outline(of outline: MindmapNodeOutline, in frame: CGRect) -> CGPath? {
+    static func outline(of outline: MindmapNodeOutline, in frame: CGRect) -> DiagramScenePath? {
         if let shape = outline.flowchartShape { return FlowchartShapeDrawing.outline(of: shape, in: frame) }
         switch outline {
         case .pill:
-            return CGPath(roundedRect: frame, cornerWidth: min(frame.width, frame.height) / 2, cornerHeight: frame.height / 2, transform: nil)
+            return DiagramScenePath(roundedRect: frame, cornerWidth: min(frame.width, frame.height) / 2, cornerHeight: frame.height / 2)
         case .cloud: return cloud(in: frame)
         case .bang: return bang(in: frame)
         case .text, .stadium, .rectangle, .roundedRectangle, .circle, .hexagon: return nil
@@ -23,7 +35,7 @@ enum MindmapShapeDrawing {
 
     /// Pele's cloud: from the bottom left, a round lobe up the left side, two wide lobes over the top and a round lobe
     /// down the right side, then straight back along the bottom.
-    private static func cloud(in frame: CGRect) -> CGPath {
+    private static func cloud(in frame: CGRect) -> DiagramScenePath {
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
         let lobeRadius = halfHeight * 0.55
@@ -32,24 +44,24 @@ enum MindmapShapeDrawing {
                        point(-halfWidth * 0.1, -halfHeight * 0.72), point(halfWidth * 0.62, -halfHeight * 0.42), point(halfWidth - lobeRadius, halfHeight)]
         let radii = [CGSize(width: lobeRadius, height: lobeRadius), CGSize(width: halfWidth * 0.42, height: halfHeight * 0.7),
                      CGSize(width: halfWidth * 0.4, height: halfHeight * 0.62), CGSize(width: lobeRadius * 1.05, height: lobeRadius * 1.05)]
-        let path = CGMutablePath()
+        var path = DiagramScenePath()
         path.move(to: corners[0])
         for (index, radius) in radii.enumerated() {
-            DiagramEllipticalArc.addArc(to: path, from: corners[index], to: corners[index + 1], radii: radius)
+            DiagramEllipticalArc.addArc(to: &path, from: corners[index], to: corners[index + 1], radii: radius)
         }
         path.closeSubpath()
         return path
     }
 
     /// Pele's bang: points around the frame's ellipse, alternately on it and `bangNotchRatio` of the way in, from the top.
-    private static func bang(in frame: CGRect) -> CGPath {
+    private static func bang(in frame: CGRect) -> DiagramScenePath {
         let pointCount = 2 * bangSpikeCount
         let points = (0..<pointCount).map { index in
             let angle = CGFloat.pi * CGFloat(index) / CGFloat(bangSpikeCount) - CGFloat.pi / 2
             let reach: CGFloat = index.isMultiple(of: 2) ? 1 : bangNotchRatio
             return CGPoint(x: frame.midX + cos(angle) * frame.width / 2 * reach, y: frame.midY + sin(angle) * frame.height / 2 * reach)
         }
-        let path = CGMutablePath()
+        var path = DiagramScenePath()
         path.addLines(between: points)
         path.closeSubpath()
         return path

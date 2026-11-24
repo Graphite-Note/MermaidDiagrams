@@ -5,8 +5,8 @@
  * Description: A user journey laid out as a column of cards, as a scene in the colors' roles, as Pele paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,18 +18,18 @@ extension DiagramScene {
     public init(layout: UserJourneyColumnLayout) {
         var builder = DiagramSceneBuilder()
         let roundJoin = DiagramStroke(lineWidth: UserJourneyDrawingParts.lineWidth, lineJoin: .round)
-        let connectors = CGMutablePath()
-        for connector in layout.connectors { connectors.addPath(DiagramEdgeDrawing.path(connector)) }
+        var connectors = DiagramScenePath()
+        for connector in layout.connectors { connectors.addEdgePath(connector) }
         builder.stroke(connectors, .line, DiagramStroke(lineWidth: UserJourneyDrawingParts.lineWidth), part: .edge)
-        let cards = CGMutablePath()
-        let faces = CGMutablePath()
-        let eyes = CGMutablePath()
-        let mouths = CGMutablePath()
-        let dotsBySeries = (0..<UserJourneyDrawingParts.seriesColorCount).map { _ in CGMutablePath() }
+        var cards = DiagramScenePath()
+        var faces = DiagramScenePath()
+        var eyes = DiagramScenePath()
+        var mouths = DiagramScenePath()
+        var dotsBySeries = (0..<UserJourneyDrawingParts.seriesColorCount).map { _ in DiagramScenePath() }
         for step in layout.steps {
-            cards.addPath(CGPath(roundedRect: step.frame, cornerWidth: UserJourneyDrawingParts.cornerRadius,
-                                 cornerHeight: UserJourneyDrawingParts.cornerRadius, transform: nil))
-            UserJourneyFaceShape.add(step.mood, at: step.faceCenter, circles: faces, eyes: eyes, mouths: mouths)
+            cards.addPathOfRoundedRect(step.frame, cornerWidth: UserJourneyDrawingParts.cornerRadius,
+                                 cornerHeight: UserJourneyDrawingParts.cornerRadius)
+            UserJourneyFaceShape.add(step.mood, at: step.faceCenter, circles: &faces, eyes: &eyes, mouths: &mouths)
             for actor in step.actors {
                 let radius = UserJourneyGeometry.dotRadius
                 dotsBySeries[actor.dot.seriesIndex % UserJourneyDrawingParts.seriesColorCount].addEllipse(

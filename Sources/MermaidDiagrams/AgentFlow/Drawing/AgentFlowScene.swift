@@ -6,8 +6,8 @@
  *              the edges and their marks, the edges' text on patches, then the nodes in their kinds' series colors.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -48,7 +48,7 @@ enum AgentFlowScenePainting {
     static let collapsedDotSpacing: CGFloat = 9
 
     static func add(_ flow: AgentFlowLayoutFlow, to builder: inout DiagramSceneBuilder, line: DiagramStroke) {
-        let box = CGPath(roundedRect: flow.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let box = DiagramScenePath(roundedRect: flow.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         let color = DiagramPaint.series(flow.paletteSlot)
         builder.keepNextShapeApart()
         builder.fillAndStroke(box, fill: fillPaint(flow.style, wash: color.atOpacity(flowWash)), stroke: flow.style?.stroke.map(DiagramPaint.color) ?? color,
@@ -80,9 +80,9 @@ enum AgentFlowScenePainting {
         let casing = DiagramStroke.rounded(lineWidth: (edge.style?.strokeWidth ?? FlowchartDrawingParts.lineWidth) + casingExtraWidth)
         builder.stroke(DiagramEdgeDrawing.path(edge.path), .background, casing, part: .casing)
         guard let mark = edge.targetMark else { return }
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked)
+        var filled = DiagramScenePath()
+        var stroked = DiagramScenePath()
+        DiagramEdgeDrawing.addMark(mark, filled: &filled, stroked: &stroked)
         builder.fillAndStroke(filled, fill: .background, stroke: .background, casing, part: .casing)
         builder.stroke(stroked, .background, casing, part: .casing)
     }
@@ -95,9 +95,9 @@ enum AgentFlowScenePainting {
         let dashes = edge.style?.strokeDashLengths ?? (edge.isDotted ? dottedDashLengths : [])
         builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, .rounded(lineWidth: width, dashLengths: dashes), part: .edge)
         guard let mark = edge.targetMark else { return }
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked)
+        var filled = DiagramScenePath()
+        var stroked = DiagramScenePath()
+        DiagramEdgeDrawing.addMark(mark, filled: &filled, stroked: &stroked)
         builder.fill(filled, paint, part: .marker)
         builder.stroke(stroked, paint, line, part: .marker)
     }
@@ -105,8 +105,8 @@ enum AgentFlowScenePainting {
     static func addText(of edge: AgentFlowLayoutEdge, to builder: inout DiagramSceneBuilder) {
         guard let text = edge.text else { return }
         let patch = text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0)
-        builder.fill(CGPath(roundedRect: patch, cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
-                            cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius, transform: nil), .background, part: .labelBackground)
+        builder.fill(DiagramScenePath(roundedRect: patch, cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
+                            cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius), .background, part: .labelBackground)
         builder.text(text, edge.style?.textColor.map(DiagramPaint.color) ?? .foreground, part: .edgeLabel)
     }
 
@@ -130,15 +130,15 @@ enum AgentFlowScenePainting {
     private static func addCollapsedFlow(_ node: AgentFlowLayoutNode, color: DiagramPaint, strokePaint: DiagramPaint, stroke: DiagramStroke,
                                          to builder: inout DiagramSceneBuilder) {
         let frame = node.frame
-        let box = CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let box = DiagramScenePath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         builder.fillAndStroke(box, fill: fillPaint(node.style, wash: color.atOpacity(flowWash)), stroke: strokePaint, stroke, part: .node)
         let lineY = frame.maxY - AgentFlowLayoutEngine.collapsedMarkHeight - 2
-        let dashed = CGMutablePath()
+        var dashed = DiagramScenePath()
         dashed.move(to: CGPoint(x: frame.minX + collapsedLineInset, y: lineY))
         dashed.addLine(to: CGPoint(x: frame.maxX - collapsedLineInset, y: lineY))
         builder.stroke(dashed, color, DiagramStroke(lineWidth: stroke.lineWidth, dashLengths: collapsedLineDashLengths), part: .node)
         let dotsY = lineY + (AgentFlowLayoutEngine.collapsedMarkHeight + 2) / 2
-        let dots = CGMutablePath()
+        var dots = DiagramScenePath()
         for offset in [-collapsedDotSpacing, 0, collapsedDotSpacing] {
             dots.addEllipse(in: CGRect(x: frame.midX + offset - collapsedDotRadius, y: dotsY - collapsedDotRadius,
                                        width: 2 * collapsedDotRadius, height: 2 * collapsedDotRadius))

@@ -6,8 +6,8 @@
  *              corners where two outlines cross inside the others, joined by arcs of the circles between them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -140,8 +140,8 @@ extension VennRegionOutline {
     }
 
     /// The outline as a closed path.
-    var path: CGPath {
-        let path = CGMutablePath()
+    var path: DiagramScenePath {
+        var path = DiagramScenePath()
         switch self {
         case .circle(let center, let radius):
             path.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))

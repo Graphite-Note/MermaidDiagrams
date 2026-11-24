@@ -6,8 +6,8 @@
  *              with their heads, the edges and their arrows, the edges' texts, the services and junctions.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -22,22 +22,22 @@ extension DiagramScene {
         var builder = DiagramSceneBuilder()
         builder.title(layout.title)
         for group in layout.groups {
-            let box = CGPath(roundedRect: group.frame, cornerWidth: ArchitectureScenePaths.cornerRadius, cornerHeight: ArchitectureScenePaths.cornerRadius, transform: nil)
+            let box = DiagramScenePath(roundedRect: group.frame, cornerWidth: ArchitectureScenePaths.cornerRadius, cornerHeight: ArchitectureScenePaths.cornerRadius)
             builder.fillAndStroke(box, fill: DiagramPaint.alternateSurface.atOpacity(0.5), stroke: .border, DiagramStroke(lineWidth: 1), part: .cluster)
             ArchitectureScenePaths.add(group.icon, to: &builder)
             builder.text(group.title, .muted, part: .clusterLabel)
         }
         for edge in layout.edges {
             builder.stroke(DiagramEdgeDrawing.path(edge.path), .line, .rounded(lineWidth: 1), part: .edge)
-            let arrows = CGMutablePath()
+            var arrows = DiagramScenePath()
             for arrow in [edge.sourceArrow, edge.targetArrow].compactMap({ arrow in arrow }) {
-                DiagramEdgeDrawing.addMark(arrow, filled: arrows, stroked: CGMutablePath())
+                DiagramEdgeDrawing.addMark(arrow, filled: &arrows)
             }
             builder.fill(arrows, .line, part: .marker)
         }
         for text in layout.edgeTexts {
             let patch = text.frame.insetBy(dx: -4, dy: 0)
-            builder.fill(CGPath(roundedRect: patch, cornerWidth: 3, cornerHeight: 3, transform: nil), .background, part: .labelBackground)
+            builder.fill(DiagramScenePath(roundedRect: patch, cornerWidth: 3, cornerHeight: 3), .background, part: .labelBackground)
             builder.text(text, .foreground, part: .edgeLabel)
         }
         for node in layout.nodes { ArchitectureScenePaths.add(node, to: &builder) }
@@ -53,10 +53,10 @@ enum ArchitectureScenePaths {
     static func add(_ node: ArchitectureLayoutNode, to builder: inout DiagramSceneBuilder) {
         switch node.form {
         case .junction(let center, let radius):
-            builder.fill(CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius), transform: nil), .line,
+            builder.fill(DiagramScenePath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)), .line,
                          part: .node)
         case .service(let square, let icon, let iconText, let title):
-            builder.fillAndStroke(CGPath(roundedRect: square, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil), fill: .surface, stroke: .border,
+            builder.fillAndStroke(DiagramScenePath(roundedRect: square, cornerWidth: cornerRadius, cornerHeight: cornerRadius), fill: .surface, stroke: .border,
                                   DiagramStroke(lineWidth: 1), part: .node)
             add(icon, to: &builder)
             builder.text(iconText, .foreground, part: .iconText)

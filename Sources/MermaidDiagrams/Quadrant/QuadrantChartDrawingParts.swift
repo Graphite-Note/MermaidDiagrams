@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartDrawingParts.swift
+ * -------------------------------------
+ * Layer: Core
+ * Description: A laid-out quadrant chart's geometry grouped by how it is painted: quadrants, axes, points and their
+ *              texts, back to front.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 23/11/2026
+ */
+
 import CoreGraphics
 
 /// A laid-out quadrant chart's geometry grouped by how it is painted, so that drawing it in any colors is a few fills
@@ -6,14 +18,16 @@ import CoreGraphics
 public struct QuadrantChartDrawingParts {
     /// Points painted alike, in one fill and one outline.
     public struct PointGroup {
-        public let circles: CGPath
+        public var circles: CGPath { circlesScenePath.coreGraphicsPath }
+        let circlesScenePath: DiagramScenePath
         public let fill: QuadrantChartPaint
         /// The outline, stroked its width wide; nil for points without one.
         public let stroke: QuadrantChartStroke?
     }
 
     /// The quadrants' boxes, filled in the surface color and stroked `lineWidth` wide in the border color.
-    public let quadrants: CGPath
+    public var quadrants: CGPath { quadrantsScenePath.coreGraphicsPath }
+    let quadrantsScenePath: DiagramScenePath
     /// The quadrants' texts, in the foreground color.
     public let quadrantTexts: [DiagramTextBlock]
     /// The x axis's texts, in the muted color.
@@ -33,11 +47,11 @@ public struct QuadrantChartDrawingParts {
     static let cornerRadius: CGFloat = 4
 
     public init(layout: QuadrantChartLayout) {
-        let quadrants = CGMutablePath()
+        var quadrants = DiagramScenePath()
         for quadrant in layout.quadrants {
-            quadrants.addPath(CGPath(roundedRect: quadrant.frame, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil))
+            quadrants.addPathOfRoundedRect(quadrant.frame, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius)
         }
-        self.quadrants = quadrants
+        self.quadrantsScenePath = quadrants
         quadrantTexts = layout.quadrants.compactMap(\.text)
         axisTexts = layout.axisLabels.filter { label in !label.isTurned }.map(\.text)
         turnedAxisTexts = layout.axisLabels.filter(\.isTurned).map(\.text)
@@ -50,18 +64,18 @@ public struct QuadrantChartDrawingParts {
     /// is painted over its own point's fill and under the next point's.
     private static func groups(of points: [QuadrantChartLayoutPoint]) -> [PointGroup] {
         var groups: [PointGroup] = []
-        var circles = CGMutablePath()
+        var circles = DiagramScenePath()
         var current: (fill: QuadrantChartPaint, stroke: QuadrantChartStroke?)?
         for point in points {
             if let paint = current, paint.fill != point.fill || paint.stroke != nil || point.stroke != nil {
-                groups.append(PointGroup(circles: circles, fill: paint.fill, stroke: paint.stroke))
-                circles = CGMutablePath()
+                groups.append(PointGroup(circlesScenePath: circles, fill: paint.fill, stroke: paint.stroke))
+                circles = DiagramScenePath()
             }
             circles.addEllipse(in: CGRect(x: point.center.x - point.radius, y: point.center.y - point.radius, width: 2 * point.radius,
                                           height: 2 * point.radius))
             current = (point.fill, point.stroke)
         }
-        if let paint = current { groups.append(PointGroup(circles: circles, fill: paint.fill, stroke: paint.stroke)) }
+        if let paint = current { groups.append(PointGroup(circlesScenePath: circles, fill: paint.fill, stroke: paint.stroke)) }
         return groups
     }
 }

@@ -5,8 +5,8 @@
  * Description: A laid-out packet diagram's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension DiagramScene {
@@ -21,7 +21,7 @@ extension DiagramScene {
 
 extension PacketDiagramDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
-        builder.fillAndStroke(fieldBoxes, fill: .surface, stroke: .border, DiagramStroke(lineWidth: Self.lineWidth), part: .node)
+        builder.fillAndStroke(fieldBoxesScenePath, fill: .surface, stroke: .border, DiagramStroke(lineWidth: Self.lineWidth), part: .node)
         builder.texts(fieldLabels, .foreground, part: .label)
         builder.texts(bitNumbers, .muted, part: .bitNumber)
         builder.title(title)

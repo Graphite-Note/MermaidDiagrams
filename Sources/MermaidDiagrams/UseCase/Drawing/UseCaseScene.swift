@@ -7,8 +7,8 @@
  *              and JSON tables with their texts.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -66,11 +66,11 @@ enum UseCaseScenePainting {
         let fill = fill(look, usual: .alternateSurface, usualOpacity: look.setsFill ? 1 : boundaryFillOpacity)
         let (strokePaint, stroke) = outline(look)
         if let tab = boundary.tabFrame {
-            builder.fillAndStroke(CGPath(rect: tab, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .boundaryTab)
+            builder.fillAndStroke(DiagramScenePath(rect: tab), fill: fill, stroke: strokePaint, stroke, part: .boundaryTab)
             let body = CGRect(x: boundary.frame.minX, y: tab.maxY, width: boundary.frame.width, height: boundary.frame.height - tab.height)
-            builder.fillAndStroke(CGPath(rect: body, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .cluster)
+            builder.fillAndStroke(DiagramScenePath(rect: body), fill: fill, stroke: strokePaint, stroke, part: .cluster)
         } else {
-            let box = CGPath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+            let box = DiagramScenePath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
             builder.fillAndStroke(box, fill: fill, stroke: strokePaint, stroke, part: .cluster)
         }
         builder.text(boundary.title, textPaint(look, usual: .muted), isBold: look.isBold, isItalic: look.isItalic, part: .clusterLabel)
@@ -81,8 +81,8 @@ enum UseCaseScenePainting {
         let stroke = DiagramStroke.rounded(lineWidth: edge.lineWidth + casingWidening)
         let paint = DiagramPaint.background.atOpacity(edge.look.strokeAmount)
         builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, stroke, part: .casing)
-        let marks = CGMutablePath()
-        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) { addOutline(of: mark, to: marks) }
+        var marks = DiagramScenePath()
+        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) { addOutline(of: mark, to: &marks) }
         if !marks.isEmpty { builder.fillAndStroke(marks, fill: paint, stroke: paint, stroke, part: .casing) }
     }
 
@@ -93,12 +93,12 @@ enum UseCaseScenePainting {
         let filledPaint = color.atOpacity(edge.look.opacity)
         builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, DiagramStroke(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths, lineCap: .round),
                        part: .edge)
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
+        var filled = DiagramScenePath()
+        var stroked = DiagramScenePath()
         for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) {
             guard mark.marker == .hollowTriangle else {
                 DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
-                                           filled: filled, stroked: stroked)
+                                           filled: &filled, stroked: &stroked)
                 continue
             }
             builder.fillAndStroke(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction),
@@ -110,12 +110,12 @@ enum UseCaseScenePainting {
     }
 
     /// The mark's shape as its casing covers it: an arrow's triangle, a circle, a cross's arms, a triangle.
-    private static func addOutline(of mark: UseCaseLayoutMark, to path: CGMutablePath) {
+    private static func addOutline(of mark: UseCaseLayoutMark, to path: inout DiagramScenePath) {
         if mark.marker == .hollowTriangle {
             path.addPath(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction))
         } else {
             DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
-                                       filled: path, stroked: path)
+                                       to: &path)
         }
     }
 
@@ -131,7 +131,7 @@ enum UseCaseScenePainting {
     /// The label on a patch of the page's color: an include's or extend's muted, else in the style's text color.
     static func addLabel(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
         guard let label = edge.label, let patch = edge.labelPatch else { return }
-        builder.fill(CGPath(roundedRect: patch, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius, transform: nil), .background,
+        builder.fill(DiagramScenePath(roundedRect: patch, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius), .background,
                      part: .labelBackground)
         builder.text(label, edge.look.textColor.map(DiagramPaint.color) ?? (edge.isSemantic ? .muted : .foreground), isBold: edge.look.isBold,
                      isItalic: edge.look.isItalic, part: .edgeLabel)

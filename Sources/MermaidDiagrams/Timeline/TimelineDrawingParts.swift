@@ -6,7 +6,7 @@
  *              periods' text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -22,20 +22,26 @@ public struct TimelineDrawingParts {
     public struct ColorGroup {
         public let color: TimelineColor
         /// Section headings and period boxes, filled in the color.
-        public let boxes: CGPath
+        public var boxes: CGPath { boxesScenePath.coreGraphicsPath }
+        let boxesScenePath: DiagramScenePath
         /// Event boxes, filled with the color at `eventFillOpacity`.
-        public let eventBoxes: CGPath
+        public var eventBoxes: CGPath { eventBoxesScenePath.coreGraphicsPath }
+        let eventBoxesScenePath: DiagramScenePath
         /// The dots on the axis, filled in the color and outlined `dotOutlineWidth` wide in the background color.
-        public let dots: CGPath
+        public var dots: CGPath { dotsScenePath.coreGraphicsPath }
+        let dotsScenePath: DiagramScenePath
     }
 
     public let colorGroups: [ColorGroup]
     /// The axis, stroked `lineWidth` wide in the line color.
-    public let axis: CGPath
+    public var axis: CGPath { axisScenePath.coreGraphicsPath }
+    let axisScenePath: DiagramScenePath
     /// The axis's arrow, filled in the line color.
-    public let axisArrow: CGPath
+    public var axisArrow: CGPath { axisArrowScenePath.coreGraphicsPath }
+    let axisArrowScenePath: DiagramScenePath
     /// The lines from periods to the axis and on to their events, stroked `lineWidth` wide in the border color.
-    public let connectors: CGPath
+    public var connectors: CGPath { connectorsScenePath.coreGraphicsPath }
+    let connectorsScenePath: DiagramScenePath
     /// Section headings' text, bold, and periods' text, on their boxes in the background color.
     public let sectionTexts: [DiagramTextBlock]
     public let periodTexts: [DiagramTextBlock]
@@ -58,22 +64,22 @@ public struct TimelineDrawingParts {
 
     public init(layout: TimelineLayout) {
         let groups = ColorGroups()
-        for section in layout.sections { groups.paths(for: .series(section.sectionIndex)).boxes.addPath(Self.box(section.frame)) }
-        let connectors = CGMutablePath()
+        for section in layout.sections { groups.paths(for: .series(section.sectionIndex)).boxes.addPathOfRoundedRect(section.frame, cornerWidth: Self.boxCornerRadius, cornerHeight: Self.boxCornerRadius) }
+        var connectors = DiagramScenePath()
         for period in layout.periods {
             let paths = groups.paths(for: period.color)
-            paths.boxes.addPath(Self.box(period.frame))
-            for event in period.events { paths.eventBoxes.addPath(Self.box(event.frame)) }
+            paths.boxes.addPathOfRoundedRect(period.frame, cornerWidth: Self.boxCornerRadius, cornerHeight: Self.boxCornerRadius)
+            for event in period.events { paths.eventBoxes.addPathOfRoundedRect(event.frame, cornerWidth: Self.boxCornerRadius, cornerHeight: Self.boxCornerRadius) }
             paths.dots.addEllipse(in: CGRect(x: period.dot.x - Self.dotRadius, y: period.dot.y - Self.dotRadius, width: 2 * Self.dotRadius,
                                              height: 2 * Self.dotRadius))
-            for connector in period.connectors { connectors.addPath(DiagramEdgeDrawing.path(connector)) }
+            for connector in period.connectors { connectors.addEdgePath(connector) }
         }
         colorGroups = groups.drawn
-        axis = layout.axis.map(DiagramEdgeDrawing.path) ?? CGMutablePath()
-        let arrow = CGMutablePath()
-        if let axisArrow = layout.axisArrow { DiagramEdgeDrawing.addMark(axisArrow, filled: arrow, stroked: CGMutablePath()) }
-        axisArrow = arrow
-        self.connectors = connectors
+        axisScenePath = layout.axis.map(DiagramEdgeDrawing.path) ?? DiagramScenePath()
+        var arrow = DiagramScenePath()
+        if let axisArrow = layout.axisArrow { DiagramEdgeDrawing.addMark(axisArrow, filled: &arrow) }
+        axisArrowScenePath = arrow
+        self.connectorsScenePath = connectors
         sectionTexts = layout.sections.map(\.text)
         periodTexts = layout.periods.map(\.text)
         func ink(_ color: TimelineColor) -> DiagramPaint {
@@ -86,8 +92,8 @@ public struct TimelineDrawingParts {
         title = layout.title
     }
 
-    private static func box(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: boxCornerRadius, cornerHeight: boxCornerRadius, transform: nil)
+    private static func box(_ frame: CGRect) -> DiagramScenePath {
+        DiagramScenePath(roundedRect: frame, cornerWidth: boxCornerRadius, cornerHeight: boxCornerRadius)
     }
 
     /// The paths of each color: one per series color, the series counted again after the eighth, and the muted color.
@@ -105,15 +111,15 @@ public struct TimelineDrawingParts {
         var drawn: [ColorGroup] {
             let all = series.enumerated().map { index, paths in (TimelineColor.series(index), paths) } + [(TimelineColor.muted, muted)]
             return all.compactMap { color, paths in
-                paths.boxes.isEmpty && paths.dots.isEmpty ? nil : ColorGroup(color: color, boxes: paths.boxes, eventBoxes: paths.eventBoxes, dots: paths.dots)
+                paths.boxes.isEmpty && paths.dots.isEmpty ? nil : ColorGroup(color: color, boxesScenePath: paths.boxes, eventBoxesScenePath: paths.eventBoxes, dotsScenePath: paths.dots)
             }
         }
     }
 
-    /// Core Graphics paths are references: a copy of these adds to the same paths.
-    private struct GroupPaths {
-        let boxes = CGMutablePath()
-        let eventBoxes = CGMutablePath()
-        let dots = CGMutablePath()
+    /// The paths of one color, which every use of the color adds to.
+    private final class GroupPaths {
+        var boxes = DiagramScenePath()
+        var eventBoxes = DiagramScenePath()
+        var dots = DiagramScenePath()
     }
 }

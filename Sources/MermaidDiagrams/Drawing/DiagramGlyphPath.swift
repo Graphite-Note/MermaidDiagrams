@@ -6,8 +6,8 @@
  *              path, and places it in a frame.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ import CoreGraphics
 /// and an arc's flags as single digits. Data SVG would refuse is refused (nil), so that a glyph is drawn whole or not at all.
 struct DiagramGlyphPath {
     /// The outline in the grid's units, its origin at the grid's top left and its y running down.
-    let gridPath: CGPath
+    let gridPath: DiagramScenePath
     /// The side of the square the data is drawn on.
     let gridSide: CGFloat
 
@@ -35,11 +35,11 @@ struct DiagramGlyphPath {
     }
 
     /// The outline scaled from its grid to `frame`'s square, whose side is the frame's smaller side, centered in it.
-    func path(in frame: CGRect) -> CGPath {
+    func path(in frame: CGRect) -> DiagramScenePath {
         let side = min(frame.width, frame.height)
         let scale = side / gridSide
-        var transform = CGAffineTransform(translationX: frame.midX - side / 2, y: frame.midY - side / 2).scaledBy(x: scale, y: scale)
-        return gridPath.copy(using: &transform) ?? gridPath
+        let transform = CGAffineTransform(translationX: frame.midX - side / 2, y: frame.midY - side / 2).scaledBy(x: scale, y: scale)
+        return gridPath.applying(transform)
     }
 }
 
@@ -47,7 +47,7 @@ struct DiagramGlyphPath {
 /// smooth curve (`S`, `T`) reflects.
 private struct DiagramGlyphPathReader {
     private var numbers: DiagramGlyphPathNumbers
-    private let path = CGMutablePath()
+    private var path = DiagramScenePath()
     private var current = CGPoint.zero
     private var subpathStart = CGPoint.zero
     /// The second control point of the last cubic curve, or the control point of the last quadratic one, with which
@@ -58,7 +58,7 @@ private struct DiagramGlyphPathReader {
         numbers = DiagramGlyphPathNumbers(bytes: bytes)
     }
 
-    mutating func read() -> CGPath? {
+    mutating func read() -> DiagramScenePath? {
         var command: UInt8?
         while true {
             numbers.skipSeparators()
@@ -129,7 +129,7 @@ private struct DiagramGlyphPathReader {
             guard let radiusAcross = numbers.readNumber(), let radiusDown = numbers.readNumber(), let rotation = numbers.readNumber(),
                   let isLarge = numbers.readFlag(), let sweepsPositively = numbers.readFlag(), let end = readPoint(from: origin) else { return false }
             DiagramGlyphArc(start: current, end: end, radii: CGSize(width: radiusAcross, height: radiusDown), rotationDegrees: rotation,
-                            isLarge: isLarge, sweepsPositively: sweepsPositively).add(to: path)
+                            isLarge: isLarge, sweepsPositively: sweepsPositively).add(to: &path)
             current = end
             lastControl = nil
         default:

@@ -6,7 +6,7 @@
  *              path's data appended as UTF-8 into one buffer, made a String once at the end.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -157,11 +157,13 @@ struct DiagramSVGBuffer {
     /// Writes the decimal digits of `whole` at `destination`, from the last to the first, two at a time, and returns how
     /// many it wrote.
     private static func writeDigits(of whole: UInt, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        var digitCount = 1
-        var power: UInt = 10
-        while power <= whole {
-            digitCount += 1
-            power &*= 10
+        var digitCount = whole < 10 ? 1 : whole < 100 ? 2 : whole < 1_000 ? 3 : whole < 10_000 ? 4 : 5
+        if digitCount == 5 {
+            var power: UInt = 100_000
+            while power <= whole {
+                digitCount += 1
+                power &*= 10
+            }
         }
         let pairs = digitPairs.utf8Start
         var position = digitCount
@@ -214,46 +216,39 @@ struct DiagramSVGBuffer {
 
     // MARK: Paths
 
-    /// The most bytes one path element takes: its letter, three points of two numbers and the spaces between them.
-    private static let largestPathElementByteCount = 1 + 6 * largestNumberByteCount + 5
-
-    /// A path's data: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates. Each element is written whole into a scratch
-    /// buffer and appended at once.
-    mutating func appendPathData(_ path: CGPath) {
-        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: Self.largestPathElementByteCount) { scratch in
-            let start = scratch.baseAddress.unsafelyUnwrapped
-            path.applyWithBlock { element in
-                let count = Self.writePathElement(element.pointee, to: start)
-                bytes.append(contentsOf: UnsafeBufferPointer(start: start, count: count))
-            }
+    /// A path's data: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates. The elements are written one after the
+    /// other into scratch memory with room for the longest data the path can take, and appended at once.
+    mutating func appendPathData(_ path: DiagramScenePath) {
+        let counts = path.elementAndPointCounts
+        let room = counts.elements + counts.points * (2 * Self.largestNumberByteCount + 2)
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: room) { scratch in
+            let first = scratch.baseAddress.unsafelyUnwrapped
+            var destination = first
+            path.forEachElement { element, points in destination += Self.writePathElement(element, points, to: destination) }
+            bytes.append(contentsOf: UnsafeBufferPointer(start: first, count: destination - first))
         }
     }
 
+    /// A Core Graphics path's data, as `appendPathData` writes a scene path's.
+    mutating func appendPathData(_ path: CGPath) {
+        appendPathData(DiagramScenePath(path))
+    }
+
     /// Writes one path element at `destination` and returns how many bytes it wrote.
-    private static func writePathElement(_ element: CGPathElement, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        let points = element.points
-        let pointCount: Int
-        switch element.type {
-        case .moveToPoint:
-            destination[0] = UInt8(ascii: "M")
-            pointCount = 1
-        case .addLineToPoint:
-            destination[0] = UInt8(ascii: "L")
-            pointCount = 1
-        case .addQuadCurveToPoint:
-            destination[0] = UInt8(ascii: "Q")
-            pointCount = 2
-        case .addCurveToPoint:
-            destination[0] = UInt8(ascii: "C")
-            pointCount = 3
-        case .closeSubpath:
+    @inline(__always)
+    private static func writePathElement(_ element: DiagramScenePathElement, _ points: UnsafeBufferPointer<CGPoint>,
+                                         to destination: UnsafeMutablePointer<UInt8>) -> Int {
+        switch element {
+        case .move: destination[0] = UInt8(ascii: "M")
+        case .line: destination[0] = UInt8(ascii: "L")
+        case .quadCurve: destination[0] = UInt8(ascii: "Q")
+        case .curve: destination[0] = UInt8(ascii: "C")
+        case .close:
             destination[0] = UInt8(ascii: "Z")
             return 1
-        @unknown default:
-            return 0
         }
         var count = 1
-        for index in 0..<pointCount {
+        for index in 0..<points.count {
             if index > 0 {
                 destination[count] = UInt8(ascii: " ")
                 count += 1

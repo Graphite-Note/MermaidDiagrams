@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -33,11 +33,11 @@ extension SequenceDrawingParts {
         addBackgrounds(to: &builder)
         addBlocks(to: &builder)
         addMessages(to: &builder)
-        builder.fillAndStroke(notes, fill: Self.surfaceAlternatePaint, stroke: .border, Self.line, part: .note)
+        builder.fillAndStroke(notesScenePath, fill: Self.surfaceAlternatePaint, stroke: .border, Self.line, part: .note)
         builder.texts(noteTexts, .foreground, part: .note)
-        builder.fillAndStroke(participantShapes, fill: .surface, stroke: .border, Self.line, part: .node)
-        builder.stroke(participantFigureLines, .border, Self.line, part: .node)
-        builder.fillAndStroke(participantFrontShapes, fill: .surface, stroke: .border, Self.line, part: .node)
+        builder.fillAndStroke(participantShapesScenePath, fill: .surface, stroke: .border, Self.line, part: .node)
+        builder.stroke(participantFigureLinesScenePath, .border, Self.line, part: .node)
+        builder.fillAndStroke(participantFrontShapesScenePath, fill: .surface, stroke: .border, Self.line, part: .node)
         for (text, ink) in zip(participantTexts, participantTextInks) { builder.text(text, Self.paint(ink, else: .foreground), part: .label) }
         builder.title(title)
     }
@@ -49,45 +49,45 @@ extension SequenceDrawingParts {
     private func addBackgrounds(to builder: inout DiagramSceneBuilder) {
         for box in boxes {
             let fill = box.color.map { color in Self.paint(color) } ?? Self.surfaceAlternatePaint.atOpacity(Self.defaultHighlightOpacity)
-            builder.fillAndStroke(box.path, fill: fill, stroke: .border, Self.line, part: .cluster)
+            builder.fillAndStroke(box.pathScenePath, fill: fill, stroke: .border, Self.line, part: .cluster)
             builder.text(box.title, Self.paint(box.titleInk, else: Self.mutedPaint), part: .clusterLabel)
         }
         for highlight in highlights {
             let paint = highlight.color.map { color in Self.paint(color) } ?? Self.surfaceAlternatePaint.atOpacity(Self.defaultHighlightOpacity)
-            builder.fill(highlight.path, paint, part: .cluster)
+            builder.fill(highlight.pathScenePath, paint, part: .cluster)
         }
-        builder.stroke(lifelines, .border, Self.line, part: .axis)
-        for activation in activations { builder.fillAndStroke(activation, fill: .surface, stroke: .border, Self.line, part: .node) }
+        builder.stroke(lifelinesScenePath, .border, Self.line, part: .axis)
+        for activation in activationsScenePaths { builder.fillAndStroke(activation, fill: .surface, stroke: .border, Self.line, part: .node) }
     }
 
     /// The block frames, their section lines, their texts on their patches, and their tabs with their keywords.
     private func addBlocks(to builder: inout DiagramSceneBuilder) {
-        builder.stroke(blockOutlines, .border, Self.line, part: .cluster)
-        builder.stroke(blockSectionLines, .border, Self.dashed, part: .cluster)
-        builder.fill(blockTextPatches, .background, part: .labelBackground)
+        builder.stroke(blockOutlinesScenePath, .border, Self.line, part: .cluster)
+        builder.stroke(blockSectionLinesScenePath, .border, Self.dashed, part: .cluster)
+        builder.fill(blockTextPatchesScenePath, .background, part: .labelBackground)
         for (text, ink) in zip(blockTexts, blockTextInks) { builder.text(text, Self.paint(ink, else: Self.mutedPaint), part: .clusterLabel) }
-        builder.fillAndStroke(blockTabs, fill: .surface, stroke: .border, Self.line, part: .cluster)
+        builder.fillAndStroke(blockTabsScenePath, fill: .surface, stroke: .border, Self.line, part: .cluster)
         builder.texts(blockKeywords, Self.mutedPaint, isBold: true, part: .clusterLabel)
     }
 
     /// The messages' lines, heads and circles in the line color, then those over colored backgrounds in their colors,
     /// the numbers, the crosses of destroyed lifelines, and the messages' texts on their patches.
     private func addMessages(to builder: inout DiagramSceneBuilder) {
-        Self.addLines(solid: solidMessageLines, dotted: dottedMessageLines, filledHeads: filledHeads, strokedHeads: strokedHeads,
-                      circles: centralConnections, paint: .line, to: &builder)
+        Self.addLines(solid: solidMessageLinesScenePath, dotted: dottedMessageLinesScenePath, filledHeads: filledHeadsScenePath, strokedHeads: strokedHeadsScenePath,
+                      circles: centralConnectionsScenePath, paint: .line, to: &builder)
         for group in inkedMessageLines {
-            Self.addLines(solid: group.solidLines, dotted: group.dottedLines, filledHeads: group.filledHeads, strokedHeads: group.strokedHeads,
-                          circles: group.centralConnections, paint: Self.paint(group.ink, else: .line), to: &builder)
+            Self.addLines(solid: group.solidLinesScenePath, dotted: group.dottedLinesScenePath, filledHeads: group.filledHeadsScenePath, strokedHeads: group.strokedHeadsScenePath,
+                          circles: group.centralConnectionsScenePath, paint: Self.paint(group.ink, else: .line), to: &builder)
         }
-        builder.fill(numberBadges, .line, part: .marker)
+        builder.fill(numberBadgesScenePath, .line, part: .marker)
         builder.texts(numberTexts, .background, part: .marker)
-        builder.stroke(destructions, .line, DiagramStroke.rounded(lineWidth: Self.destructionLineWidth), part: .marker)
-        builder.fill(messageTextPatches, .background, part: .labelBackground)
+        builder.stroke(destructionsScenePath, .line, DiagramStroke.rounded(lineWidth: Self.destructionLineWidth), part: .marker)
+        builder.fill(messageTextPatchesScenePath, .background, part: .labelBackground)
         for (text, ink) in zip(messageTexts, messageTextInks) { builder.text(text, Self.paint(ink, else: .foreground), part: .edgeLabel) }
     }
 
     /// Messages' lines, heads and central connections' circles, in one paint.
-    private static func addLines(solid: CGPath, dotted: CGPath, filledHeads: CGPath, strokedHeads: CGPath, circles: CGPath, paint: DiagramPaint,
+    private static func addLines(solid: DiagramScenePath, dotted: DiagramScenePath, filledHeads: DiagramScenePath, strokedHeads: DiagramScenePath, circles: DiagramScenePath, paint: DiagramPaint,
                                  to builder: inout DiagramSceneBuilder) {
         builder.stroke(solid, paint, line, part: .edge)
         builder.stroke(dotted, paint, dashed, part: .edge)

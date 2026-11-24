@@ -6,8 +6,8 @@
  *              collapsed group, a fork's bar, a junction, a stop and a data store.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -15,7 +15,8 @@ import CoreGraphics
 /// One piece of a node shape painted piece by piece, in its shape's order: the pieces may overlap, so each is filled
 /// and stroked before the next is.
 public struct FlowchartShapeLayer {
-    public let path: CGPath
+    public var path: CGPath { pathScenePath.coreGraphicsPath }
+    let pathScenePath: DiagramScenePath
     public let painting: FlowchartShapeLayerPainting
 }
 
@@ -43,7 +44,7 @@ enum FlowchartLayeredShapeDrawing {
             let body = CGRect(x: frame.minX, y: frame.minY + 26, width: frame.width, height: frame.height - 26)
             let headRadius: CGFloat = 13
             let head = CGRect(x: frame.midX - headRadius, y: frame.minY + 14 - headRadius, width: 2 * headRadius, height: 2 * headRadius)
-            return [layer(FlowchartExtendedShapeDrawing.roundedRectangle(body, radius: 12)), layer(CGPath(ellipseIn: head, transform: nil))]
+            return [layer(FlowchartExtendedShapeDrawing.roundedRectangle(body, radius: 12)), layer(DiagramScenePath(ellipseIn: head))]
         case .stackedDocument:
             return (0..<3).map { index in
                 let center = CGPoint(x: frame.midX + CGFloat(1 - index) * 4, y: frame.midY + CGFloat(index - 1) * 4)
@@ -60,11 +61,11 @@ enum FlowchartLayeredShapeDrawing {
             return [layer(FlowchartExtendedShapeDrawing.roundedRectangle(behind, radius: boxCornerRadius)),
                     layer(FlowchartExtendedShapeDrawing.roundedRectangle(front, radius: boxCornerRadius))]
         case .forkJoin: return [layer(FlowchartExtendedShapeDrawing.roundedRectangle(frame, radius: 2), .filledInLineColorAndOutlined)]
-        case .filledCircle: return [layer(CGPath(ellipseIn: frame, transform: nil), .filledInLineColorAndOutlined)]
+        case .filledCircle: return [layer(DiagramScenePath(ellipseIn: frame), .filledInLineColorAndOutlined)]
         case .framedCircle:
             let ringWidth: CGFloat = 4
-            return [layer(CGPath(ellipseIn: frame, transform: nil)),
-                    layer(CGPath(ellipseIn: frame.insetBy(dx: ringWidth, dy: ringWidth), transform: nil), .filledInLineColorAndOutlined)]
+            return [layer(DiagramScenePath(ellipseIn: frame)),
+                    layer(DiagramScenePath(ellipseIn: frame.insetBy(dx: ringWidth, dy: ringWidth)), .filledInLineColorAndOutlined)]
         case .dataStore: return dataStoreLayers(in: frame)
         default: return nil
         }
@@ -72,15 +73,15 @@ enum FlowchartLayeredShapeDrawing {
 
     /// A data store: its box filled without an outline, then a line along its top and one along its bottom.
     private static func dataStoreLayers(in frame: CGRect) -> [FlowchartShapeLayer] {
-        let lines = CGMutablePath()
+        var lines = DiagramScenePath()
         for y in [frame.minY, frame.maxY] {
             lines.move(to: CGPoint(x: frame.minX, y: y))
             lines.addLine(to: CGPoint(x: frame.maxX, y: y))
         }
-        return [layer(CGPath(rect: frame, transform: nil), .filledOnly), layer(lines, .outlined)]
+        return [layer(DiagramScenePath(rect: frame), .filledOnly), layer(lines, .outlined)]
     }
 
-    private static func layer(_ path: CGPath, _ painting: FlowchartShapeLayerPainting = .filledAndOutlined) -> FlowchartShapeLayer {
-        FlowchartShapeLayer(path: path, painting: painting)
+    private static func layer(_ path: DiagramScenePath, _ painting: FlowchartShapeLayerPainting = .filledAndOutlined) -> FlowchartShapeLayer {
+        FlowchartShapeLayer(pathScenePath: path, painting: painting)
     }
 }

@@ -65,7 +65,7 @@ final class PieChartOptionsTests: XCTestCase {
         let ringPoint = CGPoint(x: laidOut.center.x, y: laidOut.center.y - laidOut.radius * 0.8)
         XCTAssertTrue(parts.seriesFills[0].contains(ringPoint), "The first slice fills the ring at the top.")
         let whole = PieChartDrawingParts.wedge(PieChartLayoutSlice(seriesIndex: 0, startAngle: 0, endAngle: 2 * .pi, percentage: dogs.percentage,
-                                                                   percentagePlacement: .insideSlice), center: .zero, radius: 100, innerRadius: 50)
+                                                                   percentagePlacement: .insideSlice), center: .zero, radius: 100, innerRadius: 50).coreGraphicsPath
         XCTAssertFalse(whole.contains(.zero))
         XCTAssertTrue(whole.contains(CGPoint(x: 75, y: 0)))
     }

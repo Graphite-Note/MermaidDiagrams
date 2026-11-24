@@ -6,8 +6,8 @@
  *              roles, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,15 +18,21 @@ import CoreGraphics
 /// stereotypes and field names muted, the names bold and the values in the foreground color.
 public struct RequirementDrawingParts {
     public let title: DiagramTextBlock?
-    public let solidLines: CGPath
-    public let dashedLines: CGPath
+    public var solidLines: CGPath { solidLinesScenePath.coreGraphicsPath }
+    let solidLinesScenePath: DiagramScenePath
+    public var dashedLines: CGPath { dashedLinesScenePath.coreGraphicsPath }
+    let dashedLinesScenePath: DiagramScenePath
     /// The containment marks' circles and crosses and the open arrowheads, stroked.
-    public let marks: CGPath
-    public let textPatches: CGPath
+    public var marks: CGPath { marksScenePath.coreGraphicsPath }
+    let marksScenePath: DiagramScenePath
+    public var textPatches: CGPath { textPatchesScenePath.coreGraphicsPath }
+    let textPatchesScenePath: DiagramScenePath
     public let texts: [DiagramTextBlock]
-    public let boxFills: CGPath
+    public var boxFills: CGPath { boxFillsScenePath.coreGraphicsPath }
+    let boxFillsScenePath: DiagramScenePath
     /// The boxes' outlines and dividers, stroked in the border color.
-    public let boxOutlines: CGPath
+    public var boxOutlines: CGPath { boxOutlinesScenePath.coreGraphicsPath }
+    let boxOutlinesScenePath: DiagramScenePath
     public let stereotypes: [DiagramTextBlock]
     public let names: [DiagramTextBlock]
     public let fieldNames: [DiagramTextBlock]
@@ -47,27 +53,31 @@ public struct RequirementDrawingParts {
 
     public init(layout: RequirementLayout) {
         title = layout.title
-        let solid = CGMutablePath()
-        let dashed = CGMutablePath()
-        let marks = CGMutablePath()
-        let patches = CGMutablePath()
+        var solid = DiagramScenePath()
+        var dashed = DiagramScenePath()
+        var marks = DiagramScenePath()
+        var patches = DiagramScenePath()
         for relation in layout.relations {
-            (relation.kind == .contains ? solid : dashed).addPath(DiagramEdgeDrawing.path(relation.path))
-            Self.addMark(relation.mark, to: marks)
-            patches.addPath(CGPath(roundedRect: relation.text.frame.insetBy(dx: -Self.textPatchExtraWidth / 2, dy: 0), cornerWidth: Self.textPatchCornerRadius,
-                                   cornerHeight: Self.textPatchCornerRadius, transform: nil))
+            if relation.kind == .contains {
+                solid.addEdgePath(relation.path)
+            } else {
+                dashed.addEdgePath(relation.path)
+            }
+            Self.addMark(relation.mark, to: &marks)
+            patches.addPathOfRoundedRect(relation.text.frame.insetBy(dx: -Self.textPatchExtraWidth / 2, dy: 0), cornerWidth: Self.textPatchCornerRadius,
+                                   cornerHeight: Self.textPatchCornerRadius)
         }
-        solidLines = solid
-        dashedLines = dashed
-        self.marks = marks
-        textPatches = patches
+        solidLinesScenePath = solid
+        dashedLinesScenePath = dashed
+        self.marksScenePath = marks
+        textPatchesScenePath = patches
         texts = layout.relations.map(\.text)
         let plainBoxes = layout.boxes.filter { box in box.style == nil }
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
-        for box in plainBoxes { Self.addBox(box, fill: fills, outline: outlines) }
-        boxFills = fills
-        boxOutlines = outlines
+        var fills = DiagramScenePath()
+        var outlines = DiagramScenePath()
+        for box in plainBoxes { Self.addBox(box, fill: &fills, outline: &outlines) }
+        boxFillsScenePath = fills
+        boxOutlinesScenePath = outlines
         stereotypes = plainBoxes.map(\.stereotype)
         names = plainBoxes.map(\.name)
         fieldNames = plainBoxes.flatMap(\.fieldNames)
@@ -76,8 +86,8 @@ public struct RequirementDrawingParts {
     }
 
     /// A box's rounded rectangle to fill, and it and its divider to stroke.
-    static func addBox(_ box: RequirementLayoutBox, fill: CGMutablePath, outline: CGMutablePath) {
-        let rectangle = CGPath(roundedRect: box.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    static func addBox(_ box: RequirementLayoutBox, fill: inout DiagramScenePath, outline: inout DiagramScenePath) {
+        let rectangle = DiagramScenePath(roundedRect: box.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         fill.addPath(rectangle)
         outline.addPath(rectangle)
         if let dividerY = box.dividerY {
@@ -88,7 +98,7 @@ public struct RequirementDrawingParts {
 
     /// Pele's marks: a circle of radius 6 whose rim touches the box with a plus through it, or an open arrowhead 9 points
     /// long and 9 wide.
-    static func addMark(_ mark: RequirementRelationMark, to path: CGMutablePath) {
+    static func addMark(_ mark: RequirementRelationMark, to path: inout DiagramScenePath) {
         switch mark {
         case .containment(let point, let toward):
             let radius = containmentRadius
@@ -120,14 +130,14 @@ extension RequirementDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         builder.title(title)
-        builder.stroke(solidLines, .line, line, part: .edge)
-        builder.stroke(dashedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedLineLengths), part: .edge)
-        builder.stroke(marks, .line, line, part: .marker)
-        builder.fill(textPatches, .background, part: .labelBackground)
+        builder.stroke(solidLinesScenePath, .line, line, part: .edge)
+        builder.stroke(dashedLinesScenePath, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedLineLengths), part: .edge)
+        builder.stroke(marksScenePath, .line, line, part: .marker)
+        builder.fill(textPatchesScenePath, .background, part: .labelBackground)
         builder.texts(texts, .muted, part: .edgeLabel)
         let outline = DiagramStroke(lineWidth: Self.lineWidth)
-        builder.fill(boxFills, .surface, part: .node)
-        builder.stroke(boxOutlines, .border, outline, part: .node)
+        builder.fill(boxFillsScenePath, .surface, part: .node)
+        builder.stroke(boxOutlinesScenePath, .border, outline, part: .node)
         builder.texts(stereotypes, .muted, part: .stereotype)
         builder.texts(names, .foreground, isBold: true, part: .label)
         builder.texts(fieldNames, .muted, part: .field)
@@ -139,9 +149,9 @@ extension RequirementDrawingParts {
     /// else, on a fill it sets, in the ink that contrasts more with that fill (Pele's `inkFill`), or else in the usual roles.
     private func addStyledBox(_ box: RequirementLayoutBox, to builder: inout DiagramSceneBuilder) {
         let style = box.style ?? DiagramElementStyle()
-        let fill = CGMutablePath()
-        let outline = CGMutablePath()
-        Self.addBox(box, fill: fill, outline: outline)
+        var fill = DiagramScenePath()
+        var outline = DiagramScenePath()
+        Self.addBox(box, fill: &fill, outline: &outline)
         builder.keepNextShapeApart()
         builder.fill(fill, style.fill.map(DiagramPaint.color) ?? .surface, part: .node)
         builder.stroke(outline, style.stroke.map(DiagramPaint.color) ?? .border,

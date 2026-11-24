@@ -6,7 +6,7 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -32,21 +32,21 @@ extension StateDiagramDrawingParts {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         let dashed = DiagramStroke.rounded(lineWidth: Self.lineWidth, dashLengths: Self.noteConnectorDashLengths)
         composites.addBoxes(to: &builder)
-        builder.stroke(compositeTitleRules, .border, line, part: .cluster)
-        builder.stroke(regionDividers, .border, dashed, part: .cluster)
-        builder.stroke(transitionLines, .line, line, part: .edge)
-        builder.stroke(noteConnectors, .border, dashed, part: .edge)
-        builder.fill(arrows, .line, part: .marker)
+        builder.stroke(compositeTitleRulesScenePath, .border, line, part: .cluster)
+        builder.stroke(regionDividersScenePath, .border, dashed, part: .cluster)
+        builder.stroke(transitionLinesScenePath, .line, line, part: .edge)
+        builder.stroke(noteConnectorsScenePath, .border, dashed, part: .edge)
+        builder.fill(arrowsScenePath, .line, part: .marker)
         composites.addCrossedTitles(to: &builder)
-        builder.fill(transitionTextPatches, .background, part: .labelBackground)
+        builder.fill(transitionTextPatchesScenePath, .background, part: .labelBackground)
         builder.texts(transitionTexts, .foreground, part: .edgeLabel)
-        builder.fill(stateFills, .surface, part: .node)
-        builder.stroke(stateOutlines, .border, line, part: .node)
-        builder.fillAndStroke(endRings, fill: .background, stroke: .line, line, part: .node)
-        builder.fill(solidMarks, .line, part: .node)
+        builder.fill(stateFillsScenePath, .surface, part: .node)
+        builder.stroke(stateOutlinesScenePath, .border, line, part: .node)
+        builder.fillAndStroke(endRingsScenePath, fill: .background, stroke: .line, line, part: .node)
+        builder.fill(solidMarksScenePath, .line, part: .node)
         builder.texts(stateTexts, .foreground, part: .label)
-        builder.fillAndStroke(noteSheets, fill: .background, stroke: .border, line, part: .note)
-        builder.stroke(noteFolds, .border, line, part: .note)
+        builder.fillAndStroke(noteSheetsScenePath, fill: .background, stroke: .border, line, part: .note)
+        builder.stroke(noteFoldsScenePath, .border, line, part: .note)
         builder.texts(noteTexts, Self.noteTextPaint, part: .note)
         builder.title(title)
     }

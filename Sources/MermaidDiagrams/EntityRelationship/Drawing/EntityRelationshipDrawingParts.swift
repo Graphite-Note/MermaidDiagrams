@@ -5,8 +5,8 @@
  * Description: A laid-out entity relationship diagram's geometry grouped by how it is painted.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -17,23 +17,31 @@ import CoreGraphics
 /// outlines and header dividers, the boxes' text, the title.
 public struct EntityRelationshipDrawingParts {
     /// Identifying relationships, stroked one point wide with round caps.
-    public let identifyingLines: CGPath
+    public var identifyingLines: CGPath { identifyingLinesScenePath.coreGraphicsPath }
+    let identifyingLinesScenePath: DiagramScenePath
     /// Non-identifying relationships, stroked one point wide in dashes of 4 and gaps of 3.
-    public let nonIdentifyingLines: CGPath
+    public var nonIdentifyingLines: CGPath { nonIdentifyingLinesScenePath.coreGraphicsPath }
+    let nonIdentifyingLinesScenePath: DiagramScenePath
     /// The rings and diamonds of the cardinality marks, filled in the background color so that the line does not show
     /// through them.
-    public let markFills: CGPath
+    public var markFills: CGPath { markFillsScenePath.coreGraphicsPath }
+    let markFillsScenePath: DiagramScenePath
     /// Every mark's bars, feet, rings and diamonds, stroked one point wide in the line color, solid on any line.
-    public let markOutlines: CGPath
+    public var markOutlines: CGPath { markOutlinesScenePath.coreGraphicsPath }
+    let markOutlinesScenePath: DiagramScenePath
     /// The patches behind the labels, filled in the background color.
-    public let labelPatches: CGPath
+    public var labelPatches: CGPath { labelPatchesScenePath.coreGraphicsPath }
+    let labelPatchesScenePath: DiagramScenePath
     public let labels: [DiagramTextBlock]
     /// The boxes, filled in the surface color.
-    public let boxFills: CGPath
+    public var boxFills: CGPath { boxFillsScenePath.coreGraphicsPath }
+    let boxFillsScenePath: DiagramScenePath
     /// The first attribute row of each box and every second one after it, filled in the background color.
-    public let rowStripes: CGPath
+    public var rowStripes: CGPath { rowStripesScenePath.coreGraphicsPath }
+    let rowStripesScenePath: DiagramScenePath
     /// The boxes' outlines and the lines under their headers, stroked one point wide in the border color.
-    public let boxOutlines: CGPath
+    public var boxOutlines: CGPath { boxOutlinesScenePath.coreGraphicsPath }
+    let boxOutlinesScenePath: DiagramScenePath
     /// The entities' names and their attributes' names, in the text color.
     public let entityTexts: [DiagramTextBlock]
     /// The attributes' types, keys and comments, in the muted text color.
@@ -59,11 +67,11 @@ public struct EntityRelationshipDrawingParts {
 
     public init(layout: EntityRelationshipLayout) {
         subgraphs = FlowchartClusterDrawingParts(clusters: layout.subgraphs)
-        let identifyingLines = CGMutablePath()
-        let nonIdentifyingLines = CGMutablePath()
-        let markFills = CGMutablePath()
-        let markOutlines = CGMutablePath()
-        let labelPatches = CGMutablePath()
+        var identifyingLines = DiagramScenePath()
+        var nonIdentifyingLines = DiagramScenePath()
+        var markFills = DiagramScenePath()
+        var markOutlines = DiagramScenePath()
+        var labelPatches = DiagramScenePath()
         for relationship in layout.relationships {
             let line = DiagramEdgeDrawing.path(relationship.path)
             switch relationship.identification {
@@ -71,23 +79,23 @@ public struct EntityRelationshipDrawingParts {
             case .nonIdentifying: nonIdentifyingLines.addPath(line)
             }
             for mark in [relationship.firstEntityMark, relationship.secondEntityMark] {
-                EntityRelationshipCardinalityDrawing.addMark(mark, fills: markFills, outlines: markOutlines)
+                EntityRelationshipCardinalityDrawing.addMark(mark, fills: &markFills, outlines: &markOutlines)
             }
             if let label = relationship.label {
-                labelPatches.addPath(CGPath(roundedRect: label.frame.insetBy(dx: -Self.labelPatchExtraWidth / 2, dy: 0),
-                                            cornerWidth: Self.labelPatchCornerRadius, cornerHeight: Self.labelPatchCornerRadius, transform: nil))
+                labelPatches.addPathOfRoundedRect(label.frame.insetBy(dx: -Self.labelPatchExtraWidth / 2, dy: 0),
+                                            cornerWidth: Self.labelPatchCornerRadius, cornerHeight: Self.labelPatchCornerRadius)
             }
         }
-        self.identifyingLines = identifyingLines
-        self.nonIdentifyingLines = nonIdentifyingLines
-        self.markFills = markFills
-        self.markOutlines = markOutlines
-        self.labelPatches = labelPatches
+        self.identifyingLinesScenePath = identifyingLines
+        self.nonIdentifyingLinesScenePath = nonIdentifyingLines
+        self.markFillsScenePath = markFills
+        self.markOutlinesScenePath = markOutlines
+        self.labelPatchesScenePath = labelPatches
         labels = layout.relationships.compactMap(\.label)
         let boxes = BoxPaths(entities: layout.entities)
-        boxFills = boxes.fills
-        rowStripes = boxes.stripes
-        boxOutlines = boxes.outlines
+        boxFillsScenePath = boxes.fills
+        rowStripesScenePath = boxes.stripes
+        boxOutlinesScenePath = boxes.outlines
         entityTexts = layout.entities.flatMap { entity in [entity.name] + entity.rows.flatMap { row in Self.texts(of: row, inMutedColor: false) } }
         attributeDetails = layout.entities.flatMap { entity in entity.rows.flatMap { row in Self.texts(of: row, inMutedColor: true) } }
         title = layout.title
@@ -105,14 +113,14 @@ public struct EntityRelationshipDrawingParts {
 
     /// The boxes to fill, the rows striped over them, and their outlines and header dividers.
     private struct BoxPaths {
-        let fills = CGMutablePath()
-        let stripes = CGMutablePath()
-        let outlines = CGMutablePath()
+        var fills = DiagramScenePath()
+        var stripes = DiagramScenePath()
+        var outlines = DiagramScenePath()
 
         init(entities: [EntityRelationshipLayoutEntity]) {
             let radius = EntityRelationshipDrawingParts.boxCornerRadius
             for entity in entities {
-                let box = CGPath(roundedRect: entity.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+                let box = DiagramScenePath(roundedRect: entity.frame, cornerWidth: radius, cornerHeight: radius)
                 fills.addPath(box)
                 outlines.addPath(box)
                 if let firstRow = entity.rows.first {
@@ -126,10 +134,10 @@ public struct EntityRelationshipDrawingParts {
         }
 
         /// A row's band; the last one follows the box's rounded bottom corners: a rounded rectangle, squared off on top.
-        private func addStripe(_ frame: CGRect, isLast: Bool) {
+        private mutating func addStripe(_ frame: CGRect, isLast: Bool) {
             guard isLast else { return stripes.addRect(frame) }
             let radius = min(EntityRelationshipDrawingParts.boxCornerRadius, frame.height / 2)
-            stripes.addPath(CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            stripes.addPathOfRoundedRect(frame, cornerWidth: radius, cornerHeight: radius)
             stripes.addRect(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height / 2))
         }
     }

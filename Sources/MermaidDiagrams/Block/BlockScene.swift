@@ -6,8 +6,8 @@
  *              their titles, the edges and their marks, the blocks and arrows with their text, the edges' text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -36,8 +36,7 @@ extension DiagramScene {
         for edge in layout.edges {
             guard let text = edge.text else { continue }
             let patch = text.frame.insetBy(dx: -BlockScenePaths.textPatchExtraWidth / 2, dy: 0)
-            builder.fill(CGPath(roundedRect: patch, cornerWidth: BlockScenePaths.textPatchCornerRadius, cornerHeight: BlockScenePaths.textPatchCornerRadius,
-                                transform: nil), .background, part: .labelBackground)
+            builder.fill(DiagramScenePath(roundedRect: patch, cornerWidth: BlockScenePaths.textPatchCornerRadius, cornerHeight: BlockScenePaths.textPatchCornerRadius), .background, part: .labelBackground)
             builder.text(text, .foreground, part: .edgeLabel)
         }
         self = builder.scene(size: layout.size, font: layout.font)
@@ -56,7 +55,7 @@ enum BlockScenePaths {
 
     static func add(_ composite: BlockLayoutComposite, to builder: inout DiagramSceneBuilder) {
         let style = composite.appearance.style
-        let box = CGPath(roundedRect: composite.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let box = DiagramScenePath(roundedRect: composite.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         let fill = style.fill.map(DiagramPaint.color) ?? DiagramPaint.alternateSurface.atOpacity(compositeFillOpacity)
         builder.fillAndStroke(box, fill: fill, stroke: style.stroke.map(DiagramPaint.color) ?? .border, outlineStroke(style), part: .cluster)
         builder.text(composite.title, composite.appearance.textColor.map(DiagramPaint.color) ?? .muted, isBold: composite.appearance.isBold,
@@ -86,10 +85,10 @@ enum BlockScenePaths {
     }
 
     /// The marks at `edge`'s ends: those filled (arrows and circles) and those stroked (crosses).
-    private static func marks(of edge: BlockLayoutEdge) -> (filled: CGPath, stroked: CGPath) {
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
+    private static func marks(of edge: BlockLayoutEdge) -> (filled: DiagramScenePath, stroked: DiagramScenePath) {
+        var filled = DiagramScenePath()
+        var stroked = DiagramScenePath()
+        for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: &filled, stroked: &stroked) }
         return (filled, stroked)
     }
 
@@ -99,7 +98,7 @@ enum BlockScenePaths {
         let strokePaint = style.stroke.map(DiagramPaint.color) ?? .border
         switch node.form {
         case .arrow(let corners):
-            let outline = CGMutablePath()
+            var outline = DiagramScenePath()
             outline.addLines(between: corners)
             outline.closeSubpath()
             var stroke = outlineStroke(style)

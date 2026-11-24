@@ -5,8 +5,8 @@
  * Description: Draws a node shape's path as Pele's SVG path data draws it, in coordinates from the shape's center.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -14,7 +14,7 @@ import CoreGraphics
 /// Draws a Core Graphics path the way Pele writes a shape's SVG path data (`M`, `H`, `V`, `L`, `l`, `A`, `q`, `t`, `Z`),
 /// each point given from the shape's center, so that a shape reads as Pele's `svg/shapes.ts` writes it.
 struct FlowchartShapePen {
-    let path = CGMutablePath()
+    var path = DiagramScenePath()
     private let center: CGPoint
     /// Where the pen is, from the center.
     private var current = CGPoint.zero
@@ -60,7 +60,7 @@ struct FlowchartShapePen {
         let start = page(current)
         current = CGPoint(x: x, y: y)
         lastQuadraticControl = nil
-        DiagramEllipticalArc.addArc(to: path, from: start, to: page(current), radii: CGSize(width: radiusAcross, height: radiusDown),
+        DiagramEllipticalArc.addArc(to: &path, from: start, to: page(current), radii: CGSize(width: radiusAcross, height: radiusDown),
                                     sweepsWithIncreasingAngle: clockwise)
     }
 

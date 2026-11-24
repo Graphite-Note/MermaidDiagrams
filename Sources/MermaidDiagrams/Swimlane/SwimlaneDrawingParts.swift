@@ -6,8 +6,8 @@
  *              and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -18,9 +18,11 @@ import CoreGraphics
 /// lanes, the edges, their texts, the nodes and the title.
 public struct SwimlaneDrawingParts {
     /// The lanes' outlines, stroked one point wide in the border color.
-    public let laneOutlines: CGPath
+    public var laneOutlines: CGPath { laneOutlinesScenePath.coreGraphicsPath }
+    let laneOutlinesScenePath: DiagramScenePath
     /// The lanes' title bands, filled with the alternate surface and outlined in the border color.
-    public let titleBands: CGPath
+    public var titleBands: CGPath { titleBandsScenePath.coreGraphicsPath }
+    let titleBandsScenePath: DiagramScenePath
     public let titles: [DiagramTextBlock]
     /// Whether the titles are turned a quarter turn counterclockwise.
     public let areTitlesTurned: Bool
@@ -30,14 +32,14 @@ public struct SwimlaneDrawingParts {
     public static let turnedTitleRotation: CGFloat = -.pi / 2
 
     public init(layout: SwimlaneLayout) {
-        let outlines = CGMutablePath()
-        let bands = CGMutablePath()
+        var outlines = DiagramScenePath()
+        var bands = DiagramScenePath()
         for lane in layout.lanes {
             outlines.addRect(lane.frame)
             bands.addRect(lane.titleBand)
         }
-        laneOutlines = outlines
-        titleBands = bands
+        laneOutlinesScenePath = outlines
+        titleBandsScenePath = bands
         titles = layout.lanes.compactMap(\.title)
         areTitlesTurned = layout.lanes.first?.isTitleTurned ?? false
         flowchart = FlowchartDrawingParts(layout: layout.flowchart)
@@ -56,8 +58,8 @@ extension DiagramScene {
 extension SwimlaneDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke(lineWidth: FlowchartDrawingParts.lineWidth)
-        builder.stroke(laneOutlines, .border, line, part: .cluster)
-        builder.fillAndStroke(titleBands, fill: .alternateSurface, stroke: .border, line, part: .cluster)
+        builder.stroke(laneOutlinesScenePath, .border, line, part: .cluster)
+        builder.fillAndStroke(titleBandsScenePath, fill: .alternateSurface, stroke: .border, line, part: .cluster)
         for title in titles { builder.text(title, .muted, rotation: areTitlesTurned ? Self.turnedTitleRotation : nil, part: .clusterLabel) }
         flowchart.addScene(to: &builder)
     }

@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -30,18 +30,18 @@ extension ClassDiagramDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
         namespaces.addBoxes(to: &builder)
-        builder.stroke(solidLines, .line, line, part: .edge)
-        builder.stroke(dashedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedDashLengths), part: .edge)
-        builder.stroke(dottedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
-        builder.fill(filledMarks, .line, part: .marker)
-        builder.stroke(strokedMarks, .line, line, part: .marker)
+        builder.stroke(solidLinesScenePath, .line, line, part: .edge)
+        builder.stroke(dashedLinesScenePath, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedDashLengths), part: .edge)
+        builder.stroke(dottedLinesScenePath, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
+        builder.fill(filledMarksScenePath, .line, part: .marker)
+        builder.stroke(strokedMarksScenePath, .line, line, part: .marker)
         namespaces.addCrossedTitles(to: &builder)
-        builder.fill(edgeTextPatches, .background, part: .labelBackground)
+        builder.fill(edgeTextPatchesScenePath, .background, part: .labelBackground)
         builder.texts(edgeTexts, .foreground, part: .edgeLabel)
         builder.texts(cardinalities, .muted, part: .edgeLabel)
-        builder.fill(classFills, .surface, part: .node)
-        builder.fill(noteFills, .alternateSurface, part: .note)
-        builder.stroke(outlines, .border, line, part: .node)
+        builder.fill(classFillsScenePath, .surface, part: .node)
+        builder.fill(noteFillsScenePath, .alternateSurface, part: .note)
+        builder.stroke(outlinesScenePath, .border, line, part: .node)
         builder.texts(annotations, .muted, part: .label)
         builder.texts(names, .foreground, isBold: true, part: .label)
         for member in members {
@@ -50,7 +50,7 @@ extension ClassDiagramDrawingParts {
             case .abstract: builder.text(member.text, .foreground, isItalic: true, part: .label)
             }
         }
-        builder.stroke(memberUnderlines, .foreground, line, part: .label)
+        builder.stroke(memberUnderlinesScenePath, .foreground, line, part: .label)
         builder.texts(noteTexts, .foreground, part: .note)
         builder.title(title)
     }

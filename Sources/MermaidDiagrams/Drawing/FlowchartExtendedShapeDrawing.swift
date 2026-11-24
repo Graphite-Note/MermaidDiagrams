@@ -5,8 +5,8 @@
  * Description: The outlines and inner lines of the flowchart node shapes written by name only, as Pele draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -19,14 +19,14 @@ enum FlowchartExtendedShapeDrawing {
     private static let boxCornerRadius = FlowchartShapeDrawing.rectangleCornerRadius
 
     /// The filled and stroked outline, or nil for a shape without one.
-    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         if let corners = polygonCorners(of: shape, width: frame.width, height: frame.height) {
             var pen = FlowchartShapePen(center: CGPoint(x: frame.midX, y: frame.midY))
             pen.polygon(corners)
             return pen.path
         }
         switch shape {
-        case .ellipse, .smallCircle, .crossedCircle: return CGPath(ellipseIn: frame, transform: nil)
+        case .ellipse, .smallCircle, .crossedCircle: return DiagramScenePath(ellipseIn: frame)
         case .linedRectangle, .dividedRectangle, .windowPane, .console, .browser, .taggedRectangle:
             return roundedRectangle(frame, radius: boxCornerRadius)
         case .linedCylinder: return FlowchartShapeDrawing.cylinderBody(in: frame)
@@ -72,7 +72,7 @@ enum FlowchartExtendedShapeDrawing {
     }
 
     /// The lines drawn over the filled outline, or nil.
-    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> DiagramScenePath? {
         let center = CGPoint(x: frame.midX, y: frame.midY)
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
@@ -101,8 +101,8 @@ enum FlowchartExtendedShapeDrawing {
     }
 
     /// A browser's title bar: its lower line and three dots.
-    private static func browserLines(in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
+    private static func browserLines(in frame: CGRect) -> DiagramScenePath {
+        var path = DiagramScenePath()
         path.move(to: CGPoint(x: frame.minX, y: frame.minY + 12))
         path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY + 12))
         let dotRadius: CGFloat = 1.5
@@ -115,7 +115,7 @@ enum FlowchartExtendedShapeDrawing {
 
     /// A document's sheet, `width` by `height` around `center`: straight on three sides, its bottom a wave 10 points up
     /// from the box's bottom, Pele's `wave`.
-    static func wave(width: CGFloat, height: CGFloat, center: CGPoint) -> CGPath {
+    static func wave(width: CGFloat, height: CGFloat, center: CGPoint) -> DiagramScenePath {
         let halfWidth = width / 2
         let quarter = width / 4
         var pen = FlowchartShapePen(center: center)
@@ -129,8 +129,8 @@ enum FlowchartExtendedShapeDrawing {
     }
 
     /// A rectangle with its corners rounded, the radius kept within half its sides as SVG keeps it.
-    static func roundedRectangle(_ frame: CGRect, radius: CGFloat) -> CGPath {
+    static func roundedRectangle(_ frame: CGRect, radius: CGFloat) -> DiagramScenePath {
         let fitted = max(0, min(radius, frame.width / 2, frame.height / 2))
-        return CGPath(roundedRect: frame, cornerWidth: fitted, cornerHeight: fitted, transform: nil)
+        return DiagramScenePath(roundedRect: frame, cornerWidth: fitted, cornerHeight: fitted)
     }
 }

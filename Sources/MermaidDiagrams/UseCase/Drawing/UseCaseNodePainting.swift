@@ -6,8 +6,8 @@
  *              label, an oval or a box with its texts, a note with its folded corner, a JSON table with its rows.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -27,10 +27,10 @@ enum UseCaseNodePainting {
                          part: .label)
             return
         case .ellipse(let isBusiness):
-            builder.fillAndStroke(CGPath(ellipseIn: frame, transform: nil), fill: UseCaseScenePainting.fill(look, usual: .surface), stroke: strokePaint, stroke, part: .node)
+            builder.fillAndStroke(DiagramScenePath(ellipseIn: frame), fill: UseCaseScenePainting.fill(look, usual: .surface), stroke: strokePaint, stroke, part: .node)
             if isBusiness { builder.stroke(UseCaseFigureShapes.ellipseSlash(in: frame), strokePaint, stroke, part: .business) }
         case .rectangle:
-            builder.fillAndStroke(CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil),
+            builder.fillAndStroke(DiagramScenePath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius),
                                   fill: UseCaseScenePainting.fill(look, usual: .surface),
                                   stroke: strokePaint, stroke, part: .node)
         case .note:
@@ -74,8 +74,7 @@ enum UseCaseNodePainting {
             headY = UseCaseFigureShapes.iconHeadCenterY
             radius = UseCaseFigureShapes.iconHeadRadius
             let box = UseCaseFigureShapes.iconBox.offsetBy(dx: middle.x, dy: middle.y)
-            builder.fillAndStroke(CGPath(roundedRect: box, cornerWidth: UseCaseScenePainting.cornerRadius, cornerHeight: UseCaseScenePainting.cornerRadius,
-                                         transform: nil), fill: fill(.surface), stroke: strokePaint, stroke, part: .actorFigure)
+            builder.fillAndStroke(DiagramScenePath(roundedRect: box, cornerWidth: UseCaseScenePainting.cornerRadius, cornerHeight: UseCaseScenePainting.cornerRadius), fill: fill(.surface), stroke: strokePaint, stroke, part: .actorFigure)
         }
         if isBusiness { builder.stroke(UseCaseFigureShapes.actorSlash(headY: headY, radius: radius, at: middle), strokePaint, stroke, part: .business) }
     }
@@ -85,7 +84,7 @@ enum UseCaseNodePainting {
         let look = node.look
         let (strokePaint, stroke) = UseCaseScenePainting.outline(look)
         let radius = UseCaseScenePainting.cornerRadius
-        builder.fillAndStroke(CGPath(roundedRect: node.frame, cornerWidth: radius, cornerHeight: radius, transform: nil),
+        builder.fillAndStroke(DiagramScenePath(roundedRect: node.frame, cornerWidth: radius, cornerHeight: radius),
                               fill: UseCaseScenePainting.fill(look, usual: .surface), stroke: strokePaint, stroke, part: .node)
         builder.stroke(UseCaseFigureShapes.tableLines(in: node.frame, headHeight: node.headHeight, keyColumnWidth: node.keyColumnWidth), strokePaint, stroke,
                        part: .jsonLines)

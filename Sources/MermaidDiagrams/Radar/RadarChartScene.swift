@@ -5,7 +5,7 @@
  * Description: A laid-out radar chart's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -24,15 +24,15 @@ extension DiagramScene {
 extension RadarChartDrawingParts {
     func addScene(to builder: inout DiagramSceneBuilder) {
         builder.title(title)
-        builder.stroke(graticule, .alternateSurface, DiagramStroke(lineWidth: Self.lineWidth), part: .graticule)
-        builder.stroke(spokes, .border, DiagramStroke(lineWidth: Self.lineWidth), part: .axis)
+        builder.stroke(graticuleScenePath, .alternateSurface, DiagramStroke(lineWidth: Self.lineWidth), part: .graticule)
+        builder.stroke(spokesScenePath, .border, DiagramStroke(lineWidth: Self.lineWidth), part: .axis)
         for curve in curves {
-            builder.fillAndStroke(curve.path, fill: DiagramPaint.series(curve.seriesIndex).atOpacity(Self.curveFillOpacity), stroke: .series(curve.seriesIndex),
+            builder.fillAndStroke(curve.pathScenePath, fill: DiagramPaint.series(curve.seriesIndex).atOpacity(Self.curveFillOpacity), stroke: .series(curve.seriesIndex),
                                   DiagramStroke(lineWidth: Self.curveLineWidth, lineJoin: .round), part: .curve)
         }
         builder.texts(axisLabels, .foreground, part: .axisLabel)
         for swatch in legendSwatches {
-            builder.fillAndStroke(swatch.path, fill: DiagramPaint.series(swatch.seriesIndex).atOpacity(Self.swatchFillOpacity), stroke: .series(swatch.seriesIndex),
+            builder.fillAndStroke(swatch.pathScenePath, fill: DiagramPaint.series(swatch.seriesIndex).atOpacity(Self.swatchFillOpacity), stroke: .series(swatch.seriesIndex),
                                   DiagramStroke(lineWidth: Self.lineWidth), part: .legend)
         }
         builder.texts(legendTexts, .foreground, part: .legend)

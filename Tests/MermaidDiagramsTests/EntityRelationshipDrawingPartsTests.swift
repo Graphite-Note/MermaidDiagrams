@@ -11,11 +11,11 @@ final class EntityRelationshipDrawingPartsTests: XCTestCase {
 
     /// The mark of `cardinality` at the origin, on a line that comes up from below into a box above.
     private func markPaths(_ cardinality: EntityRelationshipCardinality) -> (fills: CGPath, outlines: CGPath) {
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
+        var fills = DiagramScenePath()
+        var outlines = DiagramScenePath()
         let mark = EntityRelationshipCardinalityMark(cardinality: cardinality, tip: .zero, direction: CGVector(dx: 0, dy: -1))
-        EntityRelationshipCardinalityDrawing.addMark(mark, fills: fills, outlines: outlines)
-        return (fills, outlines)
+        EntityRelationshipCardinalityDrawing.addMark(mark, fills: &fills, outlines: &outlines)
+        return (fills.coreGraphicsPath, outlines.coreGraphicsPath)
     }
 
     private func assertBounds(_ path: CGPath, _ expected: CGRect, _ message: String, line: UInt = #line) {

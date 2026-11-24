@@ -6,8 +6,8 @@
  *              the text, the title.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -21,16 +21,19 @@ public struct MindmapDrawingParts {
     public struct Branch {
         public let branchIndex: Int
         /// The links into the branch's nodes, stroked `linkLineWidth` wide in the branch's color.
-        public let links: CGPath
+        public var links: CGPath { linksScenePath.coreGraphicsPath }
+        let linksScenePath: DiagramScenePath
         /// The outlines of the branch's nodes, filled with the branch's color at `nodeFillOpacity` and stroked
         /// `outlineLineWidth` wide in it. A node drawn as text alone has none.
-        public let nodeOutlines: CGPath
+        public var nodeOutlines: CGPath { nodeOutlinesScenePath.coreGraphicsPath }
+        let nodeOutlinesScenePath: DiagramScenePath
     }
 
     /// The branches with something to paint, by number.
     public let branches: [Branch]
     /// The root's outline, filled in the surface color and stroked in the border color.
-    public let rootOutline: CGPath
+    public var rootOutline: CGPath { rootOutlineScenePath.coreGraphicsPath }
+    let rootOutlineScenePath: DiagramScenePath
     /// Every node's text, in the foreground color.
     public let nodeTexts: [DiagramTextBlock]
     /// The title, drawn bold, or nil.
@@ -42,11 +45,11 @@ public struct MindmapDrawingParts {
     public static let nodeFillOpacity: CGFloat = 0.22
 
     public init(layout: MindmapLayout) {
-        let links = (0..<MindmapNode.branchCount).map { _ in CGMutablePath() }
-        let outlines = (0..<MindmapNode.branchCount).map { _ in CGMutablePath() }
-        let rootOutline = CGMutablePath()
+        var links = (0..<MindmapNode.branchCount).map { _ in DiagramScenePath() }
+        var outlines = (0..<MindmapNode.branchCount).map { _ in DiagramScenePath() }
+        var rootOutline = DiagramScenePath()
         for edge in layout.edges {
-            links[edge.branchIndex % MindmapNode.branchCount].addPath(DiagramEdgeDrawing.path(edge.path))
+            links[edge.branchIndex % MindmapNode.branchCount].addEdgePath(edge.path)
         }
         for node in layout.nodes {
             guard let outline = MindmapShapeDrawing.outline(of: node.outline, in: node.frame) else { continue }
@@ -58,9 +61,9 @@ public struct MindmapDrawingParts {
         }
         branches = (0..<MindmapNode.branchCount).compactMap { branchIndex in
             links[branchIndex].isEmpty && outlines[branchIndex].isEmpty ? nil
-                : Branch(branchIndex: branchIndex, links: links[branchIndex], nodeOutlines: outlines[branchIndex])
+                : Branch(branchIndex: branchIndex, linksScenePath: links[branchIndex], nodeOutlinesScenePath: outlines[branchIndex])
         }
-        self.rootOutline = rootOutline
+        self.rootOutlineScenePath = rootOutline
         nodeTexts = layout.nodes.flatMap { node in node.isTextLeftAligned ? node.text.leftAlignedLines() : [node.text] }
         title = layout.title
     }

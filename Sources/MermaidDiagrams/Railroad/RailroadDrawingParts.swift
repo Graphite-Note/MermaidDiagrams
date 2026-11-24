@@ -6,8 +6,8 @@
  *              order, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -20,12 +20,18 @@ import CoreGraphics
 public struct RailroadDrawingParts {
     public let title: DiagramTextBlock?
     public let ruleNames: [DiagramTextBlock]
-    public let track: CGPath
-    public let arrows: CGPath
-    public let markers: CGPath
-    public let terminals: CGPath
-    public let nonterminals: CGPath
-    public let specials: CGPath
+    public var track: CGPath { trackScenePath.coreGraphicsPath }
+    let trackScenePath: DiagramScenePath
+    public var arrows: CGPath { arrowsScenePath.coreGraphicsPath }
+    let arrowsScenePath: DiagramScenePath
+    public var markers: CGPath { markersScenePath.coreGraphicsPath }
+    let markersScenePath: DiagramScenePath
+    public var terminals: CGPath { terminalsScenePath.coreGraphicsPath }
+    let terminalsScenePath: DiagramScenePath
+    public var nonterminals: CGPath { nonterminalsScenePath.coreGraphicsPath }
+    let nonterminalsScenePath: DiagramScenePath
+    public var specials: CGPath { specialsScenePath.coreGraphicsPath }
+    let specialsScenePath: DiagramScenePath
     /// Drawn in the system's monospaced font.
     public let terminalTexts: [DiagramTextBlock]
     public let nonterminalTexts: [DiagramTextBlock]
@@ -42,11 +48,11 @@ public struct RailroadDrawingParts {
     public init(layout: RailroadLayout) {
         title = layout.title
         ruleNames = layout.rules.map(\.name)
-        let track = CGMutablePath()
-        let arrows = CGMutablePath()
-        let markers = CGMutablePath()
+        var track = DiagramScenePath()
+        var arrows = DiagramScenePath()
+        var markers = DiagramScenePath()
         for rule in layout.rules {
-            for piece in rule.track { track.addPath(DiagramEdgeDrawing.path(piece)) }
+            for piece in rule.track { track.addEdgePath(piece) }
             for arrow in rule.arrows {
                 arrows.addLines(between: arrow.points)
                 arrows.closeSubpath()
@@ -56,13 +62,13 @@ public struct RailroadDrawingParts {
                                               height: 2 * layout.markerRadius))
             }
         }
-        self.track = track
-        self.arrows = arrows
-        self.markers = markers
+        self.trackScenePath = track
+        self.arrowsScenePath = arrows
+        self.markersScenePath = markers
         let boxes = layout.rules.flatMap(\.boxes)
-        terminals = Self.outlines(boxes, .terminal) { frame in frame.height / 2 }
-        nonterminals = Self.outlines(boxes, .nonterminal) { _ in Self.cornerRadius }
-        specials = Self.outlines(boxes, .special) { _ in Self.cornerRadius }
+        terminalsScenePath = Self.outlines(boxes, .terminal) { frame in frame.height / 2 }
+        nonterminalsScenePath = Self.outlines(boxes, .nonterminal) { _ in Self.cornerRadius }
+        specialsScenePath = Self.outlines(boxes, .special) { _ in Self.cornerRadius }
         terminalTexts = boxes.filter { box in box.kind == .terminal }.map(\.text)
         nonterminalTexts = boxes.filter { box in box.kind == .nonterminal }.map(\.text)
         specialTexts = boxes.filter { box in box.kind == .special }.map(\.text)
@@ -71,8 +77,8 @@ public struct RailroadDrawingParts {
         lineWidth = layout.lineWidth
     }
 
-    private static func outlines(_ boxes: [RailroadLayoutBox], _ kind: RailroadLayoutBox.Kind, radius: (CGRect) -> CGFloat) -> CGPath {
-        let path = CGMutablePath()
+    private static func outlines(_ boxes: [RailroadLayoutBox], _ kind: RailroadLayoutBox.Kind, radius: (CGRect) -> CGFloat) -> DiagramScenePath {
+        var path = DiagramScenePath()
         for box in boxes where box.kind == kind {
             let corner = min(radius(box.frame), box.frame.width / 2, box.frame.height / 2)
             path.addRoundedRect(in: box.frame, cornerWidth: corner, cornerHeight: corner)
@@ -95,12 +101,12 @@ extension RailroadDrawingParts {
         let line = DiagramStroke(lineWidth: lineWidth)
         builder.title(title)
         builder.texts(ruleNames, .foreground, isBold: true, part: .clusterLabel)
-        builder.stroke(track, .line, line, part: .edge)
-        builder.fill(arrows, .line, part: .marker)
-        builder.fill(markers, .line, part: .marker)
-        builder.fillAndStroke(terminals, fill: .surface, stroke: .border, line, part: .node)
-        builder.fillAndStroke(nonterminals, fill: .background, stroke: .border, line, part: .node)
-        builder.fillAndStroke(specials, fill: .background, stroke: .border, DiagramStroke(lineWidth: lineWidth, dashLengths: Self.specialDashLengths), part: .node)
+        builder.stroke(trackScenePath, .line, line, part: .edge)
+        builder.fill(arrowsScenePath, .line, part: .marker)
+        builder.fill(markersScenePath, .line, part: .marker)
+        builder.fillAndStroke(terminalsScenePath, fill: .surface, stroke: .border, line, part: .node)
+        builder.fillAndStroke(nonterminalsScenePath, fill: .background, stroke: .border, line, part: .node)
+        builder.fillAndStroke(specialsScenePath, fill: .background, stroke: .border, DiagramStroke(lineWidth: lineWidth, dashLengths: Self.specialDashLengths), part: .node)
         builder.texts(terminalTexts, .foreground, isMonospaced: true, part: .label)
         builder.texts(nonterminalTexts, .foreground, part: .label)
         builder.texts(specialQuestionMarks, .muted, isItalic: true, part: .label)

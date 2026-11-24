@@ -16,13 +16,13 @@ import XCTest
 @testable import MermaidDiagramsBenchmark
 
 final class DiagramSceneBuilderTests: XCTestCase {
-    private func square(at x: CGFloat) -> CGPath {
-        CGPath(rect: CGRect(x: x, y: 0, width: 10, height: 10), transform: nil)
+    private func square(at x: CGFloat) -> DiagramScenePath {
+        DiagramScenePath(rect: CGRect(x: x, y: 0, width: 10, height: 10))
     }
 
     func testEmptyPathsAndTextsWithoutLinesAreLeftOut() {
         var builder = DiagramSceneBuilder()
-        builder.fill(CGMutablePath(), .surface, part: .node)
+        builder.fill(DiagramScenePath(), .surface, part: .node)
         builder.text(nil, .foreground, part: .label)
         XCTAssertTrue(builder.items.isEmpty)
     }
