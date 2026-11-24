@@ -158,8 +158,8 @@ extension FlowchartClusterDrawingParts {
     /// Each box's inside: the alternate surface at `fillOpacity`.
     static let boxPaint = DiagramPaint.alternateSurface.atOpacity(fillOpacity)
 
-    /// The boxes as Core Graphics paths, for the state, class and entity relationship diagrams that draw their groups as
-    /// a flowchart draws its own and do not record into lanes yet: as `FlowchartSceneRecording` adds them.
+    /// The boxes as Core Graphics paths, as `FlowchartSceneRecording` adds them from lanes: for a scene made from the
+    /// public drawing parts' Core Graphics paths.
     func addBoxes(to builder: inout DiagramSceneBuilder) {
         for depthFill in fillsByDepth { builder.fill(depthFill, Self.boxPaint, part: .cluster) }
         builder.stroke(outlines, .border, .rounded(lineWidth: FlowchartDrawingParts.lineWidth), part: .cluster)

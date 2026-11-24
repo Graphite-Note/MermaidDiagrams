@@ -2,7 +2,7 @@
  * File: ReferenceGraphTypeScenes.swift
  * ------------------------------------
  * Layer: Tests
- * Description: 0.7.0's state and class diagram scenes, frozen as main 2a0cc65 made them from Core Graphics paths (the
+ * Description: 0.7.0's state, class and entity relationship diagram scenes, frozen as main 2a0cc65 made them from Core Graphics paths (the
  *              public drawing parts and the builder's Core Graphics paths), which the scenes recorded into lanes are
  *              compared with.
  *
@@ -74,6 +74,31 @@ enum ReferenceClassDiagramScene {
         }
         builder.stroke(parts.memberUnderlines, .foreground, line, part: .label)
         builder.texts(parts.noteTexts, .foreground, part: .note)
+        builder.title(parts.title)
+        return builder.scene(size: layout.size, font: layout.font)
+    }
+}
+
+/// 0.7.0's entity relationship diagram scene, made from the public drawing parts' Core Graphics paths.
+enum ReferenceEntityRelationshipScene {
+    static func scene(layout: EntityRelationshipLayout) -> DiagramScene {
+        var builder = DiagramSceneBuilder()
+        let parts = EntityRelationshipDrawingParts(layout: layout)
+        let line = DiagramStroke.rounded(lineWidth: EntityRelationshipDrawingParts.lineWidth)
+        parts.subgraphs.addBoxes(to: &builder)
+        builder.stroke(parts.identifyingLines, .line, line, part: .edge)
+        builder.stroke(parts.nonIdentifyingLines, .line,
+                       .rounded(lineWidth: EntityRelationshipDrawingParts.lineWidth, dashLengths: EntityRelationshipDrawingParts.nonIdentifyingDashLengths),
+                       part: .edge)
+        builder.fill(parts.markFills, .background, part: .marker)
+        builder.stroke(parts.markOutlines, .line, line, part: .marker)
+        builder.fill(parts.labelPatches, .background, part: .labelBackground)
+        builder.texts(parts.labels, .foreground, part: .edgeLabel)
+        builder.fill(parts.boxFills, .surface, part: .node)
+        builder.fill(parts.rowStripes, .background, part: .node)
+        builder.stroke(parts.boxOutlines, .border, line, part: .node)
+        builder.texts(parts.entityTexts, .foreground, part: .label)
+        builder.texts(parts.attributeDetails, DiagramPaint.foreground.atOpacity(EntityRelationshipDrawingParts.mutedTextOpacity), part: .label)
         builder.title(parts.title)
         return builder.scene(size: layout.size, font: layout.font)
     }
