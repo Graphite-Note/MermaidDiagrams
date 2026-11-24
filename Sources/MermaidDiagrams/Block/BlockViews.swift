@@ -6,7 +6,7 @@
  *              text, its shape's or arrow's size around it, a composite's title and the room around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -59,6 +59,11 @@ struct BlockViews {
                                          titleWidth: CGFloat) {
         var cache = BlockMeasurerCache(measurers: measurers)
         var queue = [(block: BlockDiagram.rootIndex, parent: -1)]
+        queue.reserveCapacity(diagram.blocks.count)
+        cells.reserveCapacity(diagram.blocks.count)
+        views.reserveCapacity(diagram.blocks.count)
+        parentIndices.reserveCapacity(diagram.blocks.count)
+        cellIndicesByIdentifier.reserveCapacity(diagram.blocks.count)
         var next = 0
         while next < queue.count {
             let (blockIndex, parent) = queue[next]
@@ -74,7 +79,9 @@ struct BlockViews {
             views.append(measured.view)
             parentIndices.append(parent)
             if measured.view.kind != .space { cellIndicesByIdentifier[block.identifier] = index }
-            if measured.view.kind == .composite { queue += block.childIndices.map { child in (child, index) } }
+            if measured.view.kind == .composite {
+                for child in block.childIndices { queue.append((child, index)) }
+            }
         }
     }
 
@@ -125,6 +132,8 @@ struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
     private var restyled: [BlockTextLook: Measurer] = [:]
     /// The appearance of each pair of class names and styles met, read once: blocks of one class share theirs.
     private var appearances: [BlockStyling: BlockAppearance] = [:]
+    /// The appearance of a block with neither classes nor styles, most blocks: read once, without hashing its key.
+    private var plainAppearance: BlockAppearance?
 
     private struct BlockStyling: Hashable {
         let classNames: [String]?
@@ -143,6 +152,12 @@ struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
 
     /// The appearance of a block of `classNames` with `styles`, the diagram's classes being `classes` for every call.
     mutating func appearance(classNames: [String]?, styles: [String]?, classes: [String: BlockClassDefinition]) -> BlockAppearance {
+        if classNames == nil, styles == nil {
+            if let plainAppearance { return plainAppearance }
+            let made = BlockAppearance(classNames: nil, styles: nil, classes: classes)
+            plainAppearance = made
+            return made
+        }
         let styling = BlockStyling(classNames: classNames, styles: styles)
         if let known = appearances[styling] { return known }
         let made = BlockAppearance(classNames: classNames, styles: styles, classes: classes)

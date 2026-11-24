@@ -6,8 +6,8 @@
  *              sizes, each pair as far apart as its overlap asks, two and three sets exactly, more by relaxing a ring.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -40,6 +40,9 @@ struct VennCirclePlacement {
     static let mostRelaxationRounds = 300
     /// The pair steps the relaxation may take over all its rounds.
     static let relaxationPairStepBudget = 3_000_000.0
+    /// Up to this many circles, the relaxation reads the wanted distances from a table of every pair instead of looking
+    /// each up by its key: 4,096 pairs at most.
+    static let largestDistanceTable = 64
 
     /// Places the circles of `subsets`. The pairwise overlaps they state and imply, and the distances found for them, are
     /// at most `limits.maximumLayoutPointCount`, else the diagram is refused before any is made.
@@ -152,17 +155,46 @@ struct VennCirclePlacement {
                 circles[index].y = Double(index / columns) * cell
             }
         }
-        for _ in 0..<Self.relaxationRounds(circleCount: count) { relaxOnce() }
+        let rounds = Self.relaxationRounds(circleCount: count)
+        guard rounds > 0 else { return }
+        var moves = Moves(count: count)
+        var table: [Double?] = []
+        if count <= Self.largestDistanceTable {
+            table = [Double?](repeating: nil, count: count * count)
+            for (key, distance) in wantedDistances { table[key] = distance }
+        }
+        for _ in 0..<rounds { relaxOnce(&moves, table: table) }
     }
 
-    private mutating func relaxOnce() {
+    /// Each circle's moves in a round, added up, and how many pairs moved it: made once, cleared each round.
+    private struct Moves {
+        var moveX: [Double]
+        var moveY: [Double]
+        var pulls: [Int]
+
+        init(count: Int) {
+            moveX = [Double](repeating: 0, count: count)
+            moveY = [Double](repeating: 0, count: count)
+            pulls = [Int](repeating: 0, count: count)
+        }
+
+        mutating func clear() {
+            for index in pulls.indices {
+                moveX[index] = 0
+                moveY[index] = 0
+                pulls[index] = 0
+            }
+        }
+    }
+
+    /// One round: `table` holds the wanted distance of each pair by its key, else is empty and `wantedDistances` does.
+    private mutating func relaxOnce(_ moves: inout Moves, table: [Double?]) {
         let count = circles.count
-        var moveX = [Double](repeating: 0, count: count)
-        var moveY = [Double](repeating: 0, count: count)
-        var pulls = [Int](repeating: 0, count: count)
+        moves.clear()
         for first in 0..<count {
             for second in (first + 1)..<count {
-                let overlap = wantedDistances[first * count + second]
+                let key = first * count + second
+                let overlap = table.isEmpty ? wantedDistances[key] : table[key]
                 let apart = circles[first].radius + circles[second].radius + gap
                 var unitX = circles[second].x - circles[first].x
                 var unitY = circles[second].y - circles[first].y
@@ -174,17 +206,17 @@ struct VennCirclePlacement {
                     length = 1
                 }
                 let move = (length - (overlap ?? apart)) / 2 / length
-                moveX[first] += unitX * move
-                moveY[first] += unitY * move
-                moveX[second] -= unitX * move
-                moveY[second] -= unitY * move
-                pulls[first] += 1
-                pulls[second] += 1
+                moves.moveX[first] += unitX * move
+                moves.moveY[first] += unitY * move
+                moves.moveX[second] -= unitX * move
+                moves.moveY[second] -= unitY * move
+                moves.pulls[first] += 1
+                moves.pulls[second] += 1
             }
         }
-        for index in 0..<count where pulls[index] > 0 {
-            circles[index].x += moveX[index] / Double(pulls[index])
-            circles[index].y += moveY[index] / Double(pulls[index])
+        for index in 0..<count where moves.pulls[index] > 0 {
+            circles[index].x += moves.moveX[index] / Double(moves.pulls[index])
+            circles[index].y += moves.moveY[index] / Double(moves.pulls[index])
         }
     }
 }

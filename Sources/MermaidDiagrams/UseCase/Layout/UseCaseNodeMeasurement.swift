@@ -7,8 +7,8 @@
  *              title and padding.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -113,6 +113,7 @@ enum UseCaseNodeMeasurement {
         let leastRowHeight = (small * 1.5).rounded()
         var valueWidth: CGFloat = 0
         var height: CGFloat = 0
+        view.rows.reserveCapacity(rows.count)
         for row in rows {
             let key = UseCaseTextLabel.block(row.key, measurer: cellMeasurer, room: titleRoom)
             let value = UseCaseTextLabel.block(row.value, measurer: cellMeasurer, room: jsonValueRoom)
