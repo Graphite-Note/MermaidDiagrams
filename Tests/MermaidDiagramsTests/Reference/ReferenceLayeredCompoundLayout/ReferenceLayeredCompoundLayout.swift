@@ -6,7 +6,7 @@
  *              a graph in nested groups, ported step for step from layout/compound.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -24,7 +24,7 @@ struct ReferenceLayeredCompoundLayout {
     let rootDirection: LayeredDirection
     let maximumVertexCount: Int
     /// The levels in breadth-first order, the top level first, and the level of each group by node (-1 for none).
-    var levels: [LayeredCompoundLevel] = []
+    var levels: [ReferenceLayeredCompoundLevel] = []
     var levelOfGroup: [Int]
     var depth: [Int]
     /// Each item's index in the level being built.
@@ -79,7 +79,7 @@ struct ReferenceLayeredCompoundLayout {
     private mutating func buildLevels() {
         let nodeCount = nodes.count
         var children = [[Int]](repeating: [], count: nodeCount)
-        var root = LayeredCompoundLevel(identifier: -1, direction: rootDirection)
+        var root = ReferenceLayeredCompoundLevel(identifier: -1, direction: rootDirection)
         for node in 0..<nodeCount {
             let parent = nodes[node].parent
             if parent >= 0 && parent < nodeCount && parent != node && nodes[parent].isGroup {
@@ -117,7 +117,7 @@ struct ReferenceLayeredCompoundLayout {
     }
 
     private mutating func appendLevel(of group: Int, direction: LayeredDirection, items: [Int]) {
-        var level = LayeredCompoundLevel(identifier: group, direction: direction)
+        var level = ReferenceLayeredCompoundLevel(identifier: group, direction: direction)
         level.items = items
         levelOfGroup[group] = levels.count
         levels.append(level)

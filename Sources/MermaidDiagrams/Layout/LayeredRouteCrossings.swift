@@ -5,7 +5,7 @@
  * Description: Counts how often the drawn routes of Pele's compound layout cross (compound.ts routeCrossings).
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -76,27 +76,62 @@ struct LayeredRouteSegments {
 /// in or out at a shared node or merge into a shared run of their ends.
 enum LayeredRouteCrossings {
     static func count(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], style: LayeredRouteStyle) -> Int {
-        #if DEBUG
-        LayeredLayoutRecording.current?.routeCrossings.append((nodes, edges, style))
-        #endif
-        return DiagramScratchArena.withCurrentThread { arena in
-            var pointCount = 0
-            for edge in edges { pointCount += edge.route.count }
-            var segments = LayeredRouteSegments(capacity: 4 * pointCount, arena: arena)
-            for (edgeIndex, edge) in edges.enumerated() where edge.source != edge.target {
-                cut(edge.route, edge: edgeIndex, style: style, into: &segments)
+        DiagramScratchArena.withCurrentThread { arena in
+            let nodeSpan: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodes.count)
+            for index in nodes.indices { nodeSpan[index] = nodes[index] }
+            let edgeSpan: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: edges.count)
+            var routePoints = arena.list(capacity: 0, of: LayeredRoutePoint.self)
+            for (index, edge) in edges.enumerated() {
+                edgeSpan[index] = LayeredCompoundSpanEdge(edge)
+                edgeSpan[index].routeStart = routePoints.count
+                edgeSpan[index].routeCount = edge.route.count
+                for point in edge.route { routePoints.append(point) }
             }
-            // The straight runs at the ends of each route, four points an edge; an edge of fewer than two points has none.
-            let runs: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: 4 * edges.count)
-            let hasRuns: ScratchSpan<Bool> = arena.uninitializedSpan(count: edges.count)
-            for (edgeIndex, edge) in edges.enumerated() { hasRuns[edgeIndex] = writeEndRuns(of: edge.route, into: runs.part((4 * edgeIndex)..<(4 * edgeIndex + 4))) }
-            return countCrossings(segments, nodes: nodes, edges: edges, runs: LayeredRouteEndRuns(points: runs, hasRuns: hasRuns), arena: arena)
+            return count(nodes: nodeSpan, edges: edgeSpan, routePoints: routePoints.elements, style: style, arena: arena)
         }
     }
 
+    /// The crossings of `edges`, each route a range of `routePoints`, between `nodes`.
+    static func count(nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, routePoints: ScratchSpan<LayeredRoutePoint>,
+                      style: LayeredRouteStyle, arena: DiagramScratchArena) -> Int {
+        #if DEBUG
+        record(nodes: nodes, edges: edges, routePoints: routePoints, style: style)
+        #endif
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        func route(of edge: LayeredCompoundSpanEdge) -> ScratchSpan<LayeredRoutePoint> { routePoints.part(edge.routeStart..<(edge.routeStart + edge.routeCount)) }
+        var pointCount = 0
+        for edge in edges { pointCount += edge.routeCount }
+        var segments = LayeredRouteSegments(capacity: 4 * pointCount, arena: arena)
+        for (edgeIndex, edge) in edges.enumerated() where edge.source != edge.target {
+            cut(route(of: edge), edge: edgeIndex, style: style, into: &segments)
+        }
+        // The straight runs at the ends of each route, four points an edge; an edge of fewer than two points has none.
+        let runs: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: 4 * edges.count)
+        let hasRuns: ScratchSpan<Bool> = arena.uninitializedSpan(count: edges.count)
+        for (edgeIndex, edge) in edges.enumerated() { hasRuns[edgeIndex] = writeEndRuns(of: route(of: edge), into: runs.part((4 * edgeIndex)..<(4 * edgeIndex + 4))) }
+        return countCrossings(segments, nodes: nodes, edges: edges, runs: LayeredRouteEndRuns(points: runs, hasRuns: hasRuns), arena: arena)
+    }
+
+    #if DEBUG
+    /// The nodes and edges counted, as lists, for the tests that count every compound layout's crossings again.
+    private static func record(nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, routePoints: ScratchSpan<LayeredRoutePoint>,
+                               style: LayeredRouteStyle) {
+        guard let recording = LayeredLayoutRecording.current else { return }
+        let recordedEdges = edges.map { edge in
+            var recorded = LayeredCompoundEdge(source: edge.source, target: edge.target, minimumLength: edge.minimumLength, labelWidth: edge.labelWidth,
+                                               labelHeight: edge.labelHeight)
+            recorded.labelCenter = edge.labelCenter
+            recorded.route = Array(routePoints.part(edge.routeStart..<(edge.routeStart + edge.routeCount)))
+            return recorded
+        }
+        recording.routeCrossings.append((Array(nodes), recordedEdges, style))
+    }
+    #endif
+
     /// The straight run at each end of a route: its first point to where it leaves that line, and the last likewise,
     /// written to `runs`; whether the route has them (two points or more).
-    private static func writeEndRuns(of route: [LayeredRoutePoint], into runs: ScratchSpan<CGPoint>) -> Bool {
+    private static func writeEndRuns(of route: ScratchSpan<LayeredRoutePoint>, into runs: ScratchSpan<CGPoint>) -> Bool {
         guard route.count >= 2 else { return false }
         func inLine(_ first: Int, _ second: Int, _ third: Int) -> Bool {
             let points = (route[first].point, route[second].point, route[third].point)

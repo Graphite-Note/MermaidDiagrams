@@ -5,7 +5,7 @@
  * Description: A level of Pele's compound layout as a box: its size around its content and its turn onto the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -39,11 +39,10 @@ struct LayeredCompoundBox {
         return CGPoint(x: offsetX + (isVertical ? flow.x : along), y: offsetY + (isVertical ? along : flow.x))
     }
 
-    func route(_ points: ScratchSpan<CGPoint>) -> [LayeredRoutePoint] {
-        var route: [LayeredRoutePoint] = []
-        route.reserveCapacity(points.count)
+    /// `points` turned onto the page, each run into along the level's flow, appended to `route`.
+    func appendRoute(_ points: ScratchSpan<CGPoint>, to route: inout [LayeredRoutePoint]) {
+        route.reserveCapacity(route.count + points.count)
         for point in points { route.append(LayeredRoutePoint(point: pagePoint(point), runsHorizontally: !direction.runsVertically)) }
-        return route
     }
 
     /// The point on `side` of the box in line with `point`.
@@ -58,41 +57,49 @@ struct LayeredCompoundBox {
 }
 
 extension LayeredCompoundLayout {
-    /// A port on the side the flow starts or ends at: its edge's route in the level runs on to the border.
-    mutating func placeBorderPort(_ portIndex: Int, of levelIndex: Int, route: [LayeredRoutePoint], box: LayeredCompoundBox) {
-        var route = route
-        let port = levels[levelIndex].ports[portIndex]
-        let end = port.isOutgoing ? route[route.count - 1] : route[0]
-        let border = box.borderPoint(on: port.side, from: end.point)
+    /// A port on the side the flow starts or ends at: its edge's route in the level (`flowRoute`, in flow space) runs on
+    /// to the border.
+    mutating func placeBorderPort(_ port: Int, route flowRoute: ScratchSpan<CGPoint>, box: LayeredCompoundBox) {
+        let isOutgoing = ports[port].isOutgoing
+        let end = box.pagePoint(isOutgoing ? flowRoute[flowRoute.count - 1] : flowRoute[0])
+        let border = box.borderPoint(on: ports[port].side, from: end)
         let borderPoint = LayeredRoutePoint(point: border, runsHorizontally: !box.direction.runsVertically)
-        if port.isOutgoing { route.append(borderPoint) } else { route.insert(borderPoint, at: 0) }
-        levels[levelIndex].ports[portIndex].borderPoint = border
-        levels[levelIndex].ports[portIndex].route = route
+        let start = routePoints.count
+        if !isOutgoing { routePoints.append(borderPoint) }
+        box.appendRoute(flowRoute, to: &routePoints)
+        if isOutgoing { routePoints.append(borderPoint) }
+        ports[port].borderPoint = border
+        ports[port].routeStart = start
+        ports[port].routeCount = routePoints.count - start
     }
 
     /// A port on a side across the flow: straight from its item's side, or from the port of the group its edge passes
     /// into, to the border.
-    mutating func placeSidePort(_ portIndex: Int, of levelIndex: Int, box: LayeredCompoundBox) {
-        let port = levels[levelIndex].ports[portIndex]
-        let item = nodes[port.inner]
+    mutating func placeSidePort(_ port: Int, box: LayeredCompoundBox) {
+        let record = ports[port]
+        let item = nodes[record.inner]
         var inner = CGPoint(x: item.x, y: item.y)
-        if item.isGroup && endsBelow(port.inner, edge: port.edgeIndex, isOutgoing: port.isOutgoing),
-           let innerPort = levels[levelOfGroup[port.inner]].port(edge: port.edgeIndex, isOutgoing: port.isOutgoing) {
-            inner.x += innerPort.borderPoint.x - item.width / 2
-            inner.y += innerPort.borderPoint.y - item.height / 2
+        let innerPort = item.isGroup && endsBelow(record.inner, edge: record.edgeIndex, isOutgoing: record.isOutgoing)
+            ? self.port(in: levelOfGroup[record.inner], edge: record.edgeIndex, isOutgoing: record.isOutgoing) : -1
+        if innerPort >= 0 {
+            inner.x += ports[innerPort].borderPoint.x - item.width / 2
+            inner.y += ports[innerPort].borderPoint.y - item.height / 2
         } else {
-            switch port.side {
+            switch record.side {
             case .top: inner.y -= item.height / 2
             case .bottom: inner.y += item.height / 2
             case .left: inner.x -= item.width / 2
             case .right: inner.x += item.width / 2
             }
         }
-        let border = box.borderPoint(on: port.side, from: inner)
-        let runsHorizontally = !port.side.isHorizontal
+        let border = box.borderPoint(on: record.side, from: inner)
+        let runsHorizontally = !record.side.isHorizontal
         let innerPoint = LayeredRoutePoint(point: inner, runsHorizontally: runsHorizontally)
         let borderPoint = LayeredRoutePoint(point: border, runsHorizontally: runsHorizontally)
-        levels[levelIndex].ports[portIndex].borderPoint = border
-        levels[levelIndex].ports[portIndex].route = port.isOutgoing ? [innerPoint, borderPoint] : [borderPoint, innerPoint]
+        ports[port].borderPoint = border
+        ports[port].routeStart = routePoints.count
+        ports[port].routeCount = 2
+        routePoints.append(record.isOutgoing ? innerPoint : borderPoint)
+        routePoints.append(record.isOutgoing ? borderPoint : innerPoint)
     }
 }

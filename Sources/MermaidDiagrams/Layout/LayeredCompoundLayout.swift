@@ -2,10 +2,11 @@
  * File: LayeredCompoundLayout.swift
  * ---------------------------------
  * Layer: Core
- * Description: Pele's compound layout of a graph in nested groups, ported step for step from layout/compound.ts.
+ * Description: Pele's compound layout of a graph in nested groups, ported step for step from layout/compound.ts, its
+ *              levels, ports, routes and keys in the calling thread's scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -14,135 +15,121 @@ import CoreGraphics
 /// Pele's `compoundLayout` (layout/compound.ts): each group is laid out on its own, in its own direction, by the flat
 /// layered layout, then placed in its parent as one box; an edge that crosses a group's border passes through a port on
 /// the side facing its other end. A flat layout of every node first keys the orders of all groups alike, and the port
-/// order is refined from the routes outside each group, each kept only when its routes cross less.
+/// order is refined from the routes outside each group, each kept only when its routes cross less. Every list is a span
+/// or a growing list of the arena: the levels' items, edges and ports are ranges of one list each, an edge end's ports
+/// are chained level to level, and every route is a range of one list of route points that only grows, so that a
+/// snapshot is a copy of the nodes', edges' and ports' plain values.
 struct LayeredCompoundLayout {
-    var nodes: [LayeredCompoundNode]
-    var edges: [LayeredCompoundEdge]
+    let nodes: ScratchSpan<LayeredCompoundNode>
+    let edges: ScratchSpan<LayeredCompoundSpanEdge>
     let options: LayeredFlatOptions
     let rootDirection: LayeredDirection
     let maximumVertexCount: Int
-    /// The levels in breadth-first order, the top level first, and the level of each group by node (-1 for none).
-    var levels: [LayeredCompoundLevel] = []
-    var levelOfGroup: [Int]
-    var depth: [Int]
+    /// The levels in breadth-first order, the top level first, and what they hold: items, edges and ports, each level's
+    /// a range of these.
+    var levels: ScratchList<LayeredCompoundLevel>
+    var levelItems: ScratchSpan<Int> = .empty
+    var levelEdges: ScratchSpan<LayeredCompoundLevelEdge> = .empty
+    var ports: ScratchSpan<LayeredCompoundPort> = .empty
+    /// The first port of each edge end (`edge * 2` leaving, `edge * 2 + 1` arriving), -1 for none.
+    var firstPortOfEdgeEnd: ScratchSpan<Int> = .empty
+    /// The level of each group by node (-1 for none).
+    let levelOfGroup: ScratchSpan<Int>
+    let depth: ScratchSpan<Int>
     /// Each item's index in the level being built.
-    var local: [Int]
-    var key: [Double]
+    let local: ScratchSpan<Int>
+    let key: ScratchSpan<Double>
     var isKeyed = false
     var isOrdered = false
     var flatCrossings = 0
-    /// From the flat layout: each edge's flat edge (-1 for none), the flat edges' (rank, position) points, and the
-    /// last flat rank each group occupies.
-    var flatEdgeOf: [Int] = []
-    var flatEdgePoints: [[CGPoint]] = []
-    var lastFlatRank: [Int] = []
+    /// From the flat layout: each edge's flat edge (-1 for none), the flat edges' (rank, position) points as ranges of
+    /// one list, and the last flat rank each group occupies.
+    var flatEdgeOf: ScratchSpan<Int> = .empty
+    var flatEdgePointRanges: ScratchSpan<LayeredIndexRange> = .empty
+    var flatEdgePoints: ScratchSpan<CGPoint> = .empty
+    var lastFlatRank: ScratchSpan<Int> = .empty
     var hasFarHint = false
     var total = (width: 0.0, height: 0.0)
-    var loops: [Int] = []
-    var strays: [Int] = []
-    /// The calling thread's arena, for the levels' flat graphs and layouts.
+    var loops: ScratchList<Int>
+    var strays: ScratchList<Int>
+    /// Every route written, edges', level edges' and ports', each a range of this list. It is the one list outside the
+    /// arena: it grows while each level is laid out, within the arena memory that level gives back.
+    var routePoints: [LayeredRoutePoint] = []
+    /// The calling thread's arena, for every list and the levels' flat graphs and layouts.
     let arena: DiagramScratchArena
 
-    init(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], rootDirection: LayeredDirection, options: LayeredFlatOptions,
-         maximumVertexCount: Int, arena: DiagramScratchArena) {
+    init(nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, rootDirection: LayeredDirection,
+         options: LayeredFlatOptions, maximumVertexCount: Int, arena: DiagramScratchArena) {
         self.arena = arena
         self.nodes = nodes
         self.edges = edges
         self.options = options
         self.rootDirection = rootDirection
         self.maximumVertexCount = maximumVertexCount
-        levelOfGroup = [Int](repeating: -1, count: nodes.count)
-        depth = [Int](repeating: 0, count: nodes.count)
-        local = [Int](repeating: 0, count: nodes.count)
-        key = [Double](repeating: .nan, count: nodes.count)
+        levels = arena.list(capacity: 4, of: LayeredCompoundLevel.self)
+        levelOfGroup = arena.span(count: nodes.count, repeating: -1)
+        depth = arena.span(count: nodes.count, repeating: 0)
+        local = arena.span(count: nodes.count, repeating: 0)
+        key = arena.span(count: nodes.count, repeating: .nan)
+        loops = arena.list(capacity: 0, of: Int.self)
+        strays = arena.list(capacity: 0, of: Int.self)
+        routePoints.reserveCapacity(8 * edges.count)
+    }
+
+    /// Lays the graph out in place in the arena and returns its width and height, or nil when a level would need more
+    /// vertices than the limit. Each edge's route is then a range of `routePoints`.
+    static func layout(_ layout: inout LayeredCompoundLayout) -> (width: Double, height: Double)? {
+        layout.buildLevels()
+        let ports = layout.budgetPorts()
+        layout.assignEdges()
+        layout.isOrdered = ports > 1 && ports <= LayeredCompoundConstants.maximumOrderedPorts
+            && layout.edges.count <= LayeredCompoundConstants.maximumOrderedEdges
+        return layout.arrange() ? layout.total : nil
     }
 
     /// Lays the graph out in place and returns its width and height, or nil when a level would need more vertices
-    /// than the limit.
+    /// than the limit: the lists copied into the calling thread's arena, laid out there, and copied back.
     static func layout(nodes: inout [LayeredCompoundNode], edges: inout [LayeredCompoundEdge], rootDirection: LayeredDirection,
                        options: LayeredFlatOptions, maximumVertexCount: Int = .max) -> (width: Double, height: Double)? {
-        let laidOut: LayeredCompoundLayout? = DiagramScratchArena.withCurrentThread { arena in
-            var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: rootDirection, options: options,
-                                               maximumVertexCount: maximumVertexCount, arena: arena)
-            layout.buildLevels()
-            let ports = layout.budgetPorts()
-            layout.assignEdges()
-            layout.isOrdered = ports > 1 && ports <= LayeredCompoundConstants.maximumOrderedPorts && edges.count <= LayeredCompoundConstants.maximumOrderedEdges
-            return layout.arrange() ? layout : nil
-        }
-        guard let laidOut else { return nil }
-        nodes = laidOut.nodes
-        edges = laidOut.edges
-        return laidOut.total
-    }
-
-    /// The top level and each group's level, breadth first; groups that contain each other, unreachable from the top,
-    /// lifted out to it. Each level's items in declaration order, a group's the smallest of what it holds.
-    private mutating func buildLevels() {
-        let nodeCount = nodes.count
-        var children = [[Int]](repeating: [], count: nodeCount)
-        var root = LayeredCompoundLevel(identifier: -1, direction: rootDirection)
-        for node in 0..<nodeCount {
-            let parent = nodes[node].parent
-            if parent >= 0 && parent < nodeCount && parent != node && nodes[parent].isGroup {
-                children[parent].append(node)
-            } else {
-                nodes[node].parent = -1
-                root.items.append(node)
+        DiagramScratchArena.withCurrentThread { arena in
+            let nodeSpan: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodes.count)
+            for index in nodes.indices { nodeSpan[index] = nodes[index] }
+            let edgeSpan: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: edges.count)
+            for index in edges.indices { edgeSpan[index] = LayeredCompoundSpanEdge(edges[index]) }
+            var laidOut = LayeredCompoundLayout(nodes: nodeSpan, edges: edgeSpan, rootDirection: rootDirection, options: options,
+                                                maximumVertexCount: maximumVertexCount, arena: arena)
+            guard let size = layout(&laidOut) else { return nil }
+            for index in nodes.indices { nodes[index] = nodeSpan[index] }
+            for index in edges.indices {
+                let edge = edgeSpan[index]
+                edges[index].source = edge.source
+                edges[index].target = edge.target
+                edges[index].labelCenter = edge.labelCenter
+                edges[index].route = Array(laidOut.routePoints[laidOut.routeRange(of: index)])
             }
-        }
-        levels = [root]
-        var isPlaced = [Bool](repeating: false, count: nodeCount)
-        descend(from: 0, children: children, isPlaced: &isPlaced)
-        for node in 0..<nodeCount where !isPlaced[node] {
-            let former = nodes[node].parent
-            children[former].removeAll { child in child == node }
-            nodes[node].parent = -1
-            levels[0].items.append(node)
-            isPlaced[node] = true
-            depth[node] = 0
-            if nodes[node].isGroup {
-                let from = levels.count
-                appendLevel(of: node, direction: nodes[node].direction ?? rootDirection, items: children[node])
-                descend(from: from, children: children, isPlaced: &isPlaced)
-            }
-        }
-        for levelIndex in stride(from: levels.count - 1, to: 0, by: -1) {
-            let smallest = levels[levelIndex].items.map { item in nodes[item].sequence }.min() ?? .infinity
-            if smallest != .infinity { nodes[levels[levelIndex].identifier].sequence = smallest }
-        }
-        for levelIndex in levels.indices {
-            levels[levelIndex].items.sortStably { first, second in
-                nodes[first].sequence != nodes[second].sequence ? nodes[first].sequence - nodes[second].sequence : Double(first - second)
-            }
+            return size
         }
     }
 
-    private mutating func appendLevel(of group: Int, direction: LayeredDirection, items: [Int]) {
-        var level = LayeredCompoundLevel(identifier: group, direction: direction)
-        level.items = items
-        levelOfGroup[group] = levels.count
-        levels.append(level)
-    }
-
-    private mutating func descend(from start: Int, children: [[Int]], isPlaced: inout [Bool]) {
-        var levelIndex = start
-        while levelIndex < levels.count {
-            let level = levels[levelIndex]
-            for item in level.items {
-                isPlaced[item] = true
-                depth[item] = level.identifier < 0 ? 0 : depth[level.identifier] + 1
-                if nodes[item].isGroup { appendLevel(of: item, direction: nodes[item].direction ?? level.direction, items: children[item]) }
-            }
-            levelIndex += 1
-        }
-    }
+    /// Where the route of `edge` is in `routePoints`.
+    @inline(__always)
+    func routeRange(of edge: Int) -> Range<Int> { edges[edge].routeStart..<(edges[edge].routeStart + edges[edge].routeCount) }
 
     /// The level that holds what sits directly in `group` (-1 for the top level).
+    @inline(__always)
     func levelIndex(of group: Int) -> Int { group < 0 ? 0 : levelOfGroup[group] }
 
     /// Whether the end of `edge` at `item` lies inside it rather than at it.
+    @inline(__always)
     func endsBelow(_ item: Int, edge: Int, isOutgoing: Bool) -> Bool {
         (isOutgoing ? edges[edge].source : edges[edge].target) != item
+    }
+
+    /// The port of the end of `edge` in the level `levelIndex`, or -1.
+    @inline(__always)
+    func port(in levelIndex: Int, edge: Int, isOutgoing: Bool) -> Int {
+        var port = firstPortOfEdgeEnd[edge * 2 + (isOutgoing ? 0 : 1)]
+        while port >= 0 && ports[port].level != levelIndex { port = ports[port].nextOfSameEnd }
+        return port
     }
 }

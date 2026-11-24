@@ -7,7 +7,7 @@
  *              layout, and the edges between a node and a flow around it drawn to the flow's border.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -38,13 +38,12 @@ public enum AgentFlowLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: AgentFlowDiagram, measurers: BlockMeasurers<Measurer>, font: DiagramFont,
                                                        limits: MermaidDiagramLimits,
                                                        isTurnedToRunDown: Bool = false) throws(FlowchartLayoutError) -> AgentFlowLayout {
-        var clustered = AgentFlowClusterGraph(graph: diagram.graph, direction: isTurnedToRunDown ? .topToBottom : diagram.direction)
-        clustered.flowchart.title = diagram.title
+        let clustered = AgentFlowClusterGraph(graph: diagram.graph, direction: isTurnedToRunDown ? .topToBottom : diagram.direction)
         let measurement = AgentFlowMeasurement(graph: diagram.graph, clustered: clustered, measurers: measurers, options: diagram.options)
-        clustered.flowchart = clustered.flowchart.retitlingSubgraphs(clustered.subgraphGraphIndices.map { group in measurement.groupTitles[group] })
+        let flowchart = clustered.flowchart(titles: clustered.subgraphGraphIndices.map { group in measurement.groupTitles[group] }, title: diagram.title)
         let spacing = LayeredSpacing(nodeSeparation: CGFloat(diagram.options.nodeSpacing), edgeSeparation: edgeSeparation,
                                      rankSeparation: CGFloat(diagram.options.rankSpacing), borderSeparation: borderSeparation)
-        let laidOut = try FlowchartLayoutEngine.layout(clustered.flowchart, measured: measurement.flowchartMeasurement, nodeText: measurers.nodeText,
+        let laidOut = try FlowchartLayoutEngine.layout(flowchart, measured: measurement.flowchartMeasurement, nodeText: measurers.nodeText,
                                                        font: font, limits: limits, spacing: spacing)
         return AgentFlowLayoutAssembly(diagram: diagram, clustered: clustered, measurement: measurement, laidOut: laidOut).layout
     }
@@ -74,7 +73,7 @@ struct AgentFlowMeasurement {
         let appearances = graph.nodes.map { node in BlockAppearance(classNames: nil, styles: node.compiledStyles + node.styles, classes: [:]) }
         textLooks = appearances.map { appearance in (appearance.isBold, appearance.isItalic) }
         var restyled = BlockMeasurerCache(measurers: measurers)
-        let count = clustered.flowchart.nodeCount
+        let count = clustered.flowchartNodeCount
         var texts = [DiagramTextBlock](repeating: DiagramTextBlock(label: DiagramLabel(lines: []), measurer: nodeText, maximumWidth: 0), count: count)
         var sizes = [CGSize](repeating: .zero, count: count)
         var offsets = [CGFloat](repeating: 0, count: count)
@@ -94,12 +93,8 @@ struct AgentFlowMeasurement {
         var heldEdgeTexts: [Int: DiagramTextBlock] = [:]
         for held in clustered.heldEdges { heldEdgeTexts[held.edgeIndex] = measuredText(of: held.edgeIndex) }
         self.heldEdgeTexts = heldEdgeTexts
-        var loops = [[Int]](repeating: [], count: count)
-        for (edgeIndex, edge) in clustered.flowchart.edgeDrawings.enumerated() where edge.sourceIndex == edge.targetIndex {
-            loops[edge.sourceIndex].append(edgeIndex)
-        }
         var flowchartMeasurement = FlowchartMeasurement(nodeTexts: texts, shapeSizes: sizes, textOffsets: offsets, edgeTexts: edgeTexts,
-                                                        selfLoopEdgeIndices: loops)
+                                                        selfLoopEdgeIndices: clustered.selfLoopEdgeIndices)
         // Pele gives an agent flow's nodes no span: the edges on one side of a node meet in its middle.
         flowchartMeasurement.spreadsEdgeEnds = false
         self.flowchartMeasurement = flowchartMeasurement
@@ -131,16 +126,5 @@ struct AgentFlowMeasurement {
         guard !declarations.isEmpty else { return nil }
         let style = DiagramElementStyle.reading(declarations.joined(separator: ",")).style
         return style.isEmpty ? nil : style
-    }
-}
-
-extension FlowchartMeasurement {
-    /// A flowchart measured by a diagram drawn as one, which sizes its nodes its own way.
-    init(nodeTexts: [DiagramTextBlock], shapeSizes: [CGSize], textOffsets: [CGFloat], edgeTexts: [DiagramTextBlock?], selfLoopEdgeIndices: [[Int]]) {
-        self.nodeTexts = nodeTexts
-        self.shapeSizes = shapeSizes
-        self.textOffsets = textOffsets
-        self.edgeTexts = edgeTexts
-        self.selfLoopEdgeIndices = selfLoopEdgeIndices
     }
 }

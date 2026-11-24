@@ -5,7 +5,7 @@
  * Description: Builds the flat layered graph of one level of Pele's compound layout, its ports and held ends included.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -29,16 +29,9 @@ extension LayeredCompoundLayout {
         var graph = LayeredCompoundLevelGraph(nodes: arena.list(capacity: level.items.count + level.ports.count, of: LayeredFlatNode.self),
                                               edges: arena.list(capacity: level.edges.count + level.ports.count, of: LayeredSpanEdge.self),
                                               portVertex: arena.span(count: level.ports.count, repeating: -1))
-        for (index, item) in level.items.enumerated() {
-            local[item] = index
-            let node = nodes[item]
-            var flatNode = isSized ? LayeredFlatNode(width: isVertical ? node.width : node.height, height: isVertical ? node.height : node.width)
-                : LayeredFlatNode(width: 0, height: 0)
-            flatNode.sideSpan = node.isGroup ? min(node.sideSpan, flatNode.width - 2 * node.paddingSide) : node.sideSpan
-            flatNode.orderKey = isKeyed ? key[item] : .nan
-            graph.nodes.append(flatNode)
-        }
-        for levelEdge in level.edges {
+        addItems(of: level, to: &graph, isVertical: isVertical, isSized: isSized)
+        for position in level.edges {
+            let levelEdge = levelEdges[position]
             let edge = edges[levelEdge.edgeIndex]
             var flatEdge = LayeredFlatEdge(tail: local[levelEdge.first], head: local[levelEdge.second], minimumLength: edge.minimumLength)
             if isSized {
@@ -51,18 +44,34 @@ extension LayeredCompoundLayout {
             }
             graph.edges.append(LayeredSpanEdge(flatEdge))
         }
-        for (portIndex, port) in level.ports.enumerated() {
-            if port.side == start || port.side == start.opposite {
-                addPortVertex(port, index: portIndex, to: &graph, isStart: port.side == start, isVertical: isVertical, isSized: isSized, level: level)
+        for (index, port) in level.ports.enumerated() {
+            let side = ports[port].side
+            if side == start || side == start.opposite {
+                addPortVertex(port, index: index, to: &graph, isStart: side == start, isVertical: isVertical, isSized: isSized, level: level)
             } else {
-                graph.nodes[local[port.inner]].pin = port.side == .top || port.side == .left ? -1 : 1
+                graph.nodes[local[ports[port].inner]].pin = side == .top || side == .left ? -1 : 1
             }
         }
         return graph
     }
 
-    private mutating func addPortVertex(_ port: LayeredCompoundPort, index: Int, to graph: inout LayeredCompoundLevelGraph, isStart: Bool,
+    /// The level's items as the graph's first nodes, each item's index there kept in `local`.
+    private func addItems(of level: LayeredCompoundLevel, to graph: inout LayeredCompoundLevelGraph, isVertical: Bool, isSized: Bool) {
+        for (index, position) in level.items.enumerated() {
+            let item = levelItems[position]
+            local[item] = index
+            let node = nodes[item]
+            var flatNode = isSized ? LayeredFlatNode(width: isVertical ? node.width : node.height, height: isVertical ? node.height : node.width)
+                : LayeredFlatNode(width: 0, height: 0)
+            flatNode.sideSpan = node.isGroup ? min(node.sideSpan, flatNode.width - 2 * node.paddingSide) : node.sideSpan
+            flatNode.orderKey = isKeyed ? key[item] : .nan
+            graph.nodes.append(flatNode)
+        }
+    }
+
+    private mutating func addPortVertex(_ portIndex: Int, index: Int, to graph: inout LayeredCompoundLevelGraph, isStart: Bool,
                                         isVertical: Bool, isSized: Bool, level: LayeredCompoundLevel) {
+        let port = ports[portIndex]
         let vertex = graph.nodes.count
         var flatNode = LayeredFlatNode(width: 0, height: 0, kind: isStart ? .startPort : .endPort)
         flatNode.orderKey = isKeyed ? key[port.isOutgoing ? edges[port.edgeIndex].target : edges[port.edgeIndex].source] : .nan
@@ -87,9 +96,10 @@ extension LayeredCompoundLayout {
 
     /// How far across from its middle an end meets a group whose inside it passes into: where its port is on the border.
     private func heldOffset(_ item: Int, edge: Int, isOutgoing: Bool, isVertical: Bool, isSized: Bool) -> Double {
-        guard isSized, isHeld(item, edge: edge, isOutgoing: isOutgoing),
-              let port = levels[levelIndex(of: item)].port(edge: edge, isOutgoing: isOutgoing) else { return 0 }
-        return isVertical ? port.borderPoint.x - nodes[item].width / 2 : port.borderPoint.y - nodes[item].height / 2
+        guard isSized, isHeld(item, edge: edge, isOutgoing: isOutgoing) else { return 0 }
+        let port = self.port(in: levelIndex(of: item), edge: edge, isOutgoing: isOutgoing)
+        guard port >= 0 else { return 0 }
+        return isVertical ? ports[port].borderPoint.x - nodes[item].width / 2 : ports[port].borderPoint.y - nodes[item].height / 2
     }
 
     /// An outgoing port on the side a group's flow ends at, ordered by where its flat edge runs at the group's last rank,
@@ -99,7 +109,7 @@ extension LayeredCompoundLayout {
         if flatEdge < 0 || level.identifier < 0 || !port.isOutgoing || port.side != level.direction.endSide { return .nan }
         var inside = key[edges[port.edgeIndex].source]
         var outside: Double = 0
-        for point in flatEdgePoints[flatEdge] {
+        for point in flatEdgePoints.part(flatEdgePointRanges[flatEdge].range) {
             if Int(point.x) == lastFlatRank[level.identifier] { inside = point.y }
             if Int(point.x) == lastFlatRank[level.identifier] + 1 { outside = point.y }
         }
