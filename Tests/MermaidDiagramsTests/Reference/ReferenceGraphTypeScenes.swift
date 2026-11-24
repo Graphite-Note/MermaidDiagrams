@@ -2,8 +2,9 @@
  * File: ReferenceGraphTypeScenes.swift
  * ------------------------------------
  * Layer: Tests
- * Description: 0.7.0's state diagram scene, frozen as main 2a0cc65 made it from Core Graphics paths (the public drawing
- *              parts and the builder's Core Graphics paths), which the scene recorded into lanes is compared with.
+ * Description: 0.7.0's state and class diagram scenes, frozen as main 2a0cc65 made them from Core Graphics paths (the
+ *              public drawing parts and the builder's Core Graphics paths), which the scenes recorded into lanes are
+ *              compared with.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -37,6 +38,42 @@ enum ReferenceStateDiagramScene {
         builder.fillAndStroke(parts.noteSheets, fill: .background, stroke: .border, line, part: .note)
         builder.stroke(parts.noteFolds, .border, line, part: .note)
         builder.texts(parts.noteTexts, DiagramPaint.betweenBackgroundAndForeground(share: DiagramPalette.noteTextShare), part: .note)
+        builder.title(parts.title)
+        return builder.scene(size: layout.size, font: layout.font)
+    }
+}
+
+/// 0.7.0's class diagram scene, made from the public drawing parts' Core Graphics paths.
+enum ReferenceClassDiagramScene {
+    static func scene(layout: ClassDiagramLayout) -> DiagramScene {
+        var builder = DiagramSceneBuilder()
+        let parts = ClassDiagramDrawingParts(layout: layout)
+        let line = DiagramStroke.rounded(lineWidth: ClassDiagramDrawingParts.lineWidth)
+        parts.namespaces.addBoxes(to: &builder)
+        builder.stroke(parts.solidLines, .line, line, part: .edge)
+        builder.stroke(parts.dashedLines, .line, .rounded(lineWidth: ClassDiagramDrawingParts.lineWidth, dashLengths: ClassDiagramDrawingParts.dashedDashLengths),
+                       part: .edge)
+        builder.stroke(parts.dottedLines, .line, .rounded(lineWidth: ClassDiagramDrawingParts.lineWidth, dashLengths: ClassDiagramDrawingParts.dottedDashLengths),
+                       part: .edge)
+        builder.fill(parts.filledMarks, .line, part: .marker)
+        builder.stroke(parts.strokedMarks, .line, line, part: .marker)
+        parts.namespaces.addCrossedTitles(to: &builder)
+        builder.fill(parts.edgeTextPatches, .background, part: .labelBackground)
+        builder.texts(parts.edgeTexts, .foreground, part: .edgeLabel)
+        builder.texts(parts.cardinalities, .muted, part: .edgeLabel)
+        builder.fill(parts.classFills, .surface, part: .node)
+        builder.fill(parts.noteFills, .alternateSurface, part: .note)
+        builder.stroke(parts.outlines, .border, line, part: .node)
+        builder.texts(parts.annotations, .muted, part: .label)
+        builder.texts(parts.names, .foreground, isBold: true, part: .label)
+        for member in parts.members {
+            switch member.classifier {
+            case .plain, .static: builder.text(member.text, .foreground, part: .label)
+            case .abstract: builder.text(member.text, .foreground, isItalic: true, part: .label)
+            }
+        }
+        builder.stroke(parts.memberUnderlines, .foreground, line, part: .label)
+        builder.texts(parts.noteTexts, .foreground, part: .note)
         builder.title(parts.title)
         return builder.scene(size: layout.size, font: layout.font)
     }
