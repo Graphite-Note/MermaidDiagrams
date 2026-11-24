@@ -1,3 +1,15 @@
+/**
+ * File: GitGraphDiagramBuilder.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Plays a Git graph's statements as Mermaid's Git graph database does: commits, branches, checkouts,
+ *              merges and cherry-picks, each checked in Mermaid's order.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Plays a Git graph's statements as Mermaid's Git graph database does (Pele's port of it): a commit goes on the
 /// current branch after its last commit, a branch starts from the current branch's last commit and is checked out, a
 /// merge and a cherry-pick take a second parent, and a statement the history cannot take is refused with its line,
@@ -24,6 +36,14 @@ struct GitGraphDiagramBuilder {
     init(limits: MermaidDiagramLimits, options: GitGraphOptions = GitGraphOptions()) throws(MermaidDiagramReadError) {
         self.limits = limits
         try addBranch(name: options.mainBranchName, order: options.mainBranchOrder, lastCommitIndex: nil)
+    }
+
+    /// Room for the commits of `statementCount` statements, made once: each statement makes at most one commit, and no
+    /// more than the limit's nodes are made.
+    mutating func reserveRoom(forStatementCount statementCount: Int) {
+        let commitCount = min(statementCount, limits.maximumNodeCount)
+        commits.reserveCapacity(commitCount)
+        commitIndexByIdentifier.reserveCapacity(commitCount)
     }
 
     mutating func play(_ statement: GitGraphStatement, line: Int) throws(MermaidDiagramReadError) {

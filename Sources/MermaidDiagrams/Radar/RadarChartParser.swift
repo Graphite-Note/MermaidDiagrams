@@ -5,7 +5,7 @@
  * Description: Reads a radar chart's statements after its `radar-beta` keyword: axes, curves, options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -169,7 +169,7 @@ struct RadarChartParser {
     /// One of `words` at the cursor, taken whatever follows it (`falsecurve` is `false` and a `curve`), as Mermaid's lexer
     /// takes the value of an option.
     private mutating func readWord(from words: [String], problem expected: RadarSyntaxProblem) throws(MermaidDiagramReadError) -> String {
-        for word in words where cursor.hasPrefix(Array(word.utf8)) {
+        for word in words where Self.isWritten(word, at: cursor) {
             cursor.advance(by: word.utf8.count)
             return word
         }
@@ -177,6 +177,16 @@ struct RadarChartParser {
     }
 
     // MARK: Pieces
+
+    /// Whether the bytes at the cursor are `word`'s, compared without making an array of them.
+    private static func isWritten(_ word: String, at cursor: MermaidTextCursor) -> Bool {
+        var offset = 0
+        for byte in word.utf8 {
+            guard cursor.peek(offset) == byte else { return false }
+            offset += 1
+        }
+        return true
+    }
 
     private func problem(_ problem: RadarSyntaxProblem) -> MermaidDiagramReadError {
         .invalidSyntax(line: cursor.line, problem: .radar(problem))

@@ -23,13 +23,21 @@ struct GitGraphLexer {
         self.cursor = cursor
     }
 
-    /// Skips what separates tokens and reads the token there. `start` is a copy of the cursor at its first byte, for
-    /// the line and the text an error reports.
-    mutating func readToken() throws(MermaidDiagramReadError) -> (token: GitGraphToken, start: MermaidTextCursor) {
+    /// Skips what separates tokens and reads the token there, with the position and line of its first byte, for the
+    /// line and the text an error reports: numbers, so that no copy of the cursor is kept for each token.
+    mutating func readToken() throws(MermaidDiagramReadError) -> (token: GitGraphToken, start: Int, line: Int) {
         skipSeparators()
-        let start = cursor
-        guard let byte = cursor.peek() else { return (.endOfText, start) }
-        return (try token(startingWith: byte), start)
+        let start = cursor.position
+        let line = cursor.line
+        guard let byte = cursor.peek() else { return (.endOfText, start, line) }
+        return (try token(startingWith: byte), start, line)
+    }
+
+    /// The text an error reports at `position`, a token's start.
+    func excerpt(at position: Int) -> String {
+        var start = MermaidTextCursor(bytes: cursor.bytes)
+        start.advance(by: position)
+        return start.excerpt()
     }
 
     /// Whether the cursor is where the `gitGraph` keyword may end: at a space, a line break, a comment or the end.
