@@ -6,7 +6,7 @@
  *              color, stroke-color and stroke-width, refusing another name or a value of the wrong form.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -53,6 +53,16 @@ enum QuadrantChartPointStyleSyntax {
     /// `text` without the spaces, tabs, vertical tabs and form feeds at its ends: the only white space a style's
     /// tokens hold.
     private static func spaceTrimmed(_ text: Substring) -> Substring {
+        let bytes = text.utf8
+        // In ASCII each byte is a character of its own, so the bytes are trimmed; beyond it, a blank may begin or end a
+        // character with more in it, and the characters are dropped.
+        if bytes.allSatisfy({ byte in byte < 0x80 }) {
+            var start = bytes.startIndex
+            var end = bytes.endIndex
+            while start < end, isSpace(bytes[start]) { start = bytes.index(after: start) }
+            while start < end, isSpace(bytes[bytes.index(before: end)]) { end = bytes.index(before: end) }
+            return text[start..<end]
+        }
         var trimmed = text
         while let first = trimmed.utf8.first, isSpace(first) { trimmed = trimmed.dropFirst() }
         while let last = trimmed.utf8.last, isSpace(last) { trimmed = trimmed.dropLast() }
@@ -71,13 +81,20 @@ enum QuadrantChartPointStyleSyntax {
 
     /// Six or three hexadecimal digits, the `#` before them optional; three stand for each one doubled.
     private static func color(_ text: String) -> QuadrantChartColor? {
-        let digits = Array(text.hasPrefix("#") ? text.utf8.dropFirst() : text.utf8[...])
+        let digits = text.hasPrefix("#") ? text.utf8.dropFirst() : text.utf8[...]
         guard digits.count == 6 || digits.count == 3 else { return nil }
-        let values = digits.compactMap(hexadecimalValue)
-        guard values.count == digits.count else { return nil }
-        let channels = values.count == 3 ? values.map { value in value * shortDigitScale }
-            : stride(from: 0, to: values.count, by: 2).map { offset in values[offset] * 16 + values[offset + 1] }
-        return QuadrantChartColor(red: channels[0], green: channels[1], blue: channels[2])
+        // The digits' values, in lanes of a vector rather than an array.
+        var values = SIMD8<UInt8>()
+        var lane = 0
+        for digit in digits {
+            guard let value = hexadecimalValue(digit) else { return nil }
+            values[lane] = value
+            lane += 1
+        }
+        if lane == 3 {
+            return QuadrantChartColor(red: values[0] * shortDigitScale, green: values[1] * shortDigitScale, blue: values[2] * shortDigitScale)
+        }
+        return QuadrantChartColor(red: values[0] * 16 + values[1], green: values[2] * 16 + values[3], blue: values[4] * 16 + values[5])
     }
 
     private static func hexadecimalValue(_ byte: UInt8) -> UInt8? {

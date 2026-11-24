@@ -6,8 +6,8 @@
  *              Pele's db.ts records them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// What a block's statements give it: a separator or a text, the identifiers a statement names, or a direction.
@@ -24,6 +24,8 @@ extension AgentFlowDiagramBuilder {
     mutating func addFlow(identifier written: AgentFlowText?, items: [AgentFlowDocumentItem], title: AgentFlowText?) throws(MermaidDiagramReadError) -> String {
         var seen: Set<String> = []
         var named: [String] = []
+        seen.reserveCapacity(items.count)
+        named.reserveCapacity(items.count)
         var direction: String?
         for item in items {
             switch item {
@@ -101,6 +103,10 @@ extension AgentFlowDiagramBuilder {
 
     // MARK: - Where statements sit
 
+    /// Leaves a value as it is: accessing a dictionary's entry through it with a default stores the default when the
+    /// entry is missing.
+    private static func keep(_ value: inout Int) {}
+
     private func position(_ span: AgentFlowSourceSpan?) -> AgentFlowElementPosition {
         let startLine = span?.firstLine ?? 0
         let startColumn = span?.firstColumn ?? 0
@@ -111,7 +117,8 @@ extension AgentFlowDiagramBuilder {
     @discardableResult
     private mutating func pushMapping(_ identifier: String, kind: AgentFlowElementMapping.Kind, position: AgentFlowElementPosition) -> Int {
         diagram.mappings.append(AgentFlowElementMapping(identifier: identifier, kind: kind, position: position))
-        if firstMappings[identifier] == nil { firstMappings[identifier] = diagram.mappings.count - 1 }
+        // Looked up once: the default is stored only when the identifier has no mapping yet, and a first one is kept.
+        Self.keep(&firstMappings[identifier, default: diagram.mappings.count - 1])
         return diagram.mappings.count - 1
     }
 

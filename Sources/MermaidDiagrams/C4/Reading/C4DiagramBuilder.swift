@@ -7,8 +7,8 @@
  *              its element, boundaries opened and closed around what is written inside them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Builds a C4 diagram as Pele's `C4Db` does. A positional argument fills the field of its place; a named one fills the
@@ -43,7 +43,8 @@ struct C4DiagramBuilder {
             diagram.shapes[index].kind = kind
         } else {
             index = diagram.shapes.count
-            diagram.shapes.append(C4Shape(element: try newElement(alias: arguments[0], indexedIn: &shapeIndexByAlias, at: index), kind: kind))
+            try checkNodeLimit()
+            diagram.shapes.append(C4Shape(element: Self.newElement(alias: arguments[0], indexedIn: &shapeIndexByAlias, at: index), kind: kind))
         }
         let takesTechnology = kind.takesTechnology
         let detailsStart = takesTechnology ? 4 : 3
@@ -105,14 +106,19 @@ struct C4DiagramBuilder {
     private mutating func boundaryIndex(for alias: C4Argument) throws(MermaidDiagramReadError) -> Int {
         if case .positional(let written) = alias, let known = boundaryIndexByAlias[written] { return known }
         let index = diagram.boundaries.count
-        diagram.boundaries.append(C4Boundary(element: try newElement(alias: alias, indexedIn: &boundaryIndexByAlias, at: index), deploymentNode: nil))
+        try checkNodeLimit()
+        diagram.boundaries.append(C4Boundary(element: Self.newElement(alias: alias, indexedIn: &boundaryIndexByAlias, at: index), deploymentNode: nil))
         return index
     }
 
-    /// A new element with its alias, or with the named argument written in its place applied, counted against the
-    /// node limit.
-    private func newElement(alias: C4Argument, indexedIn index: inout [String: Int], at position: Int) throws(MermaidDiagramReadError) -> C4Element {
+    /// Whether another shape or boundary fits the node limit.
+    private func checkNodeLimit() throws(MermaidDiagramReadError) {
         guard diagram.shapes.count + diagram.boundaries.count - 1 < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+    }
+
+    /// A new element with its alias, or with the named argument written in its place applied, once `checkNodeLimit` let
+    /// it be made. Static, so that the index it writes the alias in is not copied with the builder it belongs to.
+    private static func newElement(alias: C4Argument, indexedIn index: inout [String: Int], at position: Int) -> C4Element {
         var element = C4Element()
         switch alias {
         case .positional(let written):
@@ -230,6 +236,8 @@ struct C4DiagramBuilder {
 
     /// Mermaid's `replace(/\n\s+/g, '\n')`: the white space after each line break, line breaks included, taken out.
     static func collapsingIndentedLines(_ text: String) -> String {
+        // Without a line feed there is nothing to take out.
+        guard text.utf8.contains(MermaidByte.newline) else { return text }
         let units = Array(text.utf16)
         var kept: [UInt16] = []
         kept.reserveCapacity(units.count)

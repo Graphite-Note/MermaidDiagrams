@@ -7,7 +7,7 @@
  *              prototype dropped, merged into what the element had.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -17,7 +17,8 @@ enum AgentFlowMetadataReading {
     /// The YAML of a metadata block's body, or nil when it is not YAML even without the commas that end its lines. A
     /// body on one line is read inside braces; one of several lines as a block. A null value is an empty mapping.
     static func value(of body: String) -> SequenceAttributeValue? {
-        let isMultiline = body.utf8.contains(MermaidByte.newline) && body.contains("\n")
+        // A line feed is a character of its own but after a carriage return: without one, its byte is the character.
+        let isMultiline = body.utf8.contains(MermaidByte.newline) && (!body.utf8.contains(MermaidByte.carriageReturn) || body.contains("\n"))
         let document = isMultiline ? body + "\n" : "{\n" + body + "\n}"
         var parsed = try? SequenceAttributesBlockSyntax.value(of: document)
         if parsed == nil, isMultiline {

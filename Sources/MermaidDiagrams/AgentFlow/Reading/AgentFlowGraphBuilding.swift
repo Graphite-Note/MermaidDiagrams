@@ -7,8 +7,8 @@
  *              edges between what is still drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension AgentFlowDiagramBuilder {
@@ -20,7 +20,9 @@ extension AgentFlowDiagramBuilder {
         let collapsing = collapsedFlows()
         let parents = flowParents(hidden: collapsing.hidden)
         var graph = AgentFlowGraph()
+        graph.nodes.reserveCapacity(diagram.flows.count + diagram.vertices.count)
         var nodeIndices: [String: Int] = [:]
+        nodeIndices.reserveCapacity(diagram.flows.count + diagram.vertices.count)
         for flow in diagram.flows.reversed() where !collapsing.hidden.contains(flow.identifier) {
             nodeIndices[flow.identifier] = graph.nodes.count
             graph.nodes.append(groupNode(of: flow, parent: parents[flow.identifier]))
@@ -141,12 +143,14 @@ extension AgentFlowDiagramBuilder {
     /// things inside one collapsed flow has nothing left to connect.
     private func drawnEdges(collapsedInto: [String: String], defaultCurve: String?) -> [AgentFlowGraphEdge] {
         var edges: [AgentFlowGraphEdge] = []
+        edges.reserveCapacity(diagram.edges.count)
         for (index, raw) in diagram.edges.enumerated() {
             let start = collapsedInto[raw.start] ?? raw.start
             let end = collapsedInto[raw.end] ?? raw.end
             if start == end, raw.start != raw.end { continue }
             let arrow = raw.type == "arrow_open" ? "none" : raw.type == "arrow_cross" || raw.type == "arrow_point" ? raw.type ?? "arrow_point" : "arrow_point"
-            let curve = [raw.interpolation, diagram.defaultInterpolation].compactMap { curve in curve }.first { curve in !curve.isEmpty } ?? defaultCurve
+            let curve = raw.interpolation.flatMap { curve in curve.isEmpty ? nil : curve }
+                ?? diagram.defaultInterpolation.flatMap { curve in curve.isEmpty ? nil : curve } ?? defaultCurve
             edges.append(AgentFlowGraphEdge(identifier: raw.identifier.isEmpty ? "L_\(start)_\(end)_\(index)" : raw.identifier,
                                             isUserDefinedIdentifier: raw.isUserDefinedIdentifier, start: start, end: end, type: raw.type ?? "normal",
                                             label: raw.text, labelType: raw.labelType, thickness: raw.stroke, minimumLength: raw.length,
