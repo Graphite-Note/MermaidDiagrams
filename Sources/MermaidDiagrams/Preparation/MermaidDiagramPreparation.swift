@@ -6,8 +6,8 @@
  *              reader says of it, or says why it is not drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
- * Date: 23/11/2026
+ * Version: 0.8
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -15,8 +15,8 @@ import Foundation
 
 /// Reads a diagram's text, lays it out and prepares its scene, whatever its type, so that a reader needs no code of its
 /// own per type. A text that is not read, a layout that refuses what it holds, a diagram that declares nothing to draw,
-/// and one longer than the limits' drawing side are refused with why (`MermaidDiagramPreparationFailure`), never an empty
-/// or a giant scene. Adding a type means its parser, its layout, its scene, and one case in `prepare(_:)`'s switch.
+/// one longer than the limits' drawing side and one whose scene lost a path past its element limit are refused with why
+/// (`MermaidDiagramPreparationFailure`), never an empty, a giant or an incomplete scene. Adding a type means its parser, its layout, its scene, and one case in `prepare(_:)`'s switch.
 public enum MermaidDiagramPreparation {
     /// `source` read and prepared. `typography` is the text the diagram is measured in; `narrowestColumnWidth` the
     /// narrowest column it may be shown in, past which it is laid out a second time to run down (nil for none); `now` and
@@ -44,8 +44,14 @@ public enum MermaidDiagramPreparation {
                                                        timeZone: timeZone)
         let prepared = try context.prepared(diagram)
         if diagram.hasNothingToDraw { throw .nothingToDraw }
-        guard limits.allowsDrawing(prepared.scene.size) else { throw .tooLargeToDraw(maximumSideLength: limits.maximumDrawingSideLength) }
+        try refuseIncomplete(prepared.scene, limits: limits)
         return prepared
+    }
+
+    /// Refuses a scene beyond the limits' drawing side, or one that lost a path past its element limit.
+    static func refuseIncomplete(_ scene: DiagramScene, limits: MermaidDiagramLimits) throws(MermaidDiagramPreparationFailure) {
+        guard limits.allowsDrawing(scene.size) else { throw .tooLargeToDraw(maximumSideLength: limits.maximumDrawingSideLength) }
+        if let limit = scene.exceededPathElementLimit { throw .tooManyPathElements(limit: limit) }
     }
 }
 
