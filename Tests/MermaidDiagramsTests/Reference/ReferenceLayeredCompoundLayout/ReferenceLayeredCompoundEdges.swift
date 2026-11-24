@@ -77,12 +77,12 @@ extension ReferenceLayeredCompoundLayout {
                 first = nodes[first].parent
                 second = nodes[second].parent
             }
-            levels[levelIndex(of: nodes[first].parent)].edges.append(LayeredCompoundLevelEdge(edgeIndex: edgeIndex, first: first, second: second))
+            levels[levelIndex(of: nodes[first].parent)].edges.append(ReferenceLayeredCompoundLevelEdge(edgeIndex: edgeIndex, first: first, second: second))
             for (path, isOutgoing) in [(firstPath, true), (secondPath, false)] {
                 for inner in path {
                     let level = levelIndex(of: nodes[inner].parent)
                     levels[level].portIndex[edgeIndex * 2 + (isOutgoing ? 0 : 1)] = levels[level].ports.count
-                    levels[level].ports.append(LayeredCompoundPort(edgeIndex: edgeIndex, inner: inner, isOutgoing: isOutgoing))
+                    levels[level].ports.append(ReferenceLayeredCompoundPort(edgeIndex: edgeIndex, inner: inner, isOutgoing: isOutgoing))
                 }
             }
         }

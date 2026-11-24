@@ -108,7 +108,7 @@ extension ReferenceLayeredCompoundLayout {
     }
 
     /// Where across the flow the edge through `port` is when it first leaves the line out of the port, or nil.
-    private func turningAcross(of port: LayeredCompoundPort, origin: CGPoint, isVertical: Bool) -> Double? {
+    private func turningAcross(of port: ReferenceLayeredCompoundPort, origin: CGPoint, isVertical: Bool) -> Double? {
         let route = edges[port.edgeIndex].route
         let border = CGPoint(x: origin.x + port.borderPoint.x, y: origin.y + port.borderPoint.y)
         var at = -1

@@ -5,7 +5,7 @@
  * Description: Cuts drawn routes into straight pieces and counts the pieces that cross, for Pele's compound layout.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -14,7 +14,7 @@ import CoreGraphics
 extension LayeredRouteCrossings {
     /// One route cut as it is drawn: a straight step as itself, a rounded corner between two straight legs as a few
     /// pieces (adjacent corners sharing a leg, each getting half), a step drawn in three, an S curve in three.
-    static func cut(_ route: [LayeredRoutePoint], edge: Int, style: LayeredRouteStyle, into segments: inout LayeredRouteSegments) {
+    static func cut(_ route: ScratchSpan<LayeredRoutePoint>, edge: Int, style: LayeredRouteStyle, into segments: inout LayeredRouteSegments) {
         guard route.count >= 2 else { return }
         func point(_ index: Int) -> CGPoint { route[index].point }
         func isAligned(_ index: Int) -> Bool { abs(point(index).x - point(index - 1).x) < 0.01 || abs(point(index).y - point(index - 1).y) < 0.01 }

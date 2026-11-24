@@ -2,7 +2,8 @@
  * File: LayeredCompoundPlacing.swift
  * ----------------------------------
  * Layer: Core
- * Description: One placing of Pele's compound layout: port sides, every level laid out inside out, routes joined.
+ * Description: One placing of Pele's compound layout: the sides edges cross groups on, each level laid out children
+ *              first and moved to its box, its routes written as ranges of the layout's route points.
  *
  * Authors: Bahey Shalash
  * Version: 0.3
@@ -18,12 +19,13 @@ extension LayeredCompoundLayout {
     mutating func place() -> Bool {
         assignPortSides()
         var vertexBudget = maximumVertexCount
-        for levelIndex in levels.indices.reversed() {
+        for levelIndex in stride(from: levels.count - 1, through: 0, by: -1) {
             guard layOut(levelIndex, vertexBudget: &vertexBudget) else { return false }
         }
-        for levelIndex in levels.indices {
+        for levelIndex in 0..<levels.count {
             let origin = levels[levelIndex].origin
-            for item in levels[levelIndex].items {
+            for position in levels[levelIndex].items {
+                let item = levelItems[position]
                 nodes[item].x += origin.x
                 nodes[item].y += origin.y
                 if nodes[item].isGroup {
@@ -39,37 +41,44 @@ extension LayeredCompoundLayout {
     /// side of the port its edge passes through in the level above, and an edge between two items of a level leaves a
     /// group on the side facing where it is ranked to go.
     private mutating func assignPortSides() {
-        for levelIndex in levels.indices {
-            for port in levels[levelIndex].ports where nodes[port.inner].isGroup && endsBelow(port.inner, edge: port.edgeIndex, isOutgoing: port.isOutgoing) {
-                let inner = levelOfGroup[port.inner]
-                if let index = levels[inner].portIndex[port.edgeIndex * 2 + (port.isOutgoing ? 0 : 1)] { levels[inner].ports[index].side = port.side }
-            }
+        for levelIndex in 0..<levels.count {
             let level = levels[levelIndex]
-            let isNeeded = level.edges.contains { levelEdge in
-                (nodes[levelEdge.first].isGroup && edges[levelEdge.edgeIndex].source != levelEdge.first)
-                    || (nodes[levelEdge.second].isGroup && edges[levelEdge.edgeIndex].target != levelEdge.second)
+            for port in level.ports {
+                let inner = ports[port].inner
+                guard nodes[inner].isGroup && endsBelow(inner, edge: ports[port].edgeIndex, isOutgoing: ports[port].isOutgoing) else { continue }
+                let innerPort = self.port(in: levelOfGroup[inner], edge: ports[port].edgeIndex, isOutgoing: ports[port].isOutgoing)
+                if innerPort >= 0 { ports[innerPort].side = ports[port].side }
             }
+            var isNeeded = false
+            for position in level.edges where crossesIntoGroup(levelEdges[position]) { isNeeded = true }
             if !isNeeded { continue }
             let mark = arena.mark()
             defer { arena.release(to: mark) }
             let graph = buildGraph(of: levelIndex, isSized: false)
             LayeredFlatRanking.orientAndRank(nodes: graph.nodes.elements, edges: graph.edges.elements, step: 1, arena: arena)
             let start = level.direction.startSide
-            for (index, levelEdge) in level.edges.enumerated() {
+            for (index, position) in level.edges.enumerated() {
+                let levelEdge = levelEdges[position]
                 let isFirstAbove = !graph.edges[index].isReversed
                 if nodes[levelEdge.first].isGroup && edges[levelEdge.edgeIndex].source != levelEdge.first {
-                    setSide(of: levelEdge.first, key: levelEdge.edgeIndex * 2, to: isFirstAbove ? start.opposite : start)
+                    setSide(of: levelEdge.first, edge: levelEdge.edgeIndex, isOutgoing: true, to: isFirstAbove ? start.opposite : start)
                 }
                 if nodes[levelEdge.second].isGroup && edges[levelEdge.edgeIndex].target != levelEdge.second {
-                    setSide(of: levelEdge.second, key: levelEdge.edgeIndex * 2 + 1, to: isFirstAbove ? start : start.opposite)
+                    setSide(of: levelEdge.second, edge: levelEdge.edgeIndex, isOutgoing: false, to: isFirstAbove ? start : start.opposite)
                 }
             }
         }
     }
 
-    private mutating func setSide(of group: Int, key: Int, to side: DiagramSide) {
-        let level = levelOfGroup[group]
-        if let index = levels[level].portIndex[key] { levels[level].ports[index].side = side }
+    /// Whether an edge of a level passes into a group at either end.
+    private func crossesIntoGroup(_ levelEdge: LayeredCompoundLevelEdge) -> Bool {
+        (nodes[levelEdge.first].isGroup && edges[levelEdge.edgeIndex].source != levelEdge.first)
+            || (nodes[levelEdge.second].isGroup && edges[levelEdge.edgeIndex].target != levelEdge.second)
+    }
+
+    private mutating func setSide(of group: Int, edge: Int, isOutgoing: Bool, to side: DiagramSide) {
+        let port = self.port(in: levelOfGroup[group], edge: edge, isOutgoing: isOutgoing)
+        if port >= 0 { ports[port].side = side }
     }
 
     /// Lays one level out as a flat graph and turns it onto the page inside its box.
@@ -86,15 +95,15 @@ extension LayeredCompoundLayout {
         let level = levels[levelIndex]
         let group = level.identifier >= 0 ? nodes[level.identifier] : nil
         let box = LayeredCompoundBox(direction: level.direction, size: size, group: group)
-        for (index, item) in level.items.enumerated() {
+        for (index, position) in level.items.enumerated() {
             let point = box.pagePoint(CGPoint(x: built.nodes[index].x, y: built.nodes[index].y))
-            nodes[item].x = point.x
-            nodes[item].y = point.y
+            nodes[levelItems[position]].x = point.x
+            nodes[levelItems[position]].y = point.y
         }
         writeRoutes(of: levelIndex, built: built, points: points.elements, box: box)
-        if let identifier = group.map({ _ in level.identifier }) {
-            nodes[identifier].width = box.width
-            nodes[identifier].height = box.height
+        if level.identifier >= 0 {
+            nodes[level.identifier].width = box.width
+            nodes[level.identifier].height = box.height
         } else {
             total = (box.width, box.height)
         }
@@ -107,18 +116,22 @@ extension LayeredCompoundLayout {
             flatEdge.pointStart >= 0 ? points.part(flatEdge.pointStart..<(flatEdge.pointStart + flatEdge.pointCount)) : .empty
         }
         let level = levels[levelIndex]
-        for (index, levelEdge) in level.edges.enumerated() {
+        for (index, position) in level.edges.enumerated() {
             let flatEdge = built.edges[index]
-            levels[levelIndex].routes[levelEdge.edgeIndex] = box.route(route(of: flatEdge))
-            if edges[levelEdge.edgeIndex].labelWidth > 0 { edges[levelEdge.edgeIndex].labelCenter = box.pagePoint(flatEdge.labelCenter) }
+            let start = routePoints.count
+            box.appendRoute(route(of: flatEdge), to: &routePoints)
+            levelEdges[position].routeStart = start
+            levelEdges[position].routeCount = routePoints.count - start
+            let edgeIndex = levelEdges[position].edgeIndex
+            if edges[edgeIndex].labelWidth > 0 { edges[edgeIndex].labelCenter = box.pagePoint(flatEdge.labelCenter) }
         }
         var portEdge = level.edges.count
-        for portIndex in level.ports.indices {
-            if built.portVertex[portIndex] >= 0 {
-                placeBorderPort(portIndex, of: levelIndex, route: box.route(route(of: built.edges[portEdge])), box: box)
+        for (index, port) in level.ports.enumerated() {
+            if built.portVertex[index] >= 0 {
+                placeBorderPort(port, route: route(of: built.edges[portEdge]), box: box)
                 portEdge += 1
             } else {
-                placeSidePort(portIndex, of: levelIndex, box: box)
+                placeSidePort(port, box: box)
             }
         }
     }

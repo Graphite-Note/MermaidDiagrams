@@ -5,7 +5,7 @@
  * Description: Lays out a graph whose nodes sit in nested boxes with the port of Pele's compound layout.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -26,48 +26,72 @@ enum LayeredClusterLayout {
         return try placeInCompoundLayout(graph, spacing: spacing, maximumPointCount: maximumPointCount)
     }
 
-    /// `place` through the compound layout, whatever the graph.
+    /// `place` through the compound layout, whatever the graph: the compound graph written into the calling thread's
+    /// arena, laid out there, and the placement read from it.
     static func placeInCompoundLayout(_ graph: LayeredClusterGraph, spacing: LayeredSpacing,
                                       maximumPointCount: Int) throws(LayeredClusterLayoutError) -> LayeredClusterPlacement {
-        let nodeCount = graph.nodeSizes.count
-        var nodes = compoundNodes(graph)
-        func index(of end: LayeredClusterEnd) -> Int {
-            switch end {
-            case .node(let node): node
-            case .cluster(let cluster): nodeCount + cluster
+        let placement: LayeredClusterPlacement? = DiagramScratchArena.withCurrentThread { arena in
+            let nodeCount = graph.nodeSizes.count
+            let nodes = compoundNodes(graph, arena: arena)
+            func index(of end: LayeredClusterEnd) -> Int {
+                switch end {
+                case .node(let node): node
+                case .cluster(let cluster): nodeCount + cluster
+                }
             }
+            let edges: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: graph.edges.count)
+            for (edgeIndex, edge) in graph.edges.enumerated() {
+                edges[edgeIndex] = LayeredCompoundSpanEdge(source: index(of: edge.source), target: index(of: edge.target), minimumLength: edge.minimumRankSpan,
+                                                           labelWidth: Double(edge.labelSize?.width ?? 0), labelHeight: Double(edge.labelSize?.height ?? 0))
+            }
+            var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: graph.direction, options: LayeredLayout.options(spacing),
+                                               maximumVertexCount: maximumPointCount, arena: arena)
+            guard let size = LayeredCompoundLayout.layout(&layout) else { return nil }
+            return placement(of: layout, graph: graph, size: size)
         }
-        var edges = graph.edges.map { edge in
-            LayeredCompoundEdge(source: index(of: edge.source), target: index(of: edge.target), minimumLength: edge.minimumRankSpan,
-                                labelWidth: Double(edge.labelSize?.width ?? 0), labelHeight: Double(edge.labelSize?.height ?? 0))
-        }
-        guard let size = LayeredCompoundLayout.layout(nodes: &nodes, edges: &edges, rootDirection: graph.direction,
-                                                      options: LayeredLayout.options(spacing), maximumVertexCount: maximumPointCount) else {
-            throw .tooManyPoints
-        }
-        let frames = graph.clusters.indices.map { cluster in
+        guard let placement else { throw .tooManyPoints }
+        return placement
+    }
+
+    /// The placement a compound layout of `graph` gave, its lists made once from the arena's.
+    private static func placement(of layout: LayeredCompoundLayout, graph: LayeredClusterGraph, size: (width: Double, height: Double)) -> LayeredClusterPlacement {
+        let nodeCount = graph.nodeSizes.count
+        let nodes = layout.nodes
+        let edges = layout.edges
+        var frames: [CGRect] = []
+        frames.reserveCapacity(graph.clusters.count)
+        for cluster in graph.clusters.indices {
             let node = nodes[nodeCount + cluster]
-            return CGRect(x: node.x - node.width / 2, y: node.y - node.height / 2, width: node.width, height: node.height)
+            frames.append(CGRect(x: node.x - node.width / 2, y: node.y - node.height / 2, width: node.width, height: node.height))
         }
-        let strays = Set(edges.indices.filter { edgeIndex in edges[edgeIndex].source != edges[edgeIndex].target && isStray(edges[edgeIndex], nodes: nodes) })
-        return LayeredClusterPlacement(nodeCenters: (0..<nodeCount).map { node in CGPoint(x: nodes[node].x, y: nodes[node].y) },
-                                       clusterFrames: frames, edgeRoutes: edges.map(route(of:)),
-                                       edgeLabelCenters: edges.indices.map { edgeIndex in
-                                           edges[edgeIndex].labelWidth > 0 || strays.contains(edgeIndex) ? edges[edgeIndex].labelCenter : nil
-                                       },
+        var strays = Set<Int>()
+        var routes: [LayeredClusterRoute] = []
+        var labelCenters: [CGPoint?] = []
+        routes.reserveCapacity(edges.count)
+        labelCenters.reserveCapacity(edges.count)
+        for edgeIndex in 0..<edges.count {
+            if edges[edgeIndex].source != edges[edgeIndex].target && isStray(edges[edgeIndex], nodes: nodes) { strays.insert(edgeIndex) }
+            routes.append(route(layout.routePoints[layout.routeRange(of: edgeIndex)]))
+            labelCenters.append(edges[edgeIndex].labelWidth > 0 || strays.contains(edgeIndex) ? edges[edgeIndex].labelCenter : nil)
+        }
+        var centers: [CGPoint] = []
+        centers.reserveCapacity(nodeCount)
+        for node in 0..<nodeCount { centers.append(CGPoint(x: nodes[node].x, y: nodes[node].y)) }
+        return LayeredClusterPlacement(nodeCenters: centers, clusterFrames: frames, edgeRoutes: routes, edgeLabelCenters: labelCenters,
                                        size: CGSize(width: size.width, height: size.height), strayEdgeIndices: strays)
     }
 
     /// The graph's nodes, then its clusters as groups: a node's place in the declaration order its index, a cluster's
     /// after every node, in cluster order (a cluster with members takes its first member's).
-    private static func compoundNodes(_ graph: LayeredClusterGraph) -> [LayeredCompoundNode] {
+    private static func compoundNodes(_ graph: LayeredClusterGraph, arena: DiagramScratchArena) -> ScratchSpan<LayeredCompoundNode> {
         let nodeCount = graph.nodeSizes.count
-        var nodes = graph.nodeSizes.enumerated().map { node, size in
+        let nodes: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodeCount + graph.clusters.count)
+        for (node, size) in graph.nodeSizes.enumerated() {
             var compound = LayeredCompoundNode(width: Double(size.width), height: Double(size.height),
                                                parent: graph.nodeClusters[node].map { cluster in nodeCount + cluster } ?? -1)
             compound.sequence = Double(node)
             compound.sideSpan = node < graph.nodeSideSpans.count ? Double(graph.nodeSideSpans[node]) : 0
-            return compound
+            nodes[node] = compound
         }
         for (clusterIndex, cluster) in graph.clusters.enumerated() {
             var group = LayeredCompoundNode(width: 0, height: 0, parent: cluster.parent.map { parent in nodeCount + parent } ?? -1)
@@ -79,13 +103,13 @@ enum LayeredClusterLayout {
             group.minimumWidth = Double(cluster.minimumWidth)
             group.sequence = Double(cluster.sequence ?? CGFloat(nodeCount + clusterIndex))
             group.sideSpan = Double(cluster.sideSpan)
-            nodes.append(group)
+            nodes[nodeCount + clusterIndex] = group
         }
         return nodes
     }
 
     /// Whether an edge runs between a group and something inside it, which Pele draws from one center to the other.
-    private static func isStray(_ edge: LayeredCompoundEdge, nodes: [LayeredCompoundNode]) -> Bool {
+    private static func isStray(_ edge: LayeredCompoundSpanEdge, nodes: ScratchSpan<LayeredCompoundNode>) -> Bool {
         func contains(_ group: Int, _ node: Int) -> Bool {
             var parent = nodes[node].parent
             var hops = 0
@@ -99,7 +123,15 @@ enum LayeredClusterLayout {
         return contains(edge.source, edge.target) || contains(edge.target, edge.source)
     }
 
-    private static func route(of edge: LayeredCompoundEdge) -> LayeredClusterRoute {
-        LayeredClusterRoute(points: edge.route.map(\.point), segmentsRunVertically: edge.route.dropFirst().map { point in !point.runsHorizontally })
+    private static func route(_ points: ArraySlice<LayeredRoutePoint>) -> LayeredClusterRoute {
+        var placed: [CGPoint] = []
+        var segmentsRunVertically: [Bool] = []
+        placed.reserveCapacity(points.count)
+        segmentsRunVertically.reserveCapacity(max(points.count - 1, 0))
+        for (index, point) in points.enumerated() {
+            placed.append(point.point)
+            if index > 0 { segmentsRunVertically.append(!point.runsHorizontally) }
+        }
+        return LayeredClusterRoute(points: placed, segmentsRunVertically: segmentsRunVertically)
     }
 }

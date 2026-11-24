@@ -5,7 +5,7 @@
  * Description: Counts the pairs of route pieces that cross, band by band down the page, for Pele's compound layout.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -15,7 +15,7 @@ extension LayeredRouteCrossings {
     /// The pieces in about the square root of their count of bands down the page, each pair counted only in the first
     /// band both are in; within a band, the pieces sorted by their left ends, so that the pairs to try are those that
     /// overlap across.
-    static func countCrossings(_ segments: LayeredRouteSegments, nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], runs: LayeredRouteEndRuns,
+    static func countCrossings(_ segments: LayeredRouteSegments, nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, runs: LayeredRouteEndRuns,
                                arena: DiagramScratchArena) -> Int {
         let count = segments.count
         let hasHeight = segments.bottom > segments.top
@@ -54,7 +54,7 @@ extension LayeredRouteCrossings {
     }
 
     private static func crossingsInBand(_ members: ScratchSpan<Int>, band: Int, firstBand: ScratchSpan<Int>, segments: LayeredRouteSegments,
-                                        nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], runs: LayeredRouteEndRuns) -> Int {
+                                        nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, runs: LayeredRouteEndRuns) -> Int {
         var total = 0
         for (position, first) in members.enumerated() {
             let isHere = firstBand[first] == band
@@ -70,8 +70,8 @@ extension LayeredRouteCrossings {
 
     /// Whether two pieces cross, points on a line counted on one side; not where two edges fan in or out at a node
     /// they share (near it, at their first or last pieces, or on the runs of their ends).
-    private static func crosses(_ first: Int, _ second: Int, segments: LayeredRouteSegments, nodes: [LayeredCompoundNode],
-                                edges: [LayeredCompoundEdge], runs: LayeredRouteEndRuns) -> Bool {
+    private static func crosses(_ first: Int, _ second: Int, segments: LayeredRouteSegments, nodes: ScratchSpan<LayeredCompoundNode>,
+                                edges: ScratchSpan<LayeredCompoundSpanEdge>, runs: LayeredRouteEndRuns) -> Bool {
         let deltaX = segments.endX[first] - segments.startX[first]
         let deltaY = segments.endY[first] - segments.startY[first]
         let side1 = deltaX * (segments.startY[second] - segments.startY[first]) - deltaY * (segments.startX[second] - segments.startX[first])

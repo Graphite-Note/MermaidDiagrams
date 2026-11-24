@@ -61,8 +61,8 @@ extension ReferenceLayeredCompoundLayout {
         return graph
     }
 
-    private mutating func addPortVertex(_ port: LayeredCompoundPort, index: Int, to graph: inout ReferenceLayeredCompoundLevelGraph, isStart: Bool,
-                                        isVertical: Bool, isSized: Bool, level: LayeredCompoundLevel) {
+    private mutating func addPortVertex(_ port: ReferenceLayeredCompoundPort, index: Int, to graph: inout ReferenceLayeredCompoundLevelGraph, isStart: Bool,
+                                        isVertical: Bool, isSized: Bool, level: ReferenceLayeredCompoundLevel) {
         let vertex = graph.nodes.count
         var flatNode = LayeredFlatNode(width: 0, height: 0, kind: isStart ? .startPort : .endPort)
         flatNode.orderKey = isKeyed ? key[port.isOutgoing ? edges[port.edgeIndex].target : edges[port.edgeIndex].source] : .nan
@@ -94,7 +94,7 @@ extension ReferenceLayeredCompoundLayout {
 
     /// An outgoing port on the side a group's flow ends at, ordered by where its flat edge runs at the group's last rank,
     /// ties broken by the rank after (Pele's `farHint`).
-    private func farHint(level: LayeredCompoundLevel, port: LayeredCompoundPort) -> Double {
+    private func farHint(level: ReferenceLayeredCompoundLevel, port: ReferenceLayeredCompoundPort) -> Double {
         let flatEdge = flatEdgeOf[port.edgeIndex]
         if flatEdge < 0 || level.identifier < 0 || !port.isOutgoing || port.side != level.direction.endSide { return .nan }
         var inside = key[edges[port.edgeIndex].source]
