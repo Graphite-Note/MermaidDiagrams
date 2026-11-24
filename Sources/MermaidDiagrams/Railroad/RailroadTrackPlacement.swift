@@ -24,6 +24,11 @@ struct RailroadTrackPlacement {
     private(set) var boxes: [RailroadLayoutBox] = []
     private(set) var counts: [DiagramTextBlock] = []
 
+    /// The track's pieces, the last one finished, taken out of the placement.
+    mutating func takeTrack() -> [DiagramPath] {
+        track.takeFinishedPaths()
+    }
+
     init(metrics: RailroadMetrics, displacement: CGVector) {
         self.metrics = metrics
         self.displacement = displacement
@@ -271,11 +276,11 @@ struct RailroadTrackDrawing {
                    control2: point.translated(by: second).translated(by: displacement)), ending: ending)
     }
 
-    /// The pieces, the last one finished.
-    var finishedPaths: [DiagramPath] {
-        var copy = self
-        copy.finish()
-        return copy.paths
+    /// The pieces, the last one finished; the drawing is left without them.
+    mutating func takeFinishedPaths() -> [DiagramPath] {
+        finish()
+        defer { paths = [] }
+        return paths
     }
 
     private mutating func add(_ segment: DiagramPathSegment, ending: CGPoint) {
@@ -283,9 +288,11 @@ struct RailroadTrackDrawing {
         current = ending
     }
 
+    /// The piece being drawn added to the pieces, its segments copied into an array of their own once, so that the list
+    /// they are drawn into keeps its room for the next piece.
     private mutating func finish() {
         guard !segments.isEmpty else { return }
-        paths.append(DiagramPath(start: start, segments: segments))
-        segments = []
+        paths.append(DiagramPath(start: start, segments: Array(segments)))
+        segments.removeAll(keepingCapacity: true)
     }
 }

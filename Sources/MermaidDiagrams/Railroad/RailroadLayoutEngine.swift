@@ -65,7 +65,7 @@ public enum RailroadLayoutEngine {
                                                       CGPoint(x: end + options.markerRadius, y: baseline).translated(by: halfPoint)] : []
             rules.append(RailroadLayoutRule(
                 name: EventModelText.placed(name, center: CGPoint(x: padding + name.size.width / 2, y: top + headHeight / 2).translated(by: halfPoint)),
-                track: placement.track.finishedPaths, arrows: placement.arrows, markerCenters: markers, boxes: placement.boxes,
+                track: placement.takeTrack(), arrows: placement.arrows, markerCenters: markers, boxes: placement.boxes,
                 counts: placement.counts))
             width = max(width, end + 2 * options.markerRadius - padding, name.size.width)
             bottom = baseline + box.down
