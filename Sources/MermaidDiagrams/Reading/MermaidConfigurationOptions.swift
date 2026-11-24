@@ -12,8 +12,8 @@
 import Foundation
 
 /// The options a diagram gives its type, as Pele reads them: first the front matter's under `config:` and the type's
-/// section (`config:`, then `sankey:`, then `showValues: false`), read as YAML by the port of Pele's reader
-/// (`MermaidFrontMatter`, `MermaidYAMLDocument`), then those of each `%%{init: …}%%` directive over them
+/// section (`config:`, then `sankey:`, then `showValues: false`), looked up by their bytes in the tree its YAML was read
+/// into once (`MermaidFrontMatter`, `MermaidYAMLTree`), then those of each `%%{init: …}%%` directive over them
 /// (`MermaidDirectiveConfiguration`). Each option's value is a Boolean (`true`, `false`), a number, text, or a
 /// collection (a mapping, whose options are kept by their path as well, or a sequence), as `Value` holds them.
 struct MermaidConfigurationOptions {
@@ -53,16 +53,33 @@ struct MermaidConfigurationOptions {
 
     /// The options the front matter gives `section`, before any directive's.
     private init(section: String, frontMatter read: MermaidReadFrontMatter) {
-        if read.frontMatter != nil, case .object(let document)? = read.value {
-            if case .object(let configuration)? = document["config"], case .object(let options)? = configuration[section] {
-                values.reserveCapacity(options.count)
-                for (name, value) in options { record(value, named: name) }
+        guard read.frontMatter != nil, let tree = read.tree, tree.kind(of: MermaidYAMLTree.root) == .mapping else { return }
+        if let configuration = tree.entry(of: MermaidYAMLTree.root, named: "config"), let options = tree.entry(of: configuration, named: section),
+           tree.kind(of: options) == .mapping {
+            for option in tree.children(of: options) { record(option, of: tree, named: tree.key(of: option)) }
+        }
+        // The front matter's own `displayMode`, when it is truthy, is the Gantt chart's over its `config:`, as Pele moves
+        // it there.
+        if section == Self.ganttSection, let displayMode = tree.entry(of: MermaidYAMLTree.root, named: "displayMode"), tree.isTruthy(displayMode) {
+            record(.text(tree.javaScriptText(displayMode)), named: "displayMode")
+        }
+    }
+
+    /// Records the tree's `node` under `name` as `record(_:named:depth:)` records a value: a scalar as it is; a mapping as
+    /// a collection and, each entry by its path, its options; a list as a collection; null as no option.
+    private mutating func record(_ node: Int, of tree: MermaidYAMLTree, named name: String, depth: Int = 0) {
+        if tree.kind(of: node) == .mapping {
+            if !name.isEmpty { store(.collection, named: name) }
+            guard depth < Self.deepestNesting else { return }
+            for entry in tree.children(of: node) {
+                let key = tree.key(of: entry)
+                guard !Self.isPrototypeKey(key) else { continue }
+                record(entry, of: tree, named: name.isEmpty ? key : name + "." + key, depth: depth + 1)
             }
-            // The front matter's own `displayMode`, when it is truthy, is the Gantt chart's over its `config:`, as Pele
-            // moves it there.
-            if section == Self.ganttSection, let displayMode = document["displayMode"], MermaidYAMLDocument.isTruthy(displayMode) {
-                record(.text(MermaidYAMLDocument.javaScriptText(displayMode)), named: "displayMode")
-            }
+        } else if let read = tree.optionValue(of: node) {
+            store(read, named: name)
+        } else {
+            removeValue(named: name)
         }
     }
 

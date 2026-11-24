@@ -7,7 +7,7 @@
  *              flowchart or a swimlane read by the frozen flowchart reader; any other type is named and not read.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -58,7 +58,7 @@ enum ReferenceMermaidReader {
         var sourceBytes = written
         if found.contains(.carriageReturn) { sourceBytes = ReferenceMermaidPreprocessing.normalizedLineBreaks(sourceBytes) }
         if found.contains([.lessThan, .greaterThan]) { sourceBytes = ReferenceMermaidPreprocessing.singleQuotingTagAttributes(sourceBytes) }
-        let readFrontMatter = MermaidReadFrontMatter(in: sourceBytes)
+        let readFrontMatter = ReferenceReadFrontMatter(in: sourceBytes)
         let (title, start) = try frontMatterTitleAndEnd(readFrontMatter, in: sourceBytes)
         var bytes = sourceBytes
         if found.contains(.percent) { bytes = ReferenceMermaidPreprocessing.removingDirectives(from: bytes, from: start) }
@@ -68,7 +68,7 @@ enum ReferenceMermaidReader {
         return (title, cursor)
     }
 
-    private static func frontMatterTitleAndEnd(_ read: MermaidReadFrontMatter,
+    private static func frontMatterTitleAndEnd(_ read: ReferenceReadFrontMatter,
                                                in bytes: [UInt8]) throws(MermaidDiagramReadError) -> (title: String?, end: Int) {
         guard let frontMatter = read.frontMatter else {
             var opening = ReferenceMermaidTextCursor(bytes: bytes)
@@ -80,7 +80,7 @@ enum ReferenceMermaidReader {
             let firstLine = frontMatter.body.split(separator: "\n").first { line in !line.allSatisfy(\.isWhitespace) } ?? ""
             throw .invalidSyntax(line: 2, problem: .unexpectedText(String(firstLine.trimmingCharacters(in: .whitespaces).prefix(24))))
         }
-        return (MermaidFrontMatter.title(in: value), frontMatter.end)
+        return (ReferenceMermaidFrontMatter.title(in: value), frontMatter.end)
     }
 
     /// Skips blank space and comments, each to the end of its line, before the diagram's keyword.

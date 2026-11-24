@@ -24,7 +24,7 @@ struct ReferenceMermaidConfigurationOptions: Equatable {
     /// The options under `config:` and `section:` in the front matter at the start of `bytes`, then those the
     /// directives after it set under `section`.
     init(section: String, in bytes: [UInt8]) {
-        let frontMatter = MermaidFrontMatter.find(in: bytes)
+        let frontMatter = ReferenceMermaidFrontMatter.find(in: bytes)
         if let frontMatter, case .object(let document)? = MermaidYAMLDocument.value(of: frontMatter.bodyBytes) {
             if case .object(let configuration)? = document["config"], case .object(let options)? = configuration[section] {
                 for (name, value) in options { record(value, named: name) }

@@ -6,7 +6,7 @@
  *              (FlowchartModelEquivalenceTests): a position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -27,7 +27,7 @@ struct ReferenceMermaidTextCursor {
     /// are read from (`MermaidConfigurationOptions`).
     var sourceBytes: [UInt8] { source?.bytes ?? bytes }
     /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
-    var readFrontMatter: MermaidReadFrontMatter? { source?.readFrontMatter }
+    var readFrontMatter: ReferenceReadFrontMatter? { source?.readFrontMatter }
 
     init(bytes: [UInt8]) {
         self.bytes = bytes
@@ -36,7 +36,7 @@ struct ReferenceMermaidTextCursor {
         line = 1
     }
 
-    init(bytes: [UInt8], sourceBytes: [UInt8], readFrontMatter: MermaidReadFrontMatter? = nil) {
+    init(bytes: [UInt8], sourceBytes: [UInt8], readFrontMatter: ReferenceReadFrontMatter? = nil) {
         self.bytes = bytes
         source = ReferenceMermaidCursorSource(bytes: sourceBytes, readFrontMatter: readFrontMatter)
         position = 0
@@ -148,9 +148,9 @@ struct ReferenceMermaidTextCursor {
 /// cursor and never changed.
 private final class ReferenceMermaidCursorSource {
     let bytes: [UInt8]
-    let readFrontMatter: MermaidReadFrontMatter?
+    let readFrontMatter: ReferenceReadFrontMatter?
 
-    init(bytes: [UInt8], readFrontMatter: MermaidReadFrontMatter?) {
+    init(bytes: [UInt8], readFrontMatter: ReferenceReadFrontMatter?) {
         self.bytes = bytes
         self.readFrontMatter = readFrontMatter
     }

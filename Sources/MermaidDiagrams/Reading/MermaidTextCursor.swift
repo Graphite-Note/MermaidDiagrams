@@ -23,8 +23,12 @@ struct MermaidTextCursor {
     /// The text as written, line breaks made line feeds, with its front matter and directives, which a type's options
     /// are read from (`MermaidConfigurationOptions`).
     var sourceBytes: [UInt8] { source?.bytes ?? bytes }
+    /// Whether the front end found that the text, which is `sourceBytes`, has no front matter: so that nothing is kept
+    /// behind a reference for it.
+    private let isWithoutFrontMatter: Bool
+
     /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
-    var readFrontMatter: MermaidReadFrontMatter? { source?.readFrontMatter }
+    var readFrontMatter: MermaidReadFrontMatter? { source?.readFrontMatter ?? (isWithoutFrontMatter ? .absent : nil) }
     /// What the `%%{init: …}%%` directives of `sourceBytes` after its front matter set, merged: read the first time a
     /// type's options ask for it and kept for the other sections it asks for; nil for a cursor made of bytes alone,
     /// which keeps nothing.
@@ -33,6 +37,7 @@ struct MermaidTextCursor {
     init(bytes: [UInt8]) {
         self.bytes = bytes
         source = nil
+        isWithoutFrontMatter = false
         position = 0
         line = 1
     }
@@ -40,15 +45,23 @@ struct MermaidTextCursor {
     init(bytes: [UInt8], sourceBytes: [UInt8], readFrontMatter: MermaidReadFrontMatter? = nil) {
         self.bytes = bytes
         source = MermaidCursorSource(bytes: sourceBytes, readFrontMatter: readFrontMatter)
+        isWithoutFrontMatter = false
         position = 0
         line = 1
     }
 
     /// A cursor right after the type's keyword the front end found: on the text's bytes, an array made of the caller's
-    /// String when preprocessing changed none, with the text as written and its front matter.
+    /// String when preprocessing changed none, with the text as written and its front matter. A text the front end read
+    /// unchanged and without front matter, as most are, keeps no reference beside its bytes.
     init(_ frontEnd: MermaidFrontEndResult) {
         bytes = frontEnd.text.legacyBytes
-        source = MermaidCursorSource(bytes: frontEnd.sourceBytes ?? bytes, readFrontMatter: frontEnd.readFrontMatter ?? MermaidReadFrontMatter(frontMatter: nil))
+        if frontEnd.sourceBytes == nil, frontEnd.readFrontMatter == nil {
+            source = nil
+            isWithoutFrontMatter = true
+        } else {
+            source = MermaidCursorSource(bytes: frontEnd.sourceBytes ?? bytes, readFrontMatter: frontEnd.readFrontMatter ?? .absent)
+            isWithoutFrontMatter = false
+        }
         position = frontEnd.keyword.upperBound
         line = bytes.withUnsafeBufferPointer { buffer in MermaidSourceText.line(at: frontEnd.keyword.upperBound, in: buffer) }
     }

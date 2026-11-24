@@ -3,11 +3,11 @@
  * ---------------------------
  * Layer: Core
  * Description: What every diagram's reading starts with: the text preprocessed as Pele does, without a copy when no
- *              pass would change a byte, its front matter's title, the comments before the type's keyword, and the
- *              keyword itself.
+ *              pass would change a byte (front matter and all), its front matter's title, the comments before the
+ *              type's keyword, and the keyword itself.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -40,8 +40,8 @@ enum MermaidFrontEnd {
         try refuseUnindexable(byteCount: source.utf8.count)
         var string = source
         string.makeContiguousUTF8()
-        let isUnchanged = string.utf8.withContiguousStorageIfAvailable { bytes in isReadUnchanged(bytes) } ?? false
-        guard isUnchanged else {
+        let unchanged = string.utf8.withContiguousStorageIfAvailable { bytes in unchangedReading(bytes) } ?? nil
+        guard let unchanged else {
             let (title, cursor) = try MermaidDiagramReader.preprocessed(source)
             try refuseUnindexable(byteCount: cursor.bytes.count)
             let text = MermaidSourceText(bytes: cursor.bytes)
@@ -50,8 +50,13 @@ enum MermaidFrontEnd {
                                          frontMatterTitle: title, keyword: keyword, typeKeyword: type)
         }
         let text = MermaidSourceText(contiguousString: string)
-        let (keyword, type) = try keywordRange(in: text, from: 0)
-        return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: nil, frontMatterTitle: nil, keyword: keyword, typeKeyword: type)
+        guard let read = unchanged.frontMatter, let frontMatter = read.frontMatter else {
+            let (keyword, type) = try keywordRange(in: text, from: 0)
+            return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: nil, frontMatterTitle: nil, keyword: keyword, typeKeyword: type)
+        }
+        let title = try MermaidDiagramReader.frontMatterTitle(read, of: frontMatter)
+        let (keyword, type) = try keywordRange(in: text, from: frontMatter.end)
+        return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: read, frontMatterTitle: title, keyword: keyword, typeKeyword: type)
     }
 
     /// Refuses a text too long for `MermaidTextRange`'s 32-bit offsets: limits that allow more than 2 GB
@@ -61,19 +66,31 @@ enum MermaidFrontEnd {
         guard byteCount <= MermaidTextRange.maximumOffset else { throw .sourceTooLarge(limitBytes: MermaidTextRange.maximumOffset) }
     }
 
-    /// Whether preprocessing leaves `bytes` as they are: no byte order mark, no carriage return, no tag attribute to
-    /// quote, no front matter (nor a first line of `---` that would be refused as unclosed), no directive, no colour's
-    /// semicolon to drop.
-    private static func isReadUnchanged(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
-        if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF { return false }
-        // Front matter is looked for first: its text is copied anyway, and the scan is then made once, on the copy.
-        if mayStartWithFrontMatter(bytes) { return false }
+    /// A text preprocessing leaves as it is, and its front matter when it has one.
+    private struct UnchangedReading {
+        /// The front matter found on the text's own bytes and read, nil when the text starts with none.
+        let frontMatter: MermaidReadFrontMatter?
+    }
+
+    /// The reading of `bytes` when preprocessing leaves them as they are: no byte order mark, no carriage return, no
+    /// tag attribute to quote, and after the front matter, which is found and read where it stands, no directive and
+    /// no colour's semicolon to drop; nil otherwise, and for a first line of `---` that opens no front matter (refused
+    /// as unclosed, or no front matter as Pele finds it), which the copying preprocessing reads.
+    private static func unchangedReading(_ bytes: UnsafeBufferPointer<UInt8>) -> UnchangedReading? {
+        if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF { return nil }
         let found = MermaidPreprocessing.bytesFound(in: bytes)
-        if found.contains(.carriageReturn) { return false }
-        if found.contains([.lessThan, .greaterThan]), MermaidPreprocessing.hasTagAttributesToQuote(in: bytes) { return false }
-        if found.contains(.percent), MermaidPreprocessing.containsDirectiveStart(bytes, from: 0) { return false }
-        if found.contains(.hash), MermaidPreprocessing.hasColorSemicolonsToDrop(in: bytes, from: 0) { return false }
-        return true
+        if found.contains(.carriageReturn) { return nil }
+        if found.contains([.lessThan, .greaterThan]), MermaidPreprocessing.hasTagAttributesToQuote(in: bytes) { return nil }
+        var start = 0
+        var read: MermaidReadFrontMatter?
+        if mayStartWithFrontMatter(bytes) {
+            guard let frontMatter = MermaidFrontMatter.find(in: bytes) else { return nil }
+            start = frontMatter.end
+            read = MermaidReadFrontMatter(frontMatter: frontMatter)
+        }
+        if found.contains(.percent), MermaidPreprocessing.containsDirectiveStart(bytes, from: start) { return nil }
+        if found.contains(.hash), MermaidPreprocessing.hasColorSemicolonsToDrop(in: bytes, from: start) { return nil }
+        return UnchangedReading(frontMatter: read)
     }
 
     /// Whether the first line, after white space that is no line break, starts with `---`: front matter, or the fence
