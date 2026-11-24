@@ -6,7 +6,7 @@
  *              it: line breaks, HTML's and Markdown's emphasis as spans, other tags dropped, icons left out, codes read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 24/11/2026
  */
 
@@ -30,6 +30,15 @@ enum DiagramLabelDecoder {
         let label = decoded(rawText, form: form)
         #if DEBUG
         DiagramLabelDecodingObservation.observer?(rawText, form, label)
+        #endif
+        return label
+    }
+
+    /// The label of the text whose UTF-8 is `bytes`, as `label(from:form:)` reads it, without making a String.
+    static func label(fromUTF8 bytes: UnsafeBufferPointer<UInt8>, form: Form) -> DiagramLabel {
+        let label = unmarkedLabel(bytes, isLiteral: form == .literal) ?? markedLabel(bytes, form: form)
+        #if DEBUG
+        DiagramLabelDecodingObservation.observer?(String(decoding: bytes, as: UTF8.self), form, label)
         #endif
         return label
     }
