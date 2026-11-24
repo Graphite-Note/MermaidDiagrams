@@ -46,24 +46,42 @@ enum MermaidTypeKeyword {
     case other
 
     init(_ keyword: UnsafeBufferPointer<UInt8>) {
-        for (spelling, type) in Self.exactKeywords where spelling.utf8CodeUnitCount == keyword.count && Self.spells(keyword, spelling) {
+        let table = Self.exactKeywordsByLength
+        guard keyword.count < table.count else {
+            self = .other
+            return
+        }
+        for (spelling, type) in table[keyword.count] where Self.spells(keyword, spelling) {
             self = type
             return
         }
         self = .other
     }
 
-    /// Every exact keyword and its type, as `MermaidDiagramReader` named them by their text.
-    private static let exactKeywords: [(StaticString, MermaidTypeKeyword)] = [
-        ("graph", .flowchart), ("flowchart", .flowchart), ("flowchart-elk", .flowchart), ("swimlane-beta", .swimlane),
-        ("stateDiagram", .stateDiagram), ("stateDiagram-v2", .stateDiagram), ("classDiagram", .classDiagram), ("classDiagram-v2", .classDiagram),
-        ("sequenceDiagram", .sequence), ("erDiagram", .entityRelationship), ("mindmap", .mindmap), ("timeline", .timeline), ("pie", .pieChart),
-        ("gantt", .ganttChart), ("gitGraph", .gitGraph), ("journey", .userJourney), ("quadrantChart", .quadrantChart), ("xychart", .xyChart),
-        ("xychart-beta", .xyChart), ("sankey", .sankey), ("sankey-beta", .sankey), ("kanban", .kanban), ("treeView-beta", .treeView),
-        ("info", .info), ("packet", .packet), ("packet-beta", .packet), ("radar-beta", .radar), ("treemap", .treemap), ("treemap-beta", .treemap),
-        ("venn-beta", .venn), ("cynefin-beta", .cynefin), ("wardley-beta", .wardleyMap), ("block", .block), ("block-beta", .block),
-        ("architecture", .architecture), ("architecture-beta", .architecture), ("usecase-beta", .useCase), ("agentflow-beta", .agentFlow),
-    ]
+    /// The exact keywords and their types by their length, made once.
+    private static let exactKeywordsByLength = (0...17).map(exactKeywords(ofLength:))
+
+    /// The exact keywords of one length and their types, as `MermaidDiagramReader` named them by their text.
+    private static func exactKeywords(ofLength length: Int) -> [(StaticString, MermaidTypeKeyword)] {
+        switch length {
+        case 3: [("pie", .pieChart)]
+        case 4: [("info", .info)]
+        case 5: [("graph", .flowchart), ("gantt", .ganttChart), ("block", .block)]
+        case 6: [("sankey", .sankey), ("kanban", .kanban), ("packet", .packet)]
+        case 7: [("mindmap", .mindmap), ("journey", .userJourney), ("xychart", .xyChart), ("treemap", .treemap)]
+        case 8: [("timeline", .timeline), ("gitGraph", .gitGraph)]
+        case 9: [("flowchart", .flowchart), ("erDiagram", .entityRelationship), ("venn-beta", .venn)]
+        case 10: [("radar-beta", .radar), ("block-beta", .block)]
+        case 11: [("sankey-beta", .sankey), ("packet-beta", .packet)]
+        case 12: [("stateDiagram", .stateDiagram), ("classDiagram", .classDiagram), ("xychart-beta", .xyChart), ("treemap-beta", .treemap),
+                  ("cynefin-beta", .cynefin), ("wardley-beta", .wardleyMap), ("architecture", .architecture), ("usecase-beta", .useCase)]
+        case 13: [("flowchart-elk", .flowchart), ("swimlane-beta", .swimlane), ("quadrantChart", .quadrantChart), ("treeView-beta", .treeView)]
+        case 14: [("agentflow-beta", .agentFlow)]
+        case 15: [("stateDiagram-v2", .stateDiagram), ("classDiagram-v2", .classDiagram), ("sequenceDiagram", .sequence)]
+        case 17: [("architecture-beta", .architecture)]
+        default: []
+        }
+    }
 
     private static func spells(_ keyword: UnsafeBufferPointer<UInt8>, _ word: StaticString) -> Bool {
         let letters = word.utf8Start

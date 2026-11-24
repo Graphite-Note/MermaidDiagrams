@@ -38,19 +38,19 @@ struct MermaidYAMLNode {
 /// A YAML document as Pele's reader reads it (`SequenceAttributesBlockSyntax`, the reference), held as a flat list of
 /// nodes, the document's at `root`. The common front matter, block mappings of plain and quoted scalars, is read on its
 /// bytes by `MermaidYAMLTreeReader`, its keys and texts ranges of those bytes; any other YAML is read by the reference
-/// reader, and its values' bytes are written after the YAML's.
+/// reader, and its keys' and texts' bytes are written into the tree's own.
 struct MermaidYAMLTree {
     /// The document's node.
     static let root = 0
 
-    /// The YAML's bytes, then those of the keys and texts the reference reader decoded.
+    /// The YAML's bytes, which a tree read on them indexes; or the keys and texts the reference reader decoded.
     let bytes: [UInt8]
     let nodes: [MermaidYAMLNode]
 
     /// The document `yaml` holds, or nil when Pele's reader refuses it (Pele then refuses the diagram).
     static func read(_ yaml: [UInt8]) -> MermaidYAMLTree? {
         if let tree = MermaidYAMLTreeReader.tree(of: yaml) { return tree }
-        return MermaidYAMLDocument.value(of: yaml).map { value in MermaidYAMLTree(value, after: yaml) }
+        return MermaidYAMLDocument.value(of: yaml).map { value in MermaidYAMLTree(value, sizedFor: yaml.count) }
     }
 
     init(bytes: [UInt8], nodes: [MermaidYAMLNode]) {
@@ -58,10 +58,13 @@ struct MermaidYAMLTree {
         self.nodes = nodes
     }
 
-    /// The tree of a value the reference reader read from `yaml`: its keys' and texts' bytes written after the YAML's.
-    init(_ value: DirectiveValue, after yaml: [UInt8]) {
-        var bytes = yaml
+    /// The tree of a value the reference reader read from a YAML text of `yamlByteCount` bytes: its keys' and texts'
+    /// bytes written one after the other, in about as many bytes as the YAML's.
+    init(_ value: DirectiveValue, sizedFor yamlByteCount: Int) {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(yamlByteCount)
         var nodes: [MermaidYAMLNode] = []
+        nodes.reserveCapacity(16)
         Self.append(value, key: MermaidTextRange(start: bytes.count, end: bytes.count), to: &nodes, bytes: &bytes)
         self.bytes = bytes
         self.nodes = nodes
