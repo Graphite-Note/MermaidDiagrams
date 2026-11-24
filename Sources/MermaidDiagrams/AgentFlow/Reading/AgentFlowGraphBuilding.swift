@@ -27,15 +27,17 @@ extension AgentFlowDiagramBuilder {
             nodeIndices[flow.identifier] = graph.nodes.count
             graph.nodes.append(groupNode(of: flow, parent: parents[flow.identifier]))
         }
-        for vertex in diagram.vertices where !collapsing.hidden.contains(vertex.identifier) {
-            if let existing = nodeIndices[vertex.identifier] {
-                graph.nodes[existing].styles = vertex.styles
-                graph.nodes[existing].compiledStyles = compiledStyles(of: vertex.classes)
-                graph.nodes[existing].classes = vertex.classes.joined(separator: " ")
+        // The nodes and edges are read where they are in the lists, not copied out one by one.
+        for index in diagram.vertices.indices where !collapsing.hidden.contains(diagram.vertices[index].identifier) {
+            let identifier = diagram.vertices[index].identifier
+            if let existing = nodeIndices[identifier] {
+                graph.nodes[existing].styles = diagram.vertices[index].styles
+                graph.nodes[existing].compiledStyles = compiledStyles(of: diagram.vertices[index].classes)
+                graph.nodes[existing].classes = diagram.vertices[index].classes.joined(separator: " ")
                 continue
             }
-            nodeIndices[vertex.identifier] = graph.nodes.count
-            graph.nodes.append(node(of: vertex, parent: parents[vertex.identifier]))
+            nodeIndices[identifier] = graph.nodes.count
+            graph.nodes.append(node(of: diagram.vertices[index], parent: parents[identifier]))
         }
         graph.edges = drawnEdges(collapsedInto: collapsing.collapsedInto, defaultCurve: defaultCurve)
         normalizeShapes(of: &graph)
@@ -132,7 +134,7 @@ extension AgentFlowDiagramBuilder {
                            directionKeyword: flow.directionKeyword)
     }
 
-    private func node(of vertex: AgentFlowVertex, parent: String?) -> AgentFlowGraphNode {
+    private func node(of vertex: borrowing AgentFlowVertex, parent: String?) -> AgentFlowGraphNode {
         let type = vertex.type.map(AgentFlowShapes.resolvingAlias)
         return AgentFlowGraphNode(identifier: vertex.identifier, label: vertex.text, labelType: vertex.labelType,
                                   shape: type == nil || type == "square" ? "squareRect" : type ?? "squareRect", isGroup: false,
@@ -146,19 +148,25 @@ extension AgentFlowDiagramBuilder {
     private func drawnEdges(collapsedInto: [String: String], defaultCurve: String?) -> [AgentFlowGraphEdge] {
         var edges: [AgentFlowGraphEdge] = []
         edges.reserveCapacity(diagram.edges.count)
-        for (index, raw) in diagram.edges.enumerated() {
-            let start = collapsedInto[raw.start] ?? raw.start
-            let end = collapsedInto[raw.end] ?? raw.end
-            if start == end, raw.start != raw.end { continue }
-            let arrow = raw.type == "arrow_open" ? "none" : raw.type == "arrow_cross" || raw.type == "arrow_point" ? raw.type ?? "arrow_point" : "arrow_point"
-            let curve = raw.interpolation.flatMap { curve in curve.isEmpty ? nil : curve }
-                ?? diagram.defaultInterpolation.flatMap { curve in curve.isEmpty ? nil : curve } ?? defaultCurve
-            edges.append(AgentFlowGraphEdge(identifier: raw.identifier.isEmpty ? "L_\(start)_\(end)_\(index)" : raw.identifier,
-                                            isUserDefinedIdentifier: raw.isUserDefinedIdentifier, start: start, end: end, type: raw.type ?? "normal",
-                                            label: raw.text, labelType: raw.labelType, thickness: raw.stroke, minimumLength: raw.length,
-                                            arrowTypeEnd: arrow, compiledStyles: compiledStyles(of: raw.classes),
-                                            style: (diagram.defaultEdgeStyle ?? []) + (raw.style ?? []), curve: curve))
+        for index in diagram.edges.indices {
+            if let edge = drawnEdge(of: diagram.edges[index], at: index, collapsedInto: collapsedInto, defaultCurve: defaultCurve) { edges.append(edge) }
         }
         return edges
+    }
+
+    /// The edge drawn for `raw`, the edge at `index`, or nil when both its ends are inside one collapsed flow.
+    private func drawnEdge(of raw: borrowing AgentFlowEdge, at index: Int, collapsedInto: [String: String],
+                           defaultCurve: String?) -> AgentFlowGraphEdge? {
+        let start = collapsedInto[raw.start] ?? raw.start
+        let end = collapsedInto[raw.end] ?? raw.end
+        if start == end, raw.start != raw.end { return nil }
+        let arrow = raw.type == "arrow_open" ? "none" : raw.type == "arrow_cross" || raw.type == "arrow_point" ? raw.type ?? "arrow_point" : "arrow_point"
+        let curve = raw.interpolation.flatMap { curve in curve.isEmpty ? nil : curve }
+            ?? diagram.defaultInterpolation.flatMap { curve in curve.isEmpty ? nil : curve } ?? defaultCurve
+        return AgentFlowGraphEdge(identifier: raw.identifier.isEmpty ? "L_\(start)_\(end)_\(index)" : raw.identifier,
+                                  isUserDefinedIdentifier: raw.isUserDefinedIdentifier, start: start, end: end, type: raw.type ?? "normal",
+                                  label: raw.text, labelType: raw.labelType, thickness: raw.stroke, minimumLength: raw.length,
+                                  arrowTypeEnd: arrow, compiledStyles: compiledStyles(of: raw.classes),
+                                  style: (diagram.defaultEdgeStyle ?? []) + (raw.style ?? []), curve: curve)
     }
 }

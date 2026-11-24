@@ -179,6 +179,8 @@ struct UseCaseDiagramBuilder {
         firstMention.reserveCapacity(declarationCount + drafts.relationships.count)
         symbols.reserveCapacity(declarationCount + drafts.relationships.count)
         elements.reserveCapacity(drafts.elements.count + 2 * drafts.relationships.count)
+        elementOrder.reserveCapacity(drafts.elements.count + 2 * drafts.relationships.count)
+        boundaryOrder.reserveCapacity(drafts.boundaries.count)
     }
 
     /// The boundary a draft is declared in, when its title makes an id: one whose title makes none is no parent.
