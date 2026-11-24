@@ -27,6 +27,7 @@ enum DiagramLabelDecoder {
     }
 
     static func label(from rawText: String, form: Form) -> DiagramLabel {
+        if TextPrototypeRecorder.isRecording { TextPrototypeRecorder.recordDecode(rawText: rawText, form: form) }
         guard !rawText.isEmpty else { return DiagramLabel(lines: [rawText]) }
         // Most text is one line without markup, which a pass over its bytes finds without reading its characters; the
         // text is then kept as it is, trimmed.

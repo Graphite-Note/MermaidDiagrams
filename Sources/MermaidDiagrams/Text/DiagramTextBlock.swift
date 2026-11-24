@@ -33,6 +33,7 @@ public struct DiagramTextBlock: Equatable, Sendable {
     /// wraps a line wider than `maximumWidth` between its pieces (`DiagramTextWrapping`). A word wider than that stays
     /// whole on its own line. An empty label has no lines.
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) {
+        if TextPrototypeRecorder.isRecording { TextPrototypeRecorder.recordBlock(label: label, measurer: measurer, maximumWidth: maximumWidth) }
         var measured = DiagramMeasuredLines(keepsRuns: label.spans != nil)
         if !label.isEmpty {
             measured.reserveCapacity(label.lines.count)

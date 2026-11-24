@@ -46,6 +46,14 @@ struct MermaidDiagramsBenchmark {
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
+        if let prototypeIndex = CommandLine.arguments.firstIndex(of: "--text-prototype") {
+            let names = Array(CommandLine.arguments[(prototypeIndex + 1)...])
+            for name in names {
+                let sources = name == "docs: all examples" ? try FlowchartCorpus.documentationExamples() : try PeleResults.sources(ofCorpus: name)
+                TextPrototypeBenchmark.run(corpusName: name, sources: sources, typography: typography, pairCount: 7, roundSeconds: 0.15)
+            }
+            return
+        }
         if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
             return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
         }
