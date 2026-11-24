@@ -276,24 +276,33 @@ struct DiagramSVGBuffer: ~Copyable {
         copy.withUTF8 { textBytes in appendEscaped(textBytes) }
     }
 
-    /// Copies `textBytes` and looks at each byte on the way, in one pass without a branch per byte; only text with a
-    /// byte that is, or may start, something escaped or left out is then written again, byte by byte.
+    /// Copies `textBytes` eight bytes at a time and looks at each word on the way (`mayNeedEscaping`), the last few bytes
+    /// in a word of their own padded with `A`; only text with a byte that is, or may start, something escaped or left out
+    /// is then written again, byte by byte.
     mutating func appendEscaped(_ textBytes: UnsafeBufferPointer<UInt8>) {
         guard let source = textBytes.baseAddress else { return }
         let byteCount = textBytes.count
-        reserve(byteCount)
-        let destination = cursor
-        var flags: UInt8 = 0
-        for index in 0..<byteCount {
-            let byte = source[index]
-            destination[index] = byte
-            flags |= Self.escapingFlag(of: byte)
+        reserve(byteCount &+ 8)
+        let destination = UnsafeMutableRawPointer(cursor)
+        var flags: UInt64 = 0
+        var index = 0
+        while index &+ 8 <= byteCount {
+            let word = UnsafeRawPointer(source + index).loadUnaligned(as: UInt64.self)
+            (destination + index).storeBytes(of: word, as: UInt64.self)
+            flags |= Self.mayNeedEscaping(word)
+            index &+= 8
         }
-        guard flags != 0 else {
-            count &+= byteCount
-            return
+        if index < byteCount {
+            var word = Self.everyByte &* UInt64(UInt8(ascii: "A"))
+            for offset in 0..<(byteCount &- index) {
+                let shift = UInt64(truncatingIfNeeded: offset &* 8)
+                word = word & ~(0xFF << shift) | UInt64(source[index &+ offset]) << shift
+            }
+            (destination + index).storeBytes(of: word, as: UInt64.self)
+            flags |= Self.mayNeedEscaping(word)
         }
-        appendEscapedByteByByte(textBytes)
+        guard flags == 0 else { return appendEscapedByteByByte(textBytes) }
+        count &+= byteCount
     }
 
     private mutating func appendEscapedByteByByte(_ textBytes: UnsafeBufferPointer<UInt8>) {
@@ -321,22 +330,30 @@ struct DiagramSVGBuffer: ~Copyable {
     /// The lead byte of U+FFFE and U+FFFF in UTF-8 (`EF BF BE`, `EF BF BF`).
     private static let firstByteOfNoncharacter: UInt8 = 0xEF
 
-    /// The bytes below 64 that are, or may start, something escaped or left out: the control characters, `"`, `&`, `'`,
-    /// `<` and `>`, one bit each.
-    private static let lowBytesThatMayNeedEscaping: UInt64 = 0x0000_0000_FFFF_FFFF
-        | 1 << 0x22 | 1 << 0x26 | 1 << 0x27 | 1 << 0x3C | 1 << 0x3E
-    /// The bytes from 64 to 127 that are left out, one bit each from 64: DEL.
-    private static let highBytesThatMayNeedEscaping: UInt64 = 1 << (0x7F - 64)
+    /// 0x01 in each byte of a word, and 0x80.
+    private static let everyByte: UInt64 = 0x0101_0101_0101_0101
+    private static let everyHighBit: UInt64 = 0x8080_8080_8080_8080
 
-    /// 1 for a byte that is, or may start, something escaped or left out, else 0: worked out without a branch, so that a
-    /// loop over bytes asks it of many at once.
+    /// Nonzero when one of the word's bytes is, or may start, something escaped or left out: a control character, `"`,
+    /// `&`, `'`, `<`, `>`, DEL or the lead byte of U+FFFE and U+FFFF. Each test is the word-wide test for a byte below a
+    /// bound or a zero byte (after an exclusive or with the byte looked for), which never misses one; a word it flags
+    /// wrongly is only written again byte by byte, the same.
     @inline(__always)
-    private static func escapingFlag(of byte: UInt8) -> UInt8 {
-        let shift = UInt64(byte & 63)
-        let low = UInt8(truncatingIfNeeded: lowBytesThatMayNeedEscaping >> shift) & 1
-        let high = UInt8(truncatingIfNeeded: highBytesThatMayNeedEscaping >> shift) & 1
-        let beyondASCII: UInt8 = byte == firstByteOfNoncharacter ? 1 : 0
-        return byte < 64 ? low : (byte < 128 ? high : beyondASCII)
+    private static func mayNeedEscaping(_ word: UInt64) -> UInt64 {
+        let notWord = ~word
+        let control = (word &- everyByte &* 0x20) & notWord
+        let quote = hasZeroByte(word ^ (everyByte &* 0x22))
+        let ampersandOrApostrophe = hasZeroByte((word & (everyByte &* 0xFE)) ^ (everyByte &* 0x26))
+        let angleBracket = hasZeroByte((word & (everyByte &* 0xFD)) ^ (everyByte &* 0x3C))
+        let delete = hasZeroByte(word ^ (everyByte &* 0x7F))
+        let noncharacterLead = hasZeroByte(word ^ (everyByte &* UInt64(firstByteOfNoncharacter)))
+        return (control | quote | ampersandOrApostrophe | angleBracket | delete | noncharacterLead) & everyHighBit
+    }
+
+    /// Nonzero, in its high bits, when one of `word`'s bytes is zero.
+    @inline(__always)
+    private static func hasZeroByte(_ word: UInt64) -> UInt64 {
+        (word &- everyByte) & ~word
     }
 
     /// Whether the bytes at `index` are U+FFFE or U+FFFF.

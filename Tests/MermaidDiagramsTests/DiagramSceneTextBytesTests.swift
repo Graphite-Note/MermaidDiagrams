@@ -131,11 +131,23 @@ final class DiagramSceneTextBytesTests: XCTestCase {
         XCTAssertGreaterThan(runCount, 0)
     }
 
-    /// Text of random bytes and of every byte, escaped in one pass, is what the frozen writer escaped byte by byte.
+    /// Text of random bytes, of every byte, and of each escaped byte at each place of short texts, escaped in one pass, is
+    /// what the frozen writer escaped byte by byte.
     func testTextEscapedInOnePassIsWhatTheWriterEscapedByteByByte() {
         var generator = DiagramPathLaneSamples(seed: 0xE5CA)
         var texts = (0..<256).map { byte in String(decoding: [UInt8(byte), 0x41], as: UTF8.self) }
         texts += ["", "plain", "\u{FFFE}\u{FFFF}\u{FFFD}", "&<>\"'", String(repeating: "a&", count: 300), "\u{EF}"]
+        // Each byte that is escaped or left out, at each place of texts of 1 to 18 bytes: in a word of eight and in the
+        // last few bytes, padded.
+        for special: [UInt8] in [[0x00], [0x09], [0x1F], [0x22], [0x26], [0x27], [0x3C], [0x3E], [0x7F], [0xEF, 0xBF, 0xBE], [0xEF, 0xBF, 0xBF]] {
+            for length in 1...18 {
+                for place in 0..<length {
+                    var bytes = [UInt8](repeating: UInt8(ascii: "a"), count: length)
+                    bytes.replaceSubrange(place..<min(place + special.count, length), with: special.prefix(length - place))
+                    texts.append(String(decoding: bytes, as: UTF8.self))
+                }
+            }
+        }
         for _ in 0..<5_000 {
             let length = Int(generator.next() % 80)
             let bytes = (0..<length).map { _ -> UInt8 in
