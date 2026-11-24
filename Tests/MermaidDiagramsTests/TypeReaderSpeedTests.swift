@@ -9,7 +9,7 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -63,6 +63,24 @@ final class TypeReaderSpeedTests: XCTestCase {
     func testAKanbanValueWithoutALineFeedCharacterIsNotFolded() {
         for text in Self.generatedTexts(count: 20_000, longest: 7, seed: 0x5EED_0103) where !text.contains("\n") {
             XCTAssertEqual(KanbanFlowReader.folded(text), text, text.debugDescription)
+        }
+    }
+
+    /// The tree view's box-drawing pass is skipped for a text without a box character's bytes, so each of the eight
+    /// must open it alone: a branch alone makes its line an entry one level down, a dash alone makes its line go, and a
+    /// vertical bar alone leaves the lines as written (Pele converts only when a line other than bars holds one).
+    func testEachBoxCharacterAloneOpensTheBoxDrawingPass() throws {
+        for branch in ["└", "┗", "├", "┣"] {
+            let lines = try TreeViewBoxDrawingReader.lines(after: 1, in: "treeView-beta\nroot\n\(branch) child\n")
+            XCTAssertEqual(lines.map(\.text), ["treeView-beta", "root", "    child", ""], branch)
+        }
+        for dash in ["─", "━"] {
+            let lines = try TreeViewBoxDrawingReader.lines(after: 1, in: "treeView-beta\nroot\n\(dash)\(dash)\nchild\n")
+            XCTAssertEqual(lines.map(\.text), ["treeView-beta", "root", "child", ""], dash)
+        }
+        for bar in ["│", "┃"] {
+            let lines = try TreeViewBoxDrawingReader.lines(after: 1, in: "treeView-beta\nroot\n\(bar)\nchild\n")
+            XCTAssertEqual(lines.map(\.text), ["treeView-beta", "root", bar, "child", ""], bar)
         }
     }
 
