@@ -1,3 +1,15 @@
+/**
+ * File: ClassDiagramClass.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: A class of a class diagram as it is written: its identifier, label, generic type, annotations and
+ *              members, and its name as drawn.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 /// A class of a class diagram: the name relations call it by, the text its box shows, and its compartments.
 public struct ClassDiagramClass: Equatable, Sendable {
     /// The name as written, without its generic type: `Square` for `Square~Shape~`, `Animal Class!` for a name in
@@ -28,8 +40,9 @@ public struct ClassDiagramClass: Equatable, Sendable {
     /// The title as it is drawn: the label, with the generic type in angle brackets after its last line
     /// (`Square<Shape>`).
     public var displayedName: DiagramLabel {
+        guard let genericType else { return label }
         var lines = label.lines
-        guard let genericType, let last = lines.popLast() else { return label }
+        guard let last = lines.popLast() else { return label }
         return DiagramLabel(lines: lines + [last + "<" + genericType + ">"])
     }
 }
