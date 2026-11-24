@@ -9,7 +9,7 @@
  *              are the document's.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -140,8 +140,8 @@ struct DiagramSVGSceneSamples {
         return lastText
     }
 
-    /// A paint of any role, mixture or written color; series indexes from 0, as a palette takes them (a negative index
-    /// traps in `DiagramPalette.seriesColor(at:)`, which no scene asks for).
+    /// A paint of any role, mixture or written color; series indexes from 0, as scenes give them (a negative index, which
+    /// no scene gives, counts back from the last: `DiagramPaletteSeriesIndexTests`).
     mutating func paint() -> DiagramPaint {
         let roles: [DiagramPaletteRole] = [.background, .foreground, .line, .surface, .border, .accent, .critical, .muted, .alternateSurface,
                                            .series(pick(40))]
