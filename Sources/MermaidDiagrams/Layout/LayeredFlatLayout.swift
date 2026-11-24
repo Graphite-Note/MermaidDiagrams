@@ -53,18 +53,24 @@ struct LayeredFlatLayout {
             nodes[0].y = nodes[0].height / 2
             return LayeredFlatResult(width: nodes[0].width, height: nodes[0].height)
         }
-        let workspace = givenWorkspace ?? LayeredFlatWorkspace()
+        let workspace = givenWorkspace ?? LayeredThreadWorkspace.workspace()
         var layout = LayeredFlatLayout(nodes: [], edges: [], options: options, workspace: workspace,
                                        step: stepOf(nodeCount: nodes.count, edges: edges, workspace: workspace))
         // The lists move into the layout and back, so that ranking and routing change them in place, never copied.
         swap(&layout.nodes, &nodes)
         swap(&layout.edges, &edges)
+        var clockStart = LayeredStageClock.now()
         LayeredFlatRanking.orient(nodes: layout.nodes, edges: &layout.edges, workspace: workspace)
+        LayeredStageClock.add(.flatOrient, since: clockStart)
+        clockStart = LayeredStageClock.now()
         LayeredFlatRanking.rank(nodes: &layout.nodes, edges: layout.edges, step: layout.step, workspace: workspace)
+        LayeredStageClock.add(.flatRank, since: clockStart)
         let result = layout.run(maximumVertexCount: maximumVertexCount)
+        clockStart = LayeredStageClock.now()
         swap(&layout.nodes, &nodes)
         swap(&layout.edges, &edges)
         layout.recycleLists()
+        LayeredStageClock.add(.flatRecycling, since: clockStart)
         return result
     }
 
@@ -99,10 +105,15 @@ struct LayeredFlatLayout {
     }
 
     private mutating func run(maximumVertexCount: Int) -> LayeredFlatResult? {
+        var clockStart = LayeredStageClock.now()
         let bendCount = chooseDirectEdges()
         let vertexCount = nodes.count + bendCount
         guard vertexCount <= maximumVertexCount else { return nil }
         var graph = buildGraph(vertexCount: vertexCount)
+        if LayeredStageClock.isOn { LayeredStageClock.lastSizes = (vertexCount, graph.segmentCount, graph.maximumRank) }
+        LayeredStageClock.add(.flatGraphBuilding, since: clockStart)
+        clockStart = LayeredStageClock.now()
+        defer { LayeredStageClock.add(.flatRouteRest, since: clockStart) }
         var result = LayeredFlatResult(width: 0, height: 0)
         // A graph with no rank of two vertices has one order: its reduction would find no crossing and change nothing.
         if graph.segmentCount > 0 && graph.maximumRank > 0 && LayeredFlatCrossingReduction.widestRank(of: graph) >= 2 {
@@ -112,6 +123,8 @@ struct LayeredFlatLayout {
             graph = (consume reduction).finished()
             graph.settlePositions()
         }
+        LayeredStageClock.add(.flatCrossingReduction, since: clockStart)
+        clockStart = LayeredStageClock.now()
         if options.ordersOnly {
             writeOrderPositions(graph: &graph)
             graph.recycle(into: workspace)

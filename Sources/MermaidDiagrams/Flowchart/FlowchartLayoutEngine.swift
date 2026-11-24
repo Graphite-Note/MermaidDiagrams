@@ -62,9 +62,13 @@ public enum FlowchartLayoutEngine {
                                                        limits: MermaidDiagramLimits, spacing diagramSpacing: DiagramSpacing = .standard,
                                                        titleWidth: CGFloat = .greatestFiniteMagnitude) throws(FlowchartLayoutError) -> FlowchartLayout {
         // A collapsed group is drawn as one node, what it holds left out (`FlowchartCollapsedGroups`).
+        var clockStart = LayeredStageClock.now()
         let diagram = FlowchartCollapsedGroups.collapsing(written)
+        LayeredStageClock.add(.flowchartCollapsing, since: clockStart)
         let isTight = diagramSpacing == .compact
+        clockStart = LayeredStageClock.now()
         let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText, wrappingWidth: wrappingWidth)
+        LayeredStageClock.add(.flowchartMeasurement, since: clockStart)
         return try layout(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: isTight ? compactSpacing : spacing,
                           groupPadding: isTight ? FlowchartClusterGraph.tightClusterPadding : FlowchartClusterGraph.clusterPadding, titleWidth: titleWidth)
     }
@@ -82,6 +86,7 @@ public enum FlowchartLayoutEngine {
             return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing,
                                      groupPadding: groupPadding, title: title)
         }
+        var clockStart = LayeredStageClock.now()
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let layeredEdgeIndices = diagram.edges.indices.filter { edgeIndex in diagram.edges[edgeIndex].sourceIndex != diagram.edges[edgeIndex].targetIndex }
         let spanSide: DiagramSide = diagram.direction.layeredDirection.runsVertically ? .top : .left
@@ -96,9 +101,14 @@ public enum FlowchartLayoutEngine {
                                                         labelSize: labelSize)
                                  },
                                  nodeSideSpans: diagram.nodes.indices.map { node in measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: spanSide) })
+        LayeredStageClock.add(.flowchartGraphBuilding, since: clockStart)
+        clockStart = LayeredStageClock.now()
         guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
+        LayeredStageClock.add(.flatPlacement, since: clockStart)
+        clockStart = LayeredStageClock.now()
+        defer { LayeredStageClock.add(.flowchartPageAssembly, since: clockStart) }
         var page = FlowchartPageAssembly(diagram: diagram, measured: measured,
                                          axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: placement.extent.height))
         page.placeNodes(flowCenters: placement.nodeCenters)
@@ -114,14 +124,19 @@ public enum FlowchartLayoutEngine {
                                                                       font: DiagramFont, limits: MermaidDiagramLimits, spacing: LayeredSpacing,
                                                                       groupPadding: CGFloat,
                                                                       title: DiagramTextBlock?) throws(FlowchartLayoutError) -> FlowchartLayout {
+        var clockStart = LayeredStageClock.now()
         let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom,
                                               groupPadding: groupPadding)
+        LayeredStageClock.add(.clusterGraphBuilding, since: clockStart)
+        clockStart = LayeredStageClock.now()
         let placement: LayeredClusterPlacement
         do {
             placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
+        clockStart = LayeredStageClock.now()
+        defer { LayeredStageClock.add(.flowchartPageAssembly, since: clockStart) }
         var page = FlowchartPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
         page.placeNodes(clustered: clustered, placement: placement)
         page.placeEdges(clustered: clustered, placement: placement)

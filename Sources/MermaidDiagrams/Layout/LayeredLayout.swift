@@ -19,6 +19,9 @@ import CoreGraphics
 enum LayeredLayout {
     /// Lays `graph` out, or returns nil when it would need more than `maximumPointCount` nodes and passing points.
     static func place(_ graph: LayeredGraph, spacing: LayeredSpacing, maximumPointCount: Int) -> LayeredPlacement? {
+        if LayeredStageReplay.isCapturing { LayeredStageReplay.flat.append((graph, spacing, maximumPointCount)) }
+        let wrappingStart = LayeredStageClock.now()
+        defer { LayeredStageClock.add(.flatPlacementWrapping, since: wrappingStart) }
         var nodes = graph.nodeSizes.enumerated().map { node, size in
             var flatNode = LayeredFlatNode(width: Double(size.across), height: Double(size.along))
             flatNode.sideSpan = node < graph.nodeSideSpans.count ? Double(graph.nodeSideSpans[node]) : 0
@@ -31,9 +34,11 @@ enum LayeredLayout {
             flatEdge.headOffset = Double(edge.targetOffset)
             return flatEdge
         }
+        let coreStart = LayeredStageClock.now()
         guard let size = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: options(spacing), maximumVertexCount: maximumPointCount) else {
             return nil
         }
+        LayeredStageClock.add(.flatLayoutCore, since: coreStart)
         let centers = nodes.map { node in CGPoint(x: node.x, y: node.y) }
         return LayeredPlacement(nodeCenters: centers,
                                 edgeRoutes: edges.map { edge in centeredRoute(edge, centers: centers) },

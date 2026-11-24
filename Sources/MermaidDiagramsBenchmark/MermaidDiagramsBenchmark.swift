@@ -43,6 +43,13 @@ struct MermaidDiagramsBenchmark {
     /// the README's pictures of every type (`ReadmePictures`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
+        LayeredExperiments.setThreadWorkspace(CommandLine.arguments.contains("--thread-workspace"))
+        if let replayIndex = CommandLine.arguments.firstIndex(of: "--layered-replay") {
+            return try LayeredReplayProfiling.run(arguments: Array(CommandLine.arguments[(replayIndex + 1)...]), typography: typography)
+        }
+        if let stagesIndex = CommandLine.arguments.firstIndex(of: "--layout-stages") {
+            return try LayeredStageProfiling.run(arguments: Array(CommandLine.arguments[(stagesIndex + 1)...]), typography: typography)
+        }
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }

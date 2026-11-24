@@ -13,14 +13,20 @@ extension LayeredFlatLayout {
     /// Positions the ordered graph, spreads and settles the ends, straightens the bends, cuts the edges into the pieces
     /// that cross one gap each, sizes the gaps and writes every node's place and every edge's route.
     mutating func route(graph: inout LayeredFlatGraph) -> (width: Double, height: Double) {
+        var clockStart = LayeredStageClock.now()
         if let fromEnds = segmentFromEnd, let toEnds = segmentToEnd {
             graph.spreadEnds(nodes: nodes, fromEnds: fromEnds, toEnds: toEnds, workspace: workspace)
         }
+        LayeredStageClock.add(.flatSpreading, since: clockStart)
+        clockStart = LayeredStageClock.now()
         var across = LayeredFlatPositioning.positions(&graph, options: options, workspace: workspace)
+        LayeredStageClock.add(.flatPositioning, since: clockStart)
+        clockStart = LayeredStageClock.now()
         let emptyRanks = graph.emptyRanks(workspace: workspace)
         if let fromEnds = segmentFromEnd, let toEnds = segmentToEnd {
             settleEnds(graph: &graph, across: &across, emptyRanks: emptyRanks, fromEnds: fromEnds, toEnds: toEnds)
         }
+        LayeredStageClock.add(.flatEndSettling, since: clockStart)
         graph.alignPorts(&across, emptyRanks: emptyRanks)
         // A rank that holds nothing but bends is only there because another edge has a label or a twin: its bends move
         // onto the straight line between their edges' ends, and one that gets there is left out of the route.

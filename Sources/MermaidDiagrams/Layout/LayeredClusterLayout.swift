@@ -19,6 +19,9 @@ enum LayeredClusterLayout {
     /// all its boxes together.
     static func place(_ graph: LayeredClusterGraph, spacing: LayeredSpacing,
                       maximumPointCount: Int) throws(LayeredClusterLayoutError) -> LayeredClusterPlacement {
+        if LayeredStageReplay.isCapturing { LayeredStageReplay.cluster.append((graph, spacing, maximumPointCount)) }
+        let clusterStart = LayeredStageClock.now()
+        defer { LayeredStageClock.add(.clusterPlacement, since: clusterStart) }
         let nodeCount = graph.nodeSizes.count
         var nodes = compoundNodes(graph)
         func index(of end: LayeredClusterEnd) -> Int {

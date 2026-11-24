@@ -41,7 +41,7 @@ struct LayeredCompoundLayout {
     var loops: [Int] = []
     var strays: [Int] = []
     /// The working lists of every flat layout this layout runs.
-    let workspace = LayeredFlatWorkspace()
+    let workspace = LayeredThreadWorkspace.workspace()
 
     init(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], rootDirection: LayeredDirection, options: LayeredFlatOptions,
          maximumVertexCount: Int) {
