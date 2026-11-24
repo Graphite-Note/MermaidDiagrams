@@ -6,8 +6,8 @@
  *              notation, EBNF, ABNF and PEG, with the title, accessibility and hidden tokens they share.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// A token of a railroad diagram's text, in any of its notations.
@@ -41,15 +41,15 @@ enum RailroadLexers {
 
     static let constructorNotation = FirstMatchTokenizer(rules: constructorWords.map(constructor) + [
         sign("="), sign(";"), sign("("), sign(","), sign(")"),
-    ] + statements(nameContinues: isNameContinuation) + [identifier, quoted] + hidden + [
+    ] + statements(nameContinues: .wordOrHyphen) + [identifier, quoted] + hidden + [
         Rule("RR_BLOCK_COMMENT", kind: nil, firstBytes: bytes("/"), match: Patterns.blockComment(opening: "/*", closing: "*/")),
     ])
 
     static let extendedBackusNaurForm = FirstMatchTokenizer(rules: [
         sign("::="), sign("="), sign(";"), sign("|"), sign(","), sign("(", longer: ["EBNF_ISO_COMMENT"]), sign(")"), sign("["), sign("]"),
         sign("{"), sign("}"), sign("?", longer: ["EBNF_SPECIAL_SEQUENCE"]), sign("*"), sign("+"), sign("-", longer: ["RR_YAML"]),
-    ] + statements(nameContinues: isNameContinuation) + [
-        identifier, quoted, Rule("EBNF_SPECIAL_SEQUENCE", kind: .specialSequence, firstBytes: bytes("?"), match: specialSequence),
+    ] + statements(nameContinues: .wordOrHyphen) + [
+        identifier, quoted, Rule("EBNF_SPECIAL_SEQUENCE", kind: .specialSequence, firstBytes: bytes("?"), match: .custom(specialSequence)),
     ] + hidden + [
         Rule("EBNF_BLOCK_COMMENT", kind: nil, firstBytes: bytes("/"), match: Patterns.blockComment(opening: "/*", closing: "*/")),
         Rule("EBNF_ISO_COMMENT", kind: nil, firstBytes: bytes("("), match: Patterns.blockComment(opening: "(*", closing: "*)")),
@@ -57,20 +57,20 @@ enum RailroadLexers {
 
     static let augmentedBackusNaurForm = FirstMatchTokenizer(rules: [
         sign("="), sign(";", longer: ["ABNF_COMMENT"]), sign("/"), sign("("), sign(")"), sign("["), sign("]"),
-    ] + statements(nameContinues: isAugmentedNameByte) + [
-        Rule("ABNF_RULENAME", kind: .name, firstBytes: letters, match: Patterns.name(first: MermaidByte.isLetter, rest: isAugmentedNameByte)),
-        Rule("ABNF_STRING", kind: .string, firstBytes: bytes("\""), match: plainString),
-        Rule("ABNF_NUMVAL", kind: .numberValue, firstBytes: bytes("%"), match: numberValue),
-        Rule("ABNF_REPEAT", kind: .repeatCount, firstBytes: bytes("0123456789*"), match: repeatCount),
+    ] + statements(nameContinues: .letterDigitOrHyphen) + [
+        Rule("ABNF_RULENAME", kind: .name, firstBytes: letters, match: Patterns.name(first: .letter, rest: .letterDigitOrHyphen)),
+        Rule("ABNF_STRING", kind: .string, firstBytes: bytes("\""), match: .custom(plainString)),
+        Rule("ABNF_NUMVAL", kind: .numberValue, firstBytes: bytes("%"), match: .custom(numberValue)),
+        Rule("ABNF_REPEAT", kind: .repeatCount, firstBytes: bytes("0123456789*"), match: .custom(repeatCount)),
         Rule("ABNF_EXACT_REPEAT", kind: .exactRepeatCount, firstBytes: bytes("0123456789"),
-             match: Patterns.name(first: MermaidByte.isDigit, rest: MermaidByte.isDigit)),
+             match: Patterns.name(first: .digit, rest: .digit)),
     ] + hidden + [
         Rule("ABNF_COMMENT", kind: nil, firstBytes: bytes(";"), match: Patterns.lineComment(opening: ";")),
     ])
 
     static let parsingExpressionGrammar = FirstMatchTokenizer(rules: [
         sign("<-"), sign(";"), sign("/"), sign("&"), sign("!"), sign("?"), sign("*"), sign("+"), sign("("), sign(")"), sign("."),
-    ] + statements(nameContinues: isNameContinuation) + [identifier, quoted] + hidden + [
+    ] + statements(nameContinues: .wordOrHyphen) + [identifier, quoted] + hidden + [
         Rule("PEG_LINE_COMMENT", kind: nil, firstBytes: bytes("#"), match: Patterns.lineComment(opening: "#")),
     ])
 
@@ -89,8 +89,7 @@ enum RailroadLexers {
 
     /// `[A-Z_a-z][\w-]*`.
     private static let identifier = Rule(identifierName, kind: .name, firstBytes: letters + bytes("_"),
-                                         match: Patterns.name(first: { byte in MermaidByte.isLetter(byte) || byte == MermaidByte.underscore },
-                                                              rest: isNameContinuation))
+                                         match: Patterns.name(first: .letterOrUnderscore, rest: .wordOrHyphen))
     private static let quoted = Rule("RR_STRING", kind: .string, firstBytes: bytes("\"'"), match: Patterns.quoted)
 
     /// Whitespace, front matter fences, directives and `%%` comments, in the order every railroad grammar lists them.
@@ -103,11 +102,11 @@ enum RailroadLexers {
 
     /// `title`, `accTitle` and `accDescr`, which unlike Mermaid's common grammar take no blanks before them; a title's
     /// keyword followed by a byte `nameContinues` allows is the start of a name.
-    private static func statements(nameContinues: @escaping @Sendable (UInt8) -> Bool) -> [Rule] {
+    private static func statements(nameContinues: FirstMatchByteClass) -> [Rule] {
         [
             Rule("TITLE", kind: .title, firstBytes: bytes("t"), match: Patterns.lineStatement("title", leadingBlanks: false, continuesName: nameContinues)),
             Rule("ACC_TITLE", kind: .accessibilityTitle, firstBytes: bytes("a"), match: Patterns.accessibilityTitle(leadingBlanks: false)),
-            Rule("ACC_DESCR", kind: .accessibilityDescription, firstBytes: bytes("a"), match: accessibilityDescription),
+            Rule("ACC_DESCR", kind: .accessibilityDescription, firstBytes: bytes("a"), match: .custom(accessibilityDescription)),
         ]
     }
 
@@ -123,16 +122,6 @@ enum RailroadLexers {
         Array(text.utf8)
     }
 
-    /// `[\w-]`.
-    @Sendable private static func isNameContinuation(_ byte: UInt8) -> Bool {
-        Patterns.isWordByte(byte) || byte == MermaidByte.hyphen
-    }
-
-    /// `[A-Za-z0-9-]`.
-    @Sendable private static func isAugmentedNameByte(_ byte: UInt8) -> Bool {
-        MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.hyphen
-    }
-
     /// `accDescr`, blanks, then `:` and the rest of the line up to `%%`; or whitespace and `{` up to the next `}`.
     private static let accessibilityDescription: FirstMatchTokenPattern = { text, position in
         let bytes = text.bytes
@@ -143,7 +132,7 @@ enum RailroadLexers {
         }
         let brace = JavaScriptWhitespace.endOfRun(in: bytes, from: afterKeyword)
         guard brace < bytes.count, bytes[brace] == MermaidByte.openingBrace,
-              let closing = text.firstOccurrence(of: [MermaidByte.closingBrace], from: brace + 1) else { return .none }
+              let closing = text.firstOccurrence(of: closingBraceNeedle, from: brace + 1) else { return .none }
         return .matched(end: closing + 1)
     }
 
@@ -166,14 +155,14 @@ enum RailroadLexers {
 
     /// `"[^"]*"`: ABNF's strings have no escapes.
     private static let plainString: FirstMatchTokenPattern = { text, position in
-        guard let closing = text.firstOccurrence(of: [MermaidByte.quotationMark], from: position + 1) else { return .noneFurtherOn }
+        guard let closing = text.firstOccurrence(of: quotationMarkNeedle, from: position + 1) else { return .noneFurtherOn }
         return .matched(end: closing + 1)
     }
 
     /// `%[xXdDbB][0-9A-Fa-f]+(?:-[0-9A-Fa-f]+|\.[0-9A-Fa-f]+)*`.
     private static let numberValue: FirstMatchTokenPattern = { text, position in
         let bytes = text.bytes
-        guard position + 2 < bytes.count, Array("xXdDbB".utf8).contains(bytes[position + 1]), isHexadecimal(bytes[position + 2]) else { return .none }
+        guard position + 2 < bytes.count, numberValueLetters.contains(bytes[position + 1]), isHexadecimal(bytes[position + 2]) else { return .none }
         var end = position + 2
         while end < bytes.count, isHexadecimal(bytes[end]) { end += 1 }
         while end + 1 < bytes.count, bytes[end] == MermaidByte.hyphen || bytes[end] == MermaidByte.period, isHexadecimal(bytes[end + 1]) {
@@ -199,4 +188,7 @@ enum RailroadLexers {
     }
 
     private static let descriptionKeyword = Array("accDescr".utf8)
+    private static let closingBraceNeedle = [MermaidByte.closingBrace]
+    private static let quotationMarkNeedle = [MermaidByte.quotationMark]
+    private static let numberValueLetters = Array("xXdDbB".utf8)
 }
