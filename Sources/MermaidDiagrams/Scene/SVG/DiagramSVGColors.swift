@@ -3,10 +3,11 @@
  * ----------------------------
  * Layer: Core
  * Description: How a scene's paints are written in SVG: in a palette's colors, or as Pele's CSS variables with Pele's
- *              colors as their fallbacks; each paint's text worked out once per document.
+ *              colors as their fallbacks; each paint's text worked out once per document, a series' variable taken from a
+ *              table.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -37,7 +38,7 @@ extension DiagramSVGColors {
         switch self {
         case .palette(let palette):
             let components = Self.sRGBComponents(of: paint.color(in: palette))
-            return DiagramSVGPaintText(color: Self.hexadecimal(components: components), opacity: components[3])
+            return DiagramSVGPaintText(color: Self.hexadecimal(components: components), opacity: components.opacity)
         case .peleVariables:
             switch paint.source {
             case .role(let role): return DiagramSVGPaintText(color: Self.variable(role), opacity: paint.opacity)
@@ -51,20 +52,12 @@ extension DiagramSVGColors {
     }
 
     /// The colors a scene is written in: a palette with the series the diagram's theme variables set in their colors, or
-    /// Pele's variables, which `seriesStyle(of:)` sets.
+    /// Pele's variables, whose series the writer declares on the root's style as Pele does (`;--pele-series-1:#ffeb3b`,
+    /// `DiagramSeriesColors.styleDeclarations`).
     func overSeriesColors(of scene: DiagramScene) -> DiagramSVGColors {
         switch self {
         case .palette(let palette): .palette(scene.palette(over: palette))
         case .peleVariables: .peleVariables
-        }
-    }
-
-    /// The declarations of the series the diagram's theme variables set, as Pele ends its root's style with them
-    /// (`;--pele-series-1:#ffeb3b`), with Pele's variables; nothing when every color is written out.
-    func seriesStyle(of scene: DiagramScene) -> String {
-        switch self {
-        case .palette: ""
-        case .peleVariables: scene.seriesColors.styleDeclarations
         }
     }
 
@@ -88,10 +81,17 @@ extension DiagramSVGColors {
         case .critical: "var(--pele-critical,#e45756)"
         case .muted: "var(--_m)"
         case .alternateSurface: "var(--_a)"
-        case .series(let index):
-            "var(--pele-series-\(seriesSlot(index) + 1),\(hexadecimal(DiagramPalette.peleSeries[seriesSlot(index)])))"
+        case .series(let index): peleSeriesVariables[seriesSlot(index)]
         }
     }
+
+    /// Pele's eight series variables, each with its color as the fallback (`var(--pele-series-1,#4c78a8)`):
+    /// `DiagramPalette.peleSeries` in sRGB hexadecimal, as `hexadecimal(_:)` writes them (which a test checks), so that a
+    /// series paint is not spelled out again in every document.
+    static let peleSeriesVariables = [
+        "var(--pele-series-1,#4c78a8)", "var(--pele-series-2,#f58518)", "var(--pele-series-3,#54a24b)", "var(--pele-series-4,#e45756)",
+        "var(--pele-series-5,#72b7b2)", "var(--pele-series-6,#eeca3b)", "var(--pele-series-7,#b279a2)", "var(--pele-series-8,#9d755d)"
+    ]
 
     /// Which of Pele's eight series variables a series index takes, the colors taken in turn.
     private static func seriesSlot(_ index: Int) -> Int {
@@ -103,53 +103,79 @@ extension DiagramSVGColors {
         hexadecimal(components: sRGBComponents(of: color))
     }
 
-    /// `#rrggbb` of the first three of sRGB components, each clamped to 0...1.
-    private static func hexadecimal(components: [CGFloat]) -> String {
-        let channels = components.prefix(3).map { component in Int((min(1, max(0, component)) * 255).rounded()) }
-        return "#" + channels.map { channel in
-            let digits = String(channel, radix: 16)
-            return digits.count == 1 ? "0" + digits : digits
-        }.joined()
+    /// `#rrggbb` of sRGB components, each clamped to 0...1, written through a table of digits.
+    private static func hexadecimal(components: SRGBComponents) -> String {
+        String(unsafeUninitializedCapacity: 7) { characters in
+            characters[0] = UInt8(ascii: "#")
+            writeChannel(components.red, into: characters, at: 1)
+            writeChannel(components.green, into: characters, at: 3)
+            writeChannel(components.blue, into: characters, at: 5)
+            return 7
+        }
     }
+
+    /// The two hexadecimal digits of a component clamped to 0...1, as a channel of 0 to 255.
+    private static func writeChannel(_ component: CGFloat, into characters: UnsafeMutableBufferPointer<UInt8>, at index: Int) {
+        let channel = Int((min(1, max(0, component)) * 255).rounded())
+        let digits = hexadecimalDigits.utf8Start
+        characters[index] = digits[channel >> 4]
+        characters[index + 1] = digits[channel & 0xF]
+    }
+
+    /// The sixteen hexadecimal digits in lower case, as `String(_:radix:)` writes them.
+    private static let hexadecimalDigits: StaticString = "0123456789abcdef"
 
     /// The sRGB color space every color is converted to, made once.
     private static let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)
 
+    /// A color's red, green, blue and opacity in sRGB.
+    struct SRGBComponents {
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let opacity: CGFloat
+    }
+
     /// Red, green, blue and opacity in sRGB; opaque black for a color with no sRGB form.
-    private static func sRGBComponents(of color: CGColor) -> [CGFloat] {
+    private static func sRGBComponents(of color: CGColor) -> SRGBComponents {
         guard let space = sRGBColorSpace,
               let components = color.converted(to: space, intent: .defaultIntent, options: nil)?.components, components.count == 4 else {
-            return [0, 0, 0, 1]
+            return SRGBComponents(red: 0, green: 0, blue: 0, opacity: 1)
         }
-        return components
+        return SRGBComponents(red: components[0], green: components[1], blue: components[2], opacity: components[3])
     }
 }
 
 /// The text of each paint of one document, worked out the first time the paint is written: a palette's colors are
-/// converted to sRGB and a series or mixture is spelled out once, not for every shape and text.
+/// converted to sRGB and a mixture or a written color is spelled out once, not for every shape and text. With Pele's
+/// variables a role's text is fixed (a series' from its table) and is never looked up. A document has few paints, so the
+/// first ones are found by comparing them in turn, which hashes nothing; past `scannedPaintCount` they are hashed.
 struct DiagramSVGPaintTexts {
     let colors: DiagramSVGColors
+    private var scannedPaints: [(paint: DiagramPaint, text: DiagramSVGPaintText)] = []
     private var textsByPaint: [DiagramPaint: DiagramSVGPaintText] = [:]
+
+    /// How many paints are kept to be compared in turn before the rest are hashed.
+    static let scannedPaintCount = 24
 
     init(colors: DiagramSVGColors) {
         self.colors = colors
     }
 
     mutating func text(of paint: DiagramPaint) -> DiagramSVGPaintText {
-        if case .peleVariables = colors, case .role(let role) = paint.source, role.isNamedByPeleAlone {
+        if case .peleVariables = colors, case .role(let role) = paint.source {
             return DiagramSVGPaintText(color: DiagramSVGColors.variable(role), opacity: paint.opacity)
+        }
+        for entry in scannedPaints where entry.paint == paint { return entry.text }
+        if scannedPaints.count < Self.scannedPaintCount {
+            let text = colors.text(of: paint)
+            if scannedPaints.isEmpty { scannedPaints.reserveCapacity(Self.scannedPaintCount) }
+            scannedPaints.append((paint, text))
+            return text
         }
         if let text = textsByPaint[paint] { return text }
         let text = colors.text(of: paint)
         textsByPaint[paint] = text
         return text
-    }
-}
-
-private extension DiagramPaletteRole {
-    /// Whether Pele's variable for the role is a fixed text (every role but a series, whose text carries its color).
-    var isNamedByPeleAlone: Bool {
-        if case .series = self { return false }
-        return true
     }
 }

@@ -3,10 +3,10 @@
  * ----------------------------
  * Layer: Core
  * Description: Writes any diagram's scene as a standalone SVG document in Pele's structure: escaped text, no script and
- *              no external reference, written as UTF-8 into one buffer.
+ *              no external reference, written as UTF-8 into one buffer reserved from the scene, front to back.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -42,14 +42,15 @@ public struct DiagramSVGWriter: Sendable {
     /// and role description; `title` and `description` are what a screen reader reads (`accTitle`, `accDescr`).
     public func document(of scene: DiagramScene, diagramType: String, title: String? = nil, description: String? = nil) -> String {
         let colors = colors.overSeriesColors(of: scene)
-        var body = DiagramSVGBody(colors: colors, identifierPrefix: identifierPrefix,
-                                  content: DiagramSVGBuffer(reservingCapacity: Self.estimatedByteCount(of: scene)))
         let title = title.flatMap { title in title.isEmpty ? nil : title }
         let description = description.flatMap { description in description.isEmpty ? nil : description }
+        let room = Self.estimatedRoom(of: scene)
+        let byteCount = min(room.byteCount + (title?.utf8.count ?? 0) + (description?.utf8.count ?? 0), Self.largestReservedByteCount)
+        var body = DiagramSVGBody(colors: colors, identifierPrefix: identifierPrefix, content: DiagramSVGBuffer(reservingCapacity: byteCount))
         appendRootOpening(of: scene, diagramType: diagramType, colors: colors, isLabelled: (title != nil, description != nil), into: &body.content)
         if let title { appendHeadElement("title", suffix: "-title", text: title, into: &body.content) }
         if let description { appendHeadElement("desc", suffix: "-desc", text: description, into: &body.content) }
-        let definitionsOffset = body.content.count
+        if room.hasGradientFills { body.appendDefinitions(of: scene.items) }
         if paintsBackground {
             let background = body.text(of: .background)
             body.content.append("<rect width=\"")
@@ -62,22 +63,14 @@ public struct DiagramSVGWriter: Sendable {
         }
         for item in scene.items { body.add(item) }
         body.content.append("</svg>")
-        if !body.definitions.isEmpty {
-            var definitions = DiagramSVGBuffer(reservingCapacity: body.definitions.count + 13)
-            definitions.append("<defs>")
-            definitions.append(body.definitions)
-            definitions.append("</defs>")
-            body.content.insert(definitions, at: definitionsOffset)
-        }
         return body.content.text
     }
 
     /// The root `svg` element's opening tag: Pele's classes, the view box and size, the style with the font and the
-    /// colors' declarations, the roles, and the ids of the title and description when there are any.
+    /// colors' declarations, the roles, and the ids of the title and description when there are any. The style's pieces
+    /// are escaped one after the other, which escapes them as their joined text would be.
     private func appendRootOpening(of scene: DiagramScene, diagramType: String, colors: DiagramSVGColors,
                                    isLabelled: (byTitle: Bool, byDescription: Bool), into document: inout DiagramSVGBuffer) {
-        let style = colors.rootStyle + "font-family:" + fontFamily(scene.font) + ";font-size:" + DiagramSVGSyntax.number(scene.font.size) + "px"
-            + colors.seriesStyle(of: scene)
         document.append("<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" class=\"pele pele-")
         document.appendEscaped(diagramType)
         document.append("\" viewBox=\"0 0 ")
@@ -85,7 +78,13 @@ public struct DiagramSVGWriter: Sendable {
         document.append("\" width=\"")
         appendSize(of: scene, separator: "\" height=\"", into: &document)
         document.append("\" style=\"")
-        document.appendEscaped(style)
+        document.appendEscaped(colors.rootStyle)
+        document.append("font-family:")
+        document.appendEscaped(fontFamily(scene.font))
+        document.append(";font-size:")
+        document.appendNumber(scene.font.size)
+        document.append("px")
+        if case .peleVariables = colors { appendSeriesDeclarations(scene.seriesColors, into: &document) }
         document.append("\" role=\"graphics-document document\" aria-roledescription=\"")
         document.appendEscaped(diagramType)
         document.append("\"")
@@ -94,10 +93,58 @@ public struct DiagramSVGWriter: Sendable {
         document.append(">")
     }
 
-    /// About how many bytes a scene's SVG takes, so that its buffer seldom grows: a few hundred for the root, and for each
-    /// item about what the documentation examples average.
-    private static func estimatedByteCount(of scene: DiagramScene) -> Int {
-        1_024 + scene.items.count * 160
+    /// `DiagramSeriesColors.styleDeclarations`, escaped, written piece by piece: `;--pele-series-N:<color>` for each slot
+    /// set.
+    private func appendSeriesDeclarations(_ seriesColors: DiagramSeriesColors, into document: inout DiagramSVGBuffer) {
+        for (slot, color) in seriesColors.colors.enumerated() {
+            guard let color else { continue }
+            document.append(";--pele-series-")
+            document.appendNumber(CGFloat(slot + 1))
+            document.append(":")
+            document.appendEscaped(color.cssText)
+        }
+    }
+
+    /// How many bytes a scene's SVG takes at most on Pele's corpora, so that its buffer does not grow
+    /// (`DiagramSVGWriterSpeedTests` checks it on every input): the root, and for each item what its element and
+    /// attributes take around its text and path. A path's data is not counted element by element, which would walk it
+    /// once more; a diagram's shapes are few, each of everything painted alike (every node's outline, every edge), so its
+    /// paths grow with its texts, and each text is allowed its share of them beside its own bytes (an outlined text's
+    /// twice). A scene that needs more grows the buffer a few times. The same walk over the items finds whether any is
+    /// filled with a gradient, which needs `<defs>`.
+    static func estimatedRoom(of scene: DiagramScene) -> (byteCount: Int, hasGradientFills: Bool) {
+        var count = rootByteAllowance + scene.seriesColors.colors.count * seriesDeclarationByteAllowance
+        var hasGradientFills = false
+        for item in scene.items {
+            switch item {
+            case .shape(let shape):
+                count += shapeByteAllowance
+                if case .gradientFill = shape.painting { hasGradientFills = true }
+            case .text(let text): count += estimatedByteCount(of: text)
+            }
+        }
+        return (count, hasGradientFills)
+    }
+
+    /// The most room reserved at once, 4 MiB: a diagram near the limits writes more by growing its buffer, not by
+    /// reserving what its estimate says.
+    static let largestReservedByteCount = 1 << 22
+    private static let rootByteAllowance = 1_024
+    private static let seriesDeclarationByteAllowance = 64
+    private static let shapeByteAllowance = 320
+    private static let textByteAllowance = 704
+    private static let lineByteAllowance = 64
+
+    private static func estimatedByteCount(of text: DiagramSceneText) -> Int {
+        var textByteCount = 0
+        if let lineRuns = text.block.lineRuns {
+            for runs in lineRuns { for run in runs { textByteCount += run.text.utf8.count + lineByteAllowance } }
+        } else {
+            for line in text.block.lines { textByteCount += line.utf8.count }
+        }
+        textByteCount += text.block.lines.count * lineByteAllowance
+        let copies = text.outline == nil ? 1 : 2
+        return copies * (textByteAllowance + textByteCount)
     }
 
     /// The page's width, `separator`, then its height.
