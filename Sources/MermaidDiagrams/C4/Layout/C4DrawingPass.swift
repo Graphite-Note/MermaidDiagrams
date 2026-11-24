@@ -7,8 +7,8 @@
  *              boundary and its casing decided.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -83,17 +83,20 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
     /// label is placed, so that labels can keep off the arrowheads.
     mutating func routeRelations() throws(C4LayoutError) {
         let ends = try relationEnds()
-        var targetsBySource: [Int: Set<Int>] = [:]
-        for (source, target) in ends { targetsBySource[source, default: []].insert(target) }
+        // Each relation's ends as one number, source then target, to find a relation running the opposite way.
+        let boxCount = boxes.count
+        var pairs = Set<Int>(minimumCapacity: ends.count)
+        for (source, target) in ends { pairs.insert(source * boxCount + target) }
         let fills = boundaryFills()
         var router = C4Router(boxes: boxes, obstacles: isCareful ? Array(shapeOrder.indices) : nil)
         for box in groupBoxIndices.compactMap({ index in index }) { router.lanes.addFrame(boxes[box]) }
         let trim = DiagramEdgeMark.lineTrim(for: .arrow)
+        relations.reserveCapacity(diagram.relations.count)
         for (relationIndex, relation) in diagram.relations.enumerated() {
             let (source, target) = ends[relationIndex]
             let pointsAtStart = relation.kind.pointsAtStart
             let pointsAtEnd = relation.kind.pointsAtEnd
-            let isReversed = source != target && targetsBySource[target]?.contains(source) == true
+            let isReversed = source != target && pairs.contains(target * boxCount + source)
             let route = router.route(from: source, to: target, shift: isReversed ? C4Metrics.pairShift : 0, startTrim: pointsAtStart ? trim : 0,
                                      endTrim: pointsAtEnd ? trim : 0)
             grow(CGRect(x: min(route.labelStretchStart.x, route.labelStretchEnd.x), y: min(route.labelStretchStart.y, route.labelStretchEnd.y),
@@ -111,11 +114,13 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
     /// The box of each relation's two ends: a shape's or else a boundary's of that alias, among those drawn.
     private func relationEnds() throws(C4LayoutError) -> [(Int, Int)] {
         var boxByAlias: [String: Int] = [:]
+        boxByAlias.reserveCapacity(boxes.count)
         for (box, shapeIndex) in shapeOrder.enumerated() {
             let element = diagram.shapes[shapes[shapeIndex].shapeIndex].element
             if element.aliasArgument == nil { boxByAlias[element.alias] = box }
         }
-        var shapeAliases = Set(diagram.shapes.filter { shape in shape.element.aliasArgument == nil }.map(\.element.alias))
+        var shapeAliases = Set<String>(minimumCapacity: diagram.shapes.count + groups.count)
+        for shape in diagram.shapes where shape.element.aliasArgument == nil { shapeAliases.insert(shape.element.alias) }
         for (groupIndex, group) in groups.enumerated() {
             let element = diagram.boundaries[group.boundaryIndex].element
             guard let box = groupBoxIndices[groupIndex], element.aliasArgument == nil, !shapeAliases.contains(element.alias) else { continue }

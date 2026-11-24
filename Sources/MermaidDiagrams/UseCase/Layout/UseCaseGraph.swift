@@ -7,8 +7,8 @@
  *              and note connector as an edge with its marks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -90,7 +90,8 @@ struct UseCaseGraph {
 
     init(_ diagram: UseCaseDiagram) {
         let styles = UseCaseClassStyles(diagram.classDefinitions)
-        nodes = diagram.actors.map { actor in Self.node(of: actor, styles: styles) }
+        nodes.reserveCapacity(diagram.actors.count + diagram.useCases.count + diagram.notes.count + diagram.jsonNodes.count + diagram.systemBoundaries.count)
+        for actor in diagram.actors { nodes.append(Self.node(of: actor, styles: styles)) }
         for useCase in diagram.useCases { nodes.append(Self.node(of: useCase, styles: styles)) }
         for note in diagram.notes {
             nodes.append(UseCaseGraphNode(identifier: note.identifier, label: note.label, labelType: note.labelType, shape: .note, padding: 10,
@@ -111,7 +112,8 @@ struct UseCaseGraph {
             node.boundaryType = boundary.type
             nodes.append(node)
         }
-        edges = diagram.relationships.map { relationship in Self.edge(of: relationship, styles: styles) }
+        edges.reserveCapacity(diagram.relationships.count + diagram.notes.count)
+        for relationship in diagram.relationships { edges.append(Self.edge(of: relationship, styles: styles)) }
         for note in diagram.notes {
             edges.append(UseCaseGraphEdge(identifier: note.identifier + "-edge", start: note.identifier, end: note.target, relationshipType: nil, isDotted: true,
                                           startMarker: .none, endMarker: .none, label: nil, labelType: nil,
@@ -162,21 +164,37 @@ struct UseCaseGraph {
         case .include, .extend: arrowMarkers[UseCaseArrow.solidArrow.rawValue]
         }
         let isAnimated = relationship.isAnimated || relationship.animation != nil
-        let animationClass = isAnimated ? "edge-animation-" + (relationship.animation ?? .fast).rawValue : nil
+        var classNames = "default relationship relationship-" + relationship.type.rawValue
+        for name in relationship.classes {
+            classNames += " "
+            classNames += name
+        }
+        if isAnimated { classNames += " edge-animation-" + (relationship.animation ?? .fast).rawValue }
         // Include and extend are labelled with their kind, whatever label the relationship carries.
         let label = isSemantic ? relationship.type.rawValue : relationship.type == .association ? relationship.label : nil
         let labelType: UseCaseLabelType? = isSemantic ? .text : relationship.type == .association ? relationship.labelType : nil
         return UseCaseGraphEdge(identifier: relationship.identifier, start: relationship.source, end: relationship.target,
                                 relationshipType: relationship.type, isDotted: isSemantic, startMarker: markers.0, endMarker: markers.1,
                                 label: label, labelType: labelType,
-                                classNames: (["default", "relationship", "relationship-\(relationship.type.rawValue)"] + relationship.classes
-                                    + (animationClass.map { [$0] } ?? [])).joined(separator: " "),
+                                classNames: classNames,
                                 styles: styles.compiled(relationship.classes) + relationship.styles, isAnimated: relationship.isAnimated,
                                 minimumLength: relationship.minimumLength)
     }
 
+    /// The names that are not empty, a space between each two.
     private static func classNames(_ first: String, _ second: String, _ third: String?, _ business: String?, _ classes: [String]) -> String {
-        ([first, second] + [third, business].compactMap { name in name } + classes).filter { name in !name.isEmpty }.joined(separator: " ")
+        var joined = ""
+        func add(_ name: String) {
+            guard !name.isEmpty else { return }
+            if !joined.isEmpty { joined += " " }
+            joined += name
+        }
+        add(first)
+        add(second)
+        if let third { add(third) }
+        if let business { add(business) }
+        for name in classes { add(name) }
+        return joined
     }
 }
 
@@ -190,6 +208,8 @@ struct UseCaseClassStyles {
     }
 
     func compiled(_ classes: [String]) -> [String] {
+        // With no class defined, no class has a style: nothing to look up.
+        guard !stylesByClass.isEmpty else { return [] }
         var properties: [String] = []
         var declarations: [String: String] = [:]
         for name in ["default"] + classes {

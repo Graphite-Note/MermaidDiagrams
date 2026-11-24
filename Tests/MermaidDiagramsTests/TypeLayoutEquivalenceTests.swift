@@ -3,7 +3,8 @@
  * --------------------------------------
  * Layer: Tests
  * Description: The faster layout passes of single types give exactly the numbers of the passes they replace, kept as
- *              references: Sankey placements of random flows, Venn spots and circle placements of random sets.
+ *              references: Sankey placements of random flows, Venn spots and circle placements of random sets, block
+ *              grids measured and placed, and the XY chart's numbers written.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -134,5 +135,127 @@ final class TypeLayoutEquivalenceTests: XCTestCase {
             subsets.append(VennSubset(sets: members, size: Double.random(in: 0...8, using: &generator).rounded(), label: nil))
         }
         return subsets
+    }
+
+    // MARK: - Block
+
+    /// A random block diagram: a few columns or none, blocks of every kind (shapes, spaces, wide blocks, arrows and
+    /// composites with their own columns), some styled or of a class, and edges between them.
+    private func randomBlockSource(_ generator: inout SeededGenerator) -> String {
+        var lines = ["block"]
+        if Bool.random(using: &generator) { lines.append("  columns \(Int.random(in: 1...4, using: &generator))") }
+        let shapes = ["[\"Box %\"]", "(\"Round %\")", "((\"Circle %\"))", "{\"Diamond %\"}", "[(\"Store %\")]", ">\"Flag %\"]",
+                      "{{\"Hexagon %\"}}", "([\"Stadium %\"])", "[\"A longer label for % that wraps\"]", ""]
+        var identifiers: [String] = []
+        var compositeCount = 0
+        func addBlocks(_ count: Int, indent: String) {
+            for _ in 0..<count {
+                let choice = Int.random(in: 0..<10, using: &generator)
+                let identifier = "b\(identifiers.count)"
+                switch choice {
+                case 0: lines.append(indent + (Bool.random(using: &generator) ? "space" : "space:2"))
+                case 1: lines.append(indent + identifier + "<[\"Go\"]>(" + ["right", "left", "up", "down", "x"].randomElement(using: &generator)! + ")")
+                    identifiers.append(identifier)
+                case 2 where compositeCount < 3 && indent.count < 6:
+                    compositeCount += 1
+                    let composite = "g\(compositeCount)"
+                    lines.append(indent + "block:" + composite + (Bool.random(using: &generator) ? ":2" : ""))
+                    if Bool.random(using: &generator) { lines.append(indent + "  columns \(Int.random(in: 1...3, using: &generator))") }
+                    addBlocks(Int.random(in: 1...4, using: &generator), indent: indent + "  ")
+                    lines.append(indent + "end")
+                    identifiers.append(composite)
+                default:
+                    let shape = shapes.randomElement(using: &generator)!.replacingOccurrences(of: "%", with: "\(identifiers.count)")
+                    lines.append(indent + identifier + shape + (Int.random(in: 0..<5, using: &generator) == 0 ? ":2" : ""))
+                    identifiers.append(identifier)
+                }
+            }
+        }
+        addBlocks(Int.random(in: 1...12, using: &generator), indent: "  ")
+        lines.append("  classDef hot fill:#f96,stroke:#333,font-weight:bold")
+        for identifier in identifiers where Int.random(in: 0..<4, using: &generator) == 0 {
+            lines.append(Bool.random(using: &generator) ? "  style \(identifier) fill:#9cf,color:#fff,font-size:20px" : "  class \(identifier) hot")
+        }
+        for _ in 0..<Int.random(in: 0...4, using: &generator) where identifiers.count > 1 {
+            lines.append("  \(identifiers.randomElement(using: &generator)!) --> \(identifiers.randomElement(using: &generator)!)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    func testRandomBlockGridsAreMeasuredAndPlacedExactlyAsTheReferenceDoes() throws {
+        var generator = SeededGenerator(state: 15_3_2026)
+        var compared = 0
+        for _ in 0..<400 {
+            guard let diagram = try? BlockReading.block(randomBlockSource(&generator)) else { continue }
+            let views = BlockViews(diagram, measurers: BlockReading.measurers, gap: 8, wrappingWidth: 200, titleWidth: 300)
+            let reference = BlockViewsReference(diagram, measurers: BlockReading.measurers, gap: 8, wrappingWidth: 200, titleWidth: 300)
+            XCTAssertEqual(views.parentIndices, reference.parentIndices)
+            XCTAssertEqual(views.cellIndicesByIdentifier, reference.cellIndicesByIdentifier)
+            assertSameCells(views.cells, reference.cells)
+            assertSameViews(views.views, reference.views)
+            var placement = BlockPlacement(views, gap: 8)
+            var referencePlacement = BlockPlacementReference(reference, gap: 8)
+            for _ in 0..<2 {
+                try placement.place()
+                try referencePlacement.place()
+                XCTAssertEqual(placement.contentSize, referencePlacement.contentSize)
+                XCTAssertEqual(placement.outlines, referencePlacement.outlines)
+                XCTAssertEqual(placement.obstacleIndices, referencePlacement.obstacleIndices)
+                XCTAssertEqual(placement.titles.map(\.center), referencePlacement.titles.map(\.center))
+                XCTAssertEqual(placement.titles.map(\.size), referencePlacement.titles.map(\.size))
+                assertSameCells(placement.cells, referencePlacement.cells)
+                assertSameViews(placement.views, referencePlacement.views)
+                placement.clearGaps()
+                referencePlacement.clearGaps()
+            }
+            compared += 1
+        }
+        XCTAssertGreaterThan(compared, 300)
+    }
+
+    private func assertSameCells(_ cells: [BlockCell], _ reference: [BlockCell], line: UInt = #line) {
+        XCTAssertEqual(cells.count, reference.count, line: line)
+        for (cell, expected) in zip(cells, reference) {
+            XCTAssertEqual(cell.childIndices, expected.childIndices, line: line)
+            XCTAssertEqual([cell.columns, cell.span, cell.column, cell.row, cell.columnCount],
+                           [expected.columns, expected.span, expected.column, expected.row, expected.columnCount], line: line)
+            XCTAssertEqual(cell.isSpace, expected.isSpace, line: line)
+            XCTAssertEqual([cell.titleHeight, cell.neededWidth, cell.neededHeight, cell.width, cell.height],
+                           [expected.titleHeight, expected.neededWidth, expected.neededHeight, expected.width, expected.height], line: line)
+            XCTAssertEqual(cell.rowHeights, expected.rowHeights, line: line)
+            XCTAssertEqual(cell.center, expected.center, line: line)
+        }
+    }
+
+    private func assertSameViews(_ views: [BlockView], _ reference: [BlockView], line: UInt = #line) {
+        XCTAssertEqual(views.count, reference.count, line: line)
+        for (view, expected) in zip(views, reference) {
+            XCTAssertEqual(view.blockIndex, expected.blockIndex, line: line)
+            XCTAssertEqual(view.kind, expected.kind, line: line)
+            XCTAssertEqual(view.text, expected.text, line: line)
+            XCTAssertEqual(view.appearance, expected.appearance, line: line)
+            XCTAssertEqual(view.textOffset, expected.textOffset, line: line)
+            XCTAssertEqual(view.drawnSize, expected.drawnSize, line: line)
+        }
+    }
+
+    // MARK: - XY chart
+
+    /// Whole numbers small and large, either sign and zero of either sign, halves, steps of marks and numbers past the
+    /// whole numbers' shortcut: written as JavaScript writes them, as before.
+    func testTheXYChartsNumbersAreWrittenAsJavaScriptWritesThem() {
+        var generator = SeededGenerator(state: 6_4_2026)
+        var values: [Double] = [0, -0.0, 1, -1, 0.5, -0.5, 1e15 - 1, 1e15, -1e15, 1e15 + 2, 1e21, 1e-7, .nan, .infinity, -.infinity,
+                                Double(Int64.max), 123_456_789_012_345]
+        for _ in 0..<5_000 {
+            let magnitude = pow(10, Double(Int.random(in: -8...17, using: &generator)))
+            let whole = (Double.random(in: -1...1, using: &generator) * magnitude).rounded()
+            values.append(whole)
+            values.append(whole / 4)
+            values.append(Double(Int.random(in: -40...40, using: &generator)) * [0.1, 0.2, 0.25, 0.5, 2, 5, 1000].randomElement(using: &generator)!)
+        }
+        for value in values {
+            XCTAssertEqual(XYChartScaleMarks.numberText(value), JavaScriptNumberText.text(value), "\(value)")
+        }
     }
 }
