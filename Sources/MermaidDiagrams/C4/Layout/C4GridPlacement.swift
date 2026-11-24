@@ -7,8 +7,8 @@
  *              of c4BoundaryInRow, each sized around what it holds.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -36,6 +36,20 @@ struct C4PlacedBoundary {
     var box = C4RouteBox(x: 0, y: 0, width: 0, height: 0, form: .rectangle)
 }
 
+/// The texts of a C4 diagram's grid measured for one room: each boundary's heading and each shape's texts and box, and
+/// the blocks of the kinds' names by width. The tight layout draws a diagram again with wider gaps in the same room,
+/// so it measures its texts once.
+struct C4GridTexts {
+    var headings: [C4PlacedBoundary?]
+    var shapes: [C4PlacedShape?]
+    var kindNames: [(kind: C4ShapeKind, width: CGFloat, block: DiagramTextBlock?)] = []
+
+    init(diagram: C4Diagram) {
+        headings = Array(repeating: nil, count: diagram.boundaryRecords.count)
+        shapes = Array(repeating: nil, count: diagram.shapeRecords.count)
+    }
+}
+
 /// Mermaid's grid of a C4 diagram, as Pele lays it out. `room`, the width of a narrow column less the padding, makes
 /// it tight: shapes narrower, rows no wider than the room, boundaries' padding smaller, headings wrapped.
 struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
@@ -46,11 +60,12 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
     let tightGap: CGFloat
 
     /// The boundaries drawn, parents before children, the first the unnamed top level, and the shapes they hold.
-    func placed() -> (groups: [C4PlacedBoundary], shapes: [C4PlacedShape]) {
+    func placed(measuring texts: inout C4GridTexts) -> (groups: [C4PlacedBoundary], shapes: [C4PlacedShape]) {
         var groups: [C4PlacedBoundary] = []
-        var groupIndexByBoundary: [Int: Int] = [0: 0]
+        var groupIndexByBoundary = [Int](repeating: -1, count: diagram.boundaryRecords.count)
+        groupIndexByBoundary[0] = 0
         var depths: [Int] = [0]
-        groups.append(group(for: 0))
+        groups.append(group(for: 0, measuring: &texts))
         // A boundary that ends up inside itself is not reachable from the top, as in Mermaid.
         let childBoundaries = childBoundaryIndices()
         var visited = 0
@@ -59,15 +74,17 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
                 groupIndexByBoundary[child] = groups.count
                 groups[visited].childGroups.append(groups.count)
                 depths.append(depths[visited] + 1)
-                groups.append(group(for: child))
+                groups.append(group(for: child, measuring: &texts))
             }
             visited += 1
         }
         var shapes: [C4PlacedShape] = []
-        for (shapeIndex, shape) in diagram.shapes.enumerated() {
-            guard let groupIndex = groupIndexByBoundary[shape.element.parentBoundaryIndex ?? 0] else { continue }
+        shapes.reserveCapacity(diagram.shapeRecords.count)
+        for (shapeIndex, shape) in diagram.shapeRecords.enumerated() {
+            let groupIndex = groupIndexByBoundary[max(Int(shape.element.parentBoundaryIndex), 0)]
+            guard groupIndex >= 0 else { continue }
             groups[groupIndex].shapes.append(shapes.count)
-            shapes.append(measured(shapeIndex, width: shapeWidth(atDepth: depths[groupIndex])))
+            shapes.append(measured(shapeIndex, width: shapeWidth(atDepth: depths[groupIndex]), measuring: &texts))
         }
         let childrenTops = size(&groups, &shapes)
         place(&groups, &shapes, childrenTops: childrenTops)
@@ -78,9 +95,9 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
 
     /// The boundaries written in each boundary, in the order written.
     private func childBoundaryIndices() -> [[Int]] {
-        var children = [[Int]](repeating: [], count: diagram.boundaries.count)
-        for (index, boundary) in diagram.boundaries.enumerated() {
-            if let parent = boundary.element.parentBoundaryIndex { children[parent].append(index) }
+        var children = [[Int]](repeating: [], count: diagram.boundaryRecords.count)
+        for (index, boundary) in diagram.boundaryRecords.enumerated() where boundary.element.parentBoundaryIndex >= 0 {
+            children[Int(boundary.element.parentBoundaryIndex)].append(index)
         }
         return children
     }
@@ -90,17 +107,25 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
         return max(100, min(C4Metrics.shapeWidth, room - 2 * CGFloat(depth) * boundaryPadding - 32))
     }
 
+    /// A boundary's heading measured once for the room.
+    private func group(for boundaryIndex: Int, measuring texts: inout C4GridTexts) -> C4PlacedBoundary {
+        if let measured = texts.headings[boundaryIndex] { return measured }
+        let measured = group(for: boundaryIndex)
+        texts.headings[boundaryIndex] = measured
+        return measured
+    }
+
     /// A boundary's heading measured: its name in bold, `[type]` and its description in the small size.
     private func group(for boundaryIndex: Int) -> C4PlacedBoundary {
         guard boundaryIndex != 0 else {
             return C4PlacedBoundary(boundaryIndex: 0, texts: [], headingHeight: boundaryPadding, headingWidth: 0)
         }
-        let element = diagram.boundaries[boundaryIndex].element
+        let element = diagram.boundaryRecords[boundaryIndex].element
         let labelRoom = room.map { room in max(C4Metrics.leastRoom, room - 2 * C4Metrics.headingLeft - 2 * C4Metrics.boundaryPadding * 2) }
             ?? C4Metrics.unwrappedWidth
-        let texts = [C4TextLabel.block(element.label, measurer: measurers.name, maximumWidth: labelRoom),
-                     C4TextLabel.block(element.type.flatMap { type in type.isEmpty ? nil : "[" + type + "]" }, measurer: measurers.small, maximumWidth: labelRoom),
-                     C4TextLabel.block(element.description, measurer: measurers.small, maximumWidth: labelRoom)]
+        let texts = [C4TextLabel.block(element.label, in: diagram, measurer: measurers.name, maximumWidth: labelRoom),
+                     C4TextLabel.bracketedBlock(element.type, in: diagram, measurer: measurers.small, maximumWidth: labelRoom),
+                     C4TextLabel.block(element.description, in: diagram, measurer: measurers.small, maximumWidth: labelRoom)]
         let height = texts.reduce(0) { sum, text in sum + text.measuredHeight }
         let width = texts.reduce(0) { widest, text in max(widest, text.measuredWidth) }
         return C4PlacedBoundary(boundaryIndex: boundaryIndex, texts: texts,
@@ -110,17 +135,33 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
 
     /// A shape's texts measured in its width less its padding and a queue's ends, and its box: that width or its widest
     /// text's, and at least 64 points high, a person's head and a database's caps added.
-    private func measured(_ shapeIndex: Int, width: CGFloat) -> C4PlacedShape {
-        let shape = diagram.shapes[shapeIndex]
-        let form = C4ShapeForm.form(of: shape)
+    private func measured(_ shapeIndex: Int, width: CGFloat, measuring texts: inout C4GridTexts) -> C4PlacedShape {
+        if let measured = texts.shapes[shapeIndex] { return measured }
+        let measured = self.measured(shapeIndex, width: width, kindNames: &texts.kindNames)
+        texts.shapes[shapeIndex] = measured
+        return measured
+    }
+
+    /// The block of a kind's name in `width`, measured once for each kind and width.
+    private func kindName(_ kind: C4ShapeKind, width: CGFloat, in kindNames: inout [(kind: C4ShapeKind, width: CGFloat, block: DiagramTextBlock?)])
+        -> DiagramTextBlock? {
+        if let known = kindNames.first(where: { known in known.kind == kind && known.width.bitPattern == width.bitPattern }) { return known.block }
+        let block = C4TextLabel.block(kind.guillemetedName, measurer: measurers.smallest, maximumWidth: width)
+        kindNames.append((kind, width, block))
+        return block
+    }
+
+    private func measured(_ shapeIndex: Int, width: CGFloat, kindNames: inout [(kind: C4ShapeKind, width: CGFloat, block: DiagramTextBlock?)])
+        -> C4PlacedShape {
+        let shape = diagram.shapeRecords[shapeIndex]
+        let form = C4ShapeForm.form(of: shape, in: diagram)
         let capWidth = form == .horizontalCylinder ? C4Metrics.queueEndsWidth : 0
         let capHeight = form == .person ? C4Metrics.personHead : form == .cylinder ? C4Metrics.cylinderCapsHeight : 0
         let inner = width - 2 * C4Metrics.shapePaddingX - capWidth
-        let technology = shape.element.technology.flatMap { technology in technology.isEmpty ? nil : "[" + technology + "]" }
-        let texts = [C4TextLabel.block(shape.kind.guillemetedName, measurer: measurers.smallest, maximumWidth: inner),
-                     C4TextLabel.block(shape.element.label, measurer: measurers.name, maximumWidth: inner),
-                     C4TextLabel.block(technology, measurer: measurers.small, maximumWidth: inner),
-                     C4TextLabel.block(shape.element.description, measurer: measurers.small, maximumWidth: inner)]
+        let texts = [kindName(shape.kind, width: inner, in: &kindNames),
+                     C4TextLabel.block(shape.element.label, in: diagram, measurer: measurers.name, maximumWidth: inner),
+                     C4TextLabel.bracketedBlock(shape.element.technology, in: diagram, measurer: measurers.small, maximumWidth: inner),
+                     C4TextLabel.block(shape.element.description, in: diagram, measurer: measurers.small, maximumWidth: inner)]
         let textHeight = texts.reduce(texts[3].measuredHeight > 0 ? C4Metrics.descriptionGap : 0) { sum, text in sum + text.measuredHeight }
         let textWidth = texts.reduce(0) { widest, text in max(widest, text.measuredWidth) }
         let box = C4RouteBox(x: 0, y: 0, width: max(width, textWidth + 2 * C4Metrics.shapePaddingX + capWidth),

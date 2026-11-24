@@ -7,8 +7,8 @@
  *              text runs out in each of them, on the text's UTF-8 bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// Reads a C4 diagram's tokens from its keyword on, on the text's UTF-8 bytes. Pele reads UTF-16 code units, but every
@@ -199,8 +199,12 @@ struct C4Lexer {
     private mutating func readWhitespace() {
         var end = position
         var lastLineFeed = -1
-        while case let length = whitespaceLength(at: end), length > 0 {
-            if bytes[end] == Self.lineFeed { lastLineFeed = end }
+        while end < count {
+            let byte = bytes[end]
+            // ASCII white space is one byte; anything else is measured as JavaScript's `\s` takes it.
+            let length = byte == Self.space || (byte >= MermaidByte.tab && byte <= MermaidByte.carriageReturn) ? 1 : byte < 0x80 ? 0 : whitespaceLength(at: end)
+            guard length > 0 else { break }
+            if byte == Self.lineFeed { lastLineFeed = end }
             end += length
         }
         if lastLineFeed != -1 {
@@ -215,7 +219,9 @@ struct C4Lexer {
         var end = position + 1
         while end < count, C4Characters.isWord(UInt16(bytes[end])) { end += 1 }
         guard end - position <= C4TokenKind.longestKeywordLength,
-              let kind = C4TokenKind.keywords[String(decoding: bytes[position..<end], as: UTF8.self)] else { return false }
+              let kind = bytes.withUnsafeBufferPointer({ text in C4Keywords.kind(of: UnsafeBufferPointer(rebasing: text[position..<end])) }) else {
+            return false
+        }
         if kind > .deployment { condition = .macro }
         emit(kind, from: position, to: end)
         return true
@@ -341,13 +347,7 @@ struct C4Lexer {
     }
 
     private func firstIndex(of word: [UInt8], from start: Int) -> Int? {
-        var index = start
-        while index + word.count <= count {
-            guard let candidate = bytes[index...].firstIndex(of: word[0]), candidate + word.count <= count else { return nil }
-            if hasPrefix(word, at: candidate) { return candidate }
-            index = candidate + 1
-        }
-        return nil
+        C4ByteSearch.firstIndex(of: word, in: bytes, from: start)
     }
 
     private static let directionWord = Array("direction".utf8)

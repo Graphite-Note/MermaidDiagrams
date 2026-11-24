@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: Reads a C4 diagram's tokens as the parser Jison generates from Mermaid's c4Diagram.jison does (Pele's
  *              parser.ts): what it accepts, and its calls into the model in the order of the grammar's actions, with
- *              boundaries nested through a counter, not recursion.
+ *              boundaries nested through a counter, not recursion; every argument a range of the text's bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// Reads a C4 diagram from its keyword on. A statement is a title, an accessibility statement or a macro, each on its
@@ -30,18 +30,23 @@ struct C4Parser {
     private var index = 0
     private var builder: C4DiagramBuilder
 
+    /// The arguments of the macro being read, the list kept from macro to macro.
+    private var arguments: [C4ArgumentRecord] = []
+
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> C4Diagram {
         let bytes = Array(cursor.bytes[(cursor.position - keyword.utf8.count)...])
         var parser = C4Parser(bytes: bytes, firstLine: cursor.line, limits: limits)
         try parser.readDiagram()
-        return parser.builder.diagram
+        return parser.builder.finished
     }
 
     private init(bytes: [UInt8], firstLine: Int, limits: MermaidDiagramLimits) {
         self.bytes = bytes
         self.firstLine = firstLine
         tokens = C4Lexer.tokens(of: bytes)
-        builder = C4DiagramBuilder(limits: limits)
+        builder = C4DiagramBuilder(source: bytes, limits: limits)
+        builder.reserveCapacity(for: tokens.kinds)
+        arguments.reserveCapacity(Self.typicalArgumentCount)
     }
 
     private var current: C4TokenKind { index < tokens.kinds.count ? tokens.kinds[index] : .end }
@@ -49,7 +54,7 @@ struct C4Parser {
     private mutating func readDiagram() throws(MermaidDiagramReadError) {
         let header = current
         guard header >= .context, header <= .deployment else { throw failure(expecting: .header) }
-        builder.diagram.level = C4DiagramLevel(rawValue: text(at: index)) ?? .context
+        builder.diagram.level = C4DiagramLevel(rawValue: String(decoding: bytes[tokens.starts[index]..<tokens.ends[index]], as: UTF8.self)) ?? .context
         index += 1
         try expect(.newline, .lineBreak)
         try readStatements()
@@ -108,7 +113,7 @@ struct C4Parser {
     private mutating func readTitleOrAccessibility(_ token: C4TokenKind) throws(MermaidDiagramReadError) {
         switch token {
         case .title:
-            builder.diagram.title = text(at: index, droppingWordAndSpaceOf: Self.titleWordLength)
+            builder.diagram.titleText = text(at: index, droppingWordAndSpaceOf: Self.titleWordLength)
             index += 1
         case .accessibilityDescriptionStatement:
             builder.setAccessibilityDescription(text(at: index, droppingWordAndSpaceOf: Self.accessibilityDescriptionWordLength))
@@ -123,14 +128,14 @@ struct C4Parser {
             let value = trimmedText(at: index)
             index += 1
             // The grammar hands `accTitle:` to the title, so it becomes the visible title.
-            if isTitle { builder.diagram.title = value } else { builder.setAccessibilityDescription(value) }
+            if isTitle { builder.diagram.titleText = value } else { builder.setAccessibilityDescription(value) }
         }
     }
 
     /// A macro and its arguments, handed to the builder; true when it opens a boundary, whose brace is read here.
     private mutating func readMacro(_ token: C4TokenKind) throws(MermaidDiagramReadError) -> Bool {
         index += 1
-        var arguments = try readArguments()
+        try readArguments()
         switch token {
         case .person ... .externalComponentQueue:
             try builder.addShape(Self.shapeKinds[token.rawValue - C4TokenKind.person.rawValue], arguments: arguments)
@@ -163,28 +168,27 @@ struct C4Parser {
         }
     }
 
-    /// One argument or more: quoted or bare text (trimmed), empty ones, and `$key="value"`.
-    private mutating func readArguments() throws(MermaidDiagramReadError) -> [C4Argument] {
-        var arguments: [C4Argument] = []
-        // Room for the arguments of most macros, made once.
-        arguments.reserveCapacity(Self.typicalArgumentCount)
+    /// One argument or more into `arguments`: quoted or bare text (trimmed), empty ones, and `$key="value"`, each a range
+    /// of the text.
+    private mutating func readArguments() throws(MermaidDiagramReadError) {
+        arguments.removeAll(keepingCapacity: true)
         while true {
             switch current {
             case .string:
                 arguments.append(.positional(trimmedText(at: index)))
                 index += 1
             case .emptyArgument:
-                arguments.append(.positional(""))
+                arguments.append(.positional(C4DerivedText.empty))
                 index += 1
             case .namedArgumentKey:
                 index += 1
                 guard current == .namedArgumentValue else { throw failure(expecting: .namedValue) }
                 let key = trimmedText(at: index - 1)
-                arguments.append(.named(C4NamedArgument(key: key, value: trimmedText(at: index))))
+                arguments.append(builder.namedArgument(key: key, value: trimmedText(at: index)))
                 index += 1
             default:
                 guard !arguments.isEmpty else { throw failure(expecting: .arguments) }
-                return arguments
+                return
             }
         }
     }
@@ -194,23 +198,20 @@ struct C4Parser {
         index += 1
     }
 
-    private func text(at tokenIndex: Int) -> String {
-        String(decoding: bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]], as: UTF8.self)
-    }
-
     /// The token's text without the white space at its ends, as JavaScript's `trim` leaves it: trimmed on its bytes,
     /// with the white space `C4Characters.trimmed` trims.
-    private func trimmedText(at tokenIndex: Int) -> String {
-        String(decoding: JavaScriptWhitespace.trimmed(bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]]), as: UTF8.self)
+    private func trimmedText(at tokenIndex: Int) -> C4Text {
+        let trimmed = JavaScriptWhitespace.trimmed(bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]])
+        return C4Text(start: trimmed.startIndex, end: trimmed.endIndex)
     }
 
     /// The text of a `title` or `accDescription` statement after its word and the one white space character after it,
     /// which may take more than one byte.
-    private func text(at tokenIndex: Int, droppingWordAndSpaceOf wordLength: Int) -> String {
+    private func text(at tokenIndex: Int, droppingWordAndSpaceOf wordLength: Int) -> C4Text {
         let end = tokens.ends[tokenIndex]
         let spaceStart = min(tokens.starts[tokenIndex] + wordLength, end)
         let start = min(spaceStart + JavaScriptWhitespace.length(in: bytes, at: spaceStart), end)
-        return String(decoding: bytes[start..<end], as: UTF8.self)
+        return C4Text(start: start, end: end)
     }
 
     /// The line the token at `tokenIndex` starts on, in the whole text.
@@ -238,8 +239,15 @@ struct C4Parser {
                                                           .relationBack, .relation]
 }
 
-/// An argument of a macro: positional text, or a `$key="value"` argument.
-enum C4Argument: Equatable {
-    case positional(String)
-    case named(C4NamedArgument)
+/// An argument of a macro: positional text, or a `$key="value"` argument by its index in the diagram's named arguments.
+struct C4ArgumentRecord: Equatable {
+    /// The text of a positional argument; none for a named one.
+    let text: C4Text
+    /// The named argument's index, -1 for a positional argument.
+    let named: Int32
+
+    static func positional(_ text: C4Text) -> C4ArgumentRecord { C4ArgumentRecord(text: text, named: -1) }
+    static func named(_ index: Int32) -> C4ArgumentRecord { C4ArgumentRecord(text: .none, named: index) }
+
+    var isNamed: Bool { named >= 0 }
 }

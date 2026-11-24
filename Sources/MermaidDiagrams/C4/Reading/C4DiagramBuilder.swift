@@ -4,259 +4,199 @@
  * Layer: Core
  * Description: Builds a C4 diagram from the parser's calls as Pele's db.ts does: each macro's positional arguments
  *              to the fields of their places, named ones to the fields they name, an alias written again merged into
- *              its element, boundaries opened and closed around what is written inside them.
+ *              its element, boundaries opened and closed around what is written inside them; every field a range of
+ *              the text and every alias an interned name.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Builds a C4 diagram as Pele's `C4Db` does. A positional argument fills the field of its place; a named one fills the
 /// field it names whatever its place, as Mermaid assigns it. Every new shape and boundary counts against the node limit
-/// and every new relation against the edge limit before it is made.
+/// and every new relation against the edge limit before it is made. Aliases and relations' ends are interned names
+/// (`C4NameTable`), which find a shape, a boundary or a relation by number.
 struct C4DiagramBuilder {
-    var diagram = C4Diagram()
-    private let limits: MermaidDiagramLimits
-    private var shapeIndexByAlias: [String: Int] = [:]
-    /// The top level is not listed, so a boundary a diagram names `global` is its own box.
-    private var boundaryIndexByAlias: [String: Int] = [:]
-    private var relationIndexByEnds: [C4RelationEnds: Int] = [:]
-    private var currentBoundaryIndex = 0
-    private var openBoundaryIndices: [Int] = []
+    var diagram: C4Diagram
+    let limits: MermaidDiagramLimits
+    private var names: C4NameTable
+    /// By name: the shape and the boundary written with it as their alias, -1 for none. The top level is not listed, so
+    /// a boundary a diagram names `global` is its own box.
+    var shapeIndexByName: [Int32] = []
+    var boundaryIndexByName: [Int32] = []
+    /// By the names of its two ends, the relation between them.
+    var relationIndexByEnds: [UInt64: Int32] = [:]
+    private var currentBoundaryIndex: Int32 = 0
+    private var openBoundaryIndices: [Int32] = []
 
-    init(limits: MermaidDiagramLimits) {
+    init(source: [UInt8], limits: MermaidDiagramLimits) {
+        diagram = C4Diagram(source: source)
         self.limits = limits
+        names = C4NameTable(bytes: source)
     }
 
-    mutating func setAccessibilityDescription(_ text: String) {
-        diagram.accessibilityDescription = C4DiagramBuilder.collapsingIndentedLines(text)
+    /// Room for as many shapes, boundaries, relations and names as `kinds` holds macros, made once.
+    mutating func reserveCapacity(for kinds: [C4TokenKind]) {
+        var shapeCount = 0
+        var boundaryCount = 1
+        var relationCount = 0
+        for kind in kinds {
+            if kind >= .person, kind <= .externalComponentQueue { shapeCount += 1 }
+            if kind >= .enterpriseBoundary, kind <= .rightNode { boundaryCount += 1 }
+            if kind >= .relation, kind <= .relationIndex { relationCount += 1 }
+        }
+        diagram.shapeRecords.reserveCapacity(shapeCount)
+        diagram.boundaryRecords.reserveCapacity(boundaryCount)
+        diagram.relationRecords.reserveCapacity(relationCount)
+        let nameCount = shapeCount + boundaryCount + 2 * relationCount
+        names.reserveCapacity(nameCount)
+        shapeIndexByName.reserveCapacity(nameCount)
+        boundaryIndexByName.reserveCapacity(nameCount)
+        relationIndexByEnds.reserveCapacity(relationCount)
+    }
+
+    /// The diagram as read, with the count of its names.
+    var finished: C4Diagram {
+        var finished = diagram
+        finished.nameCount = names.count
+        return finished
+    }
+
+    mutating func setAccessibilityDescription(_ text: C4Text) {
+        diagram.accessibilityDescriptionText = C4IndentedLines.collapsed(text, in: &diagram)
+    }
+
+    /// A named argument added to the diagram's list.
+    mutating func namedArgument(key: C4Text, value: C4Text) -> C4ArgumentRecord {
+        diagram.namedArguments.append(C4NamedArgumentRecord(key: key, value: value))
+        return .named(Int32(diagram.namedArguments.count - 1))
+    }
+
+    /// The number of the name `text` spells: a range of the source, or an empty argument (`C4DerivedText.empty`), whose
+    /// name is the empty one.
+    mutating func name(of text: C4Text) -> Int32 {
+        precondition(!text.isDerived || text.count == 0, "A name is read from the source")
+        let (start, end) = text.isDerived ? (0, 0) : (Int(text.start), Int(text.end))
+        let number = diagram.source.withUnsafeBufferPointer { bytes in names.intern(bytes, from: start, to: end) }
+        if Int(number) == shapeIndexByName.count {
+            shapeIndexByName.append(-1)
+            boundaryIndexByName.append(-1)
+        }
+        return number
     }
 
     // MARK: - Shapes
 
     /// `alias, label, ?descr, ?sprite, ?tags, $link` for people and systems; containers and components take `?techn`
     /// before `?descr`.
-    mutating func addShape(_ kind: C4ShapeKind, arguments: [C4Argument]) throws(MermaidDiagramReadError) {
+    mutating func addShape(_ kind: C4ShapeKind, arguments: [C4ArgumentRecord]) throws(MermaidDiagramReadError) {
         let index: Int
-        if case .positional(let alias) = arguments[0], let known = shapeIndexByAlias[alias] {
-            index = known
-            diagram.shapes[index].kind = kind
+        let alias = arguments[0]
+        let name = alias.isNamed ? -1 : self.name(of: alias.text)
+        if name >= 0, shapeIndexByName[Int(name)] >= 0 {
+            index = Int(shapeIndexByName[Int(name)])
+            diagram.shapeRecords[index].kind = kind
         } else {
-            index = diagram.shapes.count
+            index = diagram.shapeRecords.count
             try checkNodeLimit()
-            diagram.shapes.append(C4Shape(element: Self.newElement(alias: arguments[0], indexedIn: &shapeIndexByAlias, at: index), kind: kind))
+            var element = C4ElementRecord()
+            setAlias(alias, name: name, of: &element)
+            if name >= 0 { shapeIndexByName[Int(name)] = Int32(index) }
+            diagram.shapeRecords.append(C4ShapeRecord(element: element, kind: kind))
         }
         let takesTechnology = kind.takesTechnology
         let detailsStart = takesTechnology ? 4 : 3
-        let currentBoundaryIndex = currentBoundaryIndex
-        Self.change(&diagram.shapes[index].element) { element in
-            element.applyLabel(Self.argument(arguments, 1))
-            if takesTechnology { element.fill(.technology, from: Self.argument(arguments, 2)) }
-            element.fill(.description, from: Self.argument(arguments, detailsStart - 1))
-            element.put(.sprite, Self.argument(arguments, detailsStart))
-            element.put(.tags, Self.argument(arguments, detailsStart + 1))
-            element.put(.link, Self.argument(arguments, detailsStart + 2))
-            element.parentBoundaryIndex = currentBoundaryIndex
-        }
+        var element = diagram.shapeRecords[index].element
+        diagram.applyLabel(Self.argument(arguments, 1), to: &element)
+        if takesTechnology { diagram.fill(.technology, from: Self.argument(arguments, 2), to: &element) }
+        diagram.fill(.description, from: Self.argument(arguments, detailsStart - 1), to: &element)
+        diagram.put(.sprite, Self.argument(arguments, detailsStart), to: &element)
+        diagram.put(.tags, Self.argument(arguments, detailsStart + 1), to: &element)
+        diagram.put(.link, Self.argument(arguments, detailsStart + 2), to: &element)
+        element.parentBoundaryIndex = currentBoundaryIndex
+        diagram.shapeRecords[index].element = element
     }
 
     // MARK: - Boundaries
 
     /// `alias, label, ?type, ?tags, $link` for boundaries, the enterprise, system and container ones with their kind
     /// written in as the third argument; `alias, label, ?type, ?descr, ?sprite, ?tags, $link` for deployment nodes.
-    mutating func addBoundary(_ macro: C4TokenKind, arguments written: [C4Argument]) throws(MermaidDiagramReadError) {
-        var arguments = written
-        let kindWord: String? = switch macro {
-        case .enterpriseBoundary: "ENTERPRISE"
-        case .systemBoundary: "SYSTEM"
-        case .containerBoundary: "CONTAINER"
+    mutating func addBoundary(_ macro: C4TokenKind, arguments: [C4ArgumentRecord]) throws(MermaidDiagramReadError) {
+        let kindWord: C4Text? = switch macro {
+        case .enterpriseBoundary: C4DerivedText.enterprise
+        case .systemBoundary: C4DerivedText.systemWord
+        case .containerBoundary: C4DerivedText.containerWord
         default: nil
         }
-        if let kindWord { arguments.insert(.positional(kindWord), at: min(2, arguments.count)) }
+        // The kind's word written in as the third argument, or after the last when there are fewer, without a copy.
+        let kindPlace = kindWord == nil ? Int.max : min(2, arguments.count)
+        func argument(_ place: Int) -> C4ArgumentRecord? {
+            if place < kindPlace { return Self.argument(arguments, place) }
+            if place == kindPlace, let kindWord { return .positional(kindWord) }
+            return Self.argument(arguments, place - 1)
+        }
         let node: C4DeploymentNodeKind? = switch macro {
         case .node: .node
         case .leftNode: .leftNode
         case .rightNode: .rightNode
         default: nil
         }
-        let index = try boundaryIndex(for: arguments[0])
-        let fallbackType = node != nil ? "node" : macro == .containerBoundary ? "container" : "system"
-        Self.change(&diagram.boundaries[index].element) { element in
-            element.applyLabel(Self.argument(arguments, 1))
-            if let type = Self.argument(arguments, 2) { element.put(.type, type) } else { element.type = fallbackType }
-            if node != nil {
-                element.fill(.description, from: Self.argument(arguments, 3))
-                // Mermaid drops whatever is in the sprite's place, a named argument included.
-                element.put(.sprite, Self.argument(arguments, 4))
-            }
-            let tagsPlace = node != nil ? 5 : 3
-            element.put(.tags, Self.argument(arguments, tagsPlace))
-            element.put(.link, Self.argument(arguments, tagsPlace + 1))
+        let index = try boundaryIndex(for: argument(0) ?? arguments[0])
+        let fallbackType = node != nil ? C4DerivedText.node : macro == .containerBoundary ? C4DerivedText.container : C4DerivedText.system
+        var element = diagram.boundaryRecords[index].element
+        diagram.applyLabel(argument(1), to: &element)
+        if let type = argument(2) { diagram.put(.type, type, to: &element) } else { element.type = fallbackType }
+        if node != nil {
+            diagram.fill(.description, from: argument(3), to: &element)
+            // Mermaid drops whatever is in the sprite's place, a named argument included.
+            diagram.put(.sprite, argument(4), to: &element)
         }
-        if node != nil { diagram.boundaries[index].deploymentNode = node }
-        diagram.boundaries[index].element.parentBoundaryIndex = currentBoundaryIndex
+        let tagsPlace = node != nil ? 5 : 3
+        diagram.put(.tags, argument(tagsPlace), to: &element)
+        diagram.put(.link, argument(tagsPlace + 1), to: &element)
+        element.parentBoundaryIndex = currentBoundaryIndex
+        diagram.boundaryRecords[index].element = element
+        if node != nil { diagram.boundaryRecords[index].deploymentNode = node }
         openBoundaryIndices.append(currentBoundaryIndex)
-        currentBoundaryIndex = index
+        currentBoundaryIndex = Int32(index)
     }
 
     mutating func closeBoundary() {
         currentBoundaryIndex = openBoundaryIndices.popLast() ?? 0
     }
 
-    private mutating func boundaryIndex(for alias: C4Argument) throws(MermaidDiagramReadError) -> Int {
-        if case .positional(let written) = alias, let known = boundaryIndexByAlias[written] { return known }
-        let index = diagram.boundaries.count
+    private mutating func boundaryIndex(for alias: C4ArgumentRecord) throws(MermaidDiagramReadError) -> Int {
+        let name = alias.isNamed ? -1 : self.name(of: alias.text)
+        if name >= 0, boundaryIndexByName[Int(name)] >= 0 { return Int(boundaryIndexByName[Int(name)]) }
+        let index = diagram.boundaryRecords.count
         try checkNodeLimit()
-        diagram.boundaries.append(C4Boundary(element: Self.newElement(alias: alias, indexedIn: &boundaryIndexByAlias, at: index), deploymentNode: nil))
+        var element = C4ElementRecord()
+        setAlias(alias, name: name, of: &element)
+        if name >= 0 { boundaryIndexByName[Int(name)] = Int32(index) }
+        diagram.boundaryRecords.append(C4BoundaryRecord(element: element, deploymentNode: nil))
         return index
     }
 
     /// Whether another shape or boundary fits the node limit.
     private func checkNodeLimit() throws(MermaidDiagramReadError) {
-        guard diagram.shapes.count + diagram.boundaries.count - 1 < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-    }
-
-    /// A new element with its alias, or with the named argument written in its place applied, once `checkNodeLimit` let
-    /// it be made. Static, so that the index it writes the alias in is not copied with the builder it belongs to.
-    private static func newElement(alias: C4Argument, indexedIn index: inout [String: Int], at position: Int) -> C4Element {
-        var element = C4Element()
-        switch alias {
-        case .positional(let written):
-            element.alias = written
-            index[written] = position
-        case .named(let argument):
-            element.aliasArgument = argument
-            element.apply(argument)
+        guard diagram.shapeRecords.count + diagram.boundaryRecords.count - 1 < limits.maximumNodeCount else {
+            throw .tooManyNodes(limit: limits.maximumNodeCount)
         }
-        return element
     }
 
-    // MARK: - Relations
-
-    /// `from, to, label, ?techn, ?descr, ?sprite, ?tags, $link`; nothing without the first three. A relation between two
-    /// aliases already related is that relation again, of the new kind.
-    mutating func addRelation(_ kind: C4RelationKind, arguments: [C4Argument]) throws(MermaidDiagramReadError) {
-        guard arguments.count >= 3 else { return }
-        let index: Int
-        let ends: C4RelationEnds? = if case .positional(let from) = arguments[0], case .positional(let to) = arguments[1] {
-            C4RelationEnds(from: from, to: to)
-        } else { nil }
-        if let ends, let known = relationIndexByEnds[ends] {
-            index = known
+    /// A new element's alias, or the named argument written in its place applied, once `checkNodeLimit` let it be made.
+    private mutating func setAlias(_ alias: C4ArgumentRecord, name: Int32, of element: inout C4ElementRecord) {
+        if alias.isNamed {
+            element.alias = C4DerivedText.empty
+            element.aliasArgument = alias.named
+            diagram.apply(alias.named, to: &element)
         } else {
-            guard diagram.relations.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-            index = diagram.relations.count
-            var relation = C4Relation(kind: kind)
-            if let ends { relationIndexByEnds[ends] = index }
-            switch arguments[0] {
-            case .positional(let from): relation.from = from
-            case .named(let argument): relation.fromArgument = argument
-            }
-            switch arguments[1] {
-            case .positional(let to): relation.to = to
-            case .named(let argument): relation.toArgument = argument
-            }
-            diagram.relations.append(relation)
-        }
-        Self.change(&diagram.relations[index]) { relation in
-            relation.kind = kind
-            relation.applyLabel(arguments[2])
-            relation.fill(.technology, from: Self.argument(arguments, 3))
-            relation.fill(.description, from: Self.argument(arguments, 4))
-            relation.put(.sprite, Self.argument(arguments, 5))
-            relation.put(.tags, Self.argument(arguments, 6))
-            relation.put(.link, Self.argument(arguments, 7))
+            element.alias = alias.text
+            element.name = name
         }
     }
 
-    // MARK: - Updates
-
-    /// `elementName, ?bgColor, ?fontColor, ?borderColor, ?shadowing, ?shape, ?sprite, ?techn, ?legendText, ?legendSprite`.
-    mutating func updateElementStyle(_ arguments: [C4Argument]) {
-        guard case .positional(let alias) = arguments[0] else { return }
-        let fields: [C4ElementField] = [.backgroundColor, .fontColor, .borderColor, .shadowing, .shape, .sprite, .technology, .legendText, .legendSprite]
-        func update(_ element: inout C4Element) {
-            for (offset, field) in fields.enumerated() { element.put(field, Self.argument(arguments, offset + 1)) }
-        }
-        if let index = shapeIndexByAlias[alias] {
-            update(&diagram.shapes[index].element)
-        } else if let index = boundaryIndexByAlias[alias] {
-            update(&diagram.boundaries[index].element)
-        }
-    }
-
-    /// `from, to, ?textColor, ?lineColor, ?offsetX, ?offsetY`, for a relation already written.
-    mutating func updateRelationStyle(_ arguments: [C4Argument]) {
-        guard arguments.count >= 2, case .positional(let from) = arguments[0], case .positional(let to) = arguments[1],
-              let index = relationIndexByEnds[C4RelationEnds(from: from, to: to)] else { return }
-        Self.change(&diagram.relations[index]) { relation in
-            relation.put(.textColor, Self.argument(arguments, 2))
-            relation.put(.lineColor, Self.argument(arguments, 3))
-            switch Self.argument(arguments, 4) {
-            case .positional(let offset): relation.labelOffsetX = JavaScriptInteger.parsed(offset)
-            case .named(let argument): relation.apply(argument)
-            case nil: break
-            }
-            switch Self.argument(arguments, 5) {
-            case .positional(let offset): relation.labelOffsetY = JavaScriptInteger.parsed(offset)
-            case .named(let argument): relation.apply(argument)
-            case nil: break
-            }
-        }
-    }
-
-    /// `?c4ShapeInRow, ?c4BoundaryInRow`. As in Mermaid, the place decides which one a value sets, not its name; a value
-    /// under one is left out.
-    mutating func updateLayoutConfiguration(_ arguments: [C4Argument]) {
-        func count(_ argument: C4Argument?) -> Int? {
-            let text: String? = switch argument {
-            case .positional(let value): value
-            case .named(let named): named.value
-            case nil: nil
-            }
-            guard let value = text.flatMap(JavaScriptInteger.parsed), value >= 1 else { return nil }
-            return Int(min(value, Self.largestRowCount))
-        }
-        if let shapes = count(Self.argument(arguments, 0)) { diagram.shapesPerRow = shapes }
-        if let boundaries = count(Self.argument(arguments, 1)) { diagram.boundariesPerRow = boundaries }
-    }
-
-    // MARK: - Helpers
-
-    /// A row holds at most this many: more than any diagram within the limits has, so that it acts as Mermaid's any.
-    private static let largestRowCount: Double = 1_000_000_000
-
-    private static func argument(_ arguments: [C4Argument], _ place: Int) -> C4Argument? {
+    static func argument(_ arguments: [C4ArgumentRecord], _ place: Int) -> C4ArgumentRecord? {
         place < arguments.count ? arguments[place] : nil
     }
-
-    private static func change<Value>(_ value: inout Value, _ body: (inout Value) -> Void) {
-        body(&value)
-    }
-
-    /// Mermaid's `replace(/\n\s+/g, '\n')`: the white space after each line break, line breaks included, taken out.
-    static func collapsingIndentedLines(_ text: String) -> String {
-        // Without a line feed there is nothing to take out.
-        guard text.utf8.contains(MermaidByte.newline) else { return text }
-        let units = Array(text.utf16)
-        var kept: [UInt16] = []
-        kept.reserveCapacity(units.count)
-        var index = 0
-        while index < units.count {
-            kept.append(units[index])
-            if units[index] == C4Characters.lineFeed, index + 1 < units.count, C4Characters.isSpace(units[index + 1]) {
-                index += 1
-                while index < units.count, C4Characters.isSpace(units[index]) { index += 1 }
-                continue
-            }
-            index += 1
-        }
-        return String(decoding: kept, as: UTF16.self)
-    }
-}
-
-/// The aliases a relation joins, by which `UpdateRelStyle` and a relation written again find it.
-private struct C4RelationEnds: Hashable {
-    let from: String
-    let to: String
 }
