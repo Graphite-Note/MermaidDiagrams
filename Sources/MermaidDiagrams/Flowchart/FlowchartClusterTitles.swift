@@ -5,7 +5,7 @@
  * Description: Where a group's title sits along the top of its box, clear of the edges crossing it where it can be.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -34,16 +34,32 @@ enum FlowchartClusterTitles {
 
     /// The title placed in `frame`, the edges' points looked up in `crossings`, sorted once for every box.
     static func placed(_ title: DiagramTextBlock, in frame: CGRect, crossings index: FlowchartRoutePointIndex) -> (title: DiagramTextBlock, isCrossed: Bool) {
-        let crossings = index.points(within: topTolerance, of: frame.minY).filter { point in point.x > frame.minX && point.x < frame.maxX }.map(\.x)
+        placed(title, in: frame, near: index.points(within: topTolerance, of: frame.minY))
+    }
+
+    /// The title placed in `frame`, among `points` sorted down the page by y.
+    static func placed(_ title: DiagramTextBlock, in frame: CGRect, sortedPoints points: ScratchSpan<CGPoint>) -> (title: DiagramTextBlock, isCrossed: Bool) {
+        placed(title, in: frame, near: points.part(FlowchartRoutePointIndex.range(within: topTolerance, of: frame.minY, in: points)))
+    }
+
+    /// The title placed in `frame`, `points` those near its top: the ones strictly between its sides cross it.
+    private static func placed<Points: Collection<CGPoint>>(_ title: DiagramTextBlock, in frame: CGRect, near points: Points) -> (title: DiagramTextBlock, isCrossed: Bool) {
         let halfWidth = title.size.width / 2
         let padding = FlowchartClusterGraph.clusterPadding
-        let candidates = [frame.minX + padding - sideReach + halfWidth, frame.midX, frame.maxX - padding + sideReach - halfWidth]
-        var best = candidates[0]
+        let candidates = (frame.minX + padding - sideReach + halfWidth, frame.midX, frame.maxX - padding + sideReach - halfWidth)
+        var best = candidates.0
         // As in Pele, another place replaces the left only where no crossing reaches half a point into its letters,
         // and then only a clearer one.
         var bestGap: CGFloat = -1
-        for candidate in candidates {
-            let gap = crossings.map { crossing in abs(crossing - candidate) - halfWidth }.min() ?? .greatestFiniteMagnitude
+        for candidateIndex in 0..<3 {
+            let candidate = candidateIndex == 0 ? candidates.0 : candidateIndex == 1 ? candidates.1 : candidates.2
+            var gap = CGFloat.greatestFiniteMagnitude
+            var isFirst = true
+            for point in points where point.x > frame.minX && point.x < frame.maxX {
+                let distance = abs(point.x - candidate) - halfWidth
+                if isFirst || distance < gap { gap = distance }
+                isFirst = false
+            }
             if gap >= clearance {
                 best = candidate
                 break
@@ -55,7 +71,7 @@ enum FlowchartClusterTitles {
         }
         var placed = title
         placed.center = CGPoint(x: best, y: frame.minY + FlowchartClusterGraph.titleMargin + title.size.height / 2)
-        let isCrossed = crossings.contains { crossing in abs(crossing - best) < halfWidth + crossingReach }
+        let isCrossed = points.contains { point in point.x > frame.minX && point.x < frame.maxX && abs(point.x - best) < halfWidth + crossingReach }
         return (placed, isCrossed)
     }
 }
@@ -70,14 +86,20 @@ struct FlowchartRoutePointIndex {
 
     /// The points less than `tolerance` from the line `along` across the page, in the order they are sorted.
     func points(within tolerance: CGFloat, of along: CGFloat) -> ArraySlice<CGPoint> {
-        var low = 0
-        var high = points.count
+        points[Self.range(within: tolerance, of: along, in: points)]
+    }
+
+    /// Where the points less than `tolerance` from the line `along` are in `points`, sorted down the page.
+    static func range<Points: RandomAccessCollection<CGPoint>>(within tolerance: CGFloat, of along: CGFloat, in points: Points) -> Range<Int>
+        where Points.Index == Int {
+        var low = points.startIndex
+        var high = points.endIndex
         while low < high {
             let middle = (low + high) / 2
             if points[middle].y <= along - tolerance { low = middle + 1 } else { high = middle }
         }
         var end = low
-        while end < points.count && points[end].y < along + tolerance { end += 1 }
-        return points[low..<end]
+        while end < points.endIndex && points[end].y < along + tolerance { end += 1 }
+        return low..<end
     }
 }

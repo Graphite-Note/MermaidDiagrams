@@ -31,26 +31,38 @@ enum LayeredClusterLayout {
     static func placeInCompoundLayout(_ graph: LayeredClusterGraph, spacing: LayeredSpacing,
                                       maximumPointCount: Int) throws(LayeredClusterLayoutError) -> LayeredClusterPlacement {
         let placement: LayeredClusterPlacement? = DiagramScratchArena.withCurrentThread { arena in
-            let nodeCount = graph.nodeSizes.count
-            let nodes = compoundNodes(graph, arena: arena)
-            func index(of end: LayeredClusterEnd) -> Int {
-                switch end {
-                case .node(let node): node
-                case .cluster(let cluster): nodeCount + cluster
-                }
+            laidOutInCompoundLayout(graph, spacing: spacing, maximumPointCount: maximumPointCount, arena: arena).map { layout in
+                placement(of: layout, graph: graph, size: layout.total)
             }
-            let edges: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: graph.edges.count)
-            for (edgeIndex, edge) in graph.edges.enumerated() {
-                edges[edgeIndex] = LayeredCompoundSpanEdge(source: index(of: edge.source), target: index(of: edge.target), minimumLength: edge.minimumRankSpan,
-                                                           labelWidth: Double(edge.labelSize?.width ?? 0), labelHeight: Double(edge.labelSize?.height ?? 0))
-            }
-            var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: graph.direction, options: LayeredLayout.options(spacing),
-                                               maximumVertexCount: maximumPointCount, arena: arena)
-            guard let size = LayeredCompoundLayout.layout(&layout) else { return nil }
-            return placement(of: layout, graph: graph, size: size)
         }
         guard let placement else { throw .tooManyPoints }
         return placement
+    }
+
+    /// A graph with clusters laid out by the compound layout in `arena`, its nodes the graph's then a group node for each
+    /// cluster, as `place` lays it out; nil when it would need more than `maximumPointCount` points. Recorded as `place`
+    /// records it, for the tests that place every cluster graph of the corpora again.
+    static func laidOutInCompoundLayout(_ graph: LayeredClusterGraph, spacing: LayeredSpacing, maximumPointCount: Int,
+                                        arena: DiagramScratchArena, isRecorded: Bool = false) -> LayeredCompoundLayout? {
+        #if DEBUG
+        if isRecorded { LayeredLayoutRecording.current?.clusterPlacements.append(.init(graph: graph, spacing: spacing, maximumPointCount: maximumPointCount)) }
+        #endif
+        let nodeCount = graph.nodeSizes.count
+        let nodes = compoundNodes(graph, arena: arena)
+        func index(of end: LayeredClusterEnd) -> Int {
+            switch end {
+            case .node(let node): node
+            case .cluster(let cluster): nodeCount + cluster
+            }
+        }
+        let edges: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: graph.edges.count)
+        for (edgeIndex, edge) in graph.edges.enumerated() {
+            edges[edgeIndex] = LayeredCompoundSpanEdge(source: index(of: edge.source), target: index(of: edge.target), minimumLength: edge.minimumRankSpan,
+                                                       labelWidth: Double(edge.labelSize?.width ?? 0), labelHeight: Double(edge.labelSize?.height ?? 0))
+        }
+        var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: graph.direction, options: LayeredLayout.options(spacing),
+                                           maximumVertexCount: maximumPointCount, arena: arena)
+        return LayeredCompoundLayout.layout(&layout) == nil ? nil : layout
     }
 
     /// The placement a compound layout of `graph` gave, its lists made once from the arena's.
@@ -70,7 +82,7 @@ enum LayeredClusterLayout {
         routes.reserveCapacity(edges.count)
         labelCenters.reserveCapacity(edges.count)
         for edgeIndex in 0..<edges.count {
-            if edges[edgeIndex].source != edges[edgeIndex].target && isStray(edges[edgeIndex], nodes: nodes) { strays.insert(edgeIndex) }
+            if layout.isStray(edgeIndex) { strays.insert(edgeIndex) }
             routes.append(route(layout.routePoints[layout.routeRange(of: edgeIndex)]))
             labelCenters.append(edges[edgeIndex].labelWidth > 0 || strays.contains(edgeIndex) ? edges[edgeIndex].labelCenter : nil)
         }
@@ -108,8 +120,25 @@ enum LayeredClusterLayout {
         return nodes
     }
 
-    /// Whether an edge runs between a group and something inside it, which Pele draws from one center to the other.
-    private static func isStray(_ edge: LayeredCompoundSpanEdge, nodes: ScratchSpan<LayeredCompoundNode>) -> Bool {
+    private static func route(_ points: ArraySlice<LayeredRoutePoint>) -> LayeredClusterRoute {
+        var placed: [CGPoint] = []
+        var segmentsRunVertically: [Bool] = []
+        placed.reserveCapacity(points.count)
+        segmentsRunVertically.reserveCapacity(max(points.count - 1, 0))
+        for (index, point) in points.enumerated() {
+            placed.append(point.point)
+            if index > 0 { segmentsRunVertically.append(!point.runsHorizontally) }
+        }
+        return LayeredClusterRoute(points: placed, segmentsRunVertically: segmentsRunVertically)
+    }
+}
+
+extension LayeredCompoundLayout {
+    /// Whether edge `edgeIndex` runs between a group and something inside it, which Pele draws from one center to the
+    /// other.
+    func isStray(_ edgeIndex: Int) -> Bool {
+        let edge = edges[edgeIndex]
+        guard edge.source != edge.target else { return false }
         func contains(_ group: Int, _ node: Int) -> Bool {
             var parent = nodes[node].parent
             var hops = 0
@@ -121,17 +150,5 @@ enum LayeredClusterLayout {
             return false
         }
         return contains(edge.source, edge.target) || contains(edge.target, edge.source)
-    }
-
-    private static func route(_ points: ArraySlice<LayeredRoutePoint>) -> LayeredClusterRoute {
-        var placed: [CGPoint] = []
-        var segmentsRunVertically: [Bool] = []
-        placed.reserveCapacity(points.count)
-        segmentsRunVertically.reserveCapacity(max(points.count - 1, 0))
-        for (index, point) in points.enumerated() {
-            placed.append(point.point)
-            if index > 0 { segmentsRunVertically.append(!point.runsHorizontally) }
-        }
-        return LayeredClusterRoute(points: placed, segmentsRunVertically: segmentsRunVertically)
     }
 }

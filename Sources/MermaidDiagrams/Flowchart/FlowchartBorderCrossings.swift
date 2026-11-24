@@ -30,7 +30,14 @@ enum FlowchartBorderCrossings {
     /// The crossings sorted by side, each side's in the order of the points' indices along the routes.
     static func crossings(routes: [LayeredClusterRoute], frames: [CGRect], firstBoxNode: Int,
                           arena: DiagramScratchArena) -> ScratchSpan<FlowchartEdgePorts.KeptPoint> {
-        let points = innerPoints(of: routes, arena: arena)
+        let frameSpan: ScratchSpan<CGRect> = arena.uninitializedSpan(count: frames.count)
+        for (box, frame) in frames.enumerated() { frameSpan[box] = frame }
+        return crossings(innerPoints: innerPoints(of: routes, arena: arena), frames: frameSpan, firstBoxNode: firstBoxNode, arena: arena)
+    }
+
+    /// The crossings of the routes passing `points` (between their ends) with the borders of `frames`.
+    static func crossings(innerPoints points: ScratchSpan<CGPoint>, frames: ScratchSpan<CGRect>, firstBoxNode: Int,
+                          arena: DiagramScratchArena) -> ScratchSpan<FlowchartEdgePorts.KeptPoint> {
         let pointCount = points.count
         let byAlong = sortedIndices(of: points, arena: arena) { first, second in first.y < second.y }
         let byAcross = sortedIndices(of: points, arena: arena) { first, second in first.x < second.x }
@@ -55,7 +62,8 @@ enum FlowchartBorderCrossings {
                 found.append(Crossing(sideKey: FlowchartEdgePorts.sideKey(node: firstBoxNode + box, side: side), point: point, box: box, offset: offset))
             }
         }
-        for (box, frame) in frames.enumerated() {
+        for box in 0..<frames.count {
+            let frame = frames[box]
             add(near: frame.minY, in: byAlong, isAlong: true, box: box, frame: frame)
             add(near: frame.maxY, in: byAlong, isAlong: true, box: box, frame: frame)
             add(near: frame.minX, in: byAcross, isAlong: false, box: box, frame: frame)

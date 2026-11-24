@@ -107,24 +107,16 @@ public enum FlowchartLayoutEngine {
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
-    /// (`FlowchartClusterGraph`, `LayeredClusterLayout`).
+    /// (`FlowchartClusterGraph`, `LayeredCompoundLayout`, `FlowchartBoxedLayout`).
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
                                                                       font: DiagramFont, limits: MermaidDiagramLimits, spacing: LayeredSpacing,
                                                                       groupPadding: CGFloat,
                                                                       title: DiagramTextBlock?) throws(FlowchartLayoutError) -> FlowchartLayout {
-        let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: nodeText, edgeTextRoom: edgeTextRoom,
-                                              groupPadding: groupPadding)
-        let placement: LayeredClusterPlacement
-        do {
-            placement = try LayeredClusterLayout.place(clustered.graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        let laidOut = DiagramScratchArena.withCurrentThread { arena in
+            FlowchartBoxedLayout.layout(diagram, measured: measured, titleText: nodeText, font: font, spacing: spacing, groupPadding: groupPadding,
+                                        maximumPointCount: limits.maximumLayoutPointCount, title: title, arena: arena)
         }
-        var page = FlowchartPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
-        page.placeNodes(clustered: clustered, placement: placement)
-        page.placeEdges(clustered: clustered, placement: placement)
-        page.placeSelfLoops()
-        page.placeClusters(clustered: clustered, placement: placement)
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: placement.size)
+        guard let laidOut else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        return laidOut
     }
 }
