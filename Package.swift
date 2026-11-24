@@ -26,6 +26,7 @@ let package = Package(
         // its resources are Mermaid's documentation examples as Pele's corpus collects them, Pele's own records and Pele
         // itself as one script (BenchmarkResources/README.md).
         .executableTarget(name: "MermaidDiagramsBenchmark", dependencies: ["MermaidDiagrams"], resources: [.copy("BenchmarkResources")]),
+        .executableTarget(name: "SlowTypesPrototype", dependencies: ["MermaidDiagrams"]),
         .testTarget(name: "MermaidDiagramsTests", dependencies: ["MermaidDiagrams", "MermaidDiagramsBenchmark"]),
         // The comparison with Pele run in JavaScriptCore on an iPad or an iPhone (`xcodebuild test`), skipped unless
         // MERMAID_DIAGRAMS_DEVICE_BENCHMARK is set; it imports the benchmark without testability, so it builds in Release.

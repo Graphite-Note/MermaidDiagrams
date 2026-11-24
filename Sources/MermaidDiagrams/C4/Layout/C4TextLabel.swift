@@ -19,6 +19,9 @@ import CoreGraphics
 enum C4TextLabel {
     static func block(_ text: String?, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> DiagramTextBlock? {
         guard let text, !text.isEmpty else { return nil }
+        if SlowTypesTextPrototype.isRecording, let measurer = measurer as? CoreTextDiagramTextMeasurer {
+            SlowTypesTextPrototype.recordedCalls.append(SlowTypesTextPrototype.Call(text: text, measurer: measurer, maximumWidth: maximumWidth))
+        }
         // The decoder breaks at a written `\\n` and trims each line before reading its codes, as Pele's layoutLabel does.
         let label = DiagramLabelDecoder.label(from: text, form: .plain)
         let wrapped = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
