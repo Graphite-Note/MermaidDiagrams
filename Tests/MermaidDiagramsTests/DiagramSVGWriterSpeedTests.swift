@@ -2,15 +2,16 @@
  * File: DiagramSVGWriterSpeedTests.swift
  * --------------------------------------
  * Layer: Tests
- * Description: What makes the SVG writer fast keeps its output: the room reserved from a scene holds every document of
- *              Pele's corpora, gradient documents are those of the writer that put its definitions in afterwards, the
- *              series variables' table and the hexadecimal digits are 0.6.1's, the paint texts are each paint's own, a
- *              buffer that grows writes what one that does not grow writes, and a piece at the end of the room grows it
- *              first.
+ * Description: What makes the SVG writer fast keeps its output: the thread's block is reused from document to
+ *              document and a document written inside another gets its own, gradient documents are those of the writer
+ *              that put its definitions in afterwards, the series variables' table and the hexadecimal digits are
+ *              0.6.1's, the colors written are each paint's own text, a written color is spelled from its channels as
+ *              its sRGB conversion, a buffer that grows writes what one that does not grow writes, and a piece at the
+ *              end of the room grows it first.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,32 +20,45 @@ import XCTest
 @testable import MermaidDiagramsBenchmark
 
 final class DiagramSVGWriterSpeedTests: XCTestCase {
-    /// The room a document is given (`DiagramSVGWriter.estimatedRoom(of:)`) holds every document of every input of
-    /// Pele's corpora, regular and narrow, in both color modes with a title and a description, with room left for the
-    /// largest piece the buffer makes sure of at once: so that writing one never moves the bytes written.
-    func testTheRoomReservedFromTheSceneHoldsEveryDocumentOfTheCorpora() throws {
+    /// A thread writing every document of Pele's corpora, regular and narrow, in both color modes with a title and a
+    /// description, a second time writes them all into the block it kept from the first time: no block is made or grown
+    /// once the thread has written its largest document. Each is also written from inside the writing of another, into
+    /// a block of its own, with the same bytes.
+    func testAThreadsBlockIsReusedFromDocumentToDocument() throws {
         let typography = DiagramSceneSamples.typography
-        var documentCount = 0
-        for (corpus, sources) in try OutputDigest.corpora() {
-            for (index, source) in sources.enumerated() {
+        var scenes: [(scene: DiagramScene, type: String, title: String, description: String)] = []
+        for (_, sources) in try OutputDigest.corpora() {
+            for source in sources {
                 for width in [nil] + OutputDigest.narrowColumnWidths.map(Optional.some) {
                     guard let prepared = try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: width,
                                                                                 now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone),
                           let scene = width == nil ? prepared.scene : prepared.narrowScene else { continue }
-                    let title = prepared.accessibility.title ?? "A title"
-                    let description = prepared.accessibility.description ?? "A description"
-                    let room = DiagramSVGWriter.estimatedRoom(of: scene).byteCount + title.utf8.count + description.utf8.count
-                    XCTAssertLessThan(room, DiagramSVGWriter.largestReservedByteCount)
-                    for writer in [DiagramSVGWriter(), DiagramSVGWriter(colors: .palette(DiagramScenePaletteSamples.dark), paintsBackground: true)] {
-                        let written = writer.document(of: scene, diagramType: prepared.kind.peleName, title: title, description: description).utf8.count
-                        XCTAssertLessThanOrEqual(written + DiagramSVGNumberWriting.largestPathElementByteCount, room,
-                                                 "\(corpus) \(index) at \(width.map { "\($0)" } ?? "its width")")
-                        documentCount += 1
-                    }
+                    scenes.append((scene, prepared.kind.peleName, prepared.accessibility.title ?? "A title", prepared.accessibility.description ?? "A description"))
                 }
             }
         }
-        XCTAssertGreaterThan(documentCount, 2_900)
+        XCTAssertGreaterThan(scenes.count, 1_450)
+        let writers = [DiagramSVGWriter(), DiagramSVGWriter(colors: .palette(DiagramScenePaletteSamples.dark), paintsBackground: true)]
+        func writeAll() -> [Int] {
+            scenes.flatMap { scene in
+                writers.map { writer in writer.document(of: scene.scene, diagramType: scene.type, title: scene.title, description: scene.description).utf8.count }
+            }
+        }
+        let first = writeAll()
+        let block = DiagramSVGScratch.current.blockAddress
+        let keptByteCount = DiagramSVGScratch.current.keptByteCount
+        XCTAssertEqual(writeAll(), first)
+        XCTAssertEqual(DiagramSVGScratch.current.blockAddress, block, "the block is reused")
+        XCTAssertEqual(DiagramSVGScratch.current.keptByteCount, keptByteCount)
+        for scene in scenes.prefix(200) {
+            let writer = writers[0]
+            let alone = writer.document(of: scene.scene, diagramType: scene.type, title: scene.title, description: scene.description)
+            let inside = writer.withDocumentBytes(of: scene.scene, diagramType: "outer") { outer in
+                (writer.document(of: scene.scene, diagramType: scene.type, title: scene.title, description: scene.description), outer.count)
+            }
+            XCTAssertEqual(inside.0, alone, scene.type)
+            XCTAssertEqual(DiagramSVGScratch.current.blockAddress, block, "the inner document is written into a block of its own")
+        }
     }
 
     /// A buffer given no room grows as it is written and writes what a buffer given all the room it needs writes.
@@ -204,26 +218,54 @@ final class DiagramSVGWriterSpeedTests: XCTestCase {
         }
     }
 
-    /// Each paint's text, however many paints a document has and in whatever order they come, is the text its colors
-    /// give it alone: the paints compared in turn and those hashed past them alike.
-    func testEachPaintsTextIsItsOwnPastThePaintsComparedInTurn() {
-        var paints: [DiagramPaint] = [.background, .foreground, .accent, .critical, .muted, .alternateSurface,
+    /// Each paint's color as the document's writer writes it, however many paints a document has and in whatever order
+    /// they come, is the text its colors give it alone (`DiagramSVGColors.text(of:)`): the palette's paints compared in
+    /// turn and those hashed past them alike, Pele's variables, mixtures and written colors spelled out.
+    func testEachPaintsColorIsItsOwnTextPastThePaintsComparedInTurn() {
+        var paints: [DiagramPaint] = [.background, .foreground, .accent, .critical, .muted, .alternateSurface, .line, .surface, .border,
                                       .betweenBackgroundAndForeground(share: 0.25), .surface.atOpacity(0.5)]
         paints += (0..<12).map { index in DiagramPaint.series(index) }
         paints += (0..<60).map { index in
             DiagramPaint.color(DiagramColor(red: Double(index) / 60, green: 0.5, blue: 1 - Double(index) / 60, alpha: index.isMultiple(of: 3) ? 0.5 : 1))
         }
-        paints += (0..<20).map { index in DiagramPaint.betweenBackgroundAndForeground(share: CGFloat(index) / 20).atOpacity(0.75) }
+        paints += (0..<20).map { index in DiagramPaint.betweenBackgroundAndForeground(share: CGFloat(index) / 20.5).atOpacity(0.75) }
+        paints += [DiagramPaint(source: .mixture(from: .series(7), to: .series(15), share: 0.99999)), .color(DiagramColor(red: 1.2, green: -0.1, blue: .nan))]
         var generator = SeededGenerator(seed: 0xFACE)
         let order = (0..<1_000).map { _ in paints[Int.random(in: 0..<paints.count, using: &generator)] }
         for colors in [DiagramSVGColors.peleVariables, .palette(DiagramScenePaletteSamples.dark), .palette(DiagramScenePaletteSamples.light)] {
-            var texts = DiagramSVGPaintTexts(colors: colors)
+            var writer = DiagramSVGPaintWriter(colors: colors)
             for paint in order {
-                let text = texts.text(of: paint)
+                var buffer = DiagramSVGBuffer()
+                buffer.reserve(DiagramSVGPaintWriter.largestColorByteCount)
+                let opacity = writer.writeColor(of: paint, into: &buffer)
                 let alone = colors.text(of: paint)
-                XCTAssertEqual(text.color, alone.color, "\(paint)")
-                XCTAssertEqual(text.opacity, alone.opacity, "\(paint)")
+                XCTAssertEqual(buffer.text, alone.color, "\(paint)")
+                XCTAssertEqual(opacity, alone.opacity, "\(paint)")
             }
+        }
+    }
+
+    /// A color the diagram's text gave is written from its own channels where they lie in 0...1, which is what
+    /// converting its `CGColor` to sRGB gives, and through that conversion otherwise.
+    func testWrittenColorsAreWrittenAsTheirSRGBConversion() throws {
+        var generator = SeededGenerator(seed: 0xC0_10)
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        var channels: [Double] = (0...255).map { level in Double(level) / 255 } + [0, 1, -0.0, 0.5, 1e-300, 1 - 1e-16, -0.05, 1.06, 2, -1, .nan, .infinity, -.infinity]
+        channels += (0..<2_000).map { _ in Double.random(in: 0...1, using: &generator) }
+        // Each channel's rounding tie and the values beside it, where a conversion that moved a channel by its last bit
+        // would write another digit.
+        channels += (0..<255).flatMap { level in
+            let tie = (Double(level) + 0.5) / 255
+            return [tie, tie.nextUp, tie.nextDown]
+        }
+        for index in 0..<24_000 {
+            let color = DiagramColor(red: channels[index % channels.count], green: channels[(index * 7 + 3) % channels.count],
+                                     blue: channels[(index * 13 + 5) % channels.count])
+            let converted = try XCTUnwrap(color.cgColor.converted(to: space, intent: .defaultIntent, options: nil))
+            let packed = DiagramSVGPaintWriter.writtenColorHexadecimal(color)
+            let written = String(decoding: (0..<7).map { byte in UInt8(truncatingIfNeeded: packed >> (byte * 8)) }, as: UTF8.self)
+            XCTAssertEqual(written, DiagramSVGColors.hexadecimal(converted), "\(color)")
+            XCTAssertEqual(written, Self.referenceHexadecimal(color.cgColor), "\(color)")
         }
     }
 

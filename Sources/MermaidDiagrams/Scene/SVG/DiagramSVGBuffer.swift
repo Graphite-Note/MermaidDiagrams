@@ -2,20 +2,22 @@
  * File: DiagramSVGBuffer.swift
  * ----------------------------
  * Layer: Core
- * Description: The bytes of an SVG document as the writer builds it: literals, escaped text, compact numbers and a
- *              path's data written as UTF-8 through a cursor over one block of memory, made a String once at the end.
+ * Description: The bytes of an SVG document as the writer builds it: room made sure of once for a piece or a whole
+ *              element, then literals, escaped text, compact numbers and path elements written unchecked through a
+ *              cursor over one block of memory, the thread's scratch block or one of the buffer's own.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// One SVG document's UTF-8 bytes, in one block of memory the buffer owns. Each piece makes sure of its room once (a
-/// literal, a String's bytes, a number, a path element) and is then written through a pointer at the end of what is
-/// written, with no per-byte check; the block grows, to twice its size or more, only when a piece does not fit, which a
-/// document whose room was reserved from its scene does not do. `text` makes the document a String once.
+/// One SVG document's UTF-8 bytes in one block of memory: a block lent by the thread's scratch (`init(lentBy:)`), kept
+/// between documents, or one the buffer makes (`init(reservingCapacity:)`). A writer makes sure of the room for a piece
+/// or a whole element once (`reserve`) and then writes it through the cursor with no per-byte check (`write…`, which
+/// debug builds check against the room reserved); the `append…` pieces make sure of their own room. The block grows, to
+/// twice its size or more, only when a piece does not fit. `text` makes the document a String once.
 struct DiagramSVGBuffer: ~Copyable {
     private var start: UnsafeMutablePointer<UInt8>
     /// How many bytes are written.
@@ -24,27 +26,54 @@ struct DiagramSVGBuffer: ~Copyable {
     private(set) var capacity: Int
     /// How many times the block grew since the buffer was made.
     private(set) var growthCount = 0
+    #if DEBUG
+    /// Where the room reserved so far ends, which debug builds check each write against.
+    private var reservedEnd = 0
+    #endif
+    /// The scratch the block is lent by, which takes it back when the buffer ends; nil for a block of the buffer's own.
+    private let lender: DiagramSVGScratch?
 
-    /// The fewest bytes a buffer holds, so that a small one does not grow at once.
+    /// The fewest bytes a buffer of its own holds, so that a small one does not grow at once.
     private static let smallestCapacity = 64
 
     init(reservingCapacity capacity: Int = 0) {
         self.capacity = max(capacity, Self.smallestCapacity)
         start = UnsafeMutablePointer<UInt8>.allocate(capacity: self.capacity)
+        lender = nil
+    }
+
+    /// A buffer writing into `scratch`'s block, which it gives back, grown or not, when it ends.
+    init(lentBy scratch: DiagramSVGScratch) {
+        let block = scratch.lendBlock()
+        start = block.start
+        capacity = block.capacity
+        lender = scratch
     }
 
     deinit {
-        start.deallocate()
+        if let lender {
+            lender.takeBack(start, capacity: capacity)
+        } else {
+            start.deallocate()
+        }
+    }
+
+    /// The written bytes, valid until the buffer changes or ends.
+    var bytes: UnsafeBufferPointer<UInt8> {
+        UnsafeBufferPointer(start: start, count: count)
     }
 
     /// The document as a String, copied without checking its UTF-8 again: the bytes are ASCII literals and digits, the
     /// UTF-8 of Strings, and escaped text that leaves out only whole scalars, so they are valid UTF-8 by construction
     /// (which debug builds check). Checking would cost more than half of the copy for text beyond ASCII.
     var text: String {
-        let written = UnsafeBufferPointer(start: start, count: count)
-        let span = written.span
-        assert((try? UTF8Span(validating: span)) != nil, "the SVG's bytes are valid UTF-8")
-        return String(copying: UTF8Span(unchecked: span))
+        Self.string(of: bytes)
+    }
+
+    /// `bytes` as a String, unchecked as `text` makes it.
+    static func string(of bytes: UnsafeBufferPointer<UInt8>) -> String {
+        assert((try? UTF8Span(validating: bytes.span)) != nil, "the SVG's bytes are valid UTF-8")
+        return String(copying: UTF8Span(unchecked: bytes.span))
     }
 
     var isEmpty: Bool {
@@ -58,10 +87,14 @@ struct DiagramSVGBuffer: ~Copyable {
 
     // MARK: Room
 
-    /// Makes sure `byteCount` more bytes fit, growing the block when they do not.
+    /// Makes sure `byteCount` more bytes fit, growing the block when they do not; the writes after it, up to that many
+    /// bytes, need no check of their own.
     @inline(__always)
-    private mutating func reserveRoom(_ byteCount: Int) {
+    mutating func reserve(_ byteCount: Int) {
         if capacity &- count < byteCount { grow(toFit: byteCount) }
+        #if DEBUG
+        reservedEnd = max(reservedEnd, count + byteCount)
+        #endif
     }
 
     /// Moves the bytes into a block of at least twice the size, with room for `byteCount` more.
@@ -76,47 +109,142 @@ struct DiagramSVGBuffer: ~Copyable {
         growthCount += 1
     }
 
-    /// Checks, in debug builds only, that `byteCount` more bytes fit in the block: a write that the room reserved before
-    /// it does not cover would go past the block's end, which the output alone does not show.
+    /// Checks, in debug builds only, that `byteCount` more bytes lie within the room reserved last: a write the room
+    /// does not cover would go past the block's end, which the output alone does not show.
     @inline(__always)
-    private func assertRoom(_ byteCount: Int) {
-        assert(capacity &- count >= byteCount, "a write past the room reserved for it")
+    private func assertReserved(_ byteCount: Int) {
+        #if DEBUG
+        assert(count + byteCount <= reservedEnd && reservedEnd <= capacity, "a write past the room reserved for it")
+        #endif
     }
 
-    /// The end of what is written, where the next byte goes; the room after it is reserved by the caller.
+    /// The end of what is written, where the next byte goes.
     @inline(__always)
     private var cursor: UnsafeMutablePointer<UInt8> {
         start + count
     }
 
-    // MARK: Pieces
+    // MARK: Unchecked writes, within the room reserved
 
-    /// Inlined, so that a literal's length is known where it is written and its bytes are copied without a call.
+    /// A literal; short ones copied byte by byte without a call.
     @inline(__always)
-    mutating func append(_ literal: StaticString) {
+    mutating func write(_ literal: StaticString) {
         let length = literal.utf8CodeUnitCount
-        reserveRoom(length)
-        cursor.initialize(from: literal.utf8Start, count: length)
+        assertReserved(length)
+        let source = literal.utf8Start
+        let destination = cursor
+        if length <= 16 {
+            for index in 0..<length { destination[index] = source[index] }
+        } else {
+            destination.initialize(from: source, count: length)
+        }
         count &+= length
     }
 
-    /// `string` as it is, unescaped: for text known to need no escaping (a color, a part's class, an identifier).
-    mutating func append(_ string: String) {
-        var string = string
-        string.withUTF8 { stringBytes in append(stringBytes) }
+    @inline(__always)
+    mutating func write(byte: UInt8) {
+        assertReserved(1)
+        cursor.pointee = byte
+        count &+= 1
     }
 
-    private mutating func append(_ bytes: UnsafeBufferPointer<UInt8>) {
+    @inline(__always)
+    mutating func write(_ bytes: UnsafeBufferPointer<UInt8>) {
         guard let source = bytes.baseAddress else { return }
-        reserveRoom(bytes.count)
+        assertReserved(bytes.count)
         cursor.initialize(from: source, count: bytes.count)
         count &+= bytes.count
     }
 
+    /// The first `byteCount` bytes of `packed`, from its lowest, stored as one word: room for all eight is reserved.
+    @inline(__always)
+    mutating func write(packedBytes packed: UInt64, count byteCount: Int) {
+        assertReserved(8)
+        UnsafeMutableRawPointer(cursor).storeBytes(of: packed.littleEndian, as: UInt64.self)
+        count &+= byteCount
+    }
+
+    /// A number, as `appendNumber` writes it.
+    @inline(__always)
+    mutating func write(number value: CGFloat) {
+        assertReserved(DiagramSVGNumberWriting.largestNumberByteCount)
+        count &+= DiagramSVGNumberWriting.writeNumber(value, to: cursor)
+    }
+
+    /// One path element, as `DiagramSVGNumberWriting.writePathElement` writes it.
+    @inline(__always)
+    mutating func write(pathElement verb: DiagramPathVerb, _ points: UnsafePointer<CGPoint>) {
+        assertReserved(DiagramSVGNumberWriting.largestPathElementByteCount)
+        count &+= DiagramSVGNumberWriting.writePathElement(verb, points, to: cursor)
+    }
+
+    /// One element of a Core Graphics path.
+    @inline(__always)
+    mutating func write(pathElement element: CGPathElement) {
+        assertReserved(DiagramSVGNumberWriting.largestPathElementByteCount)
+        count &+= DiagramSVGNumberWriting.writePathElement(element, to: cursor)
+    }
+
+    /// An opacity attribute whose name holds its space and `="` (` fill-opacity="`), or nothing for full opacity.
+    @inline(__always)
+    mutating func write(opacity: CGFloat, attribute: StaticString) {
+        guard opacity < 1 else { return }
+        write(attribute)
+        write(number: max(0, opacity))
+        write(byte: UInt8(ascii: "\""))
+    }
+
+    // MARK: Pieces that make sure of their own room
+
+    /// Inlined, so that a literal's length is known where it is written and its bytes are copied without a call.
+    @inline(__always)
+    mutating func append(_ literal: StaticString) {
+        reserve(literal.utf8CodeUnitCount)
+        write(literal)
+    }
+
+    /// `string` as it is, unescaped: for text known to need no escaping (a color, a part's class, an identifier). A
+    /// native String's bytes are read in place, without a copy of the String (and the retain it takes).
+    mutating func append(_ string: String) {
+        if let appended: Void = string.utf8.withContiguousStorageIfAvailable({ stringBytes in append(stringBytes) }) { return appended }
+        var copy = string
+        copy.withUTF8 { stringBytes in append(stringBytes) }
+    }
+
+    mutating func append(_ bytes: UnsafeBufferPointer<UInt8>) {
+        reserve(bytes.count)
+        write(bytes)
+    }
+
     mutating func append(byte: UInt8) {
-        reserveRoom(1)
-        cursor.initialize(to: byte)
-        count &+= 1
+        reserve(1)
+        write(byte: byte)
+    }
+
+    /// `value` to two decimals without trailing zeros (`12`, `12.5`, `-0.25`), as Pele writes coordinates; 0 for a value
+    /// that is not finite or is 1e12 or more in size.
+    mutating func appendNumber(_ value: CGFloat) {
+        reserve(DiagramSVGNumberWriting.largestNumberByteCount)
+        write(number: value)
+    }
+
+    /// The numbers joined by single spaces.
+    mutating func appendNumbers(_ values: [CGFloat]) {
+        for (index, value) in values.enumerated() {
+            if index > 0 { append(byte: UInt8(ascii: " ")) }
+            appendNumber(value)
+        }
+    }
+
+    /// An opacity attribute (` fill-opacity="0.4"`), or nothing for full opacity.
+    mutating func appendOpacity(_ opacity: CGFloat, attribute: StaticString) {
+        guard opacity < 1 else { return }
+        reserve(attribute.utf8CodeUnitCount + DiagramSVGNumberWriting.largestNumberByteCount + 4)
+        write(byte: UInt8(ascii: " "))
+        write(attribute)
+        write("=\"")
+        write(number: max(0, opacity))
+        write(byte: UInt8(ascii: "\""))
     }
 
     // MARK: Text
@@ -125,49 +253,32 @@ struct DiagramSVGBuffer: ~Copyable {
     /// characters XML 1.0 has no place for (control characters other than tab, line feed and carriage return, U+FFFE and
     /// U+FFFF) left out. Text with none of them, as nearly all is, is copied as it is.
     mutating func appendEscaped(_ text: String) {
-        var text = text
-        text.withUTF8 { textBytes in appendEscaped(textBytes) }
+        if let appended: Void = text.utf8.withContiguousStorageIfAvailable({ textBytes in appendEscaped(textBytes) }) { return appended }
+        var copy = text
+        copy.withUTF8 { textBytes in appendEscaped(textBytes) }
     }
 
-    private mutating func appendEscaped(_ textBytes: UnsafeBufferPointer<UInt8>) {
-        guard textBytes.contains(where: Self.mayNeedEscaping) else {
-            append(textBytes)
-            return
-        }
+    mutating func appendEscaped(_ textBytes: UnsafeBufferPointer<UInt8>) {
+        guard textBytes.contains(where: Self.mayNeedEscaping) else { return append(textBytes) }
         var index = 0
         while index < textBytes.count {
             let byte = textBytes[index]
             // An entity is at most six bytes (`&quot;`) for one byte.
-            reserveRoom(6)
+            reserve(6)
             switch byte {
-            case UInt8(ascii: "&"): writeUnchecked("&amp;")
-            case UInt8(ascii: "<"): writeUnchecked("&lt;")
-            case UInt8(ascii: ">"): writeUnchecked("&gt;")
-            case UInt8(ascii: "\""): writeUnchecked("&quot;")
-            case UInt8(ascii: "'"): writeUnchecked("&#39;")
-            case 0x09, 0x0A, 0x0D: writeUnchecked(byte)
+            case UInt8(ascii: "&"): write("&amp;")
+            case UInt8(ascii: "<"): write("&lt;")
+            case UInt8(ascii: ">"): write("&gt;")
+            case UInt8(ascii: "\""): write("&quot;")
+            case UInt8(ascii: "'"): write("&#39;")
+            case 0x09, 0x0A, 0x0D: write(byte: byte)
             case 0x00...0x1F, 0x7F: break
             case Self.firstByteOfNoncharacter where Self.isNoncharacterForbiddenInXML(textBytes, at: index):
                 index += 2
-            default: writeUnchecked(byte)
+            default: write(byte: byte)
             }
             index += 1
         }
-    }
-
-    /// A literal written where room is already reserved; debug builds check that it is.
-    @inline(__always)
-    private mutating func writeUnchecked(_ literal: StaticString) {
-        assertRoom(literal.utf8CodeUnitCount)
-        cursor.initialize(from: literal.utf8Start, count: literal.utf8CodeUnitCount)
-        count &+= literal.utf8CodeUnitCount
-    }
-
-    @inline(__always)
-    private mutating func writeUnchecked(_ byte: UInt8) {
-        assertRoom(1)
-        cursor.initialize(to: byte)
-        count &+= 1
     }
 
     /// The lead byte of U+FFFE and U+FFFF in UTF-8 (`EF BF BE`, `EF BF BF`).
@@ -189,164 +300,18 @@ struct DiagramSVGBuffer: ~Copyable {
         index + 2 < textBytes.count && textBytes[index + 1] == 0xBF && (textBytes[index + 2] == 0xBE || textBytes[index + 2] == 0xBF)
     }
 
-    // MARK: Numbers
-
-    /// `value` to two decimals without trailing zeros (`12`, `12.5`, `-0.25`), as Pele writes coordinates; 0 for a value
-    /// that is not finite or is 1e12 or more in size.
-    mutating func appendNumber(_ value: CGFloat) {
-        reserveRoom(DiagramSVGNumberWriting.largestNumberByteCount)
-        count &+= DiagramSVGNumberWriting.writeNumber(value, to: cursor)
-        assertRoom(0)
-    }
-
-    /// The numbers joined by single spaces.
-    mutating func appendNumbers(_ values: [CGFloat]) {
-        for (index, value) in values.enumerated() {
-            if index > 0 { append(byte: UInt8(ascii: " ")) }
-            appendNumber(value)
-        }
-    }
-
-    /// An opacity attribute (` fill-opacity="0.4"`), or nothing for full opacity.
-    mutating func appendOpacity(_ opacity: CGFloat, attribute: StaticString) {
-        guard opacity < 1 else { return }
-        reserveRoom(attribute.utf8CodeUnitCount + DiagramSVGNumberWriting.largestNumberByteCount + 4)
-        writeUnchecked(UInt8(ascii: " "))
-        writeUnchecked(attribute)
-        writeUnchecked("=\"")
-        count &+= DiagramSVGNumberWriting.writeNumber(max(0, opacity), to: cursor)
-        assertRoom(0)
-        writeUnchecked(UInt8(ascii: "\""))
-    }
-
     // MARK: Paths
 
-    /// A path's data: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates. Core Graphics hands each element to a C
-    /// function, which writes it whole at the cursor after making sure of its room once: no block is made for the call,
-    /// and nothing is copied through scratch memory.
+    /// A Core Graphics path's data: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates. Core Graphics hands each
+    /// element to a C function, which makes sure of its room once and writes it whole at the cursor: no block is made
+    /// for the call, and nothing is copied through scratch memory.
     mutating func appendPathData(_ path: CGPath) {
         withUnsafeMutablePointer(to: &self) { buffer in
             path.apply(info: UnsafeMutableRawPointer(buffer)) { info, element in
-                info.unsafelyUnwrapped.assumingMemoryBound(to: DiagramSVGBuffer.self).pointee.appendPathElement(element.pointee)
+                let buffer = info.unsafelyUnwrapped.assumingMemoryBound(to: DiagramSVGBuffer.self)
+                buffer.pointee.reserve(DiagramSVGNumberWriting.largestPathElementByteCount)
+                buffer.pointee.write(pathElement: element.pointee)
             }
         }
-    }
-
-    private mutating func appendPathElement(_ element: CGPathElement) {
-        reserveRoom(DiagramSVGNumberWriting.largestPathElementByteCount)
-        count &+= DiagramSVGNumberWriting.writePathElement(element, to: cursor)
-        assertRoom(0)
-    }
-}
-
-/// Writes numbers and path elements as bytes at a destination with room for them, by exactly the rule of 0.6.1.
-enum DiagramSVGNumberWriting {
-    /// The most bytes `writeNumber` writes: a sign, twelve digits, a point and two decimals.
-    static let largestNumberByteCount = 16
-
-    /// The most bytes one path element takes: its letter, three points of two numbers and the spaces between them.
-    static let largestPathElementByteCount = 1 + 6 * largestNumberByteCount + 5
-
-    /// Writes `value` as `DiagramSVGBuffer.appendNumber` appends it at `destination`, which has room for
-    /// `largestNumberByteCount` bytes, and returns how many bytes it wrote.
-    static func writeNumber(_ value: CGFloat, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        guard value.isFinite, abs(value) < 1e12 else {
-            destination[0] = UInt8(ascii: "0")
-            return 1
-        }
-        let hundredths = Int((value * 100).rounded())
-        guard hundredths != 0 else {
-            destination[0] = UInt8(ascii: "0")
-            return 1
-        }
-        var count = 0
-        if hundredths < 0 {
-            destination[0] = UInt8(ascii: "-")
-            count = 1
-        }
-        let magnitude = hundredths.magnitude
-        count += writeDigits(of: magnitude / 100, to: destination + count)
-        let pairs = digitPairs.utf8Start
-        let fraction = Int(magnitude % 100)
-        guard fraction != 0 else { return count }
-        destination[count] = UInt8(ascii: ".")
-        destination[count + 1] = pairs[fraction &* 2]
-        guard !fraction.isMultiple(of: 10) else { return count + 2 }
-        destination[count + 2] = pairs[fraction &* 2 + 1]
-        return count + 3
-    }
-
-    /// Writes the decimal digits of `whole` at `destination`, from the last to the first, two at a time, and returns how
-    /// many it wrote.
-    private static func writeDigits(of whole: UInt, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        var digitCount = 1
-        var power: UInt = 10
-        while power <= whole {
-            digitCount += 1
-            power &*= 10
-        }
-        let pairs = digitPairs.utf8Start
-        var position = digitCount
-        var remaining = whole
-        while remaining >= 100 {
-            let pair = Int(remaining % 100) &* 2
-            remaining /= 100
-            position -= 2
-            destination[position] = pairs[pair]
-            destination[position + 1] = pairs[pair + 1]
-        }
-        if remaining >= 10 {
-            let pair = Int(remaining) &* 2
-            destination[position - 2] = pairs[pair]
-            destination[position - 1] = pairs[pair + 1]
-        } else {
-            destination[position - 1] = UInt8(ascii: "0") + UInt8(truncatingIfNeeded: remaining)
-        }
-        return digitCount
-    }
-
-    /// `00`, `01`, … `99`: the two digits of each number below a hundred, at twice the number.
-    static let digitPairs: StaticString = """
-        00010203040506070809101112131415161718192021222324252627282930313233343536373839\
-        40414243444546474849505152535455565758596061626364656667686970717273747576777879\
-        8081828384858687888990919293949596979899
-        """
-
-    /// Writes one path element at `destination`, which has room for `largestPathElementByteCount` bytes, and returns how
-    /// many bytes it wrote.
-    static func writePathElement(_ element: CGPathElement, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        let points = element.points
-        let pointCount: Int
-        switch element.type {
-        case .moveToPoint:
-            destination[0] = UInt8(ascii: "M")
-            pointCount = 1
-        case .addLineToPoint:
-            destination[0] = UInt8(ascii: "L")
-            pointCount = 1
-        case .addQuadCurveToPoint:
-            destination[0] = UInt8(ascii: "Q")
-            pointCount = 2
-        case .addCurveToPoint:
-            destination[0] = UInt8(ascii: "C")
-            pointCount = 3
-        case .closeSubpath:
-            destination[0] = UInt8(ascii: "Z")
-            return 1
-        @unknown default:
-            return 0
-        }
-        var count = 1
-        for index in 0..<pointCount {
-            if index > 0 {
-                destination[count] = UInt8(ascii: " ")
-                count += 1
-            }
-            count += writeNumber(points[index].x, to: destination + count)
-            destination[count] = UInt8(ascii: " ")
-            count += 1
-            count += writeNumber(points[index].y, to: destination + count)
-        }
-        return count
     }
 }
