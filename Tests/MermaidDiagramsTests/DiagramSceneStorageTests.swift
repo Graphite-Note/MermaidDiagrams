@@ -5,10 +5,11 @@
  * Description: A scene keeps each shape's elements as Core Graphics gives them out, a move after a move and an empty path
  *              included; its fast reading and its compatibility views agree; builders record into their thread's blocks,
  *              a builder made while another records gets blocks of its own, large blocks are freed, and scenes built on
- *              many threads at once are those built alone.
+ *              many threads at once are those built alone; paths longer than the SVG writer's room made at once are
+ *              written as 0.7.0 wrote them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -131,6 +132,28 @@ final class DiagramSceneStorageTests: XCTestCase {
         let buffers = DiagramSceneRecordBuffers.borrow()
         defer { buffers.giveBack() }
         XCTAssertLessThanOrEqual(buffers.capacityByteCount, DiagramSceneRecordBuffers.largestKeptByteCount)
+    }
+
+    /// Paths of as many elements as the writer makes room for at once, one fewer and one more, and many times as many,
+    /// with numbers of the most digits a path element takes, are written as 0.7.0's writer wrote them.
+    func testPathsAroundTheElementsWrittenTogetherAreWrittenAsBefore() {
+        for elementCount in [1, 2, 63, 64, 65, 127, 128, 129, 1_000] {
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: -123_456_789.87, y: 987_654_321.25))
+            for index in 1..<elementCount {
+                let offset = CGFloat(index) * 1.37
+                switch index % 3 {
+                case 0: path.addLine(to: CGPoint(x: -99_999_999.99 + offset, y: 12.5))
+                case 1: path.addCurve(to: CGPoint(x: offset, y: -88_888_888.88), control1: CGPoint(x: -77_777_777.77, y: offset),
+                                      control2: CGPoint(x: 0.125, y: -0.125))
+                default: path.addQuadCurve(to: CGPoint(x: 9_998.995, y: -9_999.005), control: CGPoint(x: CGFloat.nan, y: CGFloat.infinity))
+                }
+            }
+            let scene = DiagramScene(size: CGSize(width: 10, height: 10), font: font,
+                                     items: [.shape(DiagramSceneShape(path: path, painting: .stroke(.line, DiagramStroke(lineWidth: 1)), part: .edge))])
+            XCTAssertEqual(DiagramSVGWriter().document(of: scene, diagramType: "flowchart"),
+                           ReferenceSVGWriter().document(of: scene, diagramType: "flowchart"), "\(elementCount) elements")
+        }
     }
 
     /// Sixteen threads prepare the same diagrams at once, each in its own order: every scene's SVG is the one prepared

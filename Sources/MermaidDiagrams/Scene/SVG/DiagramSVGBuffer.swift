@@ -178,6 +178,16 @@ struct DiagramSVGBuffer: ~Copyable {
         count &+= DiagramSVGNumberWriting.writePathElement(verb, points, to: cursor)
     }
 
+    /// Path elements written at the cursor by `body` in one go, `byteCount` bytes reserved for them: `body` writes at
+    /// the pointer it is given and returns how many bytes it wrote, at most `byteCount`.
+    @inline(__always)
+    mutating func write(reserving byteCount: Int, _ body: (UnsafeMutablePointer<UInt8>) -> Int) {
+        reserve(byteCount)
+        let written = body(cursor)
+        assert(written <= byteCount, "a write past the room reserved for it")
+        count &+= written
+    }
+
     /// One element of a Core Graphics path.
     @inline(__always)
     mutating func write(pathElement element: CGPathElement) {

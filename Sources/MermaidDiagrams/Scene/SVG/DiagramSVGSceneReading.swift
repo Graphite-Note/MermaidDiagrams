@@ -7,7 +7,7 @@
  *              storage, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -55,15 +55,29 @@ extension DiagramSVGBody {
         }
     }
 
-    /// The path data of the shape at `index`: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates, each element written
-    /// whole at the cursor once its room is made.
+    /// The path data of the shape at `index`: `M`, `L`, `Q`, `C` and `Z` with absolute coordinates, written up to
+    /// `elementsReservedTogether` elements at a time into room made once for them, the cursor kept in a register.
     private mutating func appendPathData(_ contents: DiagramSceneStorageContents, itemAt index: Int) {
         var point = UnsafePointer(contents.points + Int(contents.records[index].firstPoint))
-        for verbIndex in contents.verbRange(ofItemAt: index) {
-            let verb = contents.verbs[verbIndex]
-            content.reserve(DiagramSVGNumberWriting.largestPathElementByteCount)
-            content.write(pathElement: verb, point)
-            point += verb.pointCount
+        let verbs = UnsafePointer(contents.verbs)
+        let range = contents.verbRange(ofItemAt: index)
+        var verbIndex = range.lowerBound
+        while verbIndex < range.upperBound {
+            let end = min(verbIndex + Self.elementsReservedTogether, range.upperBound)
+            content.write(reserving: (end - verbIndex) * DiagramSVGNumberWriting.largestPathElementByteCount) { start in
+                var cursor = start
+                for element in verbIndex..<end {
+                    let verb = verbs[element]
+                    cursor += DiagramSVGNumberWriting.writePathElement(verb, point, to: cursor)
+                    point += verb.pointCount
+                }
+                return cursor - start
+            }
+            verbIndex = end
         }
     }
+
+    /// How many path elements have their room made at once: 6.5 KB, so that a long path never asks for much more room
+    /// than it takes.
+    private static let elementsReservedTogether = 64
 }
