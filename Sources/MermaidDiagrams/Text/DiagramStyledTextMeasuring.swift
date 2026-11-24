@@ -3,10 +3,10 @@
  * --------------------------------------
  * Layer: Core
  * Description: Measures a piece of text in its emphasis added to a measurer's own (its bold, italic or monospaced font),
- *              each such font made once for the text being measured.
+ *              each such font made once for the text being measured, and the advances Core Text's measurer adds up.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -38,12 +38,24 @@ struct DiagramStyledMeasuring<Measurer: DiagramTextMeasuring> {
 
     /// The width of `text` in `style` added to the measurer's own.
     mutating func width(of text: String, style: DiagramTextStyle) -> CGFloat {
-        guard !style.isEmpty else { return measurer.width(of: text) }
-        if let variant = variants[style] { return variant.width(of: text) }
+        measurer(for: style).width(of: text)
+    }
+
+    /// The advances the measurer of `style` adds up for printable ASCII (`DiagramPrintableASCIIAdvances`): Core Text's
+    /// measurer's; nil for any other measurer, whose widths are only of whole texts.
+    mutating func printableASCIIAdvances(of style: DiagramTextStyle) -> DiagramPrintableASCIIAdvances? {
+        (measurer(for: style) as? CoreTextDiagramTextMeasurer)?.printableASCIIAdvances
+    }
+
+    /// The measurer of `style` added to the measurer's own: its variant, made the first time, or the measurer itself
+    /// where it cannot add emphasis.
+    private mutating func measurer(for style: DiagramTextStyle) -> Measurer {
+        guard !style.isEmpty else { return measurer }
+        if let variant = variants[style] { return variant }
         guard let variantMaking = measurer as? any DiagramTextStyleVariantMeasuring, let variant = variantMaking.adding(style) as? Measurer else {
-            return measurer.width(of: text)
+            return measurer
         }
         variants[style] = variant
-        return variant.width(of: text)
+        return variant
     }
 }

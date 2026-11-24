@@ -3,10 +3,11 @@
  * ---------------------------------------
  * Layer: Core
  * Description: Measures a line of text with Core Text in a diagram's font, regular, bold, italic or monospaced, as it is
- *              drawn, printable ASCII from a table of the font's advances.
+ *              drawn, printable ASCII from a table of the font's advances, which wrapping continues over the bytes of
+ *              the pieces it joins.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -62,7 +63,31 @@ public struct CoreTextDiagramTextMeasurer: DiagramTextMeasuring {
         return width
     }
 
+    /// The advances `width(of:)` adds up for printable ASCII, to continue a width over more bytes.
+    var printableASCIIAdvances: DiagramPrintableASCIIAdvances {
+        DiagramPrintableASCIIAdvances(advances: face.printableASCIIAdvances)
+    }
+
     private func lineWidth(of text: String) -> CGFloat {
         CoreTextFontFaces.shared.lineWidth(of: text, in: face)
+    }
+}
+
+/// The advances of a Core Text font's printable ASCII, space (32) to tilde (126), as `CoreTextDiagramTextMeasurer`
+/// adds them up: from the first byte, each byte's advance added to the width before it. A width so added up for a text
+/// can be continued over the bytes joined to it, which gives the width of the joined text to the bit; widths added up
+/// apart and then added together round differently.
+struct DiagramPrintableASCIIAdvances {
+    let advances: [CGFloat]
+
+    static func isPrintable(_ byte: UInt8) -> Bool {
+        byte >= CoreTextFontFaces.firstPrintableASCII && byte <= CoreTextFontFaces.lastPrintableASCII
+    }
+
+    /// `width` with each byte's advance added, in order; every byte is printable.
+    func width<Bytes: Sequence<UInt8>>(continuing width: CGFloat, over bytes: Bytes) -> CGFloat {
+        var width = width
+        for byte in bytes { width += advances[Int(byte - CoreTextFontFaces.firstPrintableASCII)] }
+        return width
     }
 }

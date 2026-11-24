@@ -6,7 +6,7 @@
  *              layoutLabel wraps them, a text of more than one line set 1.3 times its size apart.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -35,6 +35,7 @@ public struct DiagramTextBlock: Equatable, Sendable {
     init(label: DiagramLabel, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) {
         var measured = DiagramMeasuredLines(keepsRuns: label.spans != nil)
         if !label.isEmpty {
+            measured.reserveCapacity(label.lines.count)
             var measuring = DiagramStyledMeasuring(measurer)
             for index in label.lines.indices {
                 measured.add(label, line: index, measuring: &measuring, maximumWidth: maximumWidth)
@@ -80,7 +81,7 @@ struct DiagramMeasuredLines {
             let line = label.lines[index]
             let width = measuring.measurer.width(of: line)
             guard width > maximumWidth, Self.canBreak(line, isReadWithoutMarkup: label.isReadWithoutMarkup) else {
-                return add(line.isEmpty ? [] : [DiagramMeasuredSpan(text: line, style: [], width: width)], width: width)
+                return line.isEmpty ? add([], width: width) : add(DiagramMeasuredSpan(text: line, style: [], width: width), width: width)
             }
             return wrap([DiagramMeasuredSpan(text: line, style: [], width: width)], measuring: &measuring, maximumWidth: maximumWidth)
         }
@@ -92,11 +93,22 @@ struct DiagramMeasuredLines {
         wrap(spans, measuring: &measuring, maximumWidth: maximumWidth)
     }
 
+    /// Wraps `spans`, the lines going straight into these lines: they are handed to the wrapping and taken back, so
+    /// that their arrays stay uniquely held and grow in place.
     private mutating func wrap<Measurer>(_ spans: [DiagramMeasuredSpan], measuring: inout DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
-        var wrapping = DiagramTextWrapping(measuring: measuring, maximumWidth: maximumWidth)
+        var handed = DiagramMeasuredLines(keepsRuns: keepsRuns)
+        swap(&handed, &self)
+        var wrapping = DiagramTextWrapping(measuring: measuring, lines: consume handed, maximumWidth: maximumWidth)
         wrapping.wrap(spans)
         measuring = wrapping.finishedMeasuring
-        for line in wrapping.lines { add(line.spans, width: line.width) }
+        self = wrapping.finishedLines
+    }
+
+    /// Room for `lineCount` more lines.
+    mutating func reserveCapacity(_ lineCount: Int) {
+        lines.reserveCapacity(lines.count + lineCount)
+        widths.reserveCapacity(widths.count + lineCount)
+        if keepsRuns { runs.reserveCapacity(runs.count + lineCount) }
     }
 
     mutating func add(_ spans: [DiagramMeasuredSpan], width: CGFloat) {
@@ -107,12 +119,33 @@ struct DiagramMeasuredLines {
         if spans.contains(where: { span in !span.style.isEmpty }) { hasEmphasis = true }
     }
 
-    /// Whether a plain line has a place Pele's wrap can break it at: whitespace, a Chinese or Japanese character, or a
-    /// zero-width space or soft hyphen.
+    /// A line of one span, `add([span], width:)` without the array.
+    mutating func add(_ span: DiagramMeasuredSpan, width: CGFloat) {
+        lines.append(span.text)
+        widths.append(width)
+        guard keepsRuns else { return }
+        runs.append([span.run])
+        if !span.style.isEmpty { hasEmphasis = true }
+    }
+
     /// Whether wrapping can break `line`, as Pele's layoutLabel decides: a line read without markup only at a plain space
     /// (`text.includes(' ')`), a Chinese or Japanese character or a break hint; a line read for its markup at any white space.
+    /// An ASCII line, which holds no Chinese or Japanese character and no hint, is answered from its bytes.
     private static func canBreak(_ line: String, isReadWithoutMarkup: Bool) -> Bool {
-        line.unicodeScalars.contains { scalar in
+        let answerOfASCII = line.utf8.withContiguousStorageIfAvailable { bytes -> Bool? in
+            // JavaScript's white space among ASCII bytes is the space and tab to carriage return.
+            var isASCII = true
+            for byte in bytes {
+                if byte >= 0x80 {
+                    isASCII = false
+                } else if byte == UInt8(ascii: " ") || (!isReadWithoutMarkup && (0x09...0x0D).contains(byte)) {
+                    return true
+                }
+            }
+            return isASCII ? false : nil
+        }
+        if let answer = answerOfASCII ?? nil { return answer }
+        return line.unicodeScalars.contains { scalar in
             (isReadWithoutMarkup ? scalar == " " : JavaScriptStringTrimming.isWhitespace(scalar)) || DiagramTextPieces.isCJK(scalar)
                 || DiagramTextPieces.isHint(scalar)
         }

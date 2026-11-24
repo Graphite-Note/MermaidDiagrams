@@ -6,7 +6,7 @@
  *              it: line breaks, HTML's and Markdown's emphasis as spans, other tags dropped, icons left out, codes read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 23/11/2026
  */
 
@@ -28,13 +28,14 @@ enum DiagramLabelDecoder {
 
     static func label(from rawText: String, form: Form) -> DiagramLabel {
         guard !rawText.isEmpty else { return DiagramLabel(lines: [rawText]) }
-        // Most text is one line without markup, which a pass over its bytes finds without reading its characters.
-        if DiagramLabelLineBreaks.isUnmarked(rawText.utf8) { return DiagramLabel(lines: [JavaScriptStringTrimming.trimmed(rawText)]) }
+        // Most text is one line without markup, which a pass over its bytes finds without reading its characters; the
+        // text is then kept as it is, trimmed.
+        let isLiteral = form == .literal
+        let isUnmarked = rawText.utf8.withContiguousStorageIfAvailable { bytes in DiagramLabelLineBreaks.isUnmarked(bytes, isLiteral: isLiteral) }
+            ?? DiagramLabelLineBreaks.isUnmarked(Array(rawText.utf8), isLiteral: isLiteral)
+        if isUnmarked { return DiagramLabel(lines: [JavaScriptStringTrimming.trimmed(rawText)]) }
         var scalars = Array(rawText.unicodeScalars)
-        if form == .literal { scalars = DiagramLabelLineBreaks.literalText(scalars) }
-        if DiagramLabelLineBreaks.isUnmarked(scalars) {
-            return DiagramLabel(lines: [JavaScriptStringTrimming.trimmed(rawText)])
-        }
+        if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
         let isMarkdown = form == .markdown
         let source = isMarkdown ? DiagramLabelLineBreaks.markdownSource(scalars) : JavaScriptStringTrimming.trimmed(scalars[...])
         var open: DiagramTextStyle = []

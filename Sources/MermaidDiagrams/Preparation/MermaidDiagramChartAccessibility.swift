@@ -6,8 +6,8 @@
  *              diagrams, as the reading view says it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension MermaidDiagramAccessibility {
@@ -15,7 +15,7 @@ extension MermaidDiagramAccessibility {
     init(timeline diagram: TimelineDiagram) {
         let periodTexts = diagram.periods.map { period in
             period.events.isEmpty ? period.label.spokenText
-                : period.label.spokenText + ": " + period.events.map(\.spokenText).joined(separator: ", ")
+                : Self.joined(period.label.spokenText, ": ", period.events.map(\.spokenText).joined(separator: ", "))
         }
         self.init(kind: .timeline, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
                   summary: periodTexts, summarySeparator: "; ")
@@ -41,13 +41,14 @@ extension MermaidDiagramAccessibility {
 
     /// Each task with the level its face shows when it has a score, and the actors who take part: “Do work: 1 (Me, Cat)”.
     init(userJourney diagram: UserJourneyDiagram, layout: UserJourneyLayout) {
+        // The legend alone is taken into the closure, not a copy of the whole layout.
+        let legend = layout.legend
         let taskTexts = zip(diagram.tasks, layout.tasks).map { task, placed in
-            var text = task.label.spokenText
-            if task.score != nil { text += ": " + Self.written(task.level) }
+            let text = task.score != nil ? Self.joined(task.label.spokenText, ": ", Self.written(task.level)) : task.label.spokenText
             let actors = placed.actorDots.compactMap { dot in
-                layout.legend.indices.contains(dot.seriesIndex) ? layout.legend[dot.seriesIndex].text.lines.joined(separator: " ") : nil
+                legend.indices.contains(dot.seriesIndex) ? legend[dot.seriesIndex].text.lines.joined(separator: " ") : nil
             }
-            return actors.isEmpty ? text : text + " (" + actors.joined(separator: ", ") + ")"
+            return actors.isEmpty ? text : Self.joined(text, " (", actors.joined(separator: ", "), ")")
         }
         self.init(kind: .userJourney, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
                   summary: taskTexts, summarySeparator: "; ")
@@ -58,7 +59,7 @@ extension MermaidDiagramAccessibility {
         let points = chart.points.compactMap { point -> String? in
             guard let xCoordinate = point.xCoordinate, let yCoordinate = point.yCoordinate, (0...1).contains(xCoordinate),
                   (0...1).contains(yCoordinate) else { return nil }
-            return point.label.spokenText + " (" + Self.written(xCoordinate) + ", " + Self.written(yCoordinate) + ")"
+            return Self.joined(point.label.spokenText, " (", Self.written(xCoordinate), ", ", Self.written(yCoordinate), ")")
         }
         self.init(kind: .quadrantChart, title: chart.accessibilityTitle ?? chart.title, description: chart.accessibilityDescription,
                   summary: chart.quadrantLabels.compactMap { label in label?.spokenText } + points, summarySeparator: "; ")
@@ -84,9 +85,10 @@ extension MermaidDiagramAccessibility {
     /// Sankey grammar has no accessibility statements: the title is the front matter's.
     init(sankey diagram: SankeyDiagram) {
         let flows = diagram.links.map { link in
-            let flow = diagram.nodes[link.sourceIndex].name + " to " + diagram.nodes[link.targetIndex].name
-            guard let value = link.value, value.isFinite, value > 0 else { return flow }
-            return flow + ": " + Self.written((value * 100).rounded() / 100)
+            let source = diagram.nodes[link.sourceIndex].name
+            let target = diagram.nodes[link.targetIndex].name
+            guard let value = link.value, value.isFinite, value > 0 else { return Self.joined(source, " to ", target) }
+            return Self.joined(source, " to ", target, ": ", Self.written((value * 100).rounded() / 100))
         }
         self.init(kind: .sankey, title: diagram.title, description: nil, summary: flows, summarySeparator: "; ")
     }

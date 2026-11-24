@@ -5,7 +5,7 @@
  * Description: The text of a node, an edge or a group as lines already read, and the emphasis of their pieces.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -52,9 +52,10 @@ public struct DiagramLabel: Equatable, Sendable {
         lines.allSatisfy(\.isEmpty)
     }
 
-    /// The lines joined by spaces, as a screen reader reads them.
+    /// The lines joined by spaces, as a screen reader reads them; a label of one line, most labels, is that line.
     public var spokenText: String {
-        lines.filter { line in !line.isEmpty }.joined(separator: " ")
+        guard lines.count != 1 else { return lines[0] }
+        return lines.filter { line in !line.isEmpty }.joined(separator: " ")
     }
 
     /// Line `index` as spans: the line's own spans, or the line as one span in the text's own font.

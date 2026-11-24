@@ -6,7 +6,7 @@
  *              reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -26,26 +26,59 @@ extension MermaidDiagramPreparationContext {
 
 extension MermaidDiagramAccessibility {
     /// Each shape with its kind, in the order written, then each relation with its label: “Banking Customer A, person;
-    /// Internet Banking System, system; Banking Customer A to Internet Banking System: Uses”.
+    /// Internet Banking System, system; Banking Customer A to Internet Banking System: Uses”. Each element's label is
+    /// read once.
     init(c4 diagram: C4Diagram) {
+        let shapes = diagram.shapes
+        let shapeNames = shapes.indices.map { index in Self.c4Name(of: shapes[index].element) }
         var nameByAlias: [String: String] = [:]
-        for shape in diagram.shapes where shape.element.aliasArgument == nil { nameByAlias[shape.element.alias] = Self.c4Name(of: shape.element) }
+        nameByAlias.reserveCapacity(shapes.count + diagram.boundaries.count)
+        for index in shapes.indices where shapes[index].element.aliasArgument == nil { nameByAlias[shapes[index].element.alias] = shapeNames[index] }
         for boundary in diagram.boundaries.dropFirst() where boundary.element.aliasArgument == nil && nameByAlias[boundary.element.alias] == nil {
             nameByAlias[boundary.element.alias] = Self.c4Name(of: boundary.element)
         }
-        let shapes = diagram.shapes.map { shape in Self.c4Name(of: shape.element) + ", " + shape.kind.rawValue.replacingOccurrences(of: "_", with: " ") }
-        let relations = diagram.relations.map { relation in
-            let names = (nameByAlias[relation.from] ?? relation.from) + " to " + (nameByAlias[relation.to] ?? relation.to)
+        var summary: [String] = []
+        summary.reserveCapacity(shapes.count + diagram.relations.count)
+        for index in shapes.indices { summary.append(Self.joined(shapeNames[index], ", ", Self.spokenName(of: shapes[index].kind))) }
+        for relation in diagram.relations {
+            let from = nameByAlias[relation.from] ?? relation.from
+            let to = nameByAlias[relation.to] ?? relation.to
             let label = Self.spoken(relation.label)
-            return label.isEmpty ? names : names + ": " + label
+            summary.append(label.isEmpty ? Self.joined(from, " to ", to) : Self.joined(from, " to ", to, ": ", label))
         }
         self.init(kind: .c4, title: diagram.title.flatMap { title in title.isEmpty ? nil : Self.spoken(title) },
-                  description: diagram.accessibilityDescription, summary: shapes + relations, summarySeparator: "; ")
+                  description: diagram.accessibilityDescription, summary: summary, summarySeparator: "; ")
     }
 
     /// An element's label as drawn, else its alias.
     private static func c4Name(of element: C4Element) -> String {
         let label = spoken(element.label)
         return label.isEmpty ? element.alias : label
+    }
+
+    /// The kind's name as a screen reader says it: its macro's name in words, `external system db`.
+    static func spokenName(of kind: C4ShapeKind) -> String {
+        switch kind {
+        case .person: "person"
+        case .externalPerson: "external person"
+        case .system: "system"
+        case .systemDatabase: "system db"
+        case .systemQueue: "system queue"
+        case .externalSystem: "external system"
+        case .externalSystemDatabase: "external system db"
+        case .externalSystemQueue: "external system queue"
+        case .container: "container"
+        case .containerDatabase: "container db"
+        case .containerQueue: "container queue"
+        case .externalContainer: "external container"
+        case .externalContainerDatabase: "external container db"
+        case .externalContainerQueue: "external container queue"
+        case .component: "component"
+        case .componentDatabase: "component db"
+        case .componentQueue: "component queue"
+        case .externalComponent: "external component"
+        case .externalComponentDatabase: "external component db"
+        case .externalComponentQueue: "external component queue"
+        }
     }
 }

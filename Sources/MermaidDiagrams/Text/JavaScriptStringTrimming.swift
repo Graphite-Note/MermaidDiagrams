@@ -3,10 +3,11 @@
  * ------------------------------------
  * Layer: Core
  * Description: JavaScript's whitespace over Unicode scalars, and text trimmed at either end as JavaScript's trim,
- *              trimStart and trimEnd leave it, as Pele trims a label's lines.
+ *              trimStart and trimEnd leave it, as Pele trims a label's lines; text with white space at neither end, found
+ *              from its bytes, given back as it is.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -37,7 +38,12 @@ enum JavaScriptStringTrimming {
     }
 
     static func trimmed(_ text: String) -> String {
-        trimmedEnd(trimmedStart(text))
+        // Most text has white space at neither end, which its first and last bytes show: it is given back as it is.
+        let isTrimmed = text.utf8.withContiguousStorageIfAvailable { bytes in
+            JavaScriptWhitespace.length(in: bytes, at: 0) == 0 && JavaScriptWhitespace.lengthOfLast(in: bytes) == 0
+        }
+        if isTrimmed == true { return text }
+        return trimmedEnd(trimmedStart(text))
     }
 
     static func trimmedStart(_ text: String) -> String {
@@ -48,6 +54,7 @@ enum JavaScriptStringTrimming {
     }
 
     static func trimmedEnd(_ text: String) -> String {
+        if text.utf8.withContiguousStorageIfAvailable({ bytes in JavaScriptWhitespace.lengthOfLast(in: bytes) == 0 }) == true { return text }
         let scalars = text.unicodeScalars
         guard let last = scalars.last, isWhitespace(last) else { return text }
         var end = scalars.endIndex

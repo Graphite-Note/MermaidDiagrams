@@ -3,10 +3,11 @@
  * -----------------------------
  * Layer: Core
  * Description: A line's text cut into the pieces Pele wraps it between: words with the spaces around them, each Chinese
- *              or Japanese character with its punctuation, and the places a zero-width space or a soft hyphen allows.
+ *              or Japanese character with its punctuation, and the places a zero-width space or a soft hyphen allows, as
+ *              ranges of the text's UTF-8 bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -15,11 +16,40 @@
 /// U+FF00 to U+FF60 (Hangul is left out, Korean puts spaces between words); the hints are the zero-width space and the
 /// soft hyphen.
 enum DiagramTextPieces {
-    static func pieces(of text: String) -> [String] {
-        pieces(ofASCII: text) ?? pieces(ofScalars: text)
+    /// The pieces of the text whose UTF-8 is `bytes`, beyond ASCII, as ranges of its positions, appended to `ranges`:
+    /// found among its scalars and given back as the positions of their bytes. ASCII is cut at its bytes, piece by piece
+    /// (`endOfASCIIPiece`).
+    static func appendPieces<Bytes: Collection<UInt8>>(ofScalarsIn bytes: Bytes, to ranges: inout [Range<Int>]) where Bytes.Index == Int {
+        var scalars: [Unicode.Scalar] = []
+        var positions: [Int] = []
+        var position = bytes.startIndex
+        for scalar in String(decoding: bytes, as: UTF8.self).unicodeScalars {
+            scalars.append(scalar)
+            positions.append(position)
+            position += UTF8.width(scalar)
+        }
+        positions.append(position)
+        var start = 0
+        while start < scalars.count {
+            let end = pieceEnd(in: scalars, from: start)
+            ranges.append(positions[start]..<positions[end])
+            start = end
+        }
     }
 
-    /// The pieces of any text, read scalar by scalar.
+    /// Where the piece of ASCII `bytes` that starts at `start` ends. ASCII holds no CJK character and no hint, and its
+    /// closing punctuation is not white space, so a piece is the white space before a run of other characters, the run
+    /// and the white space after it, or white space alone at the end.
+    static func endOfASCIIPiece<Bytes: RandomAccessCollection<UInt8>>(in bytes: Bytes, from start: Int) -> Int where Bytes.Index == Int {
+        var end = start
+        while end < bytes.endIndex, isASCIIWhitespace(bytes[end]) { end += 1 }
+        while end < bytes.endIndex, !isASCIIWhitespace(bytes[end]) { end += 1 }
+        while end < bytes.endIndex, isASCIIWhitespace(bytes[end]) { end += 1 }
+        return end
+    }
+
+    /// The pieces of any text, read scalar by scalar and each made from its scalars, without the byte positions that
+    /// `appendPieces` finds: what the tests check those positions and `endOfASCIIPiece` against.
     static func pieces(ofScalars text: String) -> [String] {
         let scalars = Array(text.unicodeScalars)
         var pieces: [String] = []
@@ -32,25 +62,18 @@ enum DiagramTextPieces {
         return pieces
     }
 
-    /// The pieces of an ASCII text, cut at its bytes; nil for text beyond ASCII. ASCII holds no CJK character and no
-    /// hint, and its closing punctuation is not white space, so a piece is the white space before a run of other
-    /// characters, the run and the white space after it, or white space alone at the end.
+    /// The pieces of an ASCII text, cut at its bytes; nil for text beyond ASCII.
     static func pieces(ofASCII text: String) -> [String]? {
-        var text = text
-        return text.withUTF8 { bytes -> [String]? in
-            guard !bytes.contains(where: { byte in byte >= 0x80 }) else { return nil }
-            var pieces: [String] = []
-            var start = 0
-            while start < bytes.count {
-                var end = start
-                while end < bytes.count, isASCIIWhitespace(bytes[end]) { end += 1 }
-                while end < bytes.count, !isASCIIWhitespace(bytes[end]) { end += 1 }
-                while end < bytes.count, isASCIIWhitespace(bytes[end]) { end += 1 }
-                pieces.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self))
-                start = end
-            }
-            return pieces
+        let bytes = Array(text.utf8)
+        guard !bytes.contains(where: { byte in byte >= 0x80 }) else { return nil }
+        var pieces: [String] = []
+        var start = 0
+        while start < bytes.count {
+            let end = endOfASCIIPiece(in: bytes, from: start)
+            pieces.append(String(decoding: bytes[start..<end], as: UTF8.self))
+            start = end
         }
+        return pieces
     }
 
     /// JavaScript's white space among ASCII bytes: tab to carriage return, and space.

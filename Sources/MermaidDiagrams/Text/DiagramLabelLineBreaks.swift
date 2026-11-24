@@ -3,10 +3,11 @@
  * ----------------------------------
  * Layer: Core
  * Description: Where a label's text breaks into lines as Pele breaks it (<br>, a written \n, a line break), the text
- *              Pele reads without markup, a Markdown string's indentation, and the literal text of journeys and timelines.
+ *              Pele reads without markup (found in its UTF-8 bytes), a Markdown string's indentation, and the literal text
+ *              of journeys and timelines.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -52,41 +53,67 @@ enum DiagramLabelLineBreaks {
         return end + 1 - index
     }
 
-    /// Whether Pele lays the text out as one line as written, trimmed (its `RE_MARKUP` test): no `<`, backslash, line
-    /// break, `*` or `_`, no `fa:fa-` icon, no `&`, and no Mermaid code (`#name;`, which Pele hides behind characters it
-    /// then tests for).
-    static func isUnmarked(_ scalars: [Unicode.Scalar]) -> Bool {
-        var hasHash = false
-        var hasSemicolon = false
-        for scalar in scalars {
-            switch scalar {
-            // Pele also reads for markup any text with a `ﬂ`, the first character of its hidden entity codes.
-            case "<", "\\", "\n", "*", "_", "&", "\u{FB02}": return false
-            case "#": hasHash = true
-            case ";": hasSemicolon = true
+    /// Whether Pele lays the text whose UTF-8 is `bytes` out as one line as written, trimmed (its `RE_MARKUP` test, after
+    /// `literalText` when `isLiteral`): no `<`, backslash, line break, `*`, `_` or `&`; no `ﬂ` (EF AC 82), the first
+    /// character of the entity codes Pele hides; no Mermaid code (`#`, word characters, `;`), which Pele hides behind
+    /// characters it then tests for; and no `:fa-` after `fa` and at most one of `bklrs` (an icon name), or after anything
+    /// in literal text, which writes it `&colon;fa-`. Every character looked for is ASCII but `ﬂ`, so a byte of one is it.
+    static func isUnmarked<Bytes: RandomAccessCollection<UInt8>>(_ bytes: Bytes, isLiteral: Bool) -> Bool where Bytes.Index == Int {
+        let lowMarkupBytes = Self.lowMarkupBytes
+        let highMarkupBytes = Self.highMarkupBytes
+        var index = bytes.startIndex
+        while index < bytes.endIndex {
+            let byte = bytes[index]
+            // Most bytes are none of those looked for, which two masks of ASCII and one comparison tell.
+            let isLookedFor = byte < 64 ? (lowMarkupBytes &>> UInt64(byte)) & 1 != 0
+                : byte < 128 ? (highMarkupBytes &>> UInt64(byte - 64)) & 1 != 0 : byte == 0xEF
+            guard isLookedFor else {
+                index += 1
+                continue
+            }
+            switch byte {
+            case UInt8(ascii: "<"), UInt8(ascii: "\\"), UInt8(ascii: "\n"), UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "&"):
+                return false
+            case 0xEF:
+                if index + 2 < bytes.endIndex, bytes[index + 1] == 0xAC, bytes[index + 2] == 0x82 { return false }
+            case UInt8(ascii: "#"):
+                var end = index + 1
+                while end < bytes.endIndex, isASCIIWordCharacter(bytes[end]) { end += 1 }
+                if end > index + 1, end < bytes.endIndex, bytes[end] == UInt8(ascii: ";") { return false }
+            case UInt8(ascii: ":"):
+                if startsIconName(in: bytes, colon: index, isLiteral: isLiteral) { return false }
             default: break
             }
+            index += 1
         }
-        if hasHash, hasSemicolon, DiagramLabelEntities.mermaidCodesAsHTML(scalars) != scalars { return false }
-        return !DiagramLabelIcons.containsIconName(scalars[...])
+        return true
     }
 
-    /// Whether the text's bytes hold none of the characters markup needs (`<`, backslash, line break, `*`, `_`, `&`, a
-    /// `#` with a `;`, and `:` for an icon name), so that it is unmarked without reading it further.
-    static func isUnmarked(_ bytes: String.UTF8View) -> Bool {
-        var hasHash = false
-        var hasSemicolon = false
-        for byte in bytes {
-            switch byte {
-            // 0xEF starts the UTF-8 of `ﬂ` (among others), which the scalars' pass looks at.
-            case UInt8(ascii: "<"), UInt8(ascii: "\\"), UInt8(ascii: "\n"), UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "&"), UInt8(ascii: ":"), 0xEF:
-                return false
-            case UInt8(ascii: "#"): hasHash = true
-            case UInt8(ascii: ";"): hasSemicolon = true
-            default: break
-            }
+    /// The bytes below 64 that `isUnmarked` looks at, as bits: line feed, `#`, `&`, `*`, `:` and `<`.
+    private static let lowMarkupBytes: UInt64 = [UInt8(ascii: "\n"), UInt8(ascii: "#"), UInt8(ascii: "&"), UInt8(ascii: "*"), UInt8(ascii: ":"),
+                                                 UInt8(ascii: "<")].reduce(0) { mask, byte in mask | 1 &<< UInt64(byte) }
+    /// The bytes from 64 to 127 that `isUnmarked` looks at, as bits from 64: backslash and `_`.
+    private static let highMarkupBytes: UInt64 = [UInt8(ascii: "\\"), UInt8(ascii: "_")].reduce(0) { mask, byte in mask | 1 &<< UInt64(byte - 64) }
+
+    /// Whether the `:` at `colon` is followed by `fa-` and, unless `isLiteral`, comes after `fa` or `fa` and one of `bklrs`.
+    private static func startsIconName<Bytes: RandomAccessCollection<UInt8>>(in bytes: Bytes, colon: Int, isLiteral: Bool) -> Bool
+        where Bytes.Index == Int {
+        guard colon + 3 < bytes.endIndex, bytes[colon + 1] == UInt8(ascii: "f"), bytes[colon + 2] == UInt8(ascii: "a"),
+              bytes[colon + 3] == UInt8(ascii: "-") else { return false }
+        if isLiteral { return true }
+        func isFontAwesome(endingAt end: Int) -> Bool {
+            end - 2 >= bytes.startIndex && bytes[end - 2] == UInt8(ascii: "f") && bytes[end - 1] == UInt8(ascii: "a")
         }
-        return !(hasHash && hasSemicolon)
+        if isFontAwesome(endingAt: colon) { return true }
+        return colon - 1 >= bytes.startIndex && "bklrs".utf8.contains(bytes[colon - 1]) && isFontAwesome(endingAt: colon - 1)
+    }
+
+    /// JavaScript's `\w` among bytes: ASCII letters, digits and `_`.
+    private static func isASCIIWordCharacter(_ byte: UInt8) -> Bool {
+        switch byte {
+        case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "0")...UInt8(ascii: "9"), UInt8(ascii: "_"): true
+        default: false
+        }
     }
 
     /// A Markdown string's text as Pele reads it before its lines: carriage returns as line breaks, the indentation all
