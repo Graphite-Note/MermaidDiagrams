@@ -7,7 +7,7 @@
  *              it records into the thread's blocks and makes the scene's storage once, at the end.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 24/11/2026
  */
 
@@ -29,8 +29,6 @@ struct DiagramSceneBuilder: ~Copyable {
     private let buffers: DiagramSceneRecordBuffers
     /// The lane a run of lanes is joined in, made with the builder, before any lane a drawing makes and gives back.
     private let runLane: DiagramPathLane?
-    private var paintings: [DiagramShapePainting] = []
-    private var texts: [DiagramSceneText] = []
     /// The shapes being merged into the last shape, not yet recorded.
     private var openRun: DiagramSceneShapeRun?
 
@@ -89,8 +87,8 @@ struct DiagramSceneBuilder: ~Copyable {
                        rotation: CGFloat? = nil, outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         guard let block, block.lineCount > 0 else { return }
         finishRun()
-        buffers.appendRecord(kind: .text, part: part, index: texts.count)
-        texts.append(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced,
+        buffers.appendRecord(kind: .text, part: part, index: buffers.texts.count)
+        buffers.texts.append(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced,
                                       rotation: rotation, outline: outline, part: part))
     }
 
@@ -114,15 +112,16 @@ struct DiagramSceneBuilder: ~Copyable {
 
     /// The scene of everything added so far, the open run's shapes joined; the builder may go on.
     func scene(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors = .none) -> DiagramScene {
-        guard let openRun else {
-            return DiagramScene(size: size, font: font, seriesColors: seriesColors, storage: buffers.makeStorage(), paintings: paintings, texts: texts)
-        }
+        guard let openRun else { return buffers.makeScene(size: size, font: font, seriesColors: seriesColors) }
         let counts = buffers.counts
-        defer { buffers.rollBack(to: counts) }
-        buffers.appendRecord(kind: .shape, part: openRun.part, index: paintings.count)
+        defer {
+            buffers.rollBack(to: counts)
+            buffers.paintings.removeLast()
+        }
+        buffers.appendRecord(kind: .shape, part: openRun.part, index: buffers.paintings.count)
         openRun.appendElements(to: buffers)
-        return DiagramScene(size: size, font: font, seriesColors: seriesColors, storage: buffers.makeStorage(),
-                            paintings: paintings + [openRun.painting], texts: texts)
+        buffers.paintings.append(openRun.painting)
+        return buffers.makeScene(size: size, font: font, seriesColors: seriesColors)
     }
 
     /// `path` merged into the open run, or made the outline of its one filled path, or else the start of a new run.
@@ -145,9 +144,9 @@ struct DiagramSceneBuilder: ~Copyable {
     /// The open run recorded as one shape, after the items before it.
     private mutating func finishRun() {
         guard let openRun else { return }
-        buffers.appendRecord(kind: .shape, part: openRun.part, index: paintings.count)
+        buffers.appendRecord(kind: .shape, part: openRun.part, index: buffers.paintings.count)
         openRun.appendElements(to: buffers)
-        paintings.append(openRun.painting)
+        buffers.paintings.append(openRun.painting)
         self.openRun = nil
     }
 }

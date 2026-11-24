@@ -3,11 +3,12 @@
  * --------------------------
  * Layer: Core
  * Description: A laid-out agent flow's scene in Pele's order and colors: the title, the flows' washed boxes and titles,
- *              the edges and their marks, the edges' text on patches, then the nodes in their kinds' series colors.
+ *              the edges and their marks, the edges' text on patches, then the nodes in their kinds' series colors, its
+ *              paths recorded into lanes of the thread's scene workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -21,16 +22,18 @@ extension DiagramScene {
     /// that one filled flow holds whole is drawn in that fill's ink, and one that crosses a filled flow's border runs
     /// over a casing of the page's color, painted after the flows (Pele's `overFills` and `edgeCasing`).
     public init(layout: AgentFlowLayout) {
-        var builder = DiagramSceneBuilder()
-        builder.title(layout.title)
-        let line = DiagramStroke.rounded(lineWidth: FlowchartDrawingParts.lineWidth)
-        for flow in layout.flows { AgentFlowScenePainting.add(flow, to: &builder, line: line) }
-        let inks = AgentFlowScenePainting.inks(of: layout)
-        for (edge, ink) in zip(layout.edges, inks) where ink == .cased { AgentFlowScenePainting.addCasing(of: edge, to: &builder) }
-        for (edge, ink) in zip(layout.edges, inks) { AgentFlowScenePainting.add(edge, ink: ink, to: &builder, line: line) }
-        for edge in layout.edges where edge.text != nil { AgentFlowScenePainting.addText(of: edge, to: &builder) }
-        for node in layout.nodes { AgentFlowScenePainting.add(node, to: &builder, line: line) }
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            builder.title(layout.title)
+            let line = DiagramStroke.rounded(lineWidth: FlowchartDrawingParts.lineWidth)
+            for flow in layout.flows { AgentFlowScenePainting.add(flow, to: &builder, workspace: workspace, line: line) }
+            let inks = AgentFlowScenePainting.inks(of: layout)
+            for (edge, ink) in zip(layout.edges, inks) where ink == .cased { AgentFlowScenePainting.addCasing(of: edge, to: &builder, workspace: workspace) }
+            for (edge, ink) in zip(layout.edges, inks) { AgentFlowScenePainting.add(edge, ink: ink, to: &builder, workspace: workspace, line: line) }
+            for edge in layout.edges where edge.text != nil { AgentFlowScenePainting.addText(of: edge, to: &builder, workspace: workspace) }
+            for node in layout.nodes { AgentFlowScenePainting.add(node, to: &builder, workspace: workspace, line: line) }
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }
 
@@ -47,8 +50,10 @@ enum AgentFlowScenePainting {
     static let collapsedDotRadius: CGFloat = 1.75
     static let collapsedDotSpacing: CGFloat = 9
 
-    static func add(_ flow: AgentFlowLayoutFlow, to builder: inout DiagramSceneBuilder, line: DiagramStroke) {
-        let box = CGPath(roundedRect: flow.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    static func add(_ flow: AgentFlowLayoutFlow, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace, line: DiagramStroke) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
+        let box = workspace.roundedRectangle(flow.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         let color = DiagramPaint.series(flow.paletteSlot)
         builder.keepNextShapeApart()
         builder.fillAndStroke(box, fill: fillPaint(flow.style, wash: color.atOpacity(flowWash)), stroke: flow.style?.stroke.map(DiagramPaint.color) ?? color,
@@ -76,50 +81,66 @@ enum AgentFlowScenePainting {
 
     /// The stroke of the page's color under `edge` and its mark, 4 points wider than its line, with round ends and
     /// corners, the mark filled and outlined in it.
-    static func addCasing(of edge: AgentFlowLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    static func addCasing(of edge: AgentFlowLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let casing = DiagramStroke.rounded(lineWidth: (edge.style?.strokeWidth ?? FlowchartDrawingParts.lineWidth) + casingExtraWidth)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), .background, casing, part: .casing)
+        builder.stroke(line(of: edge, workspace: workspace), .background, casing, part: .casing)
         guard let mark = edge.targetMark else { return }
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
+        let filled = workspace.makeLane()
+        let stroked = workspace.makeLane()
         DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked)
         builder.fillAndStroke(filled, fill: .background, stroke: .background, casing, part: .casing)
         builder.stroke(stroked, .background, casing, part: .casing)
     }
 
     /// The edge's line and mark in its style's color, or in the ink of the filled flow that holds it.
-    static func add(_ edge: AgentFlowLayoutEdge, ink: BlockEdgeInk, to builder: inout DiagramSceneBuilder, line: DiagramStroke) {
+    static func add(_ edge: AgentFlowLayoutEdge, ink: BlockEdgeInk, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace,
+                    line: DiagramStroke) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         var paint = edge.style?.stroke.map(DiagramPaint.color) ?? .line
         if case .inked(let color) = ink { paint = .color(color) }
         let width = edge.style?.strokeWidth ?? FlowchartDrawingParts.lineWidth
         let dashes = edge.style?.strokeDashLengths ?? (edge.isDotted ? dottedDashLengths : [])
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, .rounded(lineWidth: width, dashLengths: dashes), part: .edge)
+        builder.stroke(self.line(of: edge, workspace: workspace), paint, .rounded(lineWidth: width, dashLengths: dashes), part: .edge)
         guard let mark = edge.targetMark else { return }
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
+        let filled = workspace.makeLane()
+        let stroked = workspace.makeLane()
         DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked)
         builder.fill(filled, paint, part: .marker)
         builder.stroke(stroked, paint, line, part: .marker)
     }
 
-    static func addText(of edge: AgentFlowLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    /// The edge's line, recorded into a lane of `workspace` for the moment.
+    private static func line(of edge: AgentFlowLayoutEdge, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+        let drawn = workspace.makeLane()
+        DiagramEdgeDrawing.record(edge.path, into: drawn)
+        return drawn
+    }
+
+    static func addText(of edge: AgentFlowLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         guard let text = edge.text else { return }
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let patch = text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0)
-        builder.fill(CGPath(roundedRect: patch, cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
-                            cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius, transform: nil), .background, part: .labelBackground)
+        builder.fill(workspace.roundedRectangle(patch, cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
+                                                cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius), .background, part: .labelBackground)
         builder.text(text, edge.style?.textColor.map(DiagramPaint.color) ?? .foreground, part: .edgeLabel)
     }
 
-    static func add(_ node: AgentFlowLayoutNode, to builder: inout DiagramSceneBuilder, line: DiagramStroke) {
+    static func add(_ node: AgentFlowLayoutNode, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace, line: DiagramStroke) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let color = DiagramPaint.series(node.paletteSlot)
         let strokePaint = node.style?.stroke.map(DiagramPaint.color) ?? color
         let outlineStroke = stroke(line, style: node.style)
         builder.keepNextShapeApart()
         if node.isCollapsedFlow {
-            addCollapsedFlow(node, color: color, strokePaint: strokePaint, stroke: outlineStroke, to: &builder)
-        } else if let outline = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame) {
+            addCollapsedFlow(node, color: color, strokePaint: strokePaint, stroke: outlineStroke, to: &builder, workspace: workspace)
+        } else if let outline = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame, making: workspace) {
             builder.fillAndStroke(outline, fill: fillPaint(node.style, wash: color.atOpacity(nodeWash)), stroke: strokePaint, outlineStroke, part: .node)
-            if let innerLines = FlowchartShapeDrawing.innerLines(of: node.shape, in: node.frame) {
+            if let innerLines = FlowchartShapeDrawing.innerLines(of: node.shape, in: node.frame, making: workspace) {
                 builder.stroke(innerLines, strokePaint, outlineStroke, part: .node)
             }
         }
@@ -128,17 +149,17 @@ enum AgentFlowScenePainting {
 
     /// A collapsed flow: a washed box, a dashed line above its bottom, and three dots below the line.
     private static func addCollapsedFlow(_ node: AgentFlowLayoutNode, color: DiagramPaint, strokePaint: DiagramPaint, stroke: DiagramStroke,
-                                         to builder: inout DiagramSceneBuilder) {
+                                         to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let frame = node.frame
-        let box = CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let box = workspace.roundedRectangle(frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         builder.fillAndStroke(box, fill: fillPaint(node.style, wash: color.atOpacity(flowWash)), stroke: strokePaint, stroke, part: .node)
         let lineY = frame.maxY - AgentFlowLayoutEngine.collapsedMarkHeight - 2
-        let dashed = CGMutablePath()
+        let dashed = workspace.makeLane()
         dashed.move(to: CGPoint(x: frame.minX + collapsedLineInset, y: lineY))
         dashed.addLine(to: CGPoint(x: frame.maxX - collapsedLineInset, y: lineY))
         builder.stroke(dashed, color, DiagramStroke(lineWidth: stroke.lineWidth, dashLengths: collapsedLineDashLengths), part: .node)
         let dotsY = lineY + (AgentFlowLayoutEngine.collapsedMarkHeight + 2) / 2
-        let dots = CGMutablePath()
+        let dots = workspace.makeLane()
         for offset in [-collapsedDotSpacing, 0, collapsedDotSpacing] {
             dots.addEllipse(in: CGRect(x: frame.midX + offset - collapsedDotRadius, y: dotsY - collapsedDotRadius,
                                        width: 2 * collapsedDotRadius, height: 2 * collapsedDotRadius))

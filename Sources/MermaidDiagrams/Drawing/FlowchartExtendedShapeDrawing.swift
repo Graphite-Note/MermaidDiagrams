@@ -5,8 +5,8 @@
  * Description: The outlines and inner lines of the flowchart node shapes written by name only, as Pele draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,19 +19,20 @@ enum FlowchartExtendedShapeDrawing {
     private static let boxCornerRadius = FlowchartShapeDrawing.rectangleCornerRadius
 
     /// The filled and stroked outline, or nil for a shape without one.
-    static func outline(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func outline<Maker: DiagramPathMaking>(of shape: FlowchartNodeShape, in frame: CGRect, making maker: Maker) -> Maker.Path? {
         if let corners = polygonCorners(of: shape, width: frame.width, height: frame.height) {
-            var pen = FlowchartShapePen(center: CGPoint(x: frame.midX, y: frame.midY))
+            var pen = FlowchartShapePen(center: CGPoint(x: frame.midX, y: frame.midY), path: maker.makePath())
             pen.polygon(corners)
             return pen.path
         }
         switch shape {
-        case .ellipse, .smallCircle, .crossedCircle: return CGPath(ellipseIn: frame, transform: nil)
+        case .ellipse, .smallCircle, .crossedCircle: return maker.ellipse(in: frame)
         case .linedRectangle, .dividedRectangle, .windowPane, .console, .browser, .taggedRectangle:
-            return roundedRectangle(frame, radius: boxCornerRadius)
-        case .linedCylinder: return FlowchartShapeDrawing.cylinderBody(in: frame)
-        case .document, .taggedDocument, .linedDocument: return wave(width: frame.width, height: frame.height, center: CGPoint(x: frame.midX, y: frame.midY))
-        default: return FlowchartCurvedShapeDrawing.outline(of: shape, in: frame)
+            return roundedRectangle(frame, radius: boxCornerRadius, making: maker)
+        case .linedCylinder: return FlowchartShapeDrawing.cylinderBody(in: frame, making: maker)
+        case .document, .taggedDocument, .linedDocument:
+            return wave(width: frame.width, height: frame.height, center: CGPoint(x: frame.midX, y: frame.midY), making: maker)
+        default: return FlowchartCurvedShapeDrawing.outline(of: shape, in: frame, making: maker)
         }
     }
 
@@ -72,11 +73,13 @@ enum FlowchartExtendedShapeDrawing {
     }
 
     /// The lines drawn over the filled outline, or nil.
-    static func innerLines(of shape: FlowchartNodeShape, in frame: CGRect) -> CGPath? {
+    static func innerLines<Maker: DiagramPathMaking>(of shape: FlowchartNodeShape, in frame: CGRect, making maker: Maker) -> Maker.Path? {
+        if case .browser = shape { return browserLines(in: frame, making: maker) }
+        guard Self.hasPenLines(shape) else { return FlowchartCurvedShapeDrawing.innerLines(of: shape, in: frame, making: maker) }
         let center = CGPoint(x: frame.midX, y: frame.midY)
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
-        var pen = FlowchartShapePen(center: center)
+        var pen = FlowchartShapePen(center: center, path: maker.makePath())
         switch shape {
         case .linedRectangle: pen.move(toX: -halfWidth + 8, y: -halfHeight); pen.vertical(toY: halfHeight)
         case .dividedRectangle: pen.move(toX: -halfWidth, y: -halfHeight + 8); pen.horizontal(toX: halfWidth)
@@ -94,15 +97,22 @@ enum FlowchartExtendedShapeDrawing {
             pen.move(toX: -halfWidth, y: -halfHeight + 12); pen.horizontal(toX: halfWidth)
             pen.move(toX: -halfWidth + 7, y: -halfHeight + 4); pen.line(byX: 3, y: 2.5); pen.line(byX: -3, y: 2.5)
             pen.move(toX: -halfWidth + 13, y: -halfHeight + 9); pen.line(byX: 4, y: 0)
-        case .browser: return browserLines(in: frame)
-        default: return FlowchartCurvedShapeDrawing.innerLines(of: shape, in: frame)
+        default: break
         }
         return pen.path
     }
 
+    /// Whether the shape's lines are drawn by `innerLines`' pen.
+    private static func hasPenLines(_ shape: FlowchartNodeShape) -> Bool {
+        switch shape {
+        case .linedRectangle, .dividedRectangle, .windowPane, .taggedRectangle, .taggedDocument, .linedDocument, .crossedCircle, .console: true
+        default: false
+        }
+    }
+
     /// A browser's title bar: its lower line and three dots.
-    private static func browserLines(in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
+    private static func browserLines<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         path.move(to: CGPoint(x: frame.minX, y: frame.minY + 12))
         path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY + 12))
         let dotRadius: CGFloat = 1.5
@@ -115,10 +125,10 @@ enum FlowchartExtendedShapeDrawing {
 
     /// A document's sheet, `width` by `height` around `center`: straight on three sides, its bottom a wave 10 points up
     /// from the box's bottom, Pele's `wave`.
-    static func wave(width: CGFloat, height: CGFloat, center: CGPoint) -> CGPath {
+    static func wave<Maker: DiagramPathMaking>(width: CGFloat, height: CGFloat, center: CGPoint, making maker: Maker) -> Maker.Path {
         let halfWidth = width / 2
         let quarter = width / 4
-        var pen = FlowchartShapePen(center: center)
+        var pen = FlowchartShapePen(center: center, path: maker.makePath())
         pen.move(toX: -halfWidth, y: -height / 2)
         pen.horizontal(toX: halfWidth)
         pen.vertical(toY: height / 2 - 10)
@@ -129,8 +139,8 @@ enum FlowchartExtendedShapeDrawing {
     }
 
     /// A rectangle with its corners rounded, the radius kept within half its sides as SVG keeps it.
-    static func roundedRectangle(_ frame: CGRect, radius: CGFloat) -> CGPath {
+    static func roundedRectangle<Maker: DiagramPathMaking>(_ frame: CGRect, radius: CGFloat, making maker: Maker) -> Maker.Path {
         let fitted = max(0, min(radius, frame.width / 2, frame.height / 2))
-        return CGPath(roundedRect: frame, cornerWidth: fitted, cornerHeight: fitted, transform: nil)
+        return maker.roundedRectangle(frame, cornerWidth: fitted, cornerHeight: fitted)
     }
 }

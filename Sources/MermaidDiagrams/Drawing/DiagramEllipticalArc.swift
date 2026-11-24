@@ -2,11 +2,12 @@
  * File: DiagramEllipticalArc.swift
  * --------------------------------
  * Layer: Core
- * Description: An elliptical arc as SVG draws one from its end points, added to a Core Graphics path as cubic curves.
+ * Description: An elliptical arc as SVG draws one from its end points, added to a Core Graphics path or a lane as cubic
+ *              curves.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -21,6 +22,12 @@ enum DiagramEllipticalArc {
     /// Adds the arc from `start`, the path's current point, to `end`, clockwise on a page whose y runs down unless
     /// `sweepsWithIncreasingAngle` is false. Radii too small to reach are scaled up until they do, as SVG does.
     static func addArc(to path: CGMutablePath, from start: CGPoint, to end: CGPoint, radii: CGSize, sweepsWithIncreasingAngle: Bool = true) {
+        addArc(to: DiagramCoreGraphicsPath(mutable: path), from: start, to: end, radii: radii, sweepsWithIncreasingAngle: sweepsWithIncreasingAngle)
+    }
+
+    /// The same arc recorded into a Core Graphics path or a lane.
+    static func addArc<Path: DiagramPathRecording>(to path: Path, from start: CGPoint, to end: CGPoint, radii: CGSize,
+                                                   sweepsWithIncreasingAngle: Bool = true) {
         var radiusAcross = abs(radii.width)
         var radiusDown = abs(radii.height)
         guard radiusAcross > 0, radiusDown > 0, start != end else {
@@ -50,7 +57,7 @@ enum DiagramEllipticalArc {
     }
 
     /// The arc as cubic curves of at most a quarter turn each; a negative sweep turns with decreasing angle.
-    private static func addCurves(to path: CGMutablePath, center: CGPoint, radii: CGSize, startAngle: CGFloat, sweep: CGFloat) {
+    private static func addCurves<Path: DiagramPathRecording>(to path: Path, center: CGPoint, radii: CGSize, startAngle: CGFloat, sweep: CGFloat) {
         let curveCount = max(1, Int((abs(sweep) / largestCurveSweep).rounded(.up)))
         let curveSweep = sweep / CGFloat(curveCount)
         // The distance along the tangent at which a cubic's control points make it follow a circle of radius 1.

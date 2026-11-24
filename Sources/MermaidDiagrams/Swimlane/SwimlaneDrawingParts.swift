@@ -3,11 +3,11 @@
  * --------------------------------
  * Layer: Core
  * Description: A laid-out swimlane diagram's geometry grouped by how it is painted, its scene in Pele's order and roles,
- *              and its renderer.
+ *              recorded into lanes of the thread's scene workspace, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,19 +47,22 @@ public struct SwimlaneDrawingParts {
 extension DiagramScene {
     /// The swimlane diagram's painting: the lanes behind the flowchart's painting (`DiagramScene(layout:)` of a flowchart).
     public init(layout: SwimlaneLayout) {
-        var builder = DiagramSceneBuilder()
-        SwimlaneDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.flowchart.font)
-    }
-}
-
-extension SwimlaneDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke(lineWidth: FlowchartDrawingParts.lineWidth)
-        builder.stroke(laneOutlines, .border, line, part: .cluster)
-        builder.fillAndStroke(titleBands, fill: .alternateSurface, stroke: .border, line, part: .cluster)
-        for title in titles { builder.text(title, .muted, rotation: areTitlesTurned ? Self.turnedTitleRotation : nil, part: .clusterLabel) }
-        flowchart.addScene(to: &builder)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            let line = DiagramStroke(lineWidth: FlowchartDrawingParts.lineWidth)
+            let outlines = workspace.makeLane()
+            let bands = workspace.makeLane()
+            for lane in layout.lanes {
+                outlines.addRect(lane.frame)
+                bands.addRect(lane.titleBand)
+            }
+            builder.stroke(outlines, .border, line, part: .cluster)
+            builder.fillAndStroke(bands, fill: .alternateSurface, stroke: .border, line, part: .cluster)
+            let rotation = (layout.lanes.first?.isTitleTurned ?? false) ? SwimlaneDrawingParts.turnedTitleRotation : nil
+            for lane in layout.lanes { builder.text(lane.title, .muted, rotation: rotation, part: .clusterLabel) }
+            FlowchartSceneRecording.add(layout.flowchart, to: &builder, workspace: workspace)
+            return builder.scene(size: layout.size, font: layout.flowchart.font)
+        }
     }
 }
 

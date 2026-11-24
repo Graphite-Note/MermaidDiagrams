@@ -1,3 +1,14 @@
+/**
+ * File: DiagramEdgeDrawing.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: The geometry of an edge's line and marks, Pele's, recorded into Core Graphics paths or the scene's lanes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// The geometry of an edge's line and marks, Pele's: a filled arrow, a filled circle, a cross.
@@ -11,6 +22,12 @@ enum DiagramEdgeDrawing {
 
     static func path(_ path: DiagramPath) -> CGPath {
         let drawn = CGMutablePath()
+        record(path, into: DiagramCoreGraphicsPath(mutable: drawn))
+        return drawn
+    }
+
+    /// The edge's line recorded into `drawn`: a move to its start, then its lines and curves.
+    static func record<Path: DiagramPathRecording>(_ path: DiagramPath, into drawn: Path) {
         drawn.move(to: path.start)
         for segment in path.segments {
             switch segment {
@@ -18,11 +35,14 @@ enum DiagramEdgeDrawing {
             case .curve(let end, let firstControl, let secondControl): drawn.addCurve(to: end, control1: firstControl, control2: secondControl)
             }
         }
-        return drawn
     }
 
     /// Adds a mark to the paths that are filled (an arrow, a circle) or stroked (a cross).
     static func addMark(_ mark: DiagramEdgeMark, filled: CGMutablePath, stroked: CGMutablePath) {
+        addMark(mark, filled: DiagramCoreGraphicsPath(mutable: filled), stroked: DiagramCoreGraphicsPath(mutable: stroked))
+    }
+
+    static func addMark<Path: DiagramPathRecording>(_ mark: DiagramEdgeMark, filled: Path, stroked: Path) {
         let direction = mark.direction
         let normal = CGVector(dx: -direction.dy, dy: direction.dx)
         let tip = mark.tip
