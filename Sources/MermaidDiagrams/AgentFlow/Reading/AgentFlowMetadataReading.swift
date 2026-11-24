@@ -7,7 +7,7 @@
  *              prototype dropped, merged into what the element had.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -36,6 +36,7 @@ enum AgentFlowMetadataReading {
         var merged = metadata ?? [:]
         switch value {
         case .mapping(let fields):
+            merged.reserveCapacity(merged.count + fields.count)
             for (key, field) in fields { merged[key] = field }
         case .list(let items):
             for (index, item) in items.enumerated() { merged[String(index)] = item }
@@ -50,9 +51,12 @@ enum AgentFlowMetadataReading {
     /// The value without `__proto__`, `constructor` and `prototype` keys at any depth, so that a consumer merging
     /// metadata into its own objects cannot be made to pollute a prototype. The YAML reader bounds the depth.
     private static func withoutPrototypeKeys(_ value: SequenceAttributeValue) -> SequenceAttributeValue {
+        // Most metadata holds no such key: it is then kept as it is, not built again.
+        guard holdsPrototypeKey(value) else { return value }
         switch value {
         case .mapping(let fields):
             var kept: [String: SequenceAttributeValue] = [:]
+            kept.reserveCapacity(fields.count)
             for (key, field) in fields where !prototypeKeys.contains(key) { kept[key] = withoutPrototypeKeys(field) }
             return .mapping(kept)
         case .list(let items): return .list(items.map(withoutPrototypeKeys))
@@ -61,6 +65,15 @@ enum AgentFlowMetadataReading {
     }
 
     private static let prototypeKeys: Set<String> = ["__proto__", "constructor", "prototype"]
+
+    /// Whether a mapping at any depth of `value` has a `__proto__`, `constructor` or `prototype` key.
+    private static func holdsPrototypeKey(_ value: SequenceAttributeValue) -> Bool {
+        switch value {
+        case .mapping(let fields): fields.contains { key, field in prototypeKeys.contains(key) || holdsPrototypeKey(field) }
+        case .list(let items): items.contains(where: holdsPrototypeKey)
+        default: false
+        }
+    }
 
     /// The body without the comma that ends each line, which block YAML does not allow; commas inside quoted scalars,
     /// flow collections and block scalars are content and stay.

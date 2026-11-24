@@ -6,7 +6,7 @@
  *              Pele's db.ts records them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -117,6 +117,7 @@ extension AgentFlowDiagramBuilder {
     @discardableResult
     private mutating func pushMapping(_ identifier: String, kind: AgentFlowElementMapping.Kind, position: AgentFlowElementPosition) -> Int {
         diagram.mappings.append(AgentFlowElementMapping(identifier: identifier, kind: kind, position: position))
+        isBareMapping.append(false)
         // Looked up once: the default is stored only when the identifier has no mapping yet, and a first one is kept.
         Self.keep(&firstMappings[identifier, default: diagram.mappings.count - 1])
         return diagram.mappings.count - 1
@@ -126,7 +127,7 @@ extension AgentFlowDiagramBuilder {
     mutating func addVertexMapping(_ identifier: String, hasShape: Bool, span: AgentFlowSourceSpan) {
         guard !identifier.isEmpty else { return }
         let index = pushMapping(identifier, kind: .vertex, position: position(span))
-        if !hasShape { bareMappings.insert(index) }
+        if !hasShape { isBareMapping[index] = true }
     }
 
     /// Widens a node's last mapping over the metadata block after it.
@@ -137,7 +138,10 @@ extension AgentFlowDiagramBuilder {
             pushMapping(identifier, kind: .attachment, position: end)
             return
         }
-        if bareMappings.remove(index) != nil { diagram.mappings[index].kind = .attachment }
+        if isBareMapping[index] {
+            isBareMapping[index] = false
+            diagram.mappings[index].kind = .attachment
+        }
         let current = diagram.mappings[index].position
         if end.endLine > current.endLine || (end.endLine == current.endLine && end.endColumn > current.endColumn) {
             diagram.mappings[index].position.endLine = end.endLine

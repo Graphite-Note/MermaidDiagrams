@@ -6,8 +6,8 @@
  *              for step on UTF-16 code units: words and keywords, strings, comments and accessibility lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A use case diagram's tokens: each one's kind and where it starts and ends (end exclusive), in code units, followed
@@ -16,6 +16,12 @@ struct UseCaseTokens {
     var kinds: [UseCaseTokenKind] = []
     var starts: [Int] = []
     var ends: [Int] = []
+
+    mutating func reserveCapacity(_ count: Int) {
+        kinds.reserveCapacity(count)
+        starts.reserveCapacity(count)
+        ends.reserveCapacity(count)
+    }
 
     mutating func append(_ kind: UseCaseTokenKind, from start: Int, to end: Int) {
         kinds.append(kind)
@@ -43,6 +49,8 @@ struct UseCaseLexer {
 
     static func tokens(of text: UseCaseCharacters) throws(Failure) -> UseCaseTokens {
         var lexer = UseCaseLexer(text: text)
+        // About one token in four code units in the documentation's examples.
+        lexer.tokens.reserveCapacity(text.count / 4 + 3)
         try lexer.readAll()
         for _ in 0..<3 { lexer.tokens.append(.end, from: text.count, to: text.count) }
         return lexer.tokens

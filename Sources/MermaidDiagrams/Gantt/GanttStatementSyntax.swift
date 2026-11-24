@@ -5,8 +5,8 @@
  * Description: Reads the statements of a Gantt chart: keyword settings, tasks, accessibility lines and clicks.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -55,6 +55,19 @@ enum GanttStatementSyntax {
         (Array("gantt".utf8), .notAStatement), (Array("inclusiveenddates".utf8), .inclusiveEndDates), (Array("topaxis".utf8), .topAxis),
     ]
     private static let dayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map { name in Array(name.utf8) }
+    private static let weekdayWord = Array("weekday".utf8)
+    private static let weekendWord = Array("weekend".utf8)
+    private static let hrefWord = Array("href".utf8)
+    private static let callWord = Array("call".utf8)
+    private static let clickWord = Array("click".utf8)
+    /// Whether a keyword, `weekday`, `weekend`, `href` or `call` starts with a lowercase letter, by the letter: a statement
+    /// starting otherwise is no keyword statement.
+    private static let opensKeyword: [Bool] = {
+        var opens = [Bool](repeating: false, count: 128)
+        let words = keywordsWithValues.map(\.word) + keywordsAlone.map(\.word) + [weekdayWord, weekendWord, hrefWord, callWord]
+        for word in words { opens[Int(word[0])] = true }
+        return opens
+    }()
     private static let numberSign = UInt8(ascii: "#")
 
     /// A space, a tab, a carriage return, a vertical tab or a form feed: whitespace other than a line break.
@@ -82,6 +95,8 @@ enum GanttStatementSyntax {
     /// A keyword statement at the cursor, with its value without the spaces at either end, or nil with the cursor
     /// where it was. A keyword that takes a value needs a space and at least one character of value.
     static func readKeywordStatement(_ cursor: inout MermaidTextCursor) -> (GanttKeyword, String)? {
+        // Every word below starts with a letter that `opensKeyword` holds; a statement starting otherwise matches none.
+        guard let first = cursor.peek(), first < 0x80, opensKeyword[Int(MermaidByte.lowercased(first))] else { return nil }
         for (word, keyword) in keywordsAlone where cursor.hasCaseInsensitivePrefix(word) {
             guard !isWordByte(cursor.peek(word.count)) else { continue }
             cursor.advance(by: word.count)
@@ -98,7 +113,7 @@ enum GanttStatementSyntax {
             cursor = lookahead
             return (keyword, trimmed(cursor.text(from: valueStart, to: cursor.position)))
         }
-        if cursor.hasCaseInsensitivePrefix(Array("href".utf8)) || cursor.hasCaseInsensitivePrefix(Array("call".utf8)),
+        if cursor.hasCaseInsensitivePrefix(hrefWord) || cursor.hasCaseInsensitivePrefix(callWord),
            let separator = cursor.peek(4), isWhitespace(separator) {
             return (.notAStatement, "")
         }
@@ -107,8 +122,8 @@ enum GanttStatementSyntax {
 
     /// `weekday monday` … `weekday sunday`, `weekend friday` or `weekend saturday`.
     private static func readWeekStatement(_ cursor: inout MermaidTextCursor) -> (GanttKeyword, String)? {
-        let isWeekday = cursor.hasCaseInsensitivePrefix(Array("weekday".utf8))
-        guard isWeekday || cursor.hasCaseInsensitivePrefix(Array("weekend".utf8)) else { return nil }
+        let isWeekday = cursor.hasCaseInsensitivePrefix(weekdayWord)
+        guard isWeekday || cursor.hasCaseInsensitivePrefix(weekendWord) else { return nil }
         var lookahead = cursor
         lookahead.advance(by: "weekday".count)
         guard let separator = lookahead.peek(), isWhitespace(separator) else { return nil }
@@ -161,7 +176,7 @@ enum GanttStatementSyntax {
 
     /// Whether `click` and a space are at the cursor.
     static func isAtClick(_ cursor: MermaidTextCursor) -> Bool {
-        guard cursor.hasCaseInsensitivePrefix(Array("click".utf8)), let separator = cursor.peek(5) else { return false }
+        guard cursor.hasCaseInsensitivePrefix(clickWord), let separator = cursor.peek(5) else { return false }
         return isWhitespace(separator)
     }
 
@@ -214,6 +229,6 @@ enum GanttStatementSyntax {
     }
 
     private static func trimmed(_ text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
+        FoundationTextOnBytes.trimmed(text, includingLineBreaks: true)
     }
 }

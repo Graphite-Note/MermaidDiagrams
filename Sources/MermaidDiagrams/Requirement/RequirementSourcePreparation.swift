@@ -7,7 +7,7 @@
  *              dropped, a line break added.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -38,7 +38,16 @@ enum RequirementSourcePreparation {
     /// `\n`, so that lines are counted as Pele counts them.
     static func prepared(_ bytes: [UInt8], from start: Int) -> RequirementPreparedSource {
         let prefix = withLineBreaksNormalized(bytes[..<start])
-        let body = Array(String(decoding: withLineBreaksNormalized(bytes[start...]), as: UTF8.self).unicodeScalars)
+        let normalizedBody = withLineBreaksNormalized(bytes[start...])
+        // Without `%%` no comment line is taken out, and the bytes, a string's and so well formed, are the text as kept.
+        if !holdsTwoPercentSigns(normalizedBody) {
+            var text = prefix
+            text.reserveCapacity(prefix.count + normalizedBody.count + 1)
+            text.append(contentsOf: normalizedBody)
+            text.append(MermaidByte.newline)
+            return RequirementPreparedSource(bytes: text, start: prefix.count, removedLineBreaks: [])
+        }
+        let body = Array(String(decoding: normalizedBody, as: UTF8.self).unicodeScalars)
         let comments = withoutCommentLines(body)
         // The text kept is written to UTF-8 a scalar at a time, as appending scalars to a string costs more.
         var text = prefix
@@ -100,6 +109,17 @@ enum RequirementSourcePreparation {
         var end = index + 2
         while end < text.count, text[end] != "\n" { end += 1 }
         return end < text.count ? end + 1 : end
+    }
+
+    /// Whether `%%` is written anywhere: a comment line needs it.
+    private static func holdsTwoPercentSigns(_ bytes: [UInt8]) -> Bool {
+        var previousIsPercentSign = false
+        for byte in bytes {
+            let isPercentSign = byte == MermaidByte.percent
+            if isPercentSign, previousIsPercentSign { return true }
+            previousIsPercentSign = isPercentSign
+        }
+        return false
     }
 
     /// `\r\n` and a lone `\r` as `\n`.

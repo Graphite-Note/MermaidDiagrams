@@ -6,7 +6,7 @@
  *              the header and its direction, then the document's statements, and Jison's errors with their lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -27,7 +27,7 @@ struct AgentFlowParser {
         let keywordStart = cursor.position - keyword.utf8.count
         var lineStart = keywordStart
         while lineStart > 0, cursor.bytes[lineStart - 1] != MermaidByte.newline { lineStart -= 1 }
-        let units = AgentFlowPreparedText.units(of: cursor.text(from: lineStart, to: cursor.bytes.count))
+        let units = AgentFlowPreparedText.units(of: cursor.bytes[lineStart...])
         var parser = AgentFlowParser(units: units, builder: AgentFlowDiagramBuilder(limits: limits, lineOffset: cursor.line - 1))
         try parser.readDiagram()
         parser.builder.diagram.options = AgentFlowOptions(MermaidConfigurationOptions(section: "agentflow", in: cursor))
@@ -39,6 +39,7 @@ struct AgentFlowParser {
         self.units = units
         tokens = AgentFlowLexer.tokens(of: units)
         self.builder = builder
+        self.builder.reserveRoom(forTokenCount: tokens.count)
     }
 
     var current: AgentFlowTokenKind { index < tokens.count ? tokens.kinds[index] : .end }
@@ -85,13 +86,30 @@ struct AgentFlowParser {
     /// Tokens of `kinds` run together: an identifier, or what follows `interpolate`.
     mutating func joined(_ kinds: AgentFlowTokenKindSet) throws(MermaidDiagramReadError) -> String {
         guard kinds.contains(current) else { throw failure(expecting: "'NODE_STRING'") }
-        var joined = text(at: index)
+        let first = index
         index += 1
-        while kinds.contains(current) {
-            joined += text(at: index)
-            index += 1
+        while kinds.contains(current) { index += 1 }
+        return joinedText(from: first, to: index)
+    }
+
+    /// The texts of the tokens from `first` up to `end` run together: one slice of the code units when the tokens follow
+    /// one another with their own texts and no token ends between the two halves of a surrogate pair (each token's
+    /// text is decoded alone, a half alone made U+FFFD); else each token's text joined.
+    func joinedText(from first: Int, to end: Int) -> String {
+        guard end - first > 1 else { return text(at: first) }
+        var isOneSlice = tokens.replacedTexts.isEmpty
+        var position = first + 1
+        while isOneSlice, position < end {
+            let boundary = tokens.starts[position]
+            isOneSlice = boundary == tokens.ends[position - 1] && !(boundary > 0 && UTF16.isLeadSurrogate(units[boundary - 1]))
+            position += 1
         }
-        return joined
+        guard isOneSlice else {
+            var joined = text(at: first)
+            for position in (first + 1)..<end { joined += text(at: position) }
+            return joined
+        }
+        return UnicodeScalarText.string(utf16: units[tokens.starts[first]..<tokens.ends[end - 1]])
     }
 
     mutating func identifier() throws(MermaidDiagramReadError) -> String { try joined(Self.identifierTokens) }
@@ -105,13 +123,10 @@ struct AgentFlowParser {
         case .text, .tagStart, .tagEnd, .unicodeText: type = .text
         default: throw failure(expecting: Self.textTokens + ", 'TAGEND', 'STR', 'MD_STR'")
         }
-        var written = text(at: index)
+        let first = index
         index += 1
-        while Self.nodeTextTokens.contains(current) {
-            written += text(at: index)
-            index += 1
-        }
-        return AgentFlowText(text: written, type: type)
+        while Self.nodeTextTokens.contains(current) { index += 1 }
+        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
     }
 
     mutating func close(_ kind: AgentFlowTokenKind) throws(MermaidDiagramReadError) {
@@ -127,13 +142,10 @@ struct AgentFlowParser {
         case .edgeText, .unicodeText: type = .text
         default: throw failure(expecting: "'EDGE_TEXT', 'STR', 'MD_STR'")
         }
-        var written = text(at: index)
+        let first = index
         index += 1
-        while current == .edgeText || current == .unicodeText {
-            written += text(at: index)
-            index += 1
-        }
-        return AgentFlowText(text: written, type: type)
+        while current == .edgeText || current == .unicodeText { index += 1 }
+        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
     }
 
     /// A flow's or a connector's identifier: words and punctuation without tags, or a string, which is text.
@@ -144,13 +156,10 @@ struct AgentFlowParser {
         } else {
             throw failure(expecting: "'NODE_STRING', 'STR', 'MD_STR'")
         }
-        var written = text(at: index)
+        let first = index
         index += 1
-        while Self.textWithoutTagsTokens.contains(current) {
-            written += text(at: index)
-            index += 1
-        }
-        return AgentFlowText(text: written, type: type)
+        while Self.textWithoutTagsTokens.contains(current) { index += 1 }
+        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
     }
 
     /// A metadata block's body: its tokens' texts run together.

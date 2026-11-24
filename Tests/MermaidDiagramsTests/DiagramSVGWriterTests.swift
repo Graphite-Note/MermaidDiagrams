@@ -7,7 +7,7 @@
  *              and gradients are written whole, each without copying the document.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -144,26 +144,27 @@ final class DiagramSVGWriterTests: XCTestCase {
         XCTAssertNotNil(DiagramSVGDocumentReading.read(document), "Well-formed XML")
     }
 
-    /// Each gradient writes its id into both buffers; a buffer passed `inout` beside a copy of the body (a method of the
-    /// body's own) was copied whole for each, so a Sankey of many bands copied its document once per band.
+    /// Each gradient writes its definition and its use into the document's one buffer, in place: a buffer passed
+    /// `inout` beside a copy of the body (a method of the body's own) was copied whole for each, so a Sankey of many bands
+    /// copied its document once per band, and the definitions are written before the body instead of put in afterwards.
     func testGradientsAreWrittenWithoutCopyingTheDocument() {
         let reserved = 1 << 20
         var body = DiagramSVGBody(colors: .palette(DiagramScenePaletteSamples.light), identifierPrefix: "pele",
                                   content: DiagramSVGBuffer(reservingCapacity: reserved))
-        body.definitions = DiagramSVGBuffer(reservingCapacity: reserved)
         let gradient = DiagramLinearGradient(startPaint: .accent, endPaint: .series(2), startPoint: .zero, endPoint: CGPoint(x: 40, y: 0))
         let shape = DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 40, height: 10), transform: nil),
                                       painting: .gradientFill(gradient), part: DiagramScenePart.allCases[0])
-        func storage(_ buffer: DiagramSVGBuffer) -> UnsafePointer<UInt8>? {
-            buffer.bytes.withUnsafeBufferPointer { bytes in bytes.baseAddress }
-        }
-        let content = storage(body.content)
-        let definitions = storage(body.definitions)
-        for _ in 0..<200 { body.add(.shape(shape)) }
+        let items = Array(repeating: DiagramSceneItem.shape(shape), count: 200)
+        let content = body.content.storageAddress
+        body.appendDefinitions(of: items)
+        for item in items { body.add(item) }
         XCTAssertLessThan(body.content.count, reserved)
-        XCTAssertEqual(storage(body.content), content, "the document's buffer is written in place")
-        XCTAssertEqual(storage(body.definitions), definitions, "the definitions' buffer is written in place")
-        XCTAssertTrue(body.content.text.contains("fill=\"url(#pele-gradient-200)\""))
-        XCTAssertTrue(body.definitions.text.contains("<linearGradient id=\"pele-gradient-200\""))
+        XCTAssertEqual(body.content.storageAddress, content, "the document's buffer is written in place")
+        XCTAssertEqual(body.content.growthCount, 0)
+        let text = body.content.text
+        XCTAssertTrue(text.hasPrefix("<defs><linearGradient id=\"pele-gradient-1\""))
+        XCTAssertTrue(text.contains("<linearGradient id=\"pele-gradient-200\""))
+        XCTAssertTrue(text.contains("</defs><path "))
+        XCTAssertTrue(text.contains("fill=\"url(#pele-gradient-200)\""))
     }
 }

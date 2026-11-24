@@ -6,8 +6,8 @@
  *              from the blocks' own widths, each block's drawn size, and what edges and their text must stay clear of.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import CoreGraphics
@@ -49,10 +49,10 @@ struct BlockPlacement {
     mutating func place() throws(BlockLayoutError) {
         for index in cells.indices { cells[index].neededWidth = neededWidths[index] }
         contentSize = try BlockGridLayout.layout(&cells, gap: gap)
-        outlines = []
+        outlines.removeAll(keepingCapacity: true)
         outlines.reserveCapacity(cells.count)
-        obstacleIndices = []
-        titles = []
+        obstacleIndices.removeAll(keepingCapacity: true)
+        titles.removeAll(keepingCapacity: true)
         for index in cells.indices {
             let cell = cells[index]
             let drawn: CGSize
