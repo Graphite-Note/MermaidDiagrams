@@ -2,12 +2,12 @@
  * File: RequirementDrawingParts.swift
  * -----------------------------------
  * Layer: Core
- * Description: A laid-out requirement diagram's geometry grouped by how it is painted, its scene in Pele's order and
- *              roles, and its renderer.
+ * Description: A laid-out requirement diagram's geometry grouped by how it is painted, as Core Graphics paths or in any
+ *              kind a drawing records, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,27 +47,15 @@ public struct RequirementDrawingParts {
 
     public init(layout: RequirementLayout) {
         title = layout.title
-        let solid = CGMutablePath()
-        let dashed = CGMutablePath()
-        let marks = CGMutablePath()
-        let patches = CGMutablePath()
-        for relation in layout.relations {
-            (relation.kind == .contains ? solid : dashed).addPath(DiagramEdgeDrawing.path(relation.path))
-            Self.addMark(relation.mark, to: marks)
-            patches.addPath(CGPath(roundedRect: relation.text.frame.insetBy(dx: -Self.textPatchExtraWidth / 2, dy: 0), cornerWidth: Self.textPatchCornerRadius,
-                                   cornerHeight: Self.textPatchCornerRadius, transform: nil))
-        }
-        solidLines = solid
-        dashedLines = dashed
-        self.marks = marks
-        textPatches = patches
+        let paths = RequirementPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        solidLines = paths.solidLines.path
+        dashedLines = paths.dashedLines.path
+        marks = paths.marks.path
+        textPatches = paths.textPatches.path
         texts = layout.relations.map(\.text)
+        boxFills = paths.boxFills.path
+        boxOutlines = paths.boxOutlines.path
         let plainBoxes = layout.boxes.filter { box in box.style == nil }
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
-        for box in plainBoxes { Self.addBox(box, fill: fills, outline: outlines) }
-        boxFills = fills
-        boxOutlines = outlines
         stereotypes = plainBoxes.map(\.stereotype)
         names = plainBoxes.map(\.name)
         fieldNames = plainBoxes.flatMap(\.fieldNames)
@@ -77,9 +65,14 @@ public struct RequirementDrawingParts {
 
     /// A box's rounded rectangle to fill, and it and its divider to stroke.
     static func addBox(_ box: RequirementLayoutBox, fill: CGMutablePath, outline: CGMutablePath) {
-        let rectangle = CGPath(roundedRect: box.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-        fill.addPath(rectangle)
-        outline.addPath(rectangle)
+        addBox(box, fill: DiagramCoreGraphicsPath(mutable: fill), outline: DiagramCoreGraphicsPath(mutable: outline), making: DiagramCoreGraphicsPaths())
+    }
+
+    /// `addBox` in any kind a drawing records; the rounded rectangle is made for a moment and given back.
+    static func addBox<Maker: DiagramPathMaking>(_ box: RequirementLayoutBox, fill: Maker.Path, outline: Maker.Path, making maker: Maker) {
+        let madeCount = maker.madePathCount
+        fill.addPath(maker.roundedRectangle(box.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius), alsoTo: outline)
+        maker.givePathsBack(downTo: madeCount)
         if let dividerY = box.dividerY {
             outline.move(to: CGPoint(x: box.frame.minX, y: dividerY))
             outline.addLine(to: CGPoint(x: box.frame.maxX, y: dividerY))
@@ -88,7 +81,7 @@ public struct RequirementDrawingParts {
 
     /// Pele's marks: a circle of radius 6 whose rim touches the box with a plus through it, or an open arrowhead 9 points
     /// long and 9 wide.
-    static func addMark(_ mark: RequirementRelationMark, to path: CGMutablePath) {
+    static func addMark<Path: DiagramPathRecording>(_ mark: RequirementRelationMark, to path: Path) {
         switch mark {
         case .containment(let point, let toward):
             let radius = containmentRadius
@@ -107,50 +100,37 @@ public struct RequirementDrawingParts {
     }
 }
 
-extension DiagramScene {
-    /// The requirement diagram's painting, as Pele paints it (`RequirementDrawingParts`).
-    public init(layout: RequirementLayout) {
-        var builder = DiagramSceneBuilder()
-        RequirementDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
-    }
-}
+/// The paths of `RequirementDrawingParts` in any kind a drawing records: Core Graphics paths or lanes of the scene's
+/// workspace. A shape made whole (a box, a relation's line, a patch) is made for a moment, added where it is painted and
+/// given back.
+struct RequirementPaths<Path: DiagramPathRecording> {
+    let solidLines: Path
+    let dashedLines: Path
+    let marks: Path
+    let textPatches: Path
+    /// The boxes of the usual look, filled and outlined with their dividers.
+    let boxFills: Path
+    let boxOutlines: Path
 
-extension RequirementDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
-        builder.title(title)
-        builder.stroke(solidLines, .line, line, part: .edge)
-        builder.stroke(dashedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedLineLengths), part: .edge)
-        builder.stroke(marks, .line, line, part: .marker)
-        builder.fill(textPatches, .background, part: .labelBackground)
-        builder.texts(texts, .muted, part: .edgeLabel)
-        let outline = DiagramStroke(lineWidth: Self.lineWidth)
-        builder.fill(boxFills, .surface, part: .node)
-        builder.stroke(boxOutlines, .border, outline, part: .node)
-        builder.texts(stereotypes, .muted, part: .stereotype)
-        builder.texts(names, .foreground, isBold: true, part: .label)
-        builder.texts(fieldNames, .muted, part: .field)
-        builder.texts(fieldValues, .foreground, part: .value)
-        for box in styledBoxes { addStyledBox(box, to: &builder) }
-    }
-
-    /// A box in the colors and stroke its style sets, and the usual ones for the rest; all its text in its style's color, or
-    /// else, on a fill it sets, in the ink that contrasts more with that fill (Pele's `inkFill`), or else in the usual roles.
-    private func addStyledBox(_ box: RequirementLayoutBox, to builder: inout DiagramSceneBuilder) {
-        let style = box.style ?? DiagramElementStyle()
-        let fill = CGMutablePath()
-        let outline = CGMutablePath()
-        Self.addBox(box, fill: fill, outline: outline)
-        builder.keepNextShapeApart()
-        builder.fill(fill, style.fill.map(DiagramPaint.color) ?? .surface, part: .node)
-        builder.stroke(outline, style.stroke.map(DiagramPaint.color) ?? .border,
-                       DiagramStroke(lineWidth: style.strokeWidth ?? Self.lineWidth, dashLengths: style.strokeDashLengths ?? []), part: .node)
-        let text = style.textColor.map(DiagramPaint.color) ?? TreemapInk.paint(onFill: style.fill)
-        builder.text(box.stereotype, text ?? .muted, part: .stereotype)
-        builder.text(box.name, text ?? .foreground, isBold: true, part: .label)
-        builder.texts(box.fieldNames, text ?? .muted, part: .field)
-        builder.texts(box.fieldValues, text ?? .foreground, part: .value)
+    init<Maker: DiagramPathMaking>(layout: RequirementLayout, making maker: Maker) where Maker.Path == Path {
+        solidLines = maker.makePath()
+        dashedLines = maker.makePath()
+        marks = maker.makePath()
+        textPatches = maker.makePath()
+        for relation in layout.relations {
+            let madeCount = maker.madePathCount
+            let line = maker.makePath()
+            DiagramEdgeDrawing.record(relation.path, into: line)
+            (relation.kind == .contains ? solidLines : dashedLines).addPath(line)
+            RequirementDrawingParts.addMark(relation.mark, to: marks)
+            let radius = RequirementDrawingParts.textPatchCornerRadius
+            textPatches.addPath(maker.roundedRectangle(relation.text.frame.insetBy(dx: -RequirementDrawingParts.textPatchExtraWidth / 2, dy: 0),
+                                                       cornerWidth: radius, cornerHeight: radius))
+            maker.givePathsBack(downTo: madeCount)
+        }
+        boxFills = maker.makePath()
+        boxOutlines = maker.makePath()
+        for box in layout.boxes where box.style == nil { RequirementDrawingParts.addBox(box, fill: boxFills, outline: boxOutlines, making: maker) }
     }
 }
 

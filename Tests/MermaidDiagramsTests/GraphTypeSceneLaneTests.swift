@@ -2,7 +2,7 @@
  * File: GraphTypeSceneLaneTests.swift
  * -----------------------------------
  * Layer: Tests
- * Description: The scenes of state, class and entity relationship diagrams, their paths recorded into lanes, are element for element and bit for bit
+ * Description: The scenes of state, class, entity relationship and requirement diagrams, their paths recorded into lanes, are element for element and bit for bit
  *              the scenes 0.7.0 made from Core Graphics paths, for every diagram of the corpora and random ones, as they
  *              run and fitted to a narrow column.
  *
@@ -67,6 +67,14 @@ final class GraphTypeSceneLaneTests: XCTestCase {
                 XCTAssertEqual(Self.transcript(of: DiagramScene(layout: narrow)),
                                Self.transcript(of: ReferenceEntityRelationshipScene.scene(layout: narrow)), file: file, line: line)
             }
+        case .requirement(let diagram):
+            guard let layout = try? RequirementLayoutEngine.layout(diagram, typography: typography, limits: .standard) else { return false }
+            XCTAssertEqual(Self.transcript(of: DiagramScene(layout: layout)), Self.transcript(of: ReferenceRequirementScene.scene(layout: layout)),
+                           file: file, line: line)
+            if let turned = diagram.turnedToRunDown, let narrow = try? RequirementLayoutEngine.layout(turned, typography: typography, limits: .standard) {
+                XCTAssertEqual(Self.transcript(of: DiagramScene(layout: narrow)), Self.transcript(of: ReferenceRequirementScene.scene(layout: narrow)),
+                               file: file, line: line)
+            }
         default:
             return false
         }
@@ -110,6 +118,19 @@ final class GraphTypeSceneLaneTests: XCTestCase {
 
     func testEntityRelationshipScenesOfRandomDiagramsAreThoseMadeFromCoreGraphicsPaths() {
         var texts = EntityRelationshipRandomTexts(seed: 0x5CE_E2)
+        var comparedCount = 0
+        for index in 0..<1_500 where assertSameScenes(texts.text(statementCount: 2 + index % 30)) { comparedCount += 1 }
+        XCTAssertGreaterThan(comparedCount, 600)
+    }
+
+    func testRequirementScenesOfEveryCorpusAreThoseMadeFromCoreGraphicsPaths() throws {
+        var comparedCount = 0
+        for source in try RequirementCorpus.documentationExamples() where assertSameScenes(source) { comparedCount += 1 }
+        XCTAssertGreaterThan(comparedCount, 5)
+    }
+
+    func testRequirementScenesOfRandomDiagramsAreThoseMadeFromCoreGraphicsPaths() {
+        var texts = RequirementRandomTexts(seed: 0x5CE_2E)
         var comparedCount = 0
         for index in 0..<1_500 where assertSameScenes(texts.text(statementCount: 2 + index % 30)) { comparedCount += 1 }
         XCTAssertGreaterThan(comparedCount, 600)
