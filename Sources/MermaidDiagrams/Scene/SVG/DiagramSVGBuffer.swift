@@ -6,7 +6,7 @@
  *              path's data written as UTF-8 through a cursor over one block of memory, made a String once at the end.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -74,6 +74,13 @@ struct DiagramSVGBuffer: ~Copyable {
         start = grown
         capacity = grownCapacity
         growthCount += 1
+    }
+
+    /// Checks, in debug builds only, that `byteCount` more bytes fit in the block: a write that the room reserved before
+    /// it does not cover would go past the block's end, which the output alone does not show.
+    @inline(__always)
+    private func assertRoom(_ byteCount: Int) {
+        assert(capacity &- count >= byteCount, "a write past the room reserved for it")
     }
 
     /// The end of what is written, where the next byte goes; the room after it is reserved by the caller.
@@ -148,15 +155,17 @@ struct DiagramSVGBuffer: ~Copyable {
         }
     }
 
-    /// A literal written where room is already reserved.
+    /// A literal written where room is already reserved; debug builds check that it is.
     @inline(__always)
     private mutating func writeUnchecked(_ literal: StaticString) {
+        assertRoom(literal.utf8CodeUnitCount)
         cursor.initialize(from: literal.utf8Start, count: literal.utf8CodeUnitCount)
         count &+= literal.utf8CodeUnitCount
     }
 
     @inline(__always)
     private mutating func writeUnchecked(_ byte: UInt8) {
+        assertRoom(1)
         cursor.initialize(to: byte)
         count &+= 1
     }
@@ -187,6 +196,7 @@ struct DiagramSVGBuffer: ~Copyable {
     mutating func appendNumber(_ value: CGFloat) {
         reserveRoom(DiagramSVGNumberWriting.largestNumberByteCount)
         count &+= DiagramSVGNumberWriting.writeNumber(value, to: cursor)
+        assertRoom(0)
     }
 
     /// The numbers joined by single spaces.
@@ -205,6 +215,7 @@ struct DiagramSVGBuffer: ~Copyable {
         writeUnchecked(attribute)
         writeUnchecked("=\"")
         count &+= DiagramSVGNumberWriting.writeNumber(max(0, opacity), to: cursor)
+        assertRoom(0)
         writeUnchecked(UInt8(ascii: "\""))
     }
 
@@ -224,6 +235,7 @@ struct DiagramSVGBuffer: ~Copyable {
     private mutating func appendPathElement(_ element: CGPathElement) {
         reserveRoom(DiagramSVGNumberWriting.largestPathElementByteCount)
         count &+= DiagramSVGNumberWriting.writePathElement(element, to: cursor)
+        assertRoom(0)
     }
 }
 

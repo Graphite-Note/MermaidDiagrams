@@ -4,11 +4,12 @@
  * Layer: Tests
  * Description: What makes the SVG writer fast keeps its output: the room reserved from a scene holds every document of
  *              Pele's corpora, gradient documents are those of the writer that put its definitions in afterwards, the
- *              series variables' table and the hexadecimal digits are 0.6.1's, the paint texts are each paint's own, and a
- *              buffer that grows writes what one that does not grow writes.
+ *              series variables' table and the hexadecimal digits are 0.6.1's, the paint texts are each paint's own, a
+ *              buffer that grows writes what one that does not grow writes, and a piece at the end of the room grows it
+ *              first.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -77,6 +78,31 @@ final class DiagramSVGWriterSpeedTests: XCTestCase {
         XCTAssertEqual(growing.count, roomy.count)
         XCTAssertEqual(growing.text, roomy.text)
         XCTAssertTrue(roomy.text.hasPrefix("<path d=\"M-1234.5 0C999999999.99 -999999999.99 12.05 7 0 0C999999999.99 -999999999.99 12.05 7 1.25 -0.33C"))
+    }
+
+    /// Every piece the buffer writes after making sure of its room once (an entity, a number, an opacity attribute, a
+    /// path element) is written whole when it starts at any of the last bytes of the room: the buffer grows first, so
+    /// nothing goes past the block's end (which debug builds check at each write) and the bytes are the reference's.
+    func testPiecesStartingAtTheEndOfTheRoomGrowTheBufferFirst() {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -999_999_999_999.99, y: -999_999_999_999.99))
+        path.addCurve(to: CGPoint(x: -999_999_999_999.99, y: -999_999_999_999.99), control1: CGPoint(x: -999_999_999_999.99, y: -0.25),
+                      control2: CGPoint(x: 12.05, y: -999_999_999_999.99))
+        let escaped = "\"&'<>\u{9}é"
+        let pieces = DiagramSVGSyntax.escaped(escaped) + "-999999999999.99" + " stroke-opacity=\"0.25\"" + DiagramSVGSyntax.pathData(path)
+        let capacity = 64
+        for written in (capacity - DiagramSVGNumberWriting.largestPathElementByteCount)...capacity where written >= 0 {
+            var buffer = DiagramSVGBuffer(reservingCapacity: capacity)
+            let filler = String(repeating: "x", count: written)
+            buffer.append(filler)
+            buffer.appendEscaped(escaped)
+            buffer.appendNumber(-999_999_999_999.99)
+            buffer.appendOpacity(0.25, attribute: "stroke-opacity")
+            buffer.appendPathData(path)
+            XCTAssertEqual(buffer.text, filler + pieces, "\(written) bytes written first")
+            XCTAssertLessThanOrEqual(buffer.count, buffer.capacity)
+            XCTAssertGreaterThan(buffer.growthCount, 0)
+        }
     }
 
     // MARK: Gradients
