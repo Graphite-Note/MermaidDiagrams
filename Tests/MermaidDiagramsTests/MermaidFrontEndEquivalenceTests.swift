@@ -7,7 +7,7 @@
  *              position and line after the keyword, the same title, or the same error.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -90,5 +90,14 @@ final class MermaidFrontEndEquivalenceTests: XCTestCase {
         XCTAssertEqual(frontEnd.typeKeyword, .flowchart)
         XCTAssertEqual(frontEnd.keyword, MermaidTextRange(start: 0, end: 9))
         XCTAssertNotNil(try MermaidFrontEnd.read("graph TD\nstyle A fill:#f00;\n").sourceBytes)
+    }
+
+    /// A text past `MermaidTextRange`'s 32-bit offsets is refused before any range is made, whatever limits the caller
+    /// set: a range of it would wrap, and a flowchart's reading would read its name table's bytes at a negative offset.
+    func testATextLongerThanARangeCanIndexIsRefused() {
+        XCTAssertNoThrow(try MermaidFrontEnd.refuseUnindexable(byteCount: Int(Int32.max)))
+        XCTAssertThrowsError(try MermaidFrontEnd.refuseUnindexable(byteCount: Int(Int32.max) + 1)) { error in
+            XCTAssertEqual(error as? MermaidDiagramReadError, .sourceTooLarge(limitBytes: Int(Int32.max)))
+        }
     }
 }

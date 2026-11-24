@@ -7,7 +7,7 @@
  *              keyword itself.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -37,11 +37,13 @@ struct MermaidFrontEndResult {
 /// only then are the bytes copied and the passes run, as `MermaidDiagramReader.preprocessed` runs them.
 enum MermaidFrontEnd {
     static func read(_ source: String) throws(MermaidDiagramReadError) -> MermaidFrontEndResult {
+        try refuseUnindexable(byteCount: source.utf8.count)
         var string = source
         string.makeContiguousUTF8()
         let isUnchanged = string.utf8.withContiguousStorageIfAvailable { bytes in isReadUnchanged(bytes) } ?? false
         guard isUnchanged else {
             let (title, cursor) = try MermaidDiagramReader.preprocessed(source)
+            try refuseUnindexable(byteCount: cursor.bytes.count)
             let text = MermaidSourceText(bytes: cursor.bytes)
             let (keyword, type) = try keywordRange(in: text, from: cursor.position)
             return MermaidFrontEndResult(text: text, sourceBytes: cursor.sourceBytes, readFrontMatter: cursor.readFrontMatter,
@@ -50,6 +52,13 @@ enum MermaidFrontEnd {
         let text = MermaidSourceText(contiguousString: string)
         let (keyword, type) = try keywordRange(in: text, from: 0)
         return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: nil, frontMatterTitle: nil, keyword: keyword, typeKeyword: type)
+    }
+
+    /// Refuses a text too long for `MermaidTextRange`'s 32-bit offsets: limits that allow more than 2 GB
+    /// (`MermaidDiagramLimits.maximumSourceBytes`), or preprocessing's added quotation marks, would else make ranges whose
+    /// offsets wrap.
+    static func refuseUnindexable(byteCount: Int) throws(MermaidDiagramReadError) {
+        guard byteCount <= MermaidTextRange.maximumOffset else { throw .sourceTooLarge(limitBytes: MermaidTextRange.maximumOffset) }
     }
 
     /// Whether preprocessing leaves `bytes` as they are: no byte order mark, no carriage return, no tag attribute to

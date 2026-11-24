@@ -7,7 +7,7 @@
  *              over. And identifiers compared by their bytes, as Pele compares them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -99,5 +99,22 @@ extension FlowchartReadingHostileInputTests {
         let many = "graph TD\n" + (0..<10_000).map { index in "n\(index)\n" }.joined()
         XCTAssertEqual(try FlowchartReading.flowchart(many, limits: limits).nodes.count, 10_000)
         XCTAssertEqual(try FlowchartReading.flowchart("graph TD\nA --> B\nB --> A").edges.map(\.targetIndex), [1, 0])
+    }
+
+    /// `declinate` and `macallums` have the same length and the same FNV-1a hash (0xE20E47D2): the name table tells them
+    /// apart by their bytes, so they are two nodes, as 0.7.0 read them, in a table of a few names and in one grown to
+    /// thousands of slots.
+    func testNamesOfTheSameHashAndLengthAreTwoNodes() throws {
+        let pair = "declinate --> macallums\nmacallums --> declinate\n"
+        for filler in [0, 3_000] {
+            let source = "flowchart TD\n" + (0..<filler).map { index in "n\(index)\n" }.joined() + pair
+            var limits = MermaidDiagramLimits.standard
+            limits.maximumSourceBytes = 100_000
+            let diagram = try FlowchartReading.flowchart(source, limits: limits)
+            XCTAssertEqual(diagram.nodeCount, filler + 2)
+            XCTAssertEqual(diagram.edges.map { edge in [edge.sourceIndex, edge.targetIndex] }, [[filler, filler + 1], [filler + 1, filler]])
+            guard case .flowchart(let reference) = try ReferenceMermaidReader.read(source, limits: limits) else { return XCTFail("not a flowchart") }
+            XCTAssertEqual(reference.nodes.count, filler + 2)
+        }
     }
 }

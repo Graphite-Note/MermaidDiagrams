@@ -6,7 +6,7 @@
  *              else the bytes preprocessing made), and ranges of its UTF-8 bytes that models keep instead of Strings.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -22,6 +22,8 @@ struct MermaidTextRange: Equatable, Hashable, Sendable {
     }
 
     static let empty = MermaidTextRange(start: 0, end: 0)
+    /// The largest offset a range holds: the front end refuses a longer text (`MermaidFrontEnd.refuseUnindexable`).
+    static let maximumOffset = Int(Int32.max)
 
     var count: Int { Int(end - start) }
     var isEmpty: Bool { end <= start }
