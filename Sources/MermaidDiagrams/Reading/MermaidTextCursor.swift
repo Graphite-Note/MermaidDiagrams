@@ -5,7 +5,7 @@
  * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 24/11/2026
  */
 
@@ -25,6 +25,10 @@ struct MermaidTextCursor {
     var sourceBytes: [UInt8] { source?.bytes ?? bytes }
     /// The front matter of `sourceBytes` once the reader has found and read it; nil when it has not looked.
     var readFrontMatter: MermaidReadFrontMatter? { source?.readFrontMatter }
+    /// What the `%%{init: …}%%` directives of `sourceBytes` after its front matter set, merged: read the first time a
+    /// type's options ask for it and kept for the other sections it asks for; nil for a cursor made of bytes alone,
+    /// which keeps nothing.
+    var directiveConfiguration: [String: DirectiveValue]? { source?.directiveConfiguration }
 
     init(bytes: [UInt8]) {
         self.bytes = bytes
@@ -155,6 +159,9 @@ struct MermaidTextCursor {
 private final class MermaidCursorSource {
     let bytes: [UInt8]
     let readFrontMatter: MermaidReadFrontMatter?
+    /// Read once, on the reading's own thread, the first time it is asked for.
+    private(set) lazy var directiveConfiguration = MermaidDirectiveConfiguration.configuration(
+        in: bytes, from: (readFrontMatter ?? MermaidReadFrontMatter(in: bytes)).frontMatter?.end ?? 0)
 
     init(bytes: [UInt8], readFrontMatter: MermaidReadFrontMatter?) {
         self.bytes = bytes

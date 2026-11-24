@@ -5,8 +5,8 @@
  * Description: The options a diagram's front matter and its `%%{init: …}%%` directives give its type.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.7
- * Date: 23/11/2026
+ * Version: 0.8
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -37,12 +37,22 @@ struct MermaidConfigurationOptions {
         self.init(section: section, in: bytes, frontMatter: MermaidReadFrontMatter(in: bytes))
     }
 
-    /// The options of the cursor's text, from the front matter the reader already read when it has.
+    /// The options of the cursor's text, from the front matter the reader already read when it has, and from its
+    /// directives read once for every section asked for (`MermaidTextCursor.directiveConfiguration`).
     init(section: String, in cursor: MermaidTextCursor) {
-        self.init(section: section, in: cursor.sourceBytes, frontMatter: cursor.readFrontMatter ?? MermaidReadFrontMatter(in: cursor.sourceBytes))
+        let read = cursor.readFrontMatter ?? MermaidReadFrontMatter(in: cursor.sourceBytes)
+        self.init(section: section, frontMatter: read)
+        let directives = cursor.directiveConfiguration ?? MermaidDirectiveConfiguration.configuration(in: cursor.sourceBytes, from: read.frontMatter?.end ?? 0)
+        MermaidDirectiveConfiguration.apply(section: section, of: directives, to: &self)
     }
 
     private init(section: String, in bytes: [UInt8], frontMatter read: MermaidReadFrontMatter) {
+        self.init(section: section, frontMatter: read)
+        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: read.frontMatter?.end ?? 0, to: &self)
+    }
+
+    /// The options the front matter gives `section`, before any directive's.
+    private init(section: String, frontMatter read: MermaidReadFrontMatter) {
         if read.frontMatter != nil, case .object(let document)? = read.value {
             if case .object(let configuration)? = document["config"], case .object(let options)? = configuration[section] {
                 values.reserveCapacity(options.count)
@@ -54,7 +64,6 @@ struct MermaidConfigurationOptions {
                 record(.text(MermaidYAMLDocument.javaScriptText(displayMode)), named: "displayMode")
             }
         }
-        MermaidDirectiveConfiguration.apply(section: section, in: bytes, from: read.frontMatter?.end ?? 0, to: &self)
     }
 
     /// The section whose options take the front matter's own `displayMode`.
