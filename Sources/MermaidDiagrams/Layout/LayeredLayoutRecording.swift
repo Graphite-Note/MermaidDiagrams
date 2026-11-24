@@ -6,13 +6,13 @@
  *              again with the 0.7.0 layout and compare the two bit for bit.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
 #if DEBUG
 /// What the layered layouts were given while a test set `current`: every flat graph placed through `LayeredLayout`,
-/// every flat layout run (those of compound layouts too) and every ranking a compound layout asked for, in the order they
+/// every cluster graph placed through `LayeredClusterLayout`, every flat layout run (those of compound layouts too) and every ranking a compound layout asked for, in the order they
 /// ran. Release builds have none of this.
 final class LayeredLayoutRecording: @unchecked Sendable {
     // Only the thread that bound `current` (through `$current.withValue`) reaches the recording, and only while the
@@ -34,7 +34,15 @@ final class LayeredLayoutRecording: @unchecked Sendable {
         var maximumPointCount: Int
     }
 
+    /// A cluster graph placed through `LayeredClusterLayout.place`.
+    struct ClusterPlacement {
+        var graph: LayeredClusterGraph
+        var spacing: LayeredSpacing
+        var maximumPointCount: Int
+    }
+
     var placements: [Placement] = []
+    var clusterPlacements: [ClusterPlacement] = []
     var flatLayouts: [FlatLayout] = []
     /// The nodes and edges a compound layout ranked with `LayeredFlatRanking.orient` and `rank`.
     var rankings: [(nodes: [LayeredFlatNode], edges: [LayeredFlatEdge])] = []
