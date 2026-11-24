@@ -7,7 +7,7 @@
  *              that each token's test takes a binary search instead of a scan to the line's or the word's end.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -24,24 +24,45 @@ struct FlowchartLookAheadIndex {
     /// Where JavaScript white space or a quotation mark stands: what ends a link identifier's word.
     private let wordBreaks: [Int]
 
+    /// Finds the `@`s and the direction statements first, which most flowcharts have none of: the line terminators are
+    /// listed only when a direction statement is there to compare them with, and the word breaks only when a link
+    /// identifier's `@` is there to look for, since each test answers no without them.
     init(bytes: [UInt8]) {
-        var directionStatementStarts: [Int] = []
-        var lineTerminators: [Int] = []
         var linkIdentifierEnds: [Int] = []
+        var searchStart = 0
+        while let atSign = MermaidPreprocessing.firstIndex(of: MermaidByte.atSign, in: bytes, from: searchStart) {
+            if atSign + 1 >= bytes.count || (bytes[atSign + 1] != MermaidByte.openingBrace && bytes[atSign + 1] != MermaidByte.quotationMark) {
+                linkIdentifierEnds.append(atSign)
+            }
+            searchStart = atSign + 1
+        }
+        var directionStatementStarts: [Int] = []
+        searchStart = 0
+        while let start = MermaidPreprocessing.firstIndex(of: Self.direction, in: bytes, from: searchStart) {
+            if Self.isDirectionStatement(in: bytes, at: start) { directionStatementStarts.append(start) }
+            searchStart = start + 1
+        }
+        var lineTerminators: [Int] = []
+        if !directionStatementStarts.isEmpty {
+            for position in bytes.indices where Self.isLineTerminator(in: bytes, at: position) { lineTerminators.append(position) }
+        }
         var wordBreaks: [Int] = []
-        for position in bytes.indices {
-            let byte = bytes[position]
-            if Self.isLineTerminator(in: bytes, at: position) { lineTerminators.append(position) }
-            if byte == MermaidByte.quotationMark || JavaScriptWhitespace.length(in: bytes, at: position) > 0 { wordBreaks.append(position) }
-            if byte == MermaidByte.atSign, position + 1 >= bytes.count || (bytes[position + 1] != MermaidByte.openingBrace
-                && bytes[position + 1] != MermaidByte.quotationMark) { linkIdentifierEnds.append(position) }
-            if byte == UInt8(ascii: "d"), Self.isDirectionStatement(in: bytes, at: position) { directionStatementStarts.append(position) }
+        if !linkIdentifierEnds.isEmpty {
+            for position in bytes.indices {
+                let byte = bytes[position]
+                let isBreak = byte == MermaidByte.quotationMark || byte == MermaidByte.space || (byte >= MermaidByte.tab && byte <= MermaidByte.carriageReturn)
+                    || (byte >= 0xC2 && JavaScriptWhitespace.length(in: bytes, at: position) > 0)
+                if isBreak { wordBreaks.append(position) }
+            }
         }
         self.directionStatementStarts = directionStatementStarts
         self.lineTerminators = lineTerminators
         self.linkIdentifierEnds = linkIdentifierEnds
         self.wordBreaks = wordBreaks
     }
+
+    /// Whether the text holds an `@` that can end a link identifier: without one, no position starts a link identifier.
+    var hasLinkIdentifierEnds: Bool { !linkIdentifierEnds.isEmpty }
 
     /// The lexer's direction statement, `.*direction\s+(TB|BT|RL|LR|TD)[^\n]*` from `position`: whether `direction`,
     /// white space and a direction start anywhere from `position` up to the line's end.

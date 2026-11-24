@@ -1,3 +1,14 @@
+/**
+ * File: FlowchartSubgraphNesting.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: Turns a flowchart's groups, in the order they ended, into its subgraphs nested and ordered.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A `subgraph … end` group as it ends: what it is called, and the names written in its statements that no group
 /// ended before it took.
 struct EndedFlowchartSubgraph {
@@ -15,10 +26,10 @@ struct EndedFlowchartSubgraph {
 /// the next) is lifted to the top, the group that ended last first, as Pele does. Each group is listed before the
 /// groups inside it.
 enum FlowchartSubgraphNesting {
-    static func subgraphs(_ ended: [EndedFlowchartSubgraph], nodeIndexByIdentifier: [String: Int],
+    /// - Parameter endedIndexByIdentifier: The index in `ended` of the group with each identifier.
+    static func subgraphs(_ ended: [EndedFlowchartSubgraph], endedIndexByIdentifier: [String: Int], nodeIndexByIdentifier: [String: Int],
                           collapsedIdentifiers: Set<String>) -> [FlowchartSubgraph] {
-        var endedIndexByIdentifier: [String: Int] = [:]
-        for (index, group) in ended.enumerated() { endedIndexByIdentifier[group.identifier] = index }
+        guard !ended.isEmpty else { return [] }
         var parents = [Int?](repeating: nil, count: ended.count)
         var children = [[Int]](repeating: [], count: ended.count)
         for (index, group) in ended.enumerated() {

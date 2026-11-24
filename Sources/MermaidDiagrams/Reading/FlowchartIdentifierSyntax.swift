@@ -6,7 +6,7 @@
  *              that an identifier takes; and finds those tokens, and the ones a style takes, where Pele's lexer would.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -84,7 +84,7 @@ enum FlowchartIdentifierSyntax {
             while end < bytes.count, MermaidByte.isDigit(bytes[end]) { end += 1 }
             return (.number, end)
         }
-        if let single = singleCharacterTokens[byte] {
+        if let single = singleCharacterToken(byte) {
             if byte == MermaidByte.colon, text.byte(at: position + 1) == MermaidByte.colon, text.byte(at: position + 2) == MermaidByte.colon { return nil }
             return (single, position + 1)
         }
@@ -117,10 +117,16 @@ enum FlowchartIdentifierSyntax {
         return end > position ? (.space, end) : nil
     }
 
-    private static let singleCharacterTokens: [UInt8: FlowchartPieceToken] = [
-        UInt8(ascii: "#"): .numberSign, MermaidByte.ampersand: .ampersand, MermaidByte.comma: .comma, UInt8(ascii: "*"): .asterisk,
-        MermaidByte.colon: .colon,
-    ]
+    private static func singleCharacterToken(_ byte: UInt8) -> FlowchartPieceToken? {
+        switch byte {
+        case UInt8(ascii: "#"): .numberSign
+        case MermaidByte.ampersand: .ampersand
+        case MermaidByte.comma: .comma
+        case UInt8(ascii: "*"): .asterisk
+        case MermaidByte.colon: .colon
+        default: nil
+        }
+    }
     private static let defaultWord = Array("default".utf8)
     private static let styleWord = Array("style".utf8)
     private static let invisibleLink = Array("~~~".utf8)

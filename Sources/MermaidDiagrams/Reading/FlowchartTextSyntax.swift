@@ -6,7 +6,7 @@
  *              a Markdown string or plain text, which may hold no bracket.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -52,14 +52,17 @@ enum FlowchartTextSyntax {
             hasToken = !string.text.isEmpty
         }
         let plainStart = cursor.position
-        while let byte = cursor.peek(), closings.firstIndex(where: { closing in cursor.hasPrefix(closing) }) == nil, !state.endsPlainText(byte) {
-            cursor.advance()
+        var plainEnd = plainStart
+        while plainEnd < cursor.bytes.count, !state.endsPlainText(cursor.bytes[plainEnd]), closingIndex(of: closings, in: cursor.bytes, at: plainEnd) == nil {
+            plainEnd += 1
         }
-        if cursor.position > plainStart {
-            written += cursor.text(from: plainStart, to: cursor.position)
+        cursor.advance(by: plainEnd - plainStart)
+        if plainEnd > plainStart {
+            let plain = cursor.text(from: plainStart, to: plainEnd)
+            if written.isEmpty { written = plain } else { written += plain }
             hasToken = true
         }
-        guard let closingIndex = closings.firstIndex(where: { closing in cursor.hasPrefix(closing) }) else {
+        guard let closingIndex = closingIndex(of: closings, in: cursor.bytes, at: cursor.position) else {
             throw .invalidSyntax(line: cursor.isAtEnd ? openingLine : cursor.line,
                                  problem: cursor.isAtEnd ? .unclosedShape(closingText: closingText(closings)) : .unexpectedText(cursor.excerpt()))
         }
@@ -68,6 +71,19 @@ enum FlowchartTextSyntax {
         cursor.advance(by: closings[closingIndex].count)
         let trimmed = MermaidByte.startsAndEndsWithPrintableASCII(written) ? written : written.trimmingCharacters(in: .whitespacesAndNewlines)
         return (DiagramLabelDecoder.label(from: trimmed, form: form), closingIndex)
+    }
+
+    /// Which of `closings` the bytes at `position` are, the first that is; nil for none.
+    private static func closingIndex(of closings: [[UInt8]], in bytes: [UInt8], at position: Int) -> Int? {
+        guard position < bytes.count else { return nil }
+        let byte = bytes[position]
+        for index in closings.indices where closings[index].first == byte {
+            let closing = closings[index]
+            if position + closing.count <= bytes.count, (1..<closing.count).allSatisfy({ offset in bytes[position + offset] == closing[offset] }) {
+                return index
+            }
+        }
+        return nil
     }
 
     /// `"…"`, its text without the quotation marks, or `"`…`"`, a Markdown string, which holds no backtick and no
@@ -96,10 +112,12 @@ enum FlowchartTextSyntax {
     /// Whether the text starts with an invisible link (`~~~`, after any spaces), which Pele's lexer reads as a link
     /// even there.
     private static func startsInvisibleLink(_ cursor: MermaidTextCursor) -> Bool {
-        var lookahead = cursor
-        while let byte = lookahead.peek(), JavaScriptWhitespace.length(in: lookahead.bytes, at: lookahead.position) > 0 || byte == MermaidByte.tilde {
-            if byte == MermaidByte.tilde { return lookahead.peek(1) == MermaidByte.tilde && lookahead.peek(2) == MermaidByte.tilde }
-            lookahead.advance(by: JavaScriptWhitespace.length(in: lookahead.bytes, at: lookahead.position))
+        var offset = 0
+        while let byte = cursor.peek(offset) {
+            if byte == MermaidByte.tilde { return cursor.peek(offset + 1) == MermaidByte.tilde && cursor.peek(offset + 2) == MermaidByte.tilde }
+            let length = JavaScriptWhitespace.length(in: cursor.bytes, at: cursor.position + offset)
+            guard length > 0 else { return false }
+            offset += length
         }
         return false
     }

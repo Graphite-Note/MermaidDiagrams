@@ -6,7 +6,7 @@
  *              keywords, its direction statement, a link's identifier, the start of a link and its node strings.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -34,7 +34,8 @@ struct FlowchartLexerText {
 
     func hasText(_ literal: [UInt8], at position: Int) -> Bool {
         guard position >= 0, position + literal.count <= bytes.count else { return false }
-        return bytes[position..<position + literal.count].elementsEqual(literal)
+        for offset in literal.indices where bytes[position + offset] != literal[offset] { return false }
+        return true
     }
 
     /// The lexer's `kw`: `word` at `position`, not followed by a character of `\w`.
@@ -59,16 +60,16 @@ struct FlowchartLexerText {
     func startsKeywordOrAccessibility(at position: Int) -> Bool {
         switch byte(at: position) {
         case UInt8(ascii: "a"):
-            for word in [Self.accessibilityTitle, Self.accessibilityDescription] where hasText(word, at: position) {
-                let after = byte(at: endOfSpaces(from: position + word.count))
-                if after == MermaidByte.colon || (word == Self.accessibilityDescription && after == MermaidByte.openingBrace) { return true }
-            }
-            return false
+            // `accTitle` and `accDescr` have the same length.
+            let isTitle = hasText(Self.accessibilityTitle, at: position)
+            guard isTitle || hasText(Self.accessibilityDescription, at: position) else { return false }
+            let after = byte(at: endOfSpaces(from: position + Self.accessibilityTitle.count))
+            return after == MermaidByte.colon || (!isTitle && after == MermaidByte.openingBrace)
         case MermaidByte.atSign: return byte(at: position + 1) == MermaidByte.openingBrace
         case UInt8(ascii: "c"):
             return isWordAndSpace(Self.call, at: position) || isKeyword(Self.classDefinition, at: position) || isKeyword(Self.classWord, at: position)
                 || isWordAndSpace(Self.click, at: position)
-        case UInt8(ascii: "s"): return [Self.style, Self.swimlane, Self.subgraph].contains { word in isKeyword(word, at: position) }
+        case UInt8(ascii: "s"): return isKeyword(Self.style, at: position) || isKeyword(Self.swimlane, at: position) || isKeyword(Self.subgraph, at: position)
         case UInt8(ascii: "l"): return isKeyword(Self.linkStyle, at: position)
         case UInt8(ascii: "i"): return isKeyword(Self.interpolate, at: position)
         case UInt8(ascii: "h"): return hasText(Self.hypertextReference, at: position) && JavaScriptWhitespace.length(in: bytes, at: position + 4) > 0
@@ -95,7 +96,8 @@ struct FlowchartLexerText {
 
     /// The position after the `@` that ends a link's identifier starting at `position`, or nil.
     func endOfLinkIdentifier(at position: Int) -> Int? {
-        guard let first = byte(at: position), first != MermaidByte.quotationMark, JavaScriptWhitespace.length(in: bytes, at: position) == 0 else { return nil }
+        guard lookAhead.hasLinkIdentifierEnds, let first = byte(at: position), first != MermaidByte.quotationMark,
+              JavaScriptWhitespace.length(in: bytes, at: position) == 0 else { return nil }
         return lookAhead.lastLinkIdentifierEnd(inWordFrom: position).map { atSign in atSign + 1 }
     }
 
@@ -115,14 +117,17 @@ struct FlowchartLexerText {
 
     /// `[xo<]?-?\.+-` at `position`: a dotted link with no text, its mark optional.
     private func isDottedLink(markedAt position: Int) -> Bool {
-        var starts = [position]
-        if let mark = byte(at: position), mark == MermaidByte.letterX || mark == MermaidByte.letterO || mark == MermaidByte.lessThan { starts.insert(position + 1, at: 0) }
-        return starts.contains { start in
-            var index = start
-            if byte(at: index) == MermaidByte.hyphen { index += 1 }
-            let periods = run(of: MermaidByte.period, at: index)
-            return periods > 0 && byte(at: index + periods) == MermaidByte.hyphen
-        }
+        if let mark = byte(at: position), mark == MermaidByte.letterX || mark == MermaidByte.letterO || mark == MermaidByte.lessThan,
+           isDottedLinkWithoutMark(at: position + 1) { return true }
+        return isDottedLinkWithoutMark(at: position)
+    }
+
+    /// `-?\.+-` at `start`.
+    private func isDottedLinkWithoutMark(at start: Int) -> Bool {
+        var index = start
+        if byte(at: index) == MermaidByte.hyphen { index += 1 }
+        let periods = run(of: MermaidByte.period, at: index)
+        return periods > 0 && byte(at: index + periods) == MermaidByte.hyphen
     }
 
     private func run(of sign: UInt8, at position: Int) -> Int {

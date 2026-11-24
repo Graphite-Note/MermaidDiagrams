@@ -5,7 +5,7 @@
  * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -42,6 +42,21 @@ struct MermaidTextCursor {
 
     var isAtEnd: Bool { position >= bytes.count }
 
+    /// A place the cursor was at, to come back to: a lookahead that keeps it costs no copy of the cursor.
+    struct Mark {
+        fileprivate let position: Int
+        fileprivate let line: Int
+    }
+
+    /// The place the cursor is at.
+    var mark: Mark { Mark(position: position, line: line) }
+
+    /// Moves the cursor back to a place it was at.
+    mutating func move(to mark: Mark) {
+        position = mark.position
+        line = mark.line
+    }
+
     /// The byte `offset` places ahead, or nil past the end.
     func peek(_ offset: Int = 0) -> UInt8? {
         let index = position + offset
@@ -59,7 +74,7 @@ struct MermaidTextCursor {
     /// Whether the bytes at the position are `literal`, compared exactly.
     func hasPrefix(_ literal: [UInt8]) -> Bool {
         guard position + literal.count <= bytes.count else { return false }
-        for (offset, byte) in literal.enumerated() where bytes[position + offset] != byte { return false }
+        for offset in literal.indices where bytes[position + offset] != literal[offset] { return false }
         return true
     }
 
@@ -72,17 +87,20 @@ struct MermaidTextCursor {
 
     /// Skips spaces and tabs, never a line break.
     mutating func skipSpaces() {
-        while let byte = peek(), MermaidByte.isSpace(byte) { advance() }
+        while position < bytes.count, MermaidByte.isSpace(bytes[position]) { position += 1 }
     }
 
     /// Skips spaces, tabs, carriage returns and line breaks.
     mutating func skipWhitespace() {
-        while let byte = peek(), MermaidByte.isSpace(byte) || byte == MermaidByte.newline || byte == MermaidByte.carriageReturn { advance() }
+        while position < bytes.count, case let byte = bytes[position], MermaidByte.isWhitespace(byte) {
+            if byte == MermaidByte.newline { line += 1 }
+            position += 1
+        }
     }
 
     /// Moves to the line break that ends the current line, or to the end.
     mutating func skipToEndOfLine() {
-        while let byte = peek(), byte != MermaidByte.newline { advance() }
+        while position < bytes.count, bytes[position] != MermaidByte.newline { position += 1 }
     }
 
     /// The text of the bytes from `start` to `end`.
@@ -122,6 +140,20 @@ struct MermaidTextCursor {
             }
         }
         return position > start ? text(from: start, to: position) : nil
+    }
+
+    /// Where the run of ASCII letters from the position ends; the position when there is none.
+    func endOfLetters() -> Int {
+        var end = position
+        while end < bytes.count, MermaidByte.isLetter(bytes[end]) { end += 1 }
+        return end
+    }
+
+    /// Whether the bytes from `start` to `end` are `literal`.
+    func bytes(from start: Int, to end: Int, equal literal: [UInt8]) -> Bool {
+        guard end - start == literal.count else { return false }
+        for offset in literal.indices where bytes[start + offset] != literal[offset] { return false }
+        return true
     }
 
     /// Reads ASCII letters only, for a keyword. Nil when there is none.

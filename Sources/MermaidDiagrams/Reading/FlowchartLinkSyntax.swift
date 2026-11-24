@@ -5,7 +5,7 @@
  * Description: Reads a flowchart's link: its stroke, its marks, its length, its text and the identifier before it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -29,18 +29,20 @@ enum FlowchartLinkSyntax {
     /// Reads a link at the cursor, or returns nil and leaves the cursor where it was when none starts there; `text` is
     /// the cursor's text as the lexer tests it.
     static func readLink(_ cursor: inout MermaidTextCursor, in text: FlowchartLexerText) throws(MermaidDiagramReadError) -> FlowchartLink? {
-        var lookahead = cursor
+        let start = cursor.mark
         var identifier: String?
         // Pele's `LINK_ID`: the characters up to the last `@` of the run, which neither `{` nor `"` follows; spaces may
         // stand between it and the link, as Pele's link pattern starts with any.
         if let end = text.endOfLinkIdentifier(at: cursor.position) {
             identifier = cursor.text(from: cursor.position, to: end - 1)
-            lookahead.advance(by: end - cursor.position)
-            lookahead.skipSpaces()
+            cursor.advance(by: end - cursor.position)
+            cursor.skipSpaces()
         }
-        guard var link = try readOperator(&lookahead) else { return nil }
+        guard var link = try readOperator(&cursor) else {
+            cursor.move(to: start)
+            return nil
+        }
         link.identifier = identifier
-        cursor = lookahead
         cursor.skipSpaces()
         if cursor.peek() == MermaidByte.verticalBar {
             let openingLine = cursor.line
@@ -57,17 +59,17 @@ enum FlowchartLinkSyntax {
             cursor.advance(by: tildeCount)
             return FlowchartLink(stroke: .invisible, sourceArrowhead: .none, targetArrowhead: .none, minimumRankSpan: tildeCount - 2)
         }
-        var lookahead = cursor
-        let sourceArrowhead = readSourceArrowhead(&lookahead)
+        let start = cursor.mark
+        let sourceArrowhead = readSourceArrowhead(&cursor)
         let link: FlowchartLink?
-        switch lookahead.peek() {
-        case MermaidByte.equals: link = try readRun(of: MermaidByte.equals, stroke: .thick, sourceArrowhead: sourceArrowhead, &lookahead)
-        case MermaidByte.hyphen where lookahead.peek(1) == MermaidByte.period:
-            link = try readDotted(sourceArrowhead: sourceArrowhead, &lookahead)
-        case MermaidByte.hyphen: link = try readRun(of: MermaidByte.hyphen, stroke: .solid, sourceArrowhead: sourceArrowhead, &lookahead)
+        switch cursor.peek() {
+        case MermaidByte.equals: link = try readRun(of: MermaidByte.equals, stroke: .thick, sourceArrowhead: sourceArrowhead, &cursor)
+        case MermaidByte.hyphen where cursor.peek(1) == MermaidByte.period:
+            link = try readDotted(sourceArrowhead: sourceArrowhead, &cursor)
+        case MermaidByte.hyphen: link = try readRun(of: MermaidByte.hyphen, stroke: .solid, sourceArrowhead: sourceArrowhead, &cursor)
         default: link = nil
         }
-        if link != nil { cursor = lookahead }
+        if link == nil { cursor.move(to: start) }
         return link
     }
 

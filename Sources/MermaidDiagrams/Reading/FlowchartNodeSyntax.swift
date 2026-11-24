@@ -5,7 +5,7 @@
  * Description: Reads what follows a flowchart node's identifier: a shape in brackets around its text, or attributes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -53,8 +53,11 @@ enum FlowchartNodeSyntax {
     /// Reads a shape and its text at the cursor, which is right after the identifier, or returns nil and leaves the
     /// cursor where it was when no shape opens there.
     static func readShape(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartNodeDefinition? {
+        // Every opening starts with one of these; most nodes named again have none.
+        guard let first = cursor.peek(), first == UInt8(ascii: "(") || first == MermaidByte.openingBracket || first == MermaidByte.openingBrace
+            || first == MermaidByte.greaterThan else { return nil }
         if cursor.hasPrefix(propertyOpening) { return try readRectangleWithProperty(&cursor) }
-        guard let brackets = shapeBrackets.first(where: { brackets in cursor.hasPrefix(brackets.opening) }) else { return nil }
+        guard let brackets = shapeBrackets.first(where: { brackets in brackets.opening[0] == first && cursor.hasPrefix(brackets.opening) }) else { return nil }
         let openingLine = cursor.line
         cursor.advance(by: brackets.opening.count)
         let (label, closingIndex) = try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: brackets.closingTexts, state: brackets.textState,

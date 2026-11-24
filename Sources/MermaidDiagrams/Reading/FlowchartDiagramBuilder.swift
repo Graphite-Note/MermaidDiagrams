@@ -5,7 +5,7 @@
  * Description: Collects a flowchart as its statements are read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -15,7 +15,18 @@
 struct FlowchartDiagramBuilder {
     private var diagram = FlowchartDiagram()
     private let limits: MermaidDiagramLimits
+    /// The nodes by identifier, compared as Swift's strings are; kept only once `keepsIdentifierDictionary`, and made
+    /// from the nodes when it starts (`keepIdentifierDictionary()`).
     private var nodeIndexByIdentifier: [String: Int] = [:]
+    /// Whether `nodeIndexByIdentifier` holds every node. Until an identifier beyond ASCII is written or a style names a
+    /// node, every node was named by ASCII bytes, which are equal as strings only when they are equal as bytes, so the
+    /// identifier table alone says whether an identifier names a node and no string is hashed.
+    private var keepsIdentifierDictionary = false
+    /// The nodes by the bytes of the identifiers written for them, which the parser looks up before making a string.
+    private var identifierTable: FlowchartIdentifierTable
+    /// For each node, where in the text the brackets and text its shape and label were last set by were written, or an
+    /// empty range when attributes set them since, or nothing has.
+    private var shapeSources: [Range<Int>] = []
     /// Identifiers given to edges (`e1@-->`), whose `e1@{ … }` sets an edge's attributes rather than a node's.
     private var edgeIdentifiers: Set<String> = []
     /// The groups open now, outermost first.
@@ -56,28 +67,86 @@ struct FlowchartDiagramBuilder {
         }
     }
 
-    init(limits: MermaidDiagramLimits) {
+    /// - Parameter expectedNodeCount: About how many nodes the text names (its lines), which the lists are made for.
+    init(limits: MermaidDiagramLimits, expectedNodeCount: Int = 0) {
         self.limits = limits
+        let nodeCount = min(max(expectedNodeCount, 0), limits.maximumNodeCount, Self.largestReservedCount)
+        identifierTable = FlowchartIdentifierTable(expectedCount: nodeCount)
+        diagram.nodes.reserveCapacity(nodeCount)
+        shapeSources.reserveCapacity(nodeCount)
+        diagram.edges.reserveCapacity(min(nodeCount, limits.maximumEdgeCount))
     }
 
-    /// The index of the node named `identifier`, added with its identifier as its text the first time it is named.
-    /// A node named inside a group joins the innermost one.
-    mutating func nodeIndex(for identifier: String) throws(MermaidDiagramReadError) -> Int {
+    /// The most nodes and edges the lists are made for before the text is read; more grow them.
+    private static let largestReservedCount = 1024
+
+    /// The index of the node named by the identifier written from `start` to `end` of `bytes`, the text the parser reads,
+    /// and whether it is new. A new node is added without its text: the parser gives it the text written with it or
+    /// its identifier (`giveIdentifierAsLabel(toNodeAt:)`) before it reads on. A node named inside a group joins the
+    /// innermost one. The identifier is made a string only when its bytes have not named a node before; the dictionary of
+    /// strings, once kept, then says whether another spelling Swift counts as the same string has.
+    mutating func nodeIndex(forIdentifierIn bytes: [UInt8], from start: Int, to end: Int) throws(MermaidDiagramReadError) -> (index: Int, isNew: Bool) {
+        let (hash, isASCII) = FlowchartIdentifierTable.hash(of: bytes, from: start, to: end)
+        if let existing = identifierTable.nodeIndex(in: bytes, from: start, to: end, hash: hash) {
+            if !openSubgraphs.isEmpty { openSubgraphs[openSubgraphs.count - 1].add(memberName: String(decoding: bytes[start..<end], as: UTF8.self)) }
+            return (existing, false)
+        }
+        if !isASCII { keepIdentifierDictionary() }
+        let identifier = String(decoding: bytes[start..<end], as: UTF8.self)
         let index: Int
-        if let existing = nodeIndexByIdentifier[identifier] {
+        let isNew: Bool
+        if keepsIdentifierDictionary, let existing = nodeIndexByIdentifier[identifier] {
             index = existing
+            isNew = false
         } else {
             guard diagram.nodes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
             index = diagram.nodes.count
-            diagram.nodes.append(FlowchartNode(identifier: identifier, label: Self.defaultLabel(identifier)))
-            nodeIndexByIdentifier[identifier] = index
+            isNew = true
+            diagram.nodes.append(FlowchartNode(identifier: identifier, label: Self.labelNotGivenYet))
+            shapeSources.append(0..<0)
+            if keepsIdentifierDictionary { nodeIndexByIdentifier[identifier] = index }
         }
+        identifierTable.add(from: start, to: end, hash: hash, nodeIndex: index)
         if !openSubgraphs.isEmpty { openSubgraphs[openSubgraphs.count - 1].add(memberName: identifier) }
-        return index
+        return (index, isNew)
+    }
+
+    /// Starts keeping `nodeIndexByIdentifier`, made from the nodes named so far (each named by a different string).
+    private mutating func keepIdentifierDictionary() {
+        guard !keepsIdentifierDictionary else { return }
+        keepsIdentifierDictionary = true
+        nodeIndexByIdentifier.reserveCapacity(diagram.nodes.count)
+        for index in diagram.nodes.indices { nodeIndexByIdentifier[diagram.nodes[index].identifier] = index }
+    }
+
+    /// A new node's label until the parser gives it one, never left on a node.
+    private static let labelNotGivenYet = DiagramLabel(lines: [])
+
+    /// A new node written without text shows its identifier.
+    mutating func giveIdentifierAsLabel(toNodeAt index: Int) {
+        diagram.nodes[index].label = Self.defaultLabel(diagram.nodes[index].identifier)
+    }
+
+    /// The length of the brackets and text the node's shape was last written with, when `bytes` from `position` start
+    /// with them again: read again they give the shape and label the node has (the reading of brackets looks at no byte
+    /// past their closing), so the parser moves past them. Nil when they are not written again or attributes set the
+    /// node since.
+    func lengthOfShapeWrittenAgain(forNodeAt index: Int, in bytes: [UInt8], at position: Int) -> Int? {
+        let source = shapeSources[index]
+        guard !source.isEmpty, position + source.count <= bytes.count else { return nil }
+        for offset in 0..<source.count where bytes[position + offset] != bytes[source.lowerBound + offset] { return nil }
+        return source.count
+    }
+
+    /// A node's shape and text written in brackets from `start` to `end` of the text, which replace what it had.
+    mutating func define(nodeAt index: Int, asShapeWrittenFrom start: Int, to end: Int, _ definition: FlowchartNodeDefinition) {
+        define(nodeAt: index, as: definition)
+        shapeSources[index] = start..<end
     }
 
     /// A later definition of a node replaces what an earlier one set, as in Mermaid.
     mutating func define(nodeAt index: Int, as definition: FlowchartNodeDefinition) {
+        shapeSources[index] = 0..<0
         if let shape = definition.shape { diagram.nodes[index].shape = shape }
         if let label = definition.label { diagram.nodes[index].label = label }
         if definition.asksForCollapsedView { collapsedIdentifiers.insert(diagram.nodes[index].identifier) }
@@ -126,6 +195,9 @@ struct FlowchartDiagramBuilder {
         edgeIdentifiers.contains(identifier)
     }
 
+    /// Whether any edge has been given an identifier.
+    var hasEdgeIdentifiers: Bool { !edgeIdentifiers.isEmpty }
+
     /// Opens a group; `identifier` is nil when the text gives none, and Mermaid's is made as the group ends.
     mutating func openSubgraph(identifier: String?, title: DiagramLabel) {
         openSubgraphs.append(OpenSubgraph(writtenIdentifier: identifier, title: title, openingOrder: openedSubgraphCount))
@@ -165,9 +237,14 @@ struct FlowchartDiagramBuilder {
     }
 
     /// The flowchart read, its groups nested and ordered (`FlowchartSubgraphNesting`), its nodes and edges styled.
-    func finishedDiagram() -> FlowchartDiagram {
-        var finished = diagram
-        finished.subgraphs = FlowchartSubgraphNesting.subgraphs(endedSubgraphs, nodeIndexByIdentifier: nodeIndexByIdentifier,
+    mutating func finishedDiagram() -> FlowchartDiagram {
+        // The groups and the statements that style nodes find nodes by identifier.
+        if !endedSubgraphs.isEmpty || !classAssignments.isEmpty || !nodeStyleStatements.isEmpty { keepIdentifierDictionary() }
+        // The builder is done: the diagram moves out of it, so that styling the nodes and edges changes them in place.
+        var finished = FlowchartDiagram()
+        swap(&finished, &diagram)
+        finished.subgraphs = FlowchartSubgraphNesting.subgraphs(endedSubgraphs, endedIndexByIdentifier: endedSubgraphIndexByIdentifier,
+                                                                nodeIndexByIdentifier: nodeIndexByIdentifier,
                                                                 collapsedIdentifiers: collapsedIdentifiers)
         finished.unappliedStatementCount += applyStyles(to: &finished)
         return finished
@@ -182,6 +259,9 @@ struct FlowchartDiagramBuilder {
     /// A node takes the `default` class, then its classes in the order they were given, then its own `style`. Returns how
     /// many `class` and `style` statements named no node (a group's, whose box is not styled yet, or none at all).
     private func styleNodes(of diagram: inout FlowchartDiagram) -> Int {
+        let defaultStyle = classStyles["default"] ?? DiagramElementStyle()
+        // Without classes given or styles written, every node takes the default class, and none at all leaves each nil.
+        if classAssignments.isEmpty, nodeStyleStatements.isEmpty, defaultStyle.isEmpty { return 0 }
         var unappliedCount = 0
         var classNamesByNode: [Int: [String]] = [:]
         for assignment in classAssignments {
@@ -199,7 +279,6 @@ struct FlowchartDiagramBuilder {
             }
             ownStylesByNode[node] = (ownStylesByNode[node] ?? DiagramElementStyle()).overridden(by: statement.style)
         }
-        let defaultStyle = classStyles["default"] ?? DiagramElementStyle()
         for node in diagram.nodes.indices {
             var style = defaultStyle
             for className in classNamesByNode[node] ?? [] { style = style.overridden(by: classStyles[className] ?? DiagramElementStyle()) }
@@ -211,6 +290,8 @@ struct FlowchartDiagramBuilder {
 
     /// An edge takes `linkStyle default`, then the `linkStyle` of its index. Returns how many indexes named no edge.
     private func styleEdges(of diagram: inout FlowchartDiagram) -> Int {
+        // Without `linkStyle`, every edge's style stays nil.
+        if linkStyleStatements.isEmpty { return 0 }
         var unappliedCount = 0
         var defaultEdgeStyle = DiagramElementStyle()
         var edgeStyles: [Int: DiagramElementStyle] = [:]
@@ -269,11 +350,13 @@ struct FlowchartDiagramBuilder {
     /// `addVertex`), without making it a member of an open group, as Pele's parser lists no member for a style statement.
     /// A group's own identifier is left to the group, and past the node limit nothing is added (the style is then unapplied).
     private mutating func addNodeNamedByStyle(_ identifier: String) {
+        keepIdentifierDictionary()
         guard nodeIndexByIdentifier[identifier] == nil, endedSubgraphIndexByIdentifier[identifier] == nil,
               !openSubgraphs.contains(where: { group in group.writtenIdentifier == identifier }),
               diagram.nodes.count < limits.maximumNodeCount else { return }
         nodeIndexByIdentifier[identifier] = diagram.nodes.count
         diagram.nodes.append(FlowchartNode(identifier: identifier, label: Self.defaultLabel(identifier)))
+        shapeSources.append(0..<0)
     }
 
     /// The label of a node written without text: its identifier, drawn as Pele draws a vertex's text, which is its
