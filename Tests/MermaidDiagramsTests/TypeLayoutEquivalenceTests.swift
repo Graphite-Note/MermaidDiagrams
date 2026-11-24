@@ -7,7 +7,7 @@
  *              grids measured and placed, and the XY chart's numbers written.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -76,6 +76,45 @@ final class TypeLayoutEquivalenceTests: XCTestCase {
             compared += 1
         }
         XCTAssertEqual(compared, 600)
+    }
+
+    /// Fans of 21 to 60 bands into and out of one node, and columns of as many nodes: past 20 elements Swift's sort
+    /// searches for runs instead of inserting, so a list already in order is left as it is by a different path.
+    private func randomSankeyFanRows(_ generator: inout SeededGenerator) -> String {
+        let fanCount = Int.random(in: 21...60, using: &generator)
+        let values = ["1", "2", "3", "2.5", "10", "0.5", "7", "none", "0"]
+        var rows: [String] = []
+        for index in 0..<fanCount {
+            rows.append("in\(index),hub,\(values.randomElement(using: &generator) ?? "1")")
+            rows.append("hub,out\(index),\(values.randomElement(using: &generator) ?? "1")")
+            if Bool.random(using: &generator) {
+                rows.append("out\(index),last\(Int.random(in: 0..<3, using: &generator)),\(values.randomElement(using: &generator) ?? "1")")
+            }
+        }
+        return "sankey\n" + rows.joined(separator: "\n")
+    }
+
+    func testWideSankeyFansGetExactlyTheReferencePlacement() throws {
+        var generator = SeededGenerator(state: 24_11_2026)
+        let alignments: [SankeyNodeAlignment] = [.justify, .left, .right, .center]
+        var longestList = 0
+        for _ in 0..<120 {
+            let diagram = try SankeyReading.diagram(randomSankeyFanRows(&generator))
+            let options = SankeyPlacement.Options(width: [600, 1200].randomElement(using: &generator) ?? 600,
+                                                  height: [400, 120, 2400].randomElement(using: &generator) ?? 400,
+                                                  nodeWidth: 10, nodePadding: [12, 0, 4].randomElement(using: &generator) ?? 12,
+                                                  labelHeight: [0, 14].randomElement(using: &generator) ?? 0,
+                                                  alignment: alignments.randomElement(using: &generator) ?? .justify)
+            let placement = try SankeyPlacement(diagram: diagram, options: options)
+            let reference = try SankeyPlacementReference(diagram: diagram, options: options)
+            longestList = max(longestList, placement.columns.map(\.count).max() ?? 0)
+            XCTAssertEqual(placement.columns, reference.columns)
+            XCTAssertEqual(placement.nodes.map(\.y.bitPattern), reference.nodes.map(\.y.bitPattern))
+            XCTAssertEqual(placement.nodes.map(\.height.bitPattern), reference.nodes.map(\.height.bitPattern))
+            XCTAssertEqual(placement.links.map(\.sourceY.bitPattern), reference.links.map(\.sourceY.bitPattern))
+            XCTAssertEqual(placement.links.map(\.targetY.bitPattern), reference.links.map(\.targetY.bitPattern))
+        }
+        XCTAssertGreaterThan(longestList, 20, "the fans should make columns longer than Swift's insertion sort handles")
     }
 
     // MARK: - Venn
