@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: The bytes of an SVG document as the writer builds it: room made sure of once for a piece or a whole
  *              element, then literals, escaped text, compact numbers and path elements written unchecked through a
- *              cursor over one block of memory, the thread's scratch block or one of the buffer's own.
+ *              cursor over one block of memory, the thread's scratch block or one of the buffer's own; a run of path
+ *              elements written by a writer handed the cursor.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
