@@ -2,8 +2,9 @@
  * File: LayeredFlatArenaTests.swift
  * ---------------------------------
  * Layer: Tests
- * Description: The layered layout's link lists keep each key's links in order, and a layout run in a scratch arena
- *              that other layouts used, or within another use of it, gives what it gives in a fresh one.
+ * Description: The layered layout's link lists keep each key's links in order, a layout run in a scratch arena that
+ *              other layouts used, or within another use of it, gives what it gives in a fresh one, and a large graph
+ *              leaves no more than the arena's limit behind.
  *
  * Authors: Bahey Shalash
  * Version: 0.2
@@ -56,6 +57,29 @@ final class LayeredFlatArenaTests: XCTestCase {
             for index in graphs.indices { XCTAssertEqual(Self.laidOut(graphs[index]), fresh[index], "nested graph \(index)") }
             XCTAssertTrue(held.allSatisfy { value in value == 7 })
         }
+    }
+
+    /// A graph far larger than the arena keeps (2,000 nodes, 6,000 edges of which a third labelled, so about 30,000
+    /// vertices) is laid out, nested within another use of the arena, and leaves the thread's arena holding no more
+    /// than `retainedByteLimit` once the outermost use ends: a hostile graph does not leave its memory behind.
+    func testALargeGraphLeavesNoMoreThanTheRetainedLimitBehind() {
+        var generator = LayeredWorkspaceGenerator(seed: 0xB16_6AF)
+        let nodeCount = 2_000
+        var nodes = (0..<nodeCount).map { _ in LayeredFlatNode(width: 40, height: 20) }
+        var edges = (0..<6_000).map { index in
+            LayeredFlatEdge(tail: Int.random(in: 0..<nodeCount, using: &generator), head: Int.random(in: 0..<nodeCount, using: &generator),
+                            labelWidth: index % 3 == 0 ? 30 : 0, labelHeight: index % 3 == 0 ? 14 : 0)
+        }
+        let result = DiagramScratchArena.withCurrentThread { arena in
+            let held = arena.span(count: 1_000, repeating: 3)
+            let result = LayeredFlatLayout.layout(nodes: &nodes, edges: &edges, options: LayeredCompoundTesting.options)
+            XCTAssertTrue(held.allSatisfy { value in value == 3 })
+            XCTAssertGreaterThan(arena.heldByteCount, DiagramScratchArena.retainedByteLimit)
+            return result
+        }
+        XCTAssertNotNil(result)
+        XCTAssertTrue(edges.allSatisfy { edge in edge.tail == edge.head || edge.points.count >= 2 })
+        XCTAssertLessThanOrEqual(DiagramScratchArena.current.heldByteCount, DiagramScratchArena.retainedByteLimit)
     }
 
     private struct Graph {
