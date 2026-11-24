@@ -2,11 +2,12 @@
  * File: StateDiagramDrawingParts.swift
  * ------------------------------------
  * Layer: Core
- * Description: A laid-out state diagram's geometry grouped by how it is painted, back to front as Pele draws it.
+ * Description: A laid-out state diagram's geometry grouped by how it is painted, back to front as Pele draws it, as
+ *              Core Graphics paths or in any kind a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -63,99 +64,120 @@ public struct StateDiagramDrawingParts {
 
     public init(layout: StateDiagramLayout) {
         composites = FlowchartClusterDrawingParts(clusters: layout.composites)
-        let rules = CGMutablePath()
-        for composite in layout.composites {
-            guard let title = composite.title else { continue }
-            let band = composite.frame.minY + title.size.height + StateDiagramClusterGraph.titleRoom
-            rules.move(to: CGPoint(x: composite.frame.minX, y: band))
-            rules.addLine(to: CGPoint(x: composite.frame.maxX, y: band))
-        }
-        compositeTitleRules = rules
-        let dividers = CGMutablePath()
-        for divider in layout.regionDividers { dividers.addPath(DiagramEdgeDrawing.path(divider)) }
-        regionDividers = dividers
-        let transitions = TransitionPaths(transitions: layout.transitions, notes: layout.notes)
-        let states = StatePaths(states: layout.states)
-        let notes = NotePaths(notes: layout.notes)
-        transitionLines = transitions.lines
-        noteConnectors = transitions.noteConnectors
-        arrows = transitions.arrows
-        transitionTextPatches = transitions.textPatches
+        let paths = StateDiagramPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        compositeTitleRules = paths.compositeTitleRules.path
+        regionDividers = paths.regionDividers.path
+        transitionLines = paths.transitionLines.path
+        noteConnectors = paths.noteConnectors.path
+        arrows = paths.arrows.path
+        transitionTextPatches = paths.transitionTextPatches.path
         transitionTexts = layout.transitions.compactMap(\.text)
-        stateFills = states.fills
-        stateOutlines = states.outlines
-        endRings = states.endRings
-        solidMarks = states.solidMarks
+        stateFills = paths.stateFills.path
+        stateOutlines = paths.stateOutlines.path
+        endRings = paths.endRings.path
+        solidMarks = paths.solidMarks.path
         stateTexts = layout.states.flatMap { state in [state.name, state.details].compactMap { text in text } }
-        noteSheets = notes.sheets
-        noteFolds = notes.folds
+        noteSheets = paths.noteSheets.path
+        noteFolds = paths.noteFolds.path
         noteTexts = layout.notes.map(\.text)
         title = layout.title
     }
+}
 
-    /// The transitions' lines and arrows, the patches behind their text, and the lines to the notes.
-    private struct TransitionPaths {
-        let lines = CGMutablePath()
-        let noteConnectors = CGMutablePath()
-        let arrows = CGMutablePath()
-        let textPatches = CGMutablePath()
+/// The paths of `StateDiagramDrawingParts` in any kind a drawing records: Core Graphics paths or lanes of the scene's
+/// workspace. A shape made whole (a box, an ellipse, an edge's line) is made for a moment, added where it is painted and
+/// given back.
+struct StateDiagramPaths<Path: DiagramPathRecording> {
+    let compositeTitleRules: Path
+    let regionDividers: Path
+    let transitionLines: Path
+    let noteConnectors: Path
+    let arrows: Path
+    let transitionTextPatches: Path
+    let stateFills: Path
+    let stateOutlines: Path
+    let endRings: Path
+    let solidMarks: Path
+    let noteSheets: Path
+    let noteFolds: Path
 
-        init(transitions: [StateDiagramLayoutTransition], notes: [StateDiagramLayoutNote]) {
-            // A transition's arrow is only filled: nothing is ever stroked.
-            let strokedMarks = CGMutablePath()
-            for transition in transitions {
-                lines.addPath(DiagramEdgeDrawing.path(transition.path))
-                DiagramEdgeDrawing.addMark(transition.arrow, filled: arrows, stroked: strokedMarks)
-                if let text = transition.text {
-                    let patch = text.frame.insetBy(dx: -StateDiagramDrawingParts.transitionTextPatchExtraWidth / 2, dy: 0)
-                    textPatches.addPath(CGPath(roundedRect: patch, cornerWidth: StateDiagramDrawingParts.transitionTextPatchCornerRadius,
-                                               cornerHeight: StateDiagramDrawingParts.transitionTextPatchCornerRadius, transform: nil))
-                }
-            }
-            for note in notes { noteConnectors.addPath(DiagramEdgeDrawing.path(note.connector)) }
+    init<Maker: DiagramPathMaking>(layout: StateDiagramLayout, making maker: Maker) where Maker.Path == Path {
+        compositeTitleRules = maker.makePath()
+        for composite in layout.composites {
+            guard let title = composite.title else { continue }
+            let band = composite.frame.minY + title.size.height + StateDiagramClusterGraph.titleRoom
+            compositeTitleRules.move(to: CGPoint(x: composite.frame.minX, y: band))
+            compositeTitleRules.addLine(to: CGPoint(x: composite.frame.maxX, y: band))
+        }
+        regionDividers = maker.makePath()
+        for divider in layout.regionDividers { Self.add(divider, to: regionDividers, making: maker) }
+        transitionLines = maker.makePath()
+        noteConnectors = maker.makePath()
+        arrows = maker.makePath()
+        transitionTextPatches = maker.makePath()
+        Self.addTransitions(of: layout, lines: transitionLines, arrows: arrows, textPatches: transitionTextPatches, making: maker)
+        for note in layout.notes { Self.add(note.connector, to: noteConnectors, making: maker) }
+        stateFills = maker.makePath()
+        stateOutlines = maker.makePath()
+        endRings = maker.makePath()
+        solidMarks = maker.makePath()
+        let shapes = (fills: stateFills, outlines: stateOutlines, endRings: endRings, solidMarks: solidMarks)
+        for state in layout.states { Self.addShape(of: state, to: shapes, making: maker) }
+        noteSheets = maker.makePath()
+        noteFolds = maker.makePath()
+        for note in layout.notes {
+            let madeCount = maker.madePathCount
+            noteSheets.addPath(StateDiagramShapeDrawing.noteSheet(in: note.frame, making: maker))
+            noteFolds.addPath(StateDiagramShapeDrawing.noteFold(in: note.frame, making: maker))
+            maker.givePathsBack(downTo: madeCount)
         }
     }
 
-    /// The states' shapes, by how each part is painted.
-    private struct StatePaths {
-        let fills = CGMutablePath()
-        let outlines = CGMutablePath()
-        let endRings = CGMutablePath()
-        let solidMarks = CGMutablePath()
-
-        init(states: [StateDiagramLayoutState]) {
-            for state in states {
-                let frame = state.frame
-                switch state.kind {
-                case .state:
-                    let box = StateDiagramShapeDrawing.box(in: frame)
-                    fills.addPath(box)
-                    outlines.addPath(box)
-                    if state.details != nil, let name = state.name { outlines.addPath(StateDiagramShapeDrawing.rule(in: frame, below: name)) }
-                case .choice:
-                    let diamond = StateDiagramShapeDrawing.diamond(in: frame)
-                    fills.addPath(diamond)
-                    outlines.addPath(diamond)
-                case .start: solidMarks.addEllipse(in: frame)
-                case .end:
-                    endRings.addPath(StateDiagramShapeDrawing.endRing(in: frame))
-                    solidMarks.addPath(StateDiagramShapeDrawing.endDot(in: frame))
-                case .fork, .join: solidMarks.addPath(StateDiagramShapeDrawing.bar(in: frame))
-                }
+    /// The transitions' lines, their arrows and the patches behind their text.
+    private static func addTransitions<Maker: DiagramPathMaking>(of layout: StateDiagramLayout, lines: Path, arrows: Path, textPatches: Path,
+                                                                 making maker: Maker) where Maker.Path == Path {
+        // A transition's arrow is only filled: nothing is ever stroked.
+        let strokedMarks = maker.makePath()
+        for transition in layout.transitions {
+            add(transition.path, to: lines, making: maker)
+            DiagramEdgeDrawing.addMark(transition.arrow, filled: arrows, stroked: strokedMarks)
+            if let text = transition.text {
+                let madeCount = maker.madePathCount
+                let patch = text.frame.insetBy(dx: -StateDiagramDrawingParts.transitionTextPatchExtraWidth / 2, dy: 0)
+                textPatches.addPath(maker.roundedRectangle(patch, cornerWidth: StateDiagramDrawingParts.transitionTextPatchCornerRadius,
+                                                           cornerHeight: StateDiagramDrawingParts.transitionTextPatchCornerRadius))
+                maker.givePathsBack(downTo: madeCount)
             }
         }
     }
 
-    /// The notes' sheets and folds.
-    private struct NotePaths {
-        let sheets = CGMutablePath()
-        let folds = CGMutablePath()
+    /// A line recorded on its own and added to `grouped`, as `CGMutablePath.addPath(_:)` adds it.
+    private static func add<Maker: DiagramPathMaking>(_ line: DiagramPath, to grouped: Path, making maker: Maker) where Maker.Path == Path {
+        let madeCount = maker.madePathCount
+        let drawn = maker.makePath()
+        DiagramEdgeDrawing.record(line, into: drawn)
+        grouped.addPath(drawn)
+        maker.givePathsBack(downTo: madeCount)
+    }
 
-        init(notes: [StateDiagramLayoutNote]) {
-            for note in notes {
-                sheets.addPath(StateDiagramShapeDrawing.noteSheet(in: note.frame))
-                folds.addPath(StateDiagramShapeDrawing.noteFold(in: note.frame))
-            }
+    /// A state's shape, by how each part is painted.
+    private static func addShape<Maker: DiagramPathMaking>(of state: StateDiagramLayoutState,
+                                                           to shapes: (fills: Path, outlines: Path, endRings: Path, solidMarks: Path),
+                                                           making maker: Maker) where Maker.Path == Path {
+        let madeCount = maker.madePathCount
+        defer { maker.givePathsBack(downTo: madeCount) }
+        let frame = state.frame
+        switch state.kind {
+        case .state:
+            shapes.fills.addPath(StateDiagramShapeDrawing.box(in: frame, making: maker), alsoTo: shapes.outlines)
+            if state.details != nil, let name = state.name { shapes.outlines.addPath(StateDiagramShapeDrawing.rule(in: frame, below: name, making: maker)) }
+        case .choice:
+            shapes.fills.addPath(StateDiagramShapeDrawing.diamond(in: frame, making: maker), alsoTo: shapes.outlines)
+        case .start: shapes.solidMarks.addEllipse(in: frame)
+        case .end:
+            shapes.endRings.addPath(StateDiagramShapeDrawing.endRing(in: frame, making: maker))
+            shapes.solidMarks.addPath(StateDiagramShapeDrawing.endDot(in: frame, making: maker))
+        case .fork, .join: shapes.solidMarks.addPath(StateDiagramShapeDrawing.bar(in: frame, making: maker))
         }
     }
 }
