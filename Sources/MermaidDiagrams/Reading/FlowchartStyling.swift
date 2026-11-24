@@ -106,7 +106,7 @@ extension FlowchartParser {
             ownStylesByNode[node] = (ownStylesByNode[node] ?? DiagramElementStyle()).overridden(by: statement.style)
         }
         let defaultStyle = styling.classStyles["default"] ?? DiagramElementStyle()
-        parts.nodeStyles = parts.nodes.indices.map { node in
+        parts.rare.nodeStyles = parts.nodes.indices.map { node in
             var style = defaultStyle
             for className in classNamesByNode[node] ?? [] { style = style.overridden(by: styling.classStyles[className] ?? DiagramElementStyle()) }
             style = style.overridden(by: ownStylesByNode[node] ?? DiagramElementStyle())
@@ -131,7 +131,7 @@ extension FlowchartParser {
                 edgeStyles[index] = (edgeStyles[index] ?? DiagramElementStyle()).overridden(by: statement.style)
             }
         }
-        parts.edgeStyles = parts.edges.indices.map { edge in
+        parts.rare.edgeStyles = parts.edges.indices.map { edge in
             let style = defaultEdgeStyle.overridden(by: edgeStyles[edge] ?? DiagramElementStyle())
             return style.isEmpty ? nil : style
         }

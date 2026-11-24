@@ -25,14 +25,11 @@ struct MermaidFrontEndResult {
     let frontMatterTitle: String?
     /// The keyword that names the diagram's type (`flowchart`, `stateDiagram-v2`).
     let keyword: MermaidTextRange
+    /// The keyword's type, told from its bytes.
+    let typeKeyword: MermaidTypeKeyword
 
     /// The keyword as text.
     var keywordText: String { text.string(keyword) }
-
-    /// The keyword's type, told from its bytes.
-    var typeKeyword: MermaidTypeKeyword {
-        text.withBytes { bytes in MermaidTypeKeyword(UnsafeBufferPointer(rebasing: bytes[keyword.lowerBound..<keyword.upperBound])) }
-    }
 }
 
 /// Reads a text up to its type's keyword, as Pele's `preprocess` and its type detection read it. One scan of the
@@ -46,12 +43,13 @@ enum MermaidFrontEnd {
         guard isUnchanged else {
             let (title, cursor) = try MermaidDiagramReader.preprocessed(source)
             let text = MermaidSourceText(bytes: cursor.bytes)
-            let keyword = try keywordRange(in: text, from: cursor.position)
+            let (keyword, type) = try keywordRange(in: text, from: cursor.position)
             return MermaidFrontEndResult(text: text, sourceBytes: cursor.sourceBytes, readFrontMatter: cursor.readFrontMatter,
-                                         frontMatterTitle: title, keyword: keyword)
+                                         frontMatterTitle: title, keyword: keyword, typeKeyword: type)
         }
-        let text = MermaidSourceText(string: string)
-        return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: nil, frontMatterTitle: nil, keyword: try keywordRange(in: text, from: 0))
+        let text = MermaidSourceText(contiguousString: string)
+        let (keyword, type) = try keywordRange(in: text, from: 0)
+        return MermaidFrontEndResult(text: text, sourceBytes: nil, readFrontMatter: nil, frontMatterTitle: nil, keyword: keyword, typeKeyword: type)
     }
 
     /// Whether preprocessing leaves `bytes` as they are: no byte order mark, no carriage return, no tag attribute to
@@ -81,8 +79,9 @@ enum MermaidFrontEnd {
 
     /// The type's keyword after `start`, past blank space and comments, each to the end of its line: a letter, then
     /// letters, digits and `-`. Refused as no diagram at the text's end, else as text that names no type.
-    private static func keywordRange(in text: MermaidSourceText, from start: Int) throws(MermaidDiagramReadError) -> MermaidTextRange {
-        let found: Result<MermaidTextRange, MermaidDiagramReadError> = text.withBytes { bytes in
+    private static func keywordRange(in text: MermaidSourceText,
+                                     from start: Int) throws(MermaidDiagramReadError) -> (MermaidTextRange, MermaidTypeKeyword) {
+        let found: Result<(MermaidTextRange, MermaidTypeKeyword), MermaidDiagramReadError> = text.withBytes { bytes in
             var position = start
             while true {
                 while position < bytes.count, MermaidByte.isWhitespace(bytes[position]) { position += 1 }
@@ -98,7 +97,8 @@ enum MermaidFrontEnd {
             while position < bytes.count, case let byte = bytes[position], MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.hyphen {
                 position += 1
             }
-            return .success(MermaidTextRange(start: keywordStart, end: position))
+            return .success((MermaidTextRange(start: keywordStart, end: position),
+                             MermaidTypeKeyword(UnsafeBufferPointer(rebasing: bytes[keywordStart..<position]))))
         }
         return try found.get()
     }

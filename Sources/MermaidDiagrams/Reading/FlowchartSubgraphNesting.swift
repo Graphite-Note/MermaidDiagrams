@@ -33,29 +33,29 @@ extension FlowchartParser {
         let order = preorder(parents: parents, children: children)
         var place = [Int32](repeating: 0, count: groupCount)
         for (position, group) in order.enumerated() { place[group] = Int32(position) }
-        parts.groups.reserveCapacity(groupCount)
+        parts.rare.groups.reserveCapacity(groupCount)
         for endedIndex in order { addGroup(endedIndex, children: children[endedIndex], place: place) }
     }
 
     /// The model's record of the ended group at `endedIndex`: its node members, then its children by their places.
     private mutating func addGroup(_ endedIndex: Int, children: [Int], place: [Int32]) {
         let group = lists.endedGroups[endedIndex]
-        let nodesStart = Int32(parts.groupMembers.count)
+        let nodesStart = Int32(parts.rare.groupMembers.count)
         var run = Int(group.firstRun)
         while run >= 0 {
             let members = lists.memberRuns[run]
             for place in Int(members.start)..<Int(members.start + members.count) {
                 let member = lists.names.names[Int(lists.endedMembers[place])]
-                if member.endedGroupIndex < 0, member.nodeIndex >= 0 { parts.groupMembers.append(member.nodeIndex) }
+                if member.endedGroupIndex < 0, member.nodeIndex >= 0 { parts.rare.groupMembers.append(member.nodeIndex) }
             }
             run = Int(members.next)
         }
-        let childrenStart = Int32(parts.groupMembers.count)
-        for child in children { parts.groupMembers.append(place[child]) }
+        let childrenStart = Int32(parts.rare.groupMembers.count)
+        for child in children { parts.rare.groupMembers.append(place[child]) }
         let name = lists.names.names[Int(group.name)]
-        parts.groups.append(FlowchartGroupRecord(identifier: group.writtenIdentifier, generatedNumber: group.generatedNumber, title: group.title,
+        parts.rare.groups.append(FlowchartGroupRecord(identifier: group.writtenIdentifier, generatedNumber: group.generatedNumber, title: group.title,
                                                  direction: group.direction, representingNodeIndex: name.nodeIndex, isCollapsed: name.isCollapsed,
-                                                 nodeIndices: nodesStart..<childrenStart, childGroupIndices: childrenStart..<Int32(parts.groupMembers.count)))
+                                                 nodeIndices: nodesStart..<childrenStart, childGroupIndices: childrenStart..<Int32(parts.rare.groupMembers.count)))
     }
 
     /// A group cannot be reached from the top when its parents loop; the last such group to end loses its parent,

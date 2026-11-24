@@ -119,7 +119,7 @@ extension FlowchartParser {
            parts.label(node.label, in: bytes) == DiagramLabel(parts.string(node.identifier, in: bytes)) {
             node.label = FlowchartLabelReference(kind: .line, range: .empty)
         }
-        var attributes = node.assetIndex >= 0 ? parts.assetAttributes[Int(node.assetIndex)] : FlowchartNodeAssetAttributes()
+        var attributes = node.assetIndex >= 0 ? parts.rare.assetAttributes[Int(node.assetIndex)] : FlowchartNodeAssetAttributes()
         attributes.icon = written.icon ?? attributes.icon
         attributes.image = written.image ?? attributes.image
         attributes.form = written.form ?? attributes.form
@@ -128,10 +128,10 @@ extension FlowchartParser {
         attributes.height = written.height ?? attributes.height
         attributes.constraint = written.constraint ?? attributes.constraint
         if node.assetIndex >= 0 {
-            parts.assetAttributes[Int(node.assetIndex)] = attributes
+            parts.rare.assetAttributes[Int(node.assetIndex)] = attributes
         } else {
-            node.assetIndex = Int32(parts.assetAttributes.count)
-            parts.assetAttributes.append(attributes)
+            node.assetIndex = Int32(parts.rare.assetAttributes.count)
+            parts.rare.assetAttributes.append(attributes)
         }
         parts.nodes[place] = node
     }

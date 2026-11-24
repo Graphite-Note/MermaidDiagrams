@@ -10,10 +10,8 @@
  * Date: 24/11/2026
  */
 
-/// A flowchart's model while it is read.
-struct FlowchartModelParts {
-    var nodes: [FlowchartNodeRecord] = []
-    var edges: [FlowchartEdgeRecord] = []
+/// The lists of a flowchart's model that few flowcharts fill, in one box made when the first is written to.
+final class FlowchartRareModelParts {
     var groups: [FlowchartGroupRecord] = []
     var groupMembers: [Int32] = []
     var decodedLabels: [DiagramLabel] = []
@@ -21,15 +19,31 @@ struct FlowchartModelParts {
     var nodeStyles: [DiagramElementStyle?] = []
     var edgeStyles: [DiagramElementStyle?] = []
     var sideBytes: [UInt8] = []
+}
+
+/// A flowchart's model while it is read: its nodes and edges, and the box of the rest when anything is in it.
+struct FlowchartModelParts {
+    var nodes: [FlowchartNodeRecord] = []
+    var edges: [FlowchartEdgeRecord] = []
+    private(set) var rareIfAny: FlowchartRareModelParts?
+
+    /// The box of the rarer lists, made when it is first asked for.
+    var rare: FlowchartRareModelParts {
+        mutating get {
+            if let rareIfAny { return rareIfAny }
+            let made = FlowchartRareModelParts()
+            rareIfAny = made
+            return made
+        }
+    }
 
     /// The model over `text`, its lists moved out of these parts, which are left empty.
     mutating func takeModel(text: MermaidSourceText) -> FlowchartModel {
-        let hasExtras = !groups.isEmpty || !decodedLabels.isEmpty || !assetAttributes.isEmpty || !nodeStyles.isEmpty || !edgeStyles.isEmpty
-            || !sideBytes.isEmpty
-        let extras = hasExtras ? FlowchartModelExtras(groups: Self.taken(&groups), groupMembers: Self.taken(&groupMembers),
-                                                      decodedLabels: Self.taken(&decodedLabels), assetAttributes: Self.taken(&assetAttributes),
-                                                      nodeStyles: Self.taken(&nodeStyles), edgeStyles: Self.taken(&edgeStyles),
-                                                      sideBytes: Self.taken(&sideBytes)) : nil
+        let extras = rareIfAny.map { rare in
+            FlowchartModelExtras(groups: rare.groups, groupMembers: rare.groupMembers, decodedLabels: rare.decodedLabels,
+                                 assetAttributes: rare.assetAttributes, nodeStyles: rare.nodeStyles, edgeStyles: rare.edgeStyles, sideBytes: rare.sideBytes)
+        }
+        rareIfAny = nil
         return FlowchartModel(text: text, nodes: Self.taken(&nodes), edges: Self.taken(&edges), extras: extras)
     }
 
@@ -44,7 +58,7 @@ struct FlowchartModelParts {
     func string(_ range: MermaidTextRange, in bytes: FlowchartBytes) -> String {
         guard range.start < 0 else { return bytes.string(from: range.lowerBound, to: range.upperBound) }
         let start = Int(~range.start)
-        return String(decoding: sideBytes[start..<start + range.count], as: UTF8.self)
+        return String(decoding: (rareIfAny?.sideBytes ?? [])[start..<start + range.count], as: UTF8.self)
     }
 
     /// The label a reference stands for, decoded now.
@@ -54,14 +68,15 @@ struct FlowchartModelParts {
         case .line: DiagramLabel(lines: [string(reference.range, in: bytes)])
         case .plain: DiagramLabelDecoder.label(from: string(reference.range, in: bytes), form: .plain)
         case .markdown: DiagramLabelDecoder.label(from: string(reference.range, in: bytes), form: .markdown)
-        case .decoded: decodedLabels[reference.range.lowerBound]
+        case .decoded: rareIfAny?.decodedLabels[reference.range.lowerBound]
         }
     }
 
     /// `bytes` added to the side bytes, by their range there.
     mutating func sideRange(of bytes: [UInt8]) -> MermaidTextRange {
-        let start = sideBytes.count
-        sideBytes.append(contentsOf: bytes)
+        let side = rare
+        let start = side.sideBytes.count
+        side.sideBytes.append(contentsOf: bytes)
         return MermaidTextRange(start: Int(~Int32(start)), end: Int(~Int32(start)) + bytes.count)
     }
 }

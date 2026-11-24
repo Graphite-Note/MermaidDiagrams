@@ -165,8 +165,8 @@ extension FlowchartParser {
 
     /// A label decoded while reading, kept by its index.
     mutating func decoded(_ label: DiagramLabel) -> FlowchartLabelReference {
-        parts.decodedLabels.append(label)
-        return .decoded(at: parts.decodedLabels.count - 1)
+        parts.rare.decodedLabels.append(label)
+        return .decoded(at: parts.rare.decodedLabels.count - 1)
     }
 
     /// `written` without its quotation marks (`"…"`) and, inside them, a Markdown string's backticks, on bytes: the

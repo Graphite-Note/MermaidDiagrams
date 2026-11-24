@@ -74,11 +74,10 @@ extension FlowchartParser {
     private mutating func readStyleStatement(_ keyword: FlowchartStyleKeyword, keywordAt keywordStart: Int) throws(MermaidDiagramReadError) {
         let statementStart = position
         skipStatement()
-        let text = trimmedText(from: statementStart, to: position)
         guard FlowchartStyleGrammar.isReadByPele(keyword: keyword, in: bytes, from: statementStart, to: position) else {
-            throw .invalidSyntax(line: bytes.line(at: keywordStart), problem: .unexpectedText(text))
+            throw .invalidSyntax(line: bytes.line(at: keywordStart), problem: .unexpectedText(trimmedText(from: statementStart, to: position)))
         }
-        apply(FlowchartStyleSyntax.statement(keyword: keyword.text, text: text))
+        apply(FlowchartStyleSyntax.statement(keyword: keyword, in: bytes, range: trimmedRange(from: statementStart, to: position)))
     }
 
     /// `accTitle: text`, to the end of the line.

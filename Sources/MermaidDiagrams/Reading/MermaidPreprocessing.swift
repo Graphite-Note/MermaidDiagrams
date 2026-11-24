@@ -114,7 +114,10 @@ enum MermaidPreprocessing {
         var positions: [Int] = []
         var index = 0
         while index < lastClose {
-            guard bytes[index] == MermaidByte.lessThan, FlowchartBytes.isWord(bytes[index + 1]) else {
+            // The next `<` is looked for sixteen bytes at a time.
+            guard let opening = firstIndex(of: MermaidByte.lessThan, in: bytes, from: index), opening < lastClose else { break }
+            index = opening
+            guard FlowchartBytes.isWord(bytes[index + 1]) else {
                 index += 1
                 continue
             }

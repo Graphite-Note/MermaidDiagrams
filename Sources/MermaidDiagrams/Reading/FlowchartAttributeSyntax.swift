@@ -59,12 +59,14 @@ extension FlowchartParser {
         if let shape = values.shape, !shape.isEmpty { definition.shape = try shapeNamed(shape, openedAt: opening) }
         if let label = values.label {
             if !label.isEmpty {
-                let labelType = values.labelType.map { range in bytes.string(from: range.lowerBound, to: range.upperBound) }
-                definition.label = writtenLabel(label, form: labelType == "string" || labelType == "text" ? .plain : .markdown)
+                let isPlain = values.labelType.map { range in
+                    (range.count == 6 && bytes.hasText("string", at: range.lowerBound)) || (range.count == 4 && bytes.hasText("text", at: range.lowerBound))
+                } ?? false
+                definition.label = writtenLabel(label, form: isPlain ? .plain : .markdown)
             }
             definition.hasBlankWrittenLabel = label.allSatisfy { index in Self.isASCIIWhitespace(bytes.base[index]) }
         }
-        if let view = values.view { definition.asksForCollapsedView = bytes.string(from: view.lowerBound, to: view.upperBound) == "collapsed" }
+        if let view = values.view { definition.asksForCollapsedView = view.count == 9 && bytes.hasText("collapsed", at: view.lowerBound) }
         guard values.hasAssetAttributes else { return definition }
         func text(_ range: Range<Int>?) -> String? {
             guard let range, !range.isEmpty else { return nil }

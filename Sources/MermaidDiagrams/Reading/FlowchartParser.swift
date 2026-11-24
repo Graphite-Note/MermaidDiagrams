@@ -66,7 +66,10 @@ struct FlowchartParser {
                 }
             }
         }
-        return try read.get()
+        switch consume read {
+        case .success(let diagram): return diagram
+        case .failure(let error): throw error
+        }
     }
 
     private mutating func read(text: MermaidSourceText, title: String?) throws(MermaidDiagramReadError) -> FlowchartDiagram {

@@ -50,6 +50,12 @@ struct MermaidSourceText: Sendable {
         count = contiguous.utf8.count
     }
 
+    /// `string`, whose UTF-8 bytes the caller made contiguous (`makeContiguousUTF8`).
+    init(contiguousString string: String) {
+        storage = .string(string)
+        count = string.utf8.count
+    }
+
     init(bytes: [UInt8]) {
         storage = .bytes(bytes)
         count = bytes.count

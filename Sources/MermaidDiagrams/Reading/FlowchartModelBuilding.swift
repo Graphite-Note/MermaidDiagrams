@@ -23,33 +23,33 @@ extension FlowchartModel {
         }
         func reference(_ label: DiagramLabel?) -> FlowchartLabelReference {
             guard let label else { return .none }
-            parts.decodedLabels.append(label)
-            return .decoded(at: parts.decodedLabels.count - 1)
+            parts.rare.decodedLabels.append(label)
+            return .decoded(at: parts.rare.decodedLabels.count - 1)
         }
         parts.nodes.reserveCapacity(nodes.count)
         for node in nodes {
             var record = FlowchartNodeRecord(identifier: appended(node.identifier), label: reference(node.label), shape: node.shape)
             if node.assetAttributes != FlowchartNodeAssetAttributes() {
-                record.assetIndex = Int32(parts.assetAttributes.count)
-                parts.assetAttributes.append(node.assetAttributes)
+                record.assetIndex = Int32(parts.rare.assetAttributes.count)
+                parts.rare.assetAttributes.append(node.assetAttributes)
             }
             parts.nodes.append(record)
         }
-        if nodes.contains(where: { node in node.style != nil }) { parts.nodeStyles = nodes.map(\.style) }
+        if nodes.contains(where: { node in node.style != nil }) { parts.rare.nodeStyles = nodes.map(\.style) }
         parts.edges = edges.map { edge in
             FlowchartEdgeRecord(sourceIndex: Int32(edge.sourceIndex), targetIndex: Int32(edge.targetIndex), minimumRankSpan: Int32(edge.minimumRankSpan),
                                 stroke: edge.stroke, sourceArrowhead: edge.sourceArrowhead, targetArrowhead: edge.targetArrowhead, label: reference(edge.label))
         }
-        if edges.contains(where: { edge in edge.style != nil }) { parts.edgeStyles = edges.map(\.style) }
+        if edges.contains(where: { edge in edge.style != nil }) { parts.rare.edgeStyles = edges.map(\.style) }
         for subgraph in subgraphs {
-            let nodesStart = Int32(parts.groupMembers.count)
-            parts.groupMembers.append(contentsOf: subgraph.nodeIndices.map(Int32.init))
-            let childrenStart = Int32(parts.groupMembers.count)
-            parts.groupMembers.append(contentsOf: subgraph.childSubgraphIndices.map(Int32.init))
-            parts.groups.append(FlowchartGroupRecord(identifier: appended(subgraph.identifier), generatedNumber: -1, title: reference(subgraph.title),
+            let nodesStart = Int32(parts.rare.groupMembers.count)
+            parts.rare.groupMembers.append(contentsOf: subgraph.nodeIndices.map(Int32.init))
+            let childrenStart = Int32(parts.rare.groupMembers.count)
+            parts.rare.groupMembers.append(contentsOf: subgraph.childSubgraphIndices.map(Int32.init))
+            parts.rare.groups.append(FlowchartGroupRecord(identifier: appended(subgraph.identifier), generatedNumber: -1, title: reference(subgraph.title),
                                                      direction: subgraph.direction, representingNodeIndex: Int32(subgraph.representingNodeIndex ?? -1),
                                                      isCollapsed: subgraph.isCollapsed, nodeIndices: nodesStart..<childrenStart,
-                                                     childGroupIndices: childrenStart..<Int32(parts.groupMembers.count)))
+                                                     childGroupIndices: childrenStart..<Int32(parts.rare.groupMembers.count)))
         }
         self = parts.takeModel(text: MermaidSourceText(bytes: bytes))
     }
