@@ -5,8 +5,8 @@
  * Description: An entity relationship diagram laid out on a page, with its groups' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -62,11 +62,11 @@ public enum EntityRelationshipColumn: Equatable, Sendable, CaseIterable {
 public struct EntityRelationshipLayoutRelationship: Equatable, Sendable {
     public let identification: EntityRelationshipIdentification
     /// The line, from the first entity's box to the second's; the marks are drawn over its ends.
-    public let path: DiagramPath
-    public let firstEntityMark: EntityRelationshipCardinalityMark
-    public let secondEntityMark: EntityRelationshipCardinalityMark
+    public internal(set) var path: DiagramPath
+    public internal(set) var firstEntityMark: EntityRelationshipCardinalityMark
+    public internal(set) var secondEntityMark: EntityRelationshipCardinalityMark
     /// The label, drawn on a patch of the background, or nil.
-    public let label: DiagramTextBlock?
+    public internal(set) var label: DiagramTextBlock?
 }
 
 /// A cardinality drawn where a relationship's line meets a box.
@@ -101,6 +101,16 @@ extension EntityRelationshipLayoutRelationship {
         EntityRelationshipLayoutRelationship(identification: identification, path: path.translated(by: offset),
                                              firstEntityMark: firstEntityMark.translated(by: offset),
                                              secondEntityMark: secondEntityMark.translated(by: offset), label: label?.translated(by: offset))
+    }
+}
+
+extension EntityRelationshipLayoutRelationship {
+    /// Moved by `offset` where it stands, each point as `translated(by:)` moves it: its path's points in their own list.
+    mutating func translate(by offset: CGVector) {
+        path.translate(by: offset)
+        firstEntityMark = firstEntityMark.translated(by: offset)
+        secondEntityMark = secondEntityMark.translated(by: offset)
+        label = label?.translated(by: offset)
     }
 }
 

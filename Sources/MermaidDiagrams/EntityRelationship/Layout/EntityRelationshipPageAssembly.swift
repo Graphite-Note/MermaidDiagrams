@@ -5,8 +5,8 @@
  * Description: Puts a placed entity relationship diagram on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -44,36 +44,80 @@ struct EntityRelationshipPageAssembly {
         relationships = Array(repeating: nil, count: diagram.relationships.count)
     }
 
-    mutating func placeBoxes(flowCenters: [CGPoint]) {
-        boxCenters = flowCenters.map(axes.pagePoint)
+    /// The boxes of a diagram laid out in ranks, at their flat nodes' centers.
+    mutating func placeBoxes(flowNodes: ScratchSpan<LayeredFlatNode>) {
+        boxCenters.reserveCapacity(flowNodes.count)
+        for node in flowNodes { boxCenters.append(axes.pagePoint(CGPoint(x: node.x, y: node.y))) }
     }
 
-    /// The relationships between two different entities, along their routes. `layeredIndices[i]` is the
-    /// relationship of the placement's `i`-th route.
-    mutating func placeRelationships(layeredIndices: [Int], placement: LayeredPlacement) {
-        var ends: [EntityRelationshipEdgePorts.End] = []
-        for (layeredIndex, index) in layeredIndices.enumerated() {
-            let route = placement.edgeRoutes[layeredIndex]
-            let relationship = diagram.relationships[index]
-            ends.append(EntityRelationshipEdgePorts.End(relationshipIndex: index, isFirstEntityEnd: true, entity: relationship.firstEntityIndex,
-                                                        side: route[1].y > route[0].y ? axes.downstreamSide : axes.upstreamSide,
-                                                        neighborAcross: route[1].x))
-            ends.append(EntityRelationshipEdgePorts.End(relationshipIndex: index, isFirstEntityEnd: false, entity: relationship.secondEntityIndex,
-                                                        side: route[route.count - 2].y < route[route.count - 1].y ? axes.upstreamSide : axes.downstreamSide,
-                                                        neighborAcross: route[route.count - 2].x))
-        }
-        let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: diagram.relationships.count, boxCenters: boxCenters,
-                                                boxSizes: measured.boxes.map(\.size))
-        for (layeredIndex, index) in layeredIndices.enumerated() {
+    /// The relationships between two different entities, along their routes. `layeredIndices[i]` is the relationship of
+    /// the flat layout's `i`-th edge, whose route runs from its first entity's center to its second's through its
+    /// path's inner points.
+    mutating func placeRelationships(layeredIndices: ScratchSpan<Int>, nodes: ScratchSpan<LayeredFlatNode>, edges laidOut: ScratchSpan<LayeredSpanEdge>,
+                                     points: ScratchSpan<CGPoint>) {
+        let routes = RankedRoutes(nodes: nodes, edges: laidOut, points: points)
+        let ends = rankedEnds(layeredIndices: layeredIndices, routes: routes)
+        var boxSizes: [CGSize] = []
+        boxSizes.reserveCapacity(measured.boxes.count)
+        for box in measured.boxes { boxSizes.append(box.size) }
+        let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: diagram.relationships.count, boxCenters: boxCenters, boxSizes: boxSizes)
+        for layeredIndex in 0..<layeredIndices.count {
+            let index = layeredIndices[layeredIndex]
             guard let start = ports.firstEntityPoints[index], let end = ports.secondEntityPoints[index] else { continue }
-            let route = placement.edgeRoutes[layeredIndex]
-            let points = [start] + route.dropFirst().dropLast().map(axes.pagePoint) + [end]
-            let labelCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint) ?? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+            let count = routes.count(of: layeredIndex)
+            var routePoints: [CGPoint] = []
+            routePoints.reserveCapacity(count)
+            routePoints.append(start)
+            for pointIndex in 1..<(count - 1) { routePoints.append(axes.pagePoint(routes.point(pointIndex, count: count, of: layeredIndex))) }
+            routePoints.append(end)
+            let edge = laidOut[layeredIndex]
+            let labelCenter = edge.labelWidth > 0 ? axes.pagePoint(edge.labelCenter) : CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
             let startSide = ends[2 * layeredIndex].side
             let endSide = ends[2 * layeredIndex + 1].side
-            relationships[index] = relationship(at: index, along: points, leaving: EntityRelationshipEdgePorts.outward(from: startSide),
+            relationships[index] = relationship(at: index, along: routePoints, leaving: EntityRelationshipEdgePorts.outward(from: startSide),
                                                 arriving: EntityRelationshipEdgePorts.outward(from: endSide), labelCenter: labelCenter)
         }
+    }
+
+    /// The flat layout's routes in flow space, each from its first entity's center to its second's through its path's
+    /// inner points.
+    private struct RankedRoutes {
+        let nodes: ScratchSpan<LayeredFlatNode>
+        let edges: ScratchSpan<LayeredSpanEdge>
+        let points: ScratchSpan<CGPoint>
+
+        func count(of layeredIndex: Int) -> Int {
+            let edge = edges[layeredIndex]
+            return edge.pointStart >= 0 && edge.pointCount > 2 ? edge.pointCount : 2
+        }
+
+        /// The route's point `index`, of `count`: the centers at its ends, the path's inner points between.
+        func point(_ index: Int, count: Int, of layeredIndex: Int) -> CGPoint {
+            let edge = edges[layeredIndex]
+            if index == 0 { return CGPoint(x: nodes[edge.tail].x, y: nodes[edge.tail].y) }
+            if index == count - 1 { return CGPoint(x: nodes[edge.head].x, y: nodes[edge.head].y) }
+            return points[edge.pointStart + index]
+        }
+    }
+
+    /// The two ends of each route on the sides of their boxes facing it, the first entity's then the second's.
+    private func rankedEnds(layeredIndices: ScratchSpan<Int>, routes: RankedRoutes) -> [EntityRelationshipEdgePorts.End] {
+        var ends: [EntityRelationshipEdgePorts.End] = []
+        ends.reserveCapacity(2 * layeredIndices.count)
+        for layeredIndex in 0..<layeredIndices.count {
+            let index = layeredIndices[layeredIndex]
+            let count = routes.count(of: layeredIndex)
+            let first = routes.point(0, count: count, of: layeredIndex)
+            let second = routes.point(1, count: count, of: layeredIndex)
+            let beforeLast = routes.point(count - 2, count: count, of: layeredIndex)
+            let last = routes.point(count - 1, count: count, of: layeredIndex)
+            let relationship = diagram.relationships[index]
+            ends.append(EntityRelationshipEdgePorts.End(relationshipIndex: index, isFirstEntityEnd: true, entity: relationship.firstEntityIndex,
+                                                        side: second.y > first.y ? axes.downstreamSide : axes.upstreamSide, neighborAcross: second.x))
+            ends.append(EntityRelationshipEdgePorts.End(relationshipIndex: index, isFirstEntityEnd: false, entity: relationship.secondEntityIndex,
+                                                        side: beforeLast.y < last.y ? axes.upstreamSide : axes.downstreamSide, neighborAcross: beforeLast.x))
+        }
+        return ends
     }
 
     /// A relationship along `points`, from the first box's side to the second's. `leaving` and `arriving` point out
@@ -169,28 +213,15 @@ struct EntityRelationshipPageAssembly {
     }
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
-    /// title, and centered under the title when the title is wider.
+    /// title, and centered under the title when the title is wider. Each part is placed once where it is moved to.
     func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> EntityRelationshipLayout {
-        // An entity that stands for a group is its box, not an entity.
-        let drawnEntities = measured.boxes.enumerated().filter { entity, _ in representedSubgraphs.isEmpty || representedSubgraphs[entity] == nil }
-        let entities = drawnEntities.map { entity, box in
-            let origin = CGVector(dx: boxCenters[entity].x - box.size.width / 2, dy: boxCenters[entity].y - box.size.height / 2)
-            return EntityRelationshipLayoutEntity(frame: CGRect(origin: .zero, size: box.size), name: box.name, rows: box.rows).translated(by: origin)
+        // An entity that stands for a group is its box, not an entity: each drawn entity's top left corner.
+        var drawnEntities: [(entity: Int, origin: CGVector)] = []
+        drawnEntities.reserveCapacity(measured.boxes.count)
+        for (entity, box) in measured.boxes.enumerated() where representedSubgraphs.isEmpty || representedSubgraphs[entity] == nil {
+            drawnEntities.append((entity, CGVector(dx: boxCenters[entity].x - box.size.width / 2, dy: boxCenters[entity].y - box.size.height / 2)))
         }
-        let placedRelationships = relationships.compactMap { relationship in relationship }
-        // A group's loops widen the drawing by their reach, Pele's, which holds their labels without the room others take.
-        let groupLoops = groupLoopIndices.compactMap { index in relationships[index] }
-        let otherRelationships = relationships.indices.compactMap { index in groupLoopIndices.contains(index) ? nil : relationships[index] }
-        var bounds = EntityRelationshipLayoutBounds.union(entities: entities, relationships: otherRelationships)
-        if !groupLoops.isEmpty {
-            bounds = bounds.union(EntityRelationshipLayoutBounds.union(entities: [], relationships: groupLoops.map { loop in
-                EntityRelationshipLayoutRelationship(identification: loop.identification, path: loop.path, firstEntityMark: loop.firstEntityMark,
-                                                     secondEntityMark: loop.secondEntityMark, label: nil)
-            }))
-        }
-        for loop in groupLoops { if let label = loop.label { bounds = bounds.union(label.frame) } }
-        for box in subgraphBoxes { bounds = bounds.union(box.frame) }
-        for reach in loopReaches { bounds = bounds.union(reach) }
+        let bounds = drawingBounds(drawnEntities: drawnEntities)
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
         let titleHeight = title == nil ? 0 : titleSize.height + titleGap
@@ -198,8 +229,41 @@ struct EntityRelationshipPageAssembly {
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (bounds.height + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        return EntityRelationshipLayout(size: size, font: font, entities: entities.map { entity in entity.translated(by: offset) },
-                                        relationships: placedRelationships.map { relationship in relationship.translated(by: offset) }, title: placedTitle,
-                                        subgraphs: subgraphBoxes.map { box in box.translated(by: offset) })
+        var entities: [EntityRelationshipLayoutEntity] = []
+        entities.reserveCapacity(drawnEntities.count)
+        for drawn in drawnEntities { entities.append(measured.boxes[drawn.entity].placed(origin: drawn.origin, offset: offset)) }
+        var placedRelationships: [EntityRelationshipLayoutRelationship] = []
+        placedRelationships.reserveCapacity(relationships.count)
+        for relationship in relationships {
+            guard var placed = relationship else { continue }
+            placed.translate(by: offset)
+            placedRelationships.append(placed)
+        }
+        var placedSubgraphs = subgraphBoxes
+        for index in placedSubgraphs.indices { placedSubgraphs[index] = placedSubgraphs[index].translated(by: offset) }
+        return EntityRelationshipLayout(size: size, font: font, entities: entities, relationships: placedRelationships, title: placedTitle,
+                                        subgraphs: placedSubgraphs)
+    }
+
+    /// The rectangle the drawing covers: the drawn entities' boxes, then the relationships but a group's loops, then those
+    /// loops without their labels, their labels, the groups' boxes and the loops' reach, each taken in that order.
+    private func drawingBounds(drawnEntities: [(entity: Int, origin: CGVector)]) -> CGRect {
+        var bounds = CGRect.null
+        for drawn in drawnEntities { bounds = bounds.union(measured.boxes[drawn.entity].frame(origin: drawn.origin)) }
+        // A group's loops widen the drawing by their reach, Pele's, which holds their labels without the room others take.
+        for index in relationships.indices where !groupLoopIndices.contains(index) {
+            if let relationship = relationships[index] { bounds = EntityRelationshipLayoutBounds.union(bounds, relationship: relationship) }
+        }
+        bounds = bounds.isNull ? .zero : bounds
+        let groupLoops = groupLoopIndices.compactMap { index in relationships[index] }
+        if !groupLoops.isEmpty {
+            var loopBounds = CGRect.null
+            for loop in groupLoops { loopBounds = EntityRelationshipLayoutBounds.union(loopBounds, relationship: loop, includesLabel: false) }
+            bounds = bounds.union(loopBounds.isNull ? .zero : loopBounds)
+        }
+        for loop in groupLoops { if let label = loop.label { bounds = bounds.union(label.frame) } }
+        for box in subgraphBoxes { bounds = bounds.union(box.frame) }
+        for reach in loopReaches { bounds = bounds.union(reach) }
+        return bounds
     }
 }

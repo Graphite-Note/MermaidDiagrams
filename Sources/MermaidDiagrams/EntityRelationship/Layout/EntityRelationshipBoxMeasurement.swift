@@ -1,10 +1,40 @@
+/**
+ * File: EntityRelationshipBoxMeasurement.swift
+ * --------------------------------------------
+ * Layer: Core
+ * Description: An entity's box sized around its name and attribute table, Pele's, its rows placed when the box is.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
-/// An entity's box measured: its size, and its name and attribute rows placed from the box's top left corner.
+/// An entity's box measured: its size, its name placed from the box's top left corner, and its attribute table, whose
+/// rows are placed when the box is.
 struct EntityRelationshipMeasuredBox {
     let size: CGSize
     let name: DiagramTextBlock
-    let rows: [EntityRelationshipLayoutRow]
+    /// The attribute table, nil for an entity without attributes.
+    let table: EntityRelationshipAttributeTable?
+    /// Where the rows start, below the header.
+    let headerHeight: CGFloat
+    let rowFontSize: CGFloat
+
+    /// The box with its top left corner at `origin`, then moved by `offset`: every place found from the box's corner
+    /// and moved as `translated(by:)` moves it, first by `origin` and then by `offset`.
+    func placed(origin: CGVector, offset: CGVector) -> EntityRelationshipLayoutEntity {
+        let rows = table?.rows(top: headerHeight, width: size.width, inset: EntityRelationshipBoxMeasurement.cellHorizontalPadding, rowFontSize: rowFontSize,
+                               movedBy: origin, then: offset) ?? []
+        return EntityRelationshipLayoutEntity(frame: frame(origin: origin).offsetBy(dx: offset.dx, dy: offset.dy),
+                                              name: name.translated(by: origin).translated(by: offset), rows: rows)
+    }
+
+    /// The box's frame with its top left corner at `origin`, as the box placed there has it.
+    func frame(origin: CGVector) -> CGRect {
+        CGRect(origin: .zero, size: size).offsetBy(dx: origin.dx, dy: origin.dy)
+    }
 }
 
 /// Sizes an entity's box around its text as Pele does: the name 18 points from each side and 12 above and below it,
@@ -31,33 +61,39 @@ enum EntityRelationshipBoxMeasurement {
         guard !entity.attributes.isEmpty else {
             let size = CGSize(width: narrowest, height: max(nameHeight + 2 * nameVerticalPadding, minimumSize.height))
             name.center = CGPoint(x: size.width / 2, y: size.height / 2)
-            return EntityRelationshipMeasuredBox(size: size, name: name, rows: [])
+            return EntityRelationshipMeasuredBox(size: size, name: name, table: nil, headerHeight: 0, rowFontSize: measurers.row.fontSize)
         }
-        let table = EntityRelationshipAttributeTable(cells: entity.attributes.map { attribute in cells(of: attribute, measurers: measurers) },
-                                                     rowLineHeight: measurers.row.lineHeight)
+        var cells: [DiagramTextBlock] = []
+        cells.reserveCapacity(entity.attributes.count * EntityRelationshipAttributeTable.cellsPerRow)
+        // A comment that is not written, and keys that are not, are the same empty label for every attribute.
+        let noLines = DiagramLabel(lines: [])
+        let noKeys = DiagramLabel("")
+        for attribute in entity.attributes { appendCells(of: attribute, measurers: measurers, noLines: noLines, noKeys: noKeys, to: &cells) }
+        let table = EntityRelationshipAttributeTable(cells: cells, rowLineHeight: measurers.row.lineHeight)
         let width = max(narrowest, table.filledWidth + 2 * cellHorizontalPadding)
         let headerHeight = nameHeight + 2 * headerVerticalPadding
         name.center = CGPoint(x: width / 2, y: headerHeight / 2)
-        let rows = table.rows(top: headerHeight, width: width, inset: cellHorizontalPadding, rowFontSize: measurers.row.fontSize)
-        return EntityRelationshipMeasuredBox(size: CGSize(width: width, height: headerHeight + table.height), name: name, rows: rows)
+        return EntityRelationshipMeasuredBox(size: CGSize(width: width, height: headerHeight + table.height), name: name, table: table,
+                                             headerHeight: headerHeight, rowFontSize: measurers.row.fontSize)
     }
 
     /// An attribute's type, name, keys and comment, measured in that order; a cell with nothing to show has no lines.
-    private static func cells<Measurer>(of attribute: EntityRelationshipAttribute,
-                                        measurers: EntityRelationshipTextMeasurers<Measurer>) -> [DiagramTextBlock] {
+    private static func appendCells<Measurer>(of attribute: EntityRelationshipAttribute, measurers: EntityRelationshipTextMeasurers<Measurer>,
+                                              noLines: DiagramLabel, noKeys: DiagramLabel, to cells: inout [DiagramTextBlock]) {
         let unwrapped = CGFloat.greatestFiniteMagnitude
-        let keys = DiagramLabel(attribute.keys.map(\.mermaidKeyword).joined(separator: ", "))
-        return [
-            DiagramTextBlock(label: lines(of: attribute.type), measurer: measurers.row, maximumWidth: unwrapped),
-            DiagramTextBlock(label: lines(of: attribute.name), measurer: measurers.row, maximumWidth: unwrapped),
-            DiagramTextBlock(label: keys, measurer: measurers.key, maximumWidth: unwrapped),
-            DiagramTextBlock(label: attribute.comment ?? DiagramLabel(lines: []), measurer: measurers.row, maximumWidth: commentWrappingWidth),
-        ]
+        let keys = attribute.keys.isEmpty ? noKeys : DiagramLabel(attribute.keys.map(\.mermaidKeyword).joined(separator: ", "))
+        cells.append(DiagramTextBlock(label: lines(of: attribute.type), measurer: measurers.row, maximumWidth: unwrapped))
+        cells.append(DiagramTextBlock(label: lines(of: attribute.name), measurer: measurers.row, maximumWidth: unwrapped))
+        cells.append(DiagramTextBlock(label: keys, measurer: measurers.key, maximumWidth: unwrapped))
+        cells.append(DiagramTextBlock(label: attribute.comment ?? noLines, measurer: measurers.row, maximumWidth: commentWrappingWidth))
     }
 
-    /// A type or a name in backticks may hold line breaks; each starts a line.
+    /// A type or a name in backticks may hold line breaks; each starts a line. A text without a line break or a final
+    /// carriage return is its one line, the label `DiagramLabel(lines:)` makes of it.
     private static func lines(of text: String) -> DiagramLabel {
-        DiagramLabel(lines: text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+        // A line feed, alone or after a carriage return, is byte 10; a final carriage return is byte 13.
+        if !text.utf8.contains(10), text.utf8.last != 13 { return DiagramLabel(lines: [text]) }
+        return DiagramLabel(lines: text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
             String(line.hasSuffix("\r") ? line.dropLast() : line)
         })
     }
