@@ -7,8 +7,8 @@
  *              each line's text made once.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -29,7 +29,7 @@ struct DiagramMeasuredSpan {
 ///
 /// The line's spans are read as one run of UTF-8 bytes, and the spans of the line being filled are ranges of it, so that
 /// pieces are joined and trimmed by moving ends; a line's texts are made when it is ended. Where the measurer adds up
-/// the advances of printable ASCII (`DiagramPrintableASCIIAdvances`), a span of it that a piece of it joins has its width
+/// the advances of printable ASCII (`DiagramFontAdvances`), a span of it that a piece of it joins has its width
 /// continued over the piece's bytes, which is the width of the joined text to the bit; other text is measured joined.
 struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
     private var measuring: DiagramStyledMeasuring<Measurer>
@@ -52,7 +52,7 @@ struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
     /// A span of the line being wrapped: its emphasis and the advances its measurer adds up, if it does.
     private struct SpanFont {
         let style: DiagramTextStyle
-        let advances: DiagramPrintableASCIIAdvances?
+        let advances: DiagramFontAdvances?
     }
 
     /// Wraps into `lines`, after the lines they hold.
@@ -118,7 +118,7 @@ struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
     private mutating func place(_ written: Range<Int>, of bytes: UnsafeBufferPointer<UInt8>, font: SpanFont, softHyphenWidths: SoftHyphenWidths?,
                                 index: Int) {
         var piece = written
-        let isPrintableASCII = bytes[piece].allSatisfy(DiagramPrintableASCIIAdvances.isPrintable)
+        let isPrintableASCII = bytes[piece].allSatisfy(DiagramFontAdvances.isPrintable)
         let pieceWidth = softHyphenWidths?.own[index]
             ?? width(of: piece.lowerBound..<WrappedTextBytes.endTrimmed(bytes[piece]), in: bytes, font: font, isPrintableASCII: isPrintableASCII)
         if width > 0, !fits(piece, of: bytes, index: index, pieceWidth: pieceWidth, style: font.style, softHyphenWidths: softHyphenWidths) {
@@ -203,7 +203,7 @@ struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
     /// The width of `range` of `bytes` in the span's font: added up from its advances where every byte is printable ASCII
     /// and the measurer adds them up, else measured as text. Either way it is the measurer's width of that text.
     private mutating func width(of range: Range<Int>, in bytes: UnsafeBufferPointer<UInt8>, font: SpanFont, isPrintableASCII: Bool? = nil) -> CGFloat {
-        if let advances = font.advances, isPrintableASCII ?? bytes[range].allSatisfy(DiagramPrintableASCIIAdvances.isPrintable) {
+        if let advances = font.advances, isPrintableASCII ?? bytes[range].allSatisfy(DiagramFontAdvances.isPrintable) {
             return advances.width(continuing: 0, over: bytes[range])
         }
         return measuring.width(of: Self.text(bytes, range), style: font.style)

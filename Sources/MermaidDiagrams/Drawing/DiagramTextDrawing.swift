@@ -6,8 +6,8 @@
  *              its emphasis, into a context whose y runs down.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -88,8 +88,9 @@ struct DiagramTextDrawing {
     /// The font at the key's size, in its bold or italic (or both) when it has them, else in the regular font.
     private mutating func coreTextFont(_ key: FontKey) -> CTFont {
         if let made = fontsByKey[key] { return made }
-        let made = CoreTextFontFaces.shared.face(CoreTextFontFaceKey(postScriptName: font.postScriptName, size: key.size, isBold: key.isBold,
-                                                                     isItalic: key.isItalic, isMonospaced: key.isMonospaced)).font
+        let made = DiagramFontFaceRegistry.shared.coreTextFont(of: CoreTextFontFaceKey(postScriptName: font.postScriptName, size: key.size,
+                                                                                       isBold: key.isBold, isItalic: key.isItalic,
+                                                                                       isMonospaced: key.isMonospaced))
         fontsByKey[key] = made
         return made
     }

@@ -6,8 +6,8 @@
  *              each such font made once for the text being measured, and the advances Core Text's measurer adds up.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -20,8 +20,7 @@ protocol DiagramTextStyleVariantMeasuring: DiagramTextMeasuring {
 
 extension CoreTextDiagramTextMeasurer: DiagramTextStyleVariantMeasuring {
     func adding(_ style: DiagramTextStyle) -> CoreTextDiagramTextMeasurer {
-        CoreTextDiagramTextMeasurer(font: diagramFont, isBold: isBold || style.contains(.bold), isItalic: isItalic || style.contains(.italic),
-                                    isMonospaced: isMonospaced || style.contains(.monospaced))
+        CoreTextDiagramTextMeasurer(face: face.adding(style))
     }
 }
 
@@ -41,9 +40,9 @@ struct DiagramStyledMeasuring<Measurer: DiagramTextMeasuring> {
         measurer(for: style).width(of: text)
     }
 
-    /// The advances the measurer of `style` adds up for printable ASCII (`DiagramPrintableASCIIAdvances`): Core Text's
+    /// The advances the measurer of `style` adds up for printable ASCII (`DiagramFontAdvances`): Core Text's
     /// measurer's; nil for any other measurer, whose widths are only of whole texts.
-    mutating func printableASCIIAdvances(of style: DiagramTextStyle) -> DiagramPrintableASCIIAdvances? {
+    mutating func printableASCIIAdvances(of style: DiagramTextStyle) -> DiagramFontAdvances? {
         (measurer(for: style) as? CoreTextDiagramTextMeasurer)?.printableASCIIAdvances
     }
 

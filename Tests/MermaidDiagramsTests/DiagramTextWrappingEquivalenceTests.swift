@@ -8,8 +8,8 @@
  *              bytes decide whether it is read for markup as its scalars did; and C4's spoken kind names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -95,12 +95,13 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
     /// above would see it.
     func testAddingSeparateWidthsRoundsDifferently() {
         let measurer = CoreTextDiagramTextMeasurer(font: Self.fonts[1])
+        guard let advances = measurer.printableASCIIAdvances else { return XCTFail("a registered face has advances") }
         let words = ["Wrapping ", "a ", "label ", "of ", "many ", "words ", "differs ", "in ", "its ", "last ", "bits"]
         var continued: CGFloat = 0
         var added: CGFloat = 0
         var differs = false
         for word in words {
-            continued = measurer.printableASCIIAdvances.width(continuing: continued, over: word.utf8)
+            continued = advances.width(continuing: continued, over: word.utf8)
             added += measurer.width(of: word)
             differs = differs || continued != added
         }
