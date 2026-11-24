@@ -1,3 +1,14 @@
+/**
+ * File: XYChartToken.swift
+ * ------------------------
+ * Layer: Core
+ * Description: The tokens of Mermaid's XY chart grammar: their kinds, where each starts and ends, and its line.
+ *
+ * Authors: felixchvl
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// A token of Mermaid's XY chart grammar (`xychart.jison`): its kind, where its text is in the diagram's bytes, and
 /// the line it starts on.
 struct XYChartToken {
@@ -57,7 +68,10 @@ enum XYChartTokenKind: Hashable {
     /// Whether the token is part of a word of text that is not quoted: Mermaid joins such tokens without the spaces
     /// between them (`cat2 asdf` is `cat2asdf`).
     var isWordPart: Bool {
-        Self.wordParts.contains(self)
+        switch self {
+        case .ampersand, .digits, .letters, .plus, .equals, .asterisk, .period, .numberSign, .minus, .underscore: true
+        default: false
+        }
     }
 
     /// Whether the token is text: quoted, or a word part.
@@ -69,7 +83,4 @@ enum XYChartTokenKind: Hashable {
     var endsStatement: Bool {
         self == .newline || self == .semicolon || self == .endOfFile
     }
-
-    private static let wordParts: Set<XYChartTokenKind> = [.ampersand, .digits, .letters, .plus, .equals, .asterisk, .period, .numberSign, .minus,
-                                                          .underscore]
 }

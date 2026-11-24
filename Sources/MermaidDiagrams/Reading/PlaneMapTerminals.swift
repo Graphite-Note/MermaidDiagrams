@@ -7,8 +7,8 @@
  *              directives and comments, and the values of each.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 23/11/2026
  */
 
 /// Matches the terminals Mermaid's Langium grammars share at a position of a diagram's bytes, as their regular
@@ -30,9 +30,11 @@ struct PlaneMapTerminals {
     }
 
     func hasPrefix(_ literal: String, at start: Int) -> Bool {
+        let literalBytes = literal.utf8
+        guard start >= 0, start <= bytes.count - literalBytes.count else { return false }
         var index = start
-        for expected in literal.utf8 {
-            guard byte(index) == expected else { return false }
+        for expected in literalBytes {
+            guard bytes[index] == expected else { return false }
             index += 1
         }
         return true

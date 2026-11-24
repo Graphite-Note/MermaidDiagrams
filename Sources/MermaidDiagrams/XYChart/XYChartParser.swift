@@ -5,7 +5,7 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -145,13 +145,14 @@ struct XYChartParser {
         guard kind.isText else { throw failure(problem) }
         let first = tokens[index]
         index += 1
-        var written = text(of: first)
-        guard first.kind != .string else { return written }
+        guard first.kind != .string, kind.isWordPart else { return text(of: first) }
+        // The word's tokens' bytes joined, made text once.
+        var written = Array(bytes[first.start..<first.end])
         while kind.isWordPart {
-            written += text(of: tokens[index])
+            written.append(contentsOf: bytes[tokens[index].start..<tokens[index].end])
             index += 1
         }
-        return written
+        return String(decoding: written, as: UTF8.self)
     }
 
     /// A number as JavaScript's `Number` reads its text: a sign, digits and a fraction; digits past what a double

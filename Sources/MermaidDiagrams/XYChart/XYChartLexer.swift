@@ -1,3 +1,15 @@
+/**
+ * File: XYChartLexer.swift
+ * ------------------------
+ * Layer: Core
+ * Description: Splits an XY chart's text after its keyword into the tokens of Mermaid's XY chart grammar, on its
+ *              UTF-8 bytes, as Pele's lexer does.
+ *
+ * Authors: felixchvl
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Splits an XY chart's text after its keyword into the tokens of Mermaid's XY chart grammar, as Pele's lexer does:
 /// a state machine whose states decide what a character starts. In an axis' statement and between a series'
 /// brackets a number is one token and `-->` another; elsewhere digits and a minus sign are tokens of a word.
@@ -38,6 +50,8 @@ struct XYChartLexer {
 
     private init(cursor: MermaidTextCursor) {
         self.cursor = cursor
+        // About one token in three bytes in the documentation's examples.
+        tokens.reserveCapacity((cursor.bytes.count - cursor.position) / 3 + 2)
     }
 
     private mutating func readTokens() {
@@ -190,7 +204,7 @@ struct XYChartLexer {
             emit(isLetter ? .letters : .digits, to: end)
         } else if JavaScriptWhitespace.length(in: cursor.bytes, at: cursor.position) > 0 {
             cursor.advance(by: JavaScriptWhitespace.endOfRun(in: cursor.bytes, from: cursor.position) - cursor.position)
-        } else if let kind = Self.punctuation[byte] {
+        } else if byte < 0x80, let kind = Self.punctuation[Int(byte)] {
             emit(kind, to: cursor.position + 1)
         } else {
             return false
@@ -250,9 +264,14 @@ struct XYChartLexer {
     private static let lineKeyword = Array("line".utf8)
     private static let barKeyword = Array("bar".utf8)
     private static let arrow = Array("-->".utf8)
-    private static let punctuation: [UInt8: XYChartTokenKind] = [
-        UInt8(ascii: ":"): .colon, UInt8(ascii: "+"): .plus, UInt8(ascii: ","): .comma, UInt8(ascii: "="): .equals, UInt8(ascii: "*"): .asterisk,
-        UInt8(ascii: "#"): .numberSign, UInt8(ascii: "_"): .underscore, UInt8(ascii: "."): .period, UInt8(ascii: "&"): .ampersand,
-        UInt8(ascii: "-"): .minus, UInt8(ascii: ";"): .semicolon,
-    ]
+    /// The token of each punctuation byte, by the byte, looked up without hashing; nil for any other ASCII byte.
+    private static let punctuation: [XYChartTokenKind?] = {
+        var kinds = [XYChartTokenKind?](repeating: nil, count: 128)
+        let byByte: [(Character, XYChartTokenKind)] = [
+            (":", .colon), ("+", .plus), (",", .comma), ("=", .equals), ("*", .asterisk), ("#", .numberSign), ("_", .underscore), (".", .period),
+            ("&", .ampersand), ("-", .minus), (";", .semicolon),
+        ]
+        for (character, kind) in byByte { kinds[Int(character.asciiValue ?? 0)] = kind }
+        return kinds
+    }()
 }

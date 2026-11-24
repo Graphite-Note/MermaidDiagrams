@@ -6,7 +6,7 @@
  *              token a line starts, as Mermaid's lexer rules `.*direction\s+TB[^\n]*` and the others decide it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -34,7 +34,13 @@ struct RequirementDirectionStatements {
     init(bytes: [UInt8], from start: Int) {
         self.bytes = bytes
         var position = start
-        while position < bytes.count {
+        // A statement needs `direction`, a space and two letters: no later byte starts one.
+        let lastStart = bytes.count - Self.keyword.count - 3
+        while position <= lastStart {
+            guard bytes[position] | 0x20 == UInt8(ascii: "d") else {
+                position += 1
+                continue
+            }
             if let (kind, end) = match(at: position) {
                 starts[kind].append(position)
                 keywordEnds[kind].append(end)
@@ -55,12 +61,11 @@ struct RequirementDirectionStatements {
         let afterWord = position + word.count
         let afterSpace = JavaScriptWhitespace.endOfRun(in: bytes, from: afterWord)
         guard afterSpace > afterWord, afterSpace + 2 <= bytes.count else { return nil }
-        let letters = [MermaidByte.uppercased(bytes[afterSpace]), MermaidByte.uppercased(bytes[afterSpace + 1])]
-        let kind: Int? = switch letters {
-        case Array("TB".utf8): 0
-        case Array("BT".utf8): 1
-        case Array("RL".utf8): 2
-        case Array("LR".utf8): 3
+        let kind: Int? = switch (MermaidByte.uppercased(bytes[afterSpace]), MermaidByte.uppercased(bytes[afterSpace + 1])) {
+        case (UInt8(ascii: "T"), UInt8(ascii: "B")): 0
+        case (UInt8(ascii: "B"), UInt8(ascii: "T")): 1
+        case (UInt8(ascii: "R"), UInt8(ascii: "L")): 2
+        case (UInt8(ascii: "L"), UInt8(ascii: "R")): 3
         default: nil
         }
         return kind.map { kind in (kind, afterSpace + 2) }
