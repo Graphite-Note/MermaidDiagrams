@@ -5,8 +5,8 @@
  * Description: One placing of Pele's compound layout: port sides, every level laid out inside out, routes joined.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -51,11 +51,7 @@ extension LayeredCompoundLayout {
             }
             if !isNeeded { continue }
             var graph = buildGraph(of: levelIndex, isSized: false)
-            #if DEBUG
-            LayeredLayoutRecording.current?.rankings.append((graph.nodes, graph.edges))
-            #endif
-            LayeredFlatRanking.orient(nodes: graph.nodes, edges: &graph.edges, workspace: workspace)
-            LayeredFlatRanking.rank(nodes: &graph.nodes, edges: graph.edges, step: 1, workspace: workspace)
+            LayeredFlatRanking.orientAndRank(nodes: &graph.nodes, edges: &graph.edges, step: 1)
             let start = level.direction.startSide
             for (index, levelEdge) in level.edges.enumerated() {
                 let isFirstAbove = !graph.edges[index].isReversed
@@ -77,8 +73,7 @@ extension LayeredCompoundLayout {
     /// Lays one level out as a flat graph and turns it onto the page inside its box.
     private mutating func layOut(_ levelIndex: Int, vertexBudget: inout Int) -> Bool {
         var built = buildGraph(of: levelIndex, isSized: true)
-        guard let size = LayeredFlatLayout.layout(nodes: &built.nodes, edges: &built.edges, options: options, maximumVertexCount: vertexBudget,
-                                                  workspace: workspace) else {
+        guard let size = LayeredFlatLayout.layout(nodes: &built.nodes, edges: &built.edges, options: options, maximumVertexCount: vertexBudget) else {
             return false
         }
         vertexBudget -= built.nodes.count

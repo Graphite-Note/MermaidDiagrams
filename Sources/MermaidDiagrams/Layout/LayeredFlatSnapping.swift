@@ -5,49 +5,52 @@
  * Description: Brings nearly straight edges of Pele's layered layout into line, moving blocks of what is in line.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// Pele's `snap` (layout/layered.ts): a node or bend moves a little across the flow, with everything already in line
 /// with it, where the vertices beside it leave room; what is in line stays in line, so each move straightens one more
 /// edge. The blocks are joined smaller into larger, as a union of member lists.
 struct LayeredFlatSnapping {
-    /// Moved in and back out (`finished`), so that the graph is never copied.
-    private(set) var graph: LayeredFlatGraph
+    /// The graph's spans, whose offsets and order the snapping reads.
+    let graph: LayeredFlatGraph
     let options: LayeredFlatOptions
-    let emptyRanks: [Bool]?
+    let emptyRanks: ScratchSpan<Bool>?
     /// Each edge from one point held in place to the next: its upper and lower vertices and offsets.
-    private var upper: [Int]
-    private var lower: [Int]
-    private var upperOffset: [Double]
-    private var lowerOffset: [Double]
-    private var block: [Int]
+    private var upper: ScratchList<Int>
+    private var lower: ScratchList<Int>
+    private var upperOffset: ScratchList<Double>
+    private var lowerOffset: ScratchList<Double>
+    private let block: ScratchSpan<Int>
     /// The members of each block as a list in the order they joined: its first and last member and how many it has,
     /// and each member's next (-1 after the last).
-    private var firstMember: [Int]
-    private var lastMember: [Int]
-    private var memberCount: [Int]
-    private var nextMember: [Int]
-    let workspace: LayeredFlatWorkspace
+    private let firstMember: ScratchSpan<Int>
+    private let lastMember: ScratchSpan<Int>
+    private let memberCount: ScratchSpan<Int>
+    private let nextMember: ScratchSpan<Int>
+    unowned(unsafe) let arena: DiagramScratchArena
 
-    init(graph: consuming LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: [Bool]?, workspace: LayeredFlatWorkspace) {
+    /// The snapping's lists come from `arena`; the caller gives them back once the snapping is finished.
+    init(graph: LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: ScratchSpan<Bool>?, arena: DiagramScratchArena) {
         self.options = options
         self.emptyRanks = emptyRanks
-        self.workspace = workspace
+        self.arena = arena
         let vertexCount = graph.vertexCount
-        block = workspace.emptyIntegers(capacity: vertexCount)
-        block.append(contentsOf: 0..<vertexCount)
-        firstMember = workspace.emptyIntegers(capacity: vertexCount)
-        firstMember.append(contentsOf: 0..<vertexCount)
-        lastMember = workspace.emptyIntegers(capacity: vertexCount)
-        lastMember.append(contentsOf: 0..<vertexCount)
-        memberCount = workspace.integers(count: vertexCount, repeating: 1)
-        nextMember = workspace.integers(count: vertexCount, repeating: -1)
-        upper = workspace.emptyIntegers(capacity: graph.segmentCount)
-        lower = workspace.emptyIntegers(capacity: graph.segmentCount)
-        upperOffset = workspace.emptyNumbers(capacity: graph.segmentCount)
-        lowerOffset = workspace.emptyNumbers(capacity: graph.segmentCount)
+        block = arena.uninitializedSpan(count: vertexCount)
+        firstMember = arena.uninitializedSpan(count: vertexCount)
+        lastMember = arena.uninitializedSpan(count: vertexCount)
+        for vertex in 0..<vertexCount {
+            block[vertex] = vertex
+            firstMember[vertex] = vertex
+            lastMember[vertex] = vertex
+        }
+        memberCount = arena.span(count: vertexCount, repeating: 1)
+        nextMember = arena.span(count: vertexCount, repeating: -1)
+        upper = arena.list(capacity: graph.segmentCount, of: Int.self)
+        lower = arena.list(capacity: graph.segmentCount, of: Int.self)
+        upperOffset = arena.list(capacity: graph.segmentCount, of: Double.self)
+        lowerOffset = arena.list(capacity: graph.segmentCount, of: Double.self)
         for segment in 0..<graph.segmentCount {
             let from = graph.segmentFrom[segment]
             if emptyRanks != nil && graph.vertexKind[from] == .bend && emptyRanks?[graph.vertexRank[from]] == true { continue }
@@ -60,25 +63,11 @@ struct LayeredFlatSnapping {
         self.graph = graph
     }
 
-    /// The graph, the snapping's lists given back to the workspace.
-    consuming func finished() -> LayeredFlatGraph {
-        workspace.recycle(upper)
-        workspace.recycle(lower)
-        workspace.recycle(upperOffset)
-        workspace.recycle(lowerOffset)
-        workspace.recycle(block)
-        workspace.recycle(firstMember)
-        workspace.recycle(lastMember)
-        workspace.recycle(memberCount)
-        workspace.recycle(nextMember)
-        return graph
-    }
-
-    private func offAxis(_ edge: Int, across: [Double]) -> Double {
+    private func offAxis(_ edge: Int, across: ScratchSpan<Double>) -> Double {
         across[lower[edge]] + lowerOffset[edge] - across[upper[edge]] - upperOffset[edge]
     }
 
-    private mutating func join(_ first: Int, _ second: Int) {
+    private func join(_ first: Int, _ second: Int) {
         var keep = block[first]
         var drop = block[second]
         if keep == drop { return }
@@ -107,7 +96,7 @@ struct LayeredFlatSnapping {
     }
 
     /// Whether every vertex of block `identifier` can move by `shift` and keep its room from those beside it.
-    private func canMove(_ identifier: Int, by shift: Double, across: [Double]) -> Bool {
+    private func canMove(_ identifier: Int, by shift: Double, across: ScratchSpan<Double>) -> Bool {
         var member = firstMember[identifier]
         while member >= 0 {
             let vertex = member
@@ -128,25 +117,22 @@ struct LayeredFlatSnapping {
         return true
     }
 
-    mutating func snap(_ across: inout [Double]) {
-        var near = workspace.emptyIntegers(capacity: 0)
-        defer { workspace.recycle(near) }
+    func snap(_ across: ScratchSpan<Double>) {
+        var near = arena.list(capacity: upper.count, of: Int.self)
         for edge in upper.indices {
             let distance = abs(offAxis(edge, across: across))
             if distance < 0.01 { join(upper[edge], lower[edge]) } else if distance <= LayeredFlatConstants.bendSnap { near.append(edge) }
         }
         if near.isEmpty { return }
         // Sorted by the places before any edge snaps: nothing moves while the sort reads them.
-        var spare = workspace.emptyIntegers(capacity: 0)
-        near.sortStably(spare: &spare) { first, second in
+        near.sortStably(in: arena) { first, second in
             let difference = abs(offAxis(first, across: across)) - abs(offAxis(second, across: across))
             return (difference != 0 ? difference : Double(first - second)) < 0
         }
-        workspace.recycle(consume spare)
-        for edge in near { snapEdge(edge, across: &across) }
+        for edge in near { snapEdge(edge, across: across) }
     }
 
-    private mutating func snapEdge(_ edge: Int, across: inout [Double]) {
+    private func snapEdge(_ edge: Int, across: ScratchSpan<Double>) {
         let distance = offAxis(edge, across: across)
         if abs(distance) < 0.01 {
             join(upper[edge], lower[edge])
@@ -175,9 +161,9 @@ struct LayeredFlatSnapping {
 
 extension LayeredFlatGraph {
     /// The ranks between the first and the last that hold nothing but bends of edges, or nil when none does.
-    func emptyRanks(workspace: LayeredFlatWorkspace) -> [Bool]? {
+    func emptyRanks(arena: DiagramScratchArena) -> ScratchSpan<Bool>? {
         guard maximumRank > 1 else { return nil }
-        var empty = workspace.flags(count: maximumRank + 1, repeating: false)
+        let empty = arena.span(count: maximumRank + 1, repeating: false)
         var any = false
         for rank in 1..<maximumRank {
             var only = rankStart[rank + 1] > rankStart[rank]
@@ -187,8 +173,6 @@ extension LayeredFlatGraph {
                 any = true
             }
         }
-        if any { return empty }
-        workspace.recycle(consume empty)
-        return nil
+        return any ? empty : nil
     }
 }

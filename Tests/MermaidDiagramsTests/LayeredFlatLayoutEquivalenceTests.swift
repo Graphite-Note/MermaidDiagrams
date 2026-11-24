@@ -148,9 +148,7 @@ struct LayeredRankingOutcome: Equatable {
             ReferenceLayeredFlatRanking.orient(nodes: nodes, edges: &edges, workspace: workspace)
             ReferenceLayeredFlatRanking.rank(nodes: &nodes, edges: edges, step: 1, workspace: workspace)
         } else {
-            let workspace = LayeredFlatWorkspace()
-            LayeredFlatRanking.orient(nodes: nodes, edges: &edges, workspace: workspace)
-            LayeredFlatRanking.rank(nodes: &nodes, edges: edges, step: 1, workspace: workspace)
+            LayeredFlatRanking.orientAndRank(nodes: &nodes, edges: &edges, step: 1)
         }
         ranks = nodes.map(\.rank)
         reversed = edges.map(\.isReversed)

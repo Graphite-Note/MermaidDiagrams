@@ -5,8 +5,8 @@
  * Description: Pele's layered (Sugiyama) layout of one flat graph, ported step for step from layout/layered.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -15,40 +15,38 @@ import CoreGraphics
 /// edges that close cycles are turned around, the nodes ranked and balanced, every edge cut at each rank it passes,
 /// the ranks ordered by sweeps and swaps, positioned by Brandes and Köpf's four alignments, the ends spread along their
 /// sides and settled, the bends straightened, and the gaps sized to the levels and tracks of the edges that cross them.
-/// Values only: the vertices are numbered, and each pass reads and writes arrays indexed by vertex or segment.
+/// Values only: the vertices are numbered, and each pass reads and writes spans of the calling thread's scratch arena
+/// indexed by vertex or segment, so that a layout allocates nothing once the arena has room.
 struct LayeredFlatLayout {
-    var nodes: [LayeredFlatNode]
-    var edges: [LayeredFlatEdge]
+    let nodes: ScratchSpan<LayeredFlatNode>
+    let edges: ScratchSpan<LayeredSpanEdge>
+    /// Every edge's route, one after another (`LayeredSpanEdge.pointStart`).
+    var points: ScratchList<CGPoint>
     let options: LayeredFlatOptions
-    /// The working lists, shared with the other flat layouts of one compound layout.
-    let workspace: LayeredFlatWorkspace
+    unowned(unsafe) let arena: DiagramScratchArena
     /// 2 when every edge gets a middle rank of its own, for labels or parallel edges; else 1.
     let step: Int
     /// The ranks each edge passes, and whether it is drawn as one direct curve instead of through bends.
-    var edgeRankSpan: [Int] = []
-    var isDirect: [Bool] = []
+    var edgeRankSpan = ScratchSpan<Int>.empty
+    var isDirect = ScratchSpan<Bool>.empty
     /// The first bend of each edge, the vertex of its label, and its first and last segments; -1 for none.
-    var firstBend: [Int] = []
-    var labelVertex: [Int] = []
-    var firstSegment: [Int] = []
-    var lastSegment: [Int] = []
-    var vertexHeight: [Double] = []
-    var vertexKey: [Double] = []
+    var firstBend = ScratchSpan<Int>.empty
+    var labelVertex = ScratchSpan<Int>.empty
+    var firstSegment = ScratchSpan<Int>.empty
+    var lastSegment = ScratchSpan<Int>.empty
+    var vertexHeight = ScratchSpan<Double>.empty
+    var vertexKey = ScratchSpan<Double>.empty
     /// Which way the labelled edges of each rank head: 1 down, 2 up, 3 both.
-    var labelHeadings: [UInt8] = []
+    var labelHeadings = ScratchSpan<UInt8>.empty
     /// What each segment's ends are to the nodes they meet, where nodes spread their ends; nil when none does.
-    var segmentFromEnd: [LayeredSegmentEnd]?
-    var segmentToEnd: [LayeredSegmentEnd]?
+    var segmentFromEnd: ScratchSpan<LayeredSegmentEnd>?
+    var segmentToEnd: ScratchSpan<LayeredSegmentEnd>?
 
-    /// Lays `nodes` and `edges` out in place, or returns nil when the nodes and bends would be more than
-    /// `maximumVertexCount` (the nodes then ranked and the edges oriented, but neither placed). The working lists come
-    /// from `workspace`, which a compound layout hands to each of its flat layouts, and go back to it; without one, the
-    /// layout makes its own.
-    static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
-                       maximumVertexCount: Int = .max, workspace givenWorkspace: LayeredFlatWorkspace? = nil) -> LayeredFlatResult? {
-        #if DEBUG
-        LayeredLayoutRecording.current?.flatLayouts.append(.init(nodes: nodes, edges: edges, options: options, maximumVertexCount: maximumVertexCount))
-        #endif
+    /// Lays `nodes` and `edges` out in place, each edge's route appended to `points`, or returns nil when the nodes and
+    /// bends would be more than `maximumVertexCount` (the nodes then ranked and the edges oriented, but neither placed).
+    /// Every span the layout works in comes from `arena`, after `points`' room.
+    static func layout(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, points: inout ScratchList<CGPoint>,
+                       options: LayeredFlatOptions, maximumVertexCount: Int, arena: DiagramScratchArena) -> LayeredFlatResult? {
         if nodes.isEmpty { return LayeredFlatResult(width: 0, height: 0) }
         if nodes.count == 1 && edges.isEmpty && nodes[0].kind == .node {
             nodes[0].rank = 0
@@ -56,74 +54,83 @@ struct LayeredFlatLayout {
             nodes[0].y = nodes[0].height / 2
             return LayeredFlatResult(width: nodes[0].width, height: nodes[0].height)
         }
-        let workspace = givenWorkspace ?? LayeredFlatWorkspace()
-        var layout = LayeredFlatLayout(nodes: [], edges: [], options: options, workspace: workspace,
-                                       step: stepOf(nodeCount: nodes.count, edges: edges, workspace: workspace))
-        // The lists move into the layout and back, so that ranking and routing change them in place, never copied.
-        swap(&layout.nodes, &nodes)
-        swap(&layout.edges, &edges)
-        LayeredFlatRanking.orient(nodes: layout.nodes, edges: &layout.edges, workspace: workspace)
-        LayeredFlatRanking.rank(nodes: &layout.nodes, edges: layout.edges, step: layout.step, workspace: workspace)
+        var layout = LayeredFlatLayout(nodes: nodes, edges: edges, points: points, options: options, arena: arena,
+                                       step: stepOf(nodeCount: nodes.count, edges: edges, arena: arena))
+        LayeredFlatRanking.orient(nodes: nodes, edges: edges, arena: arena)
+        LayeredFlatRanking.rank(nodes: nodes, edges: edges, step: layout.step, arena: arena)
         let result = layout.run(maximumVertexCount: maximumVertexCount)
-        swap(&layout.nodes, &nodes)
-        swap(&layout.edges, &edges)
-        layout.recycleLists()
+        points = layout.points
         return result
     }
 
-    /// Gives the layout's own lists back to its workspace.
-    private consuming func recycleLists() {
-        workspace.recycle(edgeRankSpan)
-        workspace.recycle(isDirect)
-        workspace.recycle(firstBend)
-        workspace.recycle(labelVertex)
-        workspace.recycle(firstSegment)
-        workspace.recycle(lastSegment)
-        workspace.recycle(vertexHeight)
-        workspace.recycle(vertexKey)
-        if let segmentFromEnd { workspace.recycle(consume segmentFromEnd) }
-        if let segmentToEnd { workspace.recycle(consume segmentToEnd) }
+    /// Lays `nodes` and `edges` out in place as `layout(nodes:edges:points:...)` does, with the calling thread's arena:
+    /// each edge laid out gets its route as a list of its own. For compound layouts and tests.
+    static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
+                       maximumVertexCount: Int = .max) -> LayeredFlatResult? {
+        #if DEBUG
+        LayeredLayoutRecording.current?.flatLayouts.append(.init(nodes: nodes, edges: edges, options: options, maximumVertexCount: maximumVertexCount))
+        #endif
+        return DiagramScratchArena.withCurrentThread { arena in
+            let nodeSpan: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: nodes.count)
+            for node in nodes.indices { nodeSpan[node] = nodes[node] }
+            let edgeSpan: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: edges.count)
+            for edgeIndex in edges.indices { edgeSpan[edgeIndex] = LayeredSpanEdge(edges[edgeIndex]) }
+            var points = arena.list(capacity: 0, of: CGPoint.self)
+            let result = layout(nodes: nodeSpan, edges: edgeSpan, points: &points, options: options, maximumVertexCount: maximumVertexCount,
+                                arena: arena)
+            for node in nodes.indices { nodes[node] = nodeSpan[node] }
+            for edgeIndex in edges.indices {
+                let laidOut = edgeSpan[edgeIndex]
+                edges[edgeIndex].tailOffset = laidOut.tailOffset
+                edges[edgeIndex].headOffset = laidOut.headOffset
+                edges[edgeIndex].isReversed = laidOut.isReversed
+                edges[edgeIndex].labelCenter = laidOut.labelCenter
+                if laidOut.pointStart >= 0 {
+                    edges[edgeIndex].points = Array(points.elements.part(laidOut.pointStart..<(laidOut.pointStart + laidOut.pointCount)))
+                }
+            }
+            return result
+        }
     }
 
     /// Every edge gets a middle rank of its own when an edge has a label or two edges join the same two nodes.
-    private static func stepOf(nodeCount: Int, edges: [LayeredFlatEdge], workspace: LayeredFlatWorkspace) -> Int {
+    private static func stepOf(nodeCount: Int, edges: ScratchSpan<LayeredSpanEdge>, arena: DiagramScratchArena) -> Int {
         if edges.contains(where: { edge in edge.labelWidth > 0 }) { return 2 }
         // Two edges join the same two nodes when their pairs, sorted, have two alike side by side.
-        var pairs = workspace.emptyIntegers(capacity: edges.count)
-        for edge in edges { pairs.append(min(edge.tail, edge.head) * nodeCount + max(edge.tail, edge.head)) }
-        pairs.sort()
-        var step = 1
-        for index in pairs.indices.dropFirst() where pairs[index] == pairs[index - 1] {
-            step = 2
-            break
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
+        let pairs: ScratchSpan<Int> = arena.uninitializedSpan(count: edges.count)
+        for edgeIndex in edges.indices {
+            let edge = edges[edgeIndex]
+            pairs[edgeIndex] = min(edge.tail, edge.head) * nodeCount + max(edge.tail, edge.head)
         }
-        workspace.recycle(consume pairs)
-        return step
+        pairs.sortAscending()
+        for index in pairs.indices.dropFirst() where pairs[index] == pairs[index - 1] { return 2 }
+        return 1
     }
 
     private mutating func run(maximumVertexCount: Int) -> LayeredFlatResult? {
         let bendCount = chooseDirectEdges()
         let vertexCount = nodes.count + bendCount
         guard vertexCount <= maximumVertexCount else { return nil }
-        var graph = buildGraph(vertexCount: vertexCount)
+        let graph = buildGraph(vertexCount: vertexCount)
         var result = LayeredFlatResult(width: 0, height: 0)
         // A graph with no rank of two vertices has one order: its reduction would find no crossing and change nothing.
         if graph.segmentCount > 0 && graph.maximumRank > 0 && LayeredFlatCrossingReduction.widestRank(of: graph) >= 2 {
-            // The graph moves into the reduction and back, so that its order is changed in place and never copied.
-            var reduction = LayeredFlatCrossingReduction(graph: consume graph, nodes: nodes, workspace: workspace)
+            // The reduction changes the graph's order in place; its own lists are given back when it is done.
+            let mark = arena.mark()
+            var reduction = LayeredFlatCrossingReduction(graph: graph, nodes: nodes, arena: arena)
             (result.crossings, result.declaredCrossings) = reduction.reduce()
-            graph = (consume reduction).finished()
+            arena.release(to: mark)
             graph.settlePositions()
         }
         if options.ordersOnly {
-            writeOrderPositions(graph: &graph)
-            graph.recycle(into: workspace)
+            writeOrderPositions(graph: graph)
             return result
         }
-        let placed = route(graph: &graph)
+        let placed = route(graph: graph)
         result.width = placed.width
         result.height = placed.height
-        graph.recycle(into: workspace)
         return result
     }
 
@@ -131,18 +138,20 @@ struct LayeredFlatLayout {
     /// edge whose ends share a rank (only an edge from a node to itself, which callers lay out beside the node and Pele
     /// never hands its layout) is drawn direct too, so that every segment runs from one rank to the next.
     private mutating func chooseDirectEdges() -> Int {
-        edgeRankSpan = workspace.emptyIntegers(capacity: edges.count)
-        isDirect = workspace.flags(count: edges.count, repeating: false)
+        edgeRankSpan = arena.uninitializedSpan(count: edges.count)
+        isDirect = arena.span(count: edges.count, repeating: false)
         var bendCount = 0
         for edgeIndex in edges.indices {
             let span = abs(nodes[edges[edgeIndex].head].rank - nodes[edges[edgeIndex].tail].rank)
-            edgeRankSpan.append(span)
+            edgeRankSpan[edgeIndex] = span
             bendCount += max(0, span - 1)
             isDirect[edgeIndex] = span == 0
         }
         guard bendCount > LayeredFlatConstants.maximumBends else { return bendCount }
-        var longest = edges.indices.filter { edgeIndex in edgeRankSpan[edgeIndex] > 1 }
-        longest.sortStably { first, second in Double(edgeRankSpan[second] - edgeRankSpan[first]) }
+        var longest = arena.list(capacity: edges.count, of: Int.self)
+        for edgeIndex in edges.indices where edgeRankSpan[edgeIndex] > 1 { longest.append(edgeIndex) }
+        let edgeRankSpan = edgeRankSpan
+        longest.sortStably(in: arena) { first, second in Double(edgeRankSpan[second] - edgeRankSpan[first]) < 0 }
         for edgeIndex in longest {
             if bendCount <= LayeredFlatConstants.maximumBends { break }
             isDirect[edgeIndex] = true
@@ -152,22 +161,22 @@ struct LayeredFlatLayout {
     }
 
     /// With `ordersOnly`: each node's position across, and each edge's (rank, position) points.
-    private mutating func writeOrderPositions(graph: inout LayeredFlatGraph) {
-        let across = LayeredFlatPositioning.positions(&graph, options: options, workspace: workspace)
+    private mutating func writeOrderPositions(graph: LayeredFlatGraph) {
+        let across = LayeredFlatPositioning.positions(graph, options: options, arena: arena)
         for node in nodes.indices { nodes[node].x = across[node] }
         for edgeIndex in edges.indices {
             let edge = edges[edgeIndex]
             let upper = edge.isReversed ? edge.head : edge.tail
             let lower = edge.isReversed ? edge.tail : edge.head
-            var points = [CGPoint(x: Double(graph.vertexRank[upper]), y: across[upper])]
+            edges[edgeIndex].pointStart = points.count
+            points.append(CGPoint(x: Double(graph.vertexRank[upper]), y: across[upper]))
             if !isDirect[edgeIndex] && firstBend[edgeIndex] >= 0 {
                 for bend in firstBend[edgeIndex]..<(firstBend[edgeIndex] + edgeRankSpan[edgeIndex] - 1) {
                     points.append(CGPoint(x: Double(graph.vertexRank[bend]), y: across[bend]))
                 }
             }
             points.append(CGPoint(x: Double(graph.vertexRank[lower]), y: across[lower]))
-            edges[edgeIndex].points = points
+            edges[edgeIndex].pointCount = points.count - edges[edgeIndex].pointStart
         }
-        workspace.recycle(consume across)
     }
 }

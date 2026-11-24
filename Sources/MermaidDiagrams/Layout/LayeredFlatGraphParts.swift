@@ -5,8 +5,8 @@
  * Description: The nodes, edges, options and result of Pele's layered layout of one flat graph (layout/layered.ts).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -69,6 +69,55 @@ struct LayeredFlatEdge: Equatable, Sendable {
         self.minimumLength = minimumLength
         self.labelWidth = labelWidth
         self.labelHeight = labelHeight
+    }
+}
+
+/// An edge as the flat layout works on it, in a scratch span: `LayeredFlatEdge` with its route a run of the layout's one
+/// list of points instead of a list of its own, so that it is a plain value.
+struct LayeredSpanEdge {
+    var tail: Int
+    var head: Int
+    var minimumLength: Int
+    var labelWidth: Double
+    var labelHeight: Double
+    var tailOffset: Double
+    var headOffset: Double
+    var isTailHeld: Bool
+    var isHeadHeld: Bool
+    var isReversed: Bool
+    var labelCenter: CGPoint
+    /// Where the edge's route starts in the layout's points, and how many points it has; -1 until it is written.
+    var pointStart = -1
+    var pointCount = 0
+
+    /// `edge` without its points.
+    init(_ edge: LayeredFlatEdge) {
+        tail = edge.tail
+        head = edge.head
+        minimumLength = edge.minimumLength
+        labelWidth = edge.labelWidth
+        labelHeight = edge.labelHeight
+        tailOffset = edge.tailOffset
+        headOffset = edge.headOffset
+        isTailHeld = edge.isTailHeld
+        isHeadHeld = edge.isHeadHeld
+        isReversed = edge.isReversed
+        labelCenter = edge.labelCenter
+    }
+
+    /// An edge of a graph to place, its ends held nowhere.
+    init(tail: Int, head: Int, minimumLength: Int, labelWidth: Double, labelHeight: Double, tailOffset: Double, headOffset: Double) {
+        self.tail = tail
+        self.head = head
+        self.minimumLength = minimumLength
+        self.labelWidth = labelWidth
+        self.labelHeight = labelHeight
+        self.tailOffset = tailOffset
+        self.headOffset = headOffset
+        isTailHeld = false
+        isHeadHeld = false
+        isReversed = false
+        labelCenter = .zero
     }
 }
 

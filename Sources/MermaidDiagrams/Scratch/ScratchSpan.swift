@@ -23,6 +23,11 @@ struct ScratchSpan<Element: BitwiseCopyable>: RandomAccessCollection {
         self.count = count
     }
 
+    /// A span of no values, for a list not made yet.
+    static var empty: ScratchSpan<Element> {
+        ScratchSpan(start: UnsafeMutablePointer(bitPattern: MemoryLayout<Element>.alignment).unsafelyUnwrapped, count: 0)
+    }
+
     var startIndex: Int { 0 }
     var endIndex: Int { count }
 

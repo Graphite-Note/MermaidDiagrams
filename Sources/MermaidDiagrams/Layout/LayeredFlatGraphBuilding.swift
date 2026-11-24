@@ -5,28 +5,28 @@
  * Description: Cuts the edges of Pele's layered layout into segments and gives every rank its first order.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// The vertices and segments a layout is ordered on, built as layout/layered.ts builds them.
 private struct LayeredSegmentList {
-    var from: [Int] = []
-    var to: [Int] = []
-    var fromOffset: [Double] = []
-    var toOffset: [Double] = []
-    var fromEnd: [LayeredSegmentEnd] = []
-    var toEnd: [LayeredSegmentEnd] = []
+    var from: ScratchList<Int>
+    var to: ScratchList<Int>
+    var fromOffset: ScratchList<Double>
+    var toOffset: ScratchList<Double>
+    var fromEnd: ScratchList<LayeredSegmentEnd>
+    var toEnd: ScratchList<LayeredSegmentEnd>
     var hasOffsets = false
 
-    /// Empty lists from `workspace` with room for `count` segments each.
-    init(capacity count: Int, workspace: LayeredFlatWorkspace) {
-        from = workspace.emptyIntegers(capacity: count)
-        to = workspace.emptyIntegers(capacity: count)
-        fromOffset = workspace.emptyNumbers(capacity: count)
-        toOffset = workspace.emptyNumbers(capacity: count)
-        fromEnd = workspace.emptyEnds(capacity: count)
-        toEnd = workspace.emptyEnds(capacity: count)
+    /// Empty lists from `arena` with room for `count` segments each.
+    init(capacity count: Int, arena: DiagramScratchArena) {
+        from = arena.list(capacity: count, of: Int.self)
+        to = arena.list(capacity: count, of: Int.self)
+        fromOffset = arena.list(capacity: count, of: Double.self)
+        toOffset = arena.list(capacity: count, of: Double.self)
+        fromEnd = arena.list(capacity: count, of: LayeredSegmentEnd.self)
+        toEnd = arena.list(capacity: count, of: LayeredSegmentEnd.self)
     }
 
     mutating func append(from upper: Int, to lower: Int, fromOffset: Double, toOffset: Double,
@@ -45,36 +45,44 @@ extension LayeredFlatLayout {
         let nodeCount = nodes.count
         var maximumRank = 0
         for node in nodes { maximumRank = max(maximumRank, node.rank) }
-        var widths = workspace.numbers(count: vertexCount, repeating: 0)
-        vertexHeight = workspace.numbers(count: vertexCount, repeating: 0)
-        var kinds = workspace.kinds(count: vertexCount, repeating: .bend)
-        var ranks = workspace.integers(count: vertexCount, repeating: 0)
+        let widths = arena.span(count: vertexCount, repeating: 0.0)
+        vertexHeight = arena.span(count: vertexCount, repeating: 0)
+        let kinds = arena.span(count: vertexCount, repeating: LayeredVertexKind.bend)
+        let ranks = arena.span(count: vertexCount, repeating: 0)
         for node in 0..<nodeCount {
             widths[node] = nodes[node].width
             vertexHeight[node] = nodes[node].height
             kinds[node] = nodes[node].kind
             ranks[node] = nodes[node].rank
         }
-        labelHeadings = [UInt8](repeating: 0, count: maximumRank + 1)
+        labelHeadings = arena.span(count: maximumRank + 1, repeating: 0)
         let spreads = nodes.contains { node in node.sideSpan > 0 && node.kind == .node }
-        vertexKey = workspace.numbers(count: vertexCount, repeating: .nan)
+        vertexKey = arena.span(count: vertexCount, repeating: .nan)
         for node in 0..<nodeCount { vertexKey[node] = nodes[node].orderKey }
-        let segments = cutEdges(widths: &widths, kinds: &kinds, ranks: &ranks, spreads: spreads)
+        let segments = cutEdges(widths: widths, kinds: kinds, ranks: ranks, spreads: spreads)
         let groups = vertexGroups(vertexCount: vertexCount)
-        let adjacency = LayeredFlatGraph.adjacency(vertexCount: vertexCount, segmentFrom: segments.from, segmentTo: segments.to,
-                                                   workspace: workspace)
-        let rankStart = LayeredFlatGraph.rankStarts(vertexRank: ranks, maximumRank: maximumRank, workspace: workspace)
-        var graph = LayeredFlatGraph(vertexCount: vertexCount, nodeCount: nodeCount, maximumRank: maximumRank, vertexWidth: widths,
-                                     vertexKind: kinds, vertexRank: ranks, segmentFrom: segments.from, segmentTo: segments.to,
-                                     segmentFromOffset: segments.fromOffset, segmentToOffset: segments.toOffset,
+        let segmentFrom = segments.from.elements
+        let segmentTo = segments.to.elements
+        let adjacency = LayeredFlatGraph.adjacency(vertexCount: vertexCount, segmentFrom: segmentFrom, segmentTo: segmentTo, arena: arena)
+        let rankStart = LayeredFlatGraph.rankStarts(vertexRank: ranks, maximumRank: maximumRank, arena: arena)
+        let graph = LayeredFlatGraph(vertexCount: vertexCount, nodeCount: nodeCount, maximumRank: maximumRank, segmentCount: segmentFrom.count,
+                                     vertexWidth: widths, vertexKind: kinds, vertexRank: ranks, segmentFrom: segmentFrom, segmentTo: segmentTo,
+                                     segmentFromOffset: segments.fromOffset.elements, segmentToOffset: segments.toOffset.elements,
                                      successorStart: adjacency.successorStart, successorSegments: adjacency.successorSegments,
                                      predecessorStart: adjacency.predecessorStart, predecessorSegments: adjacency.predecessorSegments,
-                                     rankStart: rankStart, order: workspace.integers(count: vertexCount, repeating: 0),
-                                     position: workspace.integers(count: vertexCount, repeating: 0), hasOffsets: segments.hasOffsets,
-                                     isRankFixed: workspace.flags(count: maximumRank + 1, repeating: false), vertexGroup: groups,
-                                     parentOfGroup: options.parentOfGroup)
-        orderInitially(&graph)
+                                     rankStart: rankStart, order: arena.span(count: vertexCount, repeating: 0),
+                                     position: arena.span(count: vertexCount, repeating: 0), hasOffsets: segments.hasOffsets,
+                                     isRankFixed: arena.span(count: maximumRank + 1, repeating: false), vertexGroup: groups,
+                                     parentOfGroup: groupParents())
+        orderInitially(graph)
         return graph
+    }
+
+    /// The parent of each group, in a span.
+    private func groupParents() -> ScratchSpan<Int> {
+        let parents: ScratchSpan<Int> = arena.uninitializedSpan(count: options.parentOfGroup.count)
+        for group in options.parentOfGroup.indices { parents[group] = options.parentOfGroup[group] }
+        return parents
     }
 
     /// The rank of an edge's label: halfway along; for an edge that passes ranks of nodes, in one of those beside the
@@ -91,34 +99,26 @@ extension LayeredFlatLayout {
 
     /// Every edge not drawn direct cut into segments, one per rank it passes, with a bend or its label in each rank
     /// between its ends.
-    private mutating func cutEdges(widths: inout [Double], kinds: inout [LayeredVertexKind], ranks: inout [Int], spreads: Bool) -> LayeredSegmentList {
-        firstBend = workspace.integers(count: edges.count, repeating: -1)
-        labelVertex = workspace.integers(count: edges.count, repeating: -1)
-        firstSegment = workspace.integers(count: edges.count, repeating: -1)
-        lastSegment = workspace.integers(count: edges.count, repeating: -1)
+    private mutating func cutEdges(widths: ScratchSpan<Double>, kinds: ScratchSpan<LayeredVertexKind>, ranks: ScratchSpan<Int>,
+                                   spreads: Bool) -> LayeredSegmentList {
+        firstBend = arena.span(count: edges.count, repeating: -1)
+        labelVertex = arena.span(count: edges.count, repeating: -1)
+        firstSegment = arena.span(count: edges.count, repeating: -1)
+        lastSegment = arena.span(count: edges.count, repeating: -1)
         // An edge cut into n bends makes n + 1 segments: the bends are the vertices past the nodes.
-        var segments = LayeredSegmentList(capacity: max(0, widths.count - nodes.count) + edges.count, workspace: workspace)
+        var segments = LayeredSegmentList(capacity: max(0, widths.count - nodes.count) + edges.count, arena: arena)
         var nextVertex = nodes.count
         for edgeIndex in edges.indices where !isDirect[edgeIndex] {
-            cutEdge(edgeIndex, into: &segments, nextVertex: &nextVertex, widths: &widths, kinds: &kinds, ranks: &ranks)
+            cutEdge(edgeIndex, into: &segments, nextVertex: &nextVertex, widths: widths, kinds: kinds, ranks: ranks)
         }
-        if spreads {
-            segmentFromEnd = segments.fromEnd
-            segmentToEnd = segments.toEnd
-        } else {
-            workspace.recycle(segments.fromEnd)
-            workspace.recycle(segments.toEnd)
-            segmentFromEnd = nil
-            segmentToEnd = nil
-        }
-        segments.fromEnd = []
-        segments.toEnd = []
+        segmentFromEnd = spreads ? segments.fromEnd.elements : nil
+        segmentToEnd = spreads ? segments.toEnd.elements : nil
         return segments
     }
 
     /// One edge cut into a segment per rank it passes, with a bend or its label in each rank between its ends.
-    private mutating func cutEdge(_ edgeIndex: Int, into segments: inout LayeredSegmentList, nextVertex: inout Int, widths: inout [Double],
-                                  kinds: inout [LayeredVertexKind], ranks: inout [Int]) {
+    private func cutEdge(_ edgeIndex: Int, into segments: inout LayeredSegmentList, nextVertex: inout Int, widths: ScratchSpan<Double>,
+                         kinds: ScratchSpan<LayeredVertexKind>, ranks: ScratchSpan<Int>) {
         let edge = edges[edgeIndex]
         let upper = edge.isReversed ? edge.head : edge.tail
         let lower = edge.isReversed ? edge.tail : edge.head
@@ -155,10 +155,10 @@ extension LayeredFlatLayout {
     }
 
     /// The innermost group of every vertex: a node's own, and a bend's the innermost holding both its edge's ends.
-    private func vertexGroups(vertexCount: Int) -> [Int]? {
+    private func vertexGroups(vertexCount: Int) -> ScratchSpan<Int>? {
         guard let groupOfNode = options.groupOfNode else { return nil }
         let parent = options.parentOfGroup
-        var groups = workspace.integers(count: vertexCount, repeating: -1)
+        let groups = arena.span(count: vertexCount, repeating: -1)
         for node in nodes.indices { groups[node] = groupOfNode[node] }
         func depth(_ group: Int) -> Int {
             var depth = 0

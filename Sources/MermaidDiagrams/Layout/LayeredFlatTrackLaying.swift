@@ -5,14 +5,15 @@
  * Description: Lays the pieces of one gap of Pele's layered layout on tracks, and finds the curves that need levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension LayeredFlatTracks {
     /// Gives the pieces of one gap their tracks, each the number its group takes, counting from the group's first in
-    /// curves; returns the number of tracks. The pieces reaching furthest go first, so that those of one fan nest.
-    mutating func lay(_ list: inout [Int]) -> Int {
+    /// curves; returns the number of tracks. The pieces reaching furthest go first, so that those of one fan nest: `list`
+    /// is sorted so in place.
+    mutating func lay(_ list: ScratchSpan<Int>) -> Int {
         // No piece takes no track; one piece takes the first, a group of its own one track high.
         if list.isEmpty { return 0 }
         if list.count == 1 {
@@ -20,60 +21,51 @@ extension LayeredFlatTracks {
             pieces.levels[list[0]] = 1
             return 1
         }
+        let mark = arena.mark()
+        defer { arena.release(to: mark) }
         let low = low, high = high
-        var spare = workspace.emptyIntegers(capacity: 0)
-        list.sortStably(spare: &spare) { first, second in
+        list.sortStably(in: arena) { first, second in
             let reach = (high[second] - low[second]) - (high[first] - low[first])
             if reach != 0 { return reach < 0 }
             return (low[first] != low[second] ? low[first] - low[second] : Double(first - second)) < 0
         }
-        workspace.recycle(consume spare)
         let count = list.count
-        var groups = LayeredUnionFind(count: count, workspace: workspace)
+        var groups = LayeredSpanUnionFind(count: count, arena: arena)
         let rows: Int
         if count <= LayeredFlatConstants.maximumWeighedPieces {
             rows = layWeighed(list, groups: &groups)
         } else {
-            var sequence = workspace.emptyIntegers(capacity: count)
-            sequence.append(contentsOf: 0..<count)
+            let sequence: ScratchSpan<Int> = arena.uninitializedSpan(count: count)
+            for index in 0..<count { sequence[index] = index }
             rows = placeOnTracks(list, sequence: sequence)
-            workspace.recycle(consume sequence)
         }
         writeLevels(of: list, groups: &groups, rows: rows)
-        groups.recycle(into: workspace)
         return rows
     }
 
     /// The tracks of a gap few enough to weigh which piece goes above which; returns the number of tracks.
-    private mutating func layWeighed(_ list: [Int], groups: inout LayeredUnionFind) -> Int {
-        let pairs = nearPairs(list)
+    private mutating func layWeighed(_ list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind) -> Int {
+        let pairs = nearPairs(list).elements
         // Each pair that clashes is a link both ways, in the order of the pairs.
-        var keys = workspace.emptyIntegers(capacity: 0)
-        var values = workspace.emptyIntegers(capacity: 0)
+        var keys = arena.list(capacity: pairs.count, of: Int.self)
+        var values = arena.list(capacity: pairs.count, of: Int.self)
         for pair in stride(from: 0, to: pairs.count, by: 2) where clash(list[pairs[pair]], list[pairs[pair + 1]]) {
             keys.append(pairs[pair])
             values.append(pairs[pair + 1])
             keys.append(pairs[pair + 1])
             values.append(pairs[pair])
         }
-        let clashes = LayeredLinkLists(count: list.count, keys: keys, values: values, workspace: workspace)
-        workspace.recycle(consume keys)
-        workspace.recycle(consume values)
-        var sequence = workspace.emptyIntegers(capacity: list.count)
+        let clashes = LayeredLinkLists(count: list.count, keys: keys.elements, values: values.elements, arena: arena)
+        var sequence = arena.list(capacity: list.count, of: Int.self)
         let above = weighedSequence(list, pairs: pairs, groups: &groups, into: &sequence)
-        workspace.recycle(consume pairs)
-        let rows = placeOnWeighedTracks(list, sequence: sequence, above: above, clashes: clashes)
-        above.recycle(into: workspace)
-        clashes.recycle(into: workspace)
-        workspace.recycle(consume sequence)
-        return rows
+        return placeOnWeighedTracks(list, sequence: sequence.elements, above: above, clashes: clashes)
     }
 
     /// Each piece's group's number of tracks, and in curves each track counted from its group's first.
-    private mutating func writeLevels(of list: [Int], groups: inout LayeredUnionFind, rows: Int) {
+    private mutating func writeLevels(of list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind, rows: Int) {
         let count = list.count
-        var firstTrack = workspace.integers(count: count, repeating: rows)
-        var lastTrack = workspace.integers(count: count, repeating: -1)
+        let firstTrack = arena.span(count: count, repeating: rows)
+        let lastTrack = arena.span(count: count, repeating: -1)
         for index in 0..<count {
             let root = groups.find(index)
             firstTrack[root] = min(firstTrack[root], pieces.track[list[index]])
@@ -84,18 +76,17 @@ extension LayeredFlatTracks {
             pieces.levels[list[index]] = lastTrack[root] - firstTrack[root] + 1
             if isCurved { pieces.track[list[index]] -= firstTrack[root] }
         }
-        workspace.recycle(consume firstTrack)
-        workspace.recycle(consume lastTrack)
     }
 
     /// Which pieces should be above which, so that they cross less, the pieces that could meet joined into groups, and
     /// the order that follows as many of those wishes as it can, written to `sequence`. Returns, for each piece, those
     /// that should be above it.
-    private func weighedSequence(_ list: [Int], pairs: [Int], groups: inout LayeredUnionFind, into sequence: inout [Int]) -> LayeredLinkLists {
+    private func weighedSequence(_ list: ScratchSpan<Int>, pairs: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind,
+                                 into sequence: inout ScratchList<Int>) -> LayeredLinkLists {
         // Each wish as a piece that should be below and the one that should be above it, in the order of the pairs.
-        var lowerPieces = workspace.emptyIntegers(capacity: 0)
-        var upperPieces = workspace.emptyIntegers(capacity: 0)
-        var waiting = workspace.integers(count: list.count, repeating: 0)
+        var lowerPieces = arena.list(capacity: pairs.count / 2, of: Int.self)
+        var upperPieces = arena.list(capacity: pairs.count / 2, of: Int.self)
+        let waiting = arena.span(count: list.count, repeating: 0)
         for pair in stride(from: 0, to: pairs.count, by: 2) {
             let first = pairs[pair], second = pairs[pair + 1]
             if !meet(list[first], list[second]) { continue }
@@ -107,21 +98,17 @@ extension LayeredFlatTracks {
             upperPieces.append(firstAbove < secondAbove ? first : second)
             waiting[firstAbove < secondAbove ? second : first] += 1
         }
-        let above = LayeredLinkLists(count: list.count, keys: lowerPieces, values: upperPieces, workspace: workspace)
-        let after = LayeredLinkLists(count: list.count, keys: upperPieces, values: lowerPieces, workspace: workspace)
-        workspace.recycle(consume lowerPieces)
-        workspace.recycle(consume upperPieces)
-        Self.sequence(count: list.count, waiting: &waiting, after: after, into: &sequence, workspace: workspace)
-        workspace.recycle(consume waiting)
-        after.recycle(into: workspace)
+        let above = LayeredLinkLists(count: list.count, keys: lowerPieces.elements, values: upperPieces.elements, arena: arena)
+        let after = LayeredLinkLists(count: list.count, keys: upperPieces.elements, values: lowerPieces.elements, arena: arena)
+        Self.sequence(count: list.count, waiting: waiting, after: after, into: &sequence, arena: arena)
         return above
     }
 
     /// The order that follows as many of the wishes as it can: a piece once all that should be above it are placed, and
     /// when none is free, the one with the fewest still waiting.
-    private static func sequence(count: Int, waiting: inout [Int], after: LayeredLinkLists, into sequence: inout [Int],
-                                 workspace: LayeredFlatWorkspace) {
-        var isPlaced = workspace.flags(count: count, repeating: false)
+    private static func sequence(count: Int, waiting: ScratchSpan<Int>, after: LayeredLinkLists, into sequence: inout ScratchList<Int>,
+                                 arena: DiagramScratchArena) {
+        let isPlaced = arena.span(count: count, repeating: false)
         for _ in 0..<count {
             var pick = -1
             for index in 0..<count where !isPlaced[index] {
@@ -132,14 +119,14 @@ extension LayeredFlatTracks {
             sequence.append(pick)
             for next in after[pick] { waiting[next] -= 1 }
         }
-        workspace.recycle(consume isPlaced)
     }
 
     /// Each piece of a weighed gap on the first track below those that should be above it that no piece it clashes
     /// with has taken. Every piece starts without a track, so the piece placed k-th takes a track no higher than k: the
-    /// tracks taken are marked in one list of flags as long as the list, instead of a set.
-    private mutating func placeOnWeighedTracks(_ list: [Int], sequence: [Int], above: LayeredLinkLists, clashes: LayeredLinkLists) -> Int {
-        var isTaken = workspace.flags(count: list.count + 1, repeating: false)
+    /// tracks taken are marked in one span of flags as long as the list, instead of a set.
+    private mutating func placeOnWeighedTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>, above: LayeredLinkLists,
+                                               clashes: LayeredLinkLists) -> Int {
+        let isTaken = arena.span(count: list.count + 1, repeating: false)
         var rows = 0
         for at in sequence {
             let piece = list[at]
@@ -151,12 +138,12 @@ extension LayeredFlatTracks {
             pieces.track[piece] = track
             rows = max(rows, track + 1)
         }
-        workspace.recycle(consume isTaken)
         return rows
     }
 
     /// Each piece of a gap of too many pieces to weigh on the first track where it clashes with none already there.
-    private mutating func placeOnTracks(_ list: [Int], sequence: [Int]) -> Int {
+    private mutating func placeOnTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>) -> Int {
+        // Only gaps of more than `maximumWeighedPieces` pieces come here: the tracks' own lists are arrays.
         var onTrack: [[Int]] = []
         var rows = 0
         for at in sequence {
@@ -173,17 +160,18 @@ extension LayeredFlatTracks {
 
     /// The levels of one gap of curves: the pieces that turn onto levels, with the short pieces that could cross them,
     /// unless the curves mostly cross each other, when the gap grows instead.
-    mutating func assignLevels(rank: Int, all: [Int]) {
+    mutating func assignLevels(rank: Int, all: ScratchSpan<Int>) {
         // A lone piece has none to be told apart from: it turns onto no level and leaves the gap as it is.
         if all.count < 2 { return }
-        let pairs = nearPairs(all)
+        let mark = arena.mark()
         defer {
             for piece in all {
                 isLevel[piece] = false
                 isBeside[piece] = false
             }
-            workspace.recycle(pairs)
+            arena.release(to: mark)
         }
+        let pairs = nearPairs(all).elements
         if markLevelPieces(rank: rank, all: all, pairs: pairs) == 0 { return }
         var crossing = 0
         var alongside = 0
@@ -203,23 +191,22 @@ extension LayeredFlatTracks {
             }
             return
         }
-        var members = workspace.emptyIntegers(capacity: all.count)
+        var members = arena.list(capacity: all.count, of: Int.self)
         for piece in all where isLevel[piece] || (!pieces.isWide[piece] && isBeside[piece]) { members.append(piece) }
-        _ = lay(&members)
+        _ = lay(members.elements)
         var most: Int?
         for piece in members { most = max(most ?? pieces.levels[piece], pieces.levels[piece]) }
         trackCount[rank] = most ?? 0
-        workspace.recycle(consume members)
     }
 
     /// Marks in `isLevel` the pieces that turn onto levels: first those that run far across and have another such
     /// piece to be told apart from, then any two that would pass too near each other as plain curves. Returns how many.
-    private mutating func markLevelPieces(rank: Int, all: [Int], pairs: [Int]) -> Int {
-        var far = workspace.emptyIntegers(capacity: all.count)
+    private mutating func markLevelPieces(rank: Int, all: ScratchSpan<Int>, pairs: ScratchSpan<Int>) -> Int {
+        var far = arena.list(capacity: all.count, of: Int.self)
         for piece in all where pieces.isWide[piece] { far.append(piece) }
-        defer { workspace.recycle(far) }
-        _ = lay(&far)
+        _ = lay(far.elements)
         var levelCount = 0
+        let isLevel = isLevel
         func mark(_ piece: Int) {
             if isLevel[piece] { return }
             isLevel[piece] = true
@@ -251,15 +238,6 @@ struct LayeredUnionFind {
 
     init(count: Int) { parent = Array(0..<count) }
 
-    /// The groups of `count` indices, each its own, in a list of `workspace`.
-    init(count: Int, workspace: LayeredFlatWorkspace) {
-        parent = workspace.emptyIntegers(capacity: count)
-        parent.append(contentsOf: 0..<count)
-    }
-
-    /// Gives the list back to `workspace`.
-    consuming func recycle(into workspace: LayeredFlatWorkspace) { workspace.recycle(parent) }
-
     mutating func find(_ index: Int) -> Int {
         var index = index
         while parent[index] != index {
@@ -271,6 +249,33 @@ struct LayeredUnionFind {
 
     /// Puts the group of `first` under the root of `second`'s.
     mutating func join(_ first: Int, into second: Int) {
+        let firstRoot = find(first)
+        let secondRoot = find(second)
+        parent[firstRoot] = secondRoot
+    }
+}
+
+/// `LayeredUnionFind` with its parents in a span of a scratch arena.
+struct LayeredSpanUnionFind {
+    private let parent: ScratchSpan<Int>
+
+    /// The groups of `count` indices, each its own.
+    init(count: Int, arena: DiagramScratchArena) {
+        parent = arena.uninitializedSpan(count: count)
+        for index in 0..<count { parent[index] = index }
+    }
+
+    func find(_ index: Int) -> Int {
+        var index = index
+        while parent[index] != index {
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        }
+        return index
+    }
+
+    /// Puts the group of `first` under the root of `second`'s.
+    func join(_ first: Int, into second: Int) {
         let firstRoot = find(first)
         let secondRoot = find(second)
         parent[firstRoot] = secondRoot

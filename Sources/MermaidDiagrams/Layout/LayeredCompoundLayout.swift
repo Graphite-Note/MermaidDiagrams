@@ -5,8 +5,8 @@
  * Description: Pele's compound layout of a graph in nested groups, ported step for step from layout/compound.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -40,8 +40,6 @@ struct LayeredCompoundLayout {
     var total = (width: 0.0, height: 0.0)
     var loops: [Int] = []
     var strays: [Int] = []
-    /// The working lists of every flat layout this layout runs.
-    let workspace = LayeredFlatWorkspace()
 
     init(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], rootDirection: LayeredDirection, options: LayeredFlatOptions,
          maximumVertexCount: Int) {
