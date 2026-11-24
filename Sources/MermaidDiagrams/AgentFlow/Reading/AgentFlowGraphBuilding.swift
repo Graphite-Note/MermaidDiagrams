@@ -7,8 +7,8 @@
  *              edges between what is still drawn.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension AgentFlowDiagramBuilder {
@@ -19,6 +19,16 @@ extension AgentFlowDiagramBuilder {
     mutating func buildGraph(paletteLength: Int = Self.paletteLength, defaultCurve: String? = nil) {
         let collapsing = collapsedFlows()
         let parents = flowParents(hidden: collapsing.hidden)
+        // Made by a method that changes nothing, so that reading the builder's lists while making each node copies nothing.
+        var graph = drawnGraph(collapsing: collapsing, parents: parents, defaultCurve: defaultCurve)
+        normalizeShapes(of: &graph)
+        assignColorSlots(to: &graph, order: containerOrder(parents: parents), paletteLength: paletteLength)
+        diagram.graph = graph
+    }
+
+    /// The flows, nodes and edges still drawn once collapsed flows stand for what they hold, their shapes as written.
+    private func drawnGraph(collapsing: (hidden: Set<String>, collapsedInto: [String: String]), parents: [String: String],
+                            defaultCurve: String?) -> AgentFlowGraph {
         var graph = AgentFlowGraph()
         graph.nodes.reserveCapacity(diagram.flows.count + diagram.vertices.count)
         var nodeIndices: [String: Int] = [:]
@@ -40,9 +50,7 @@ extension AgentFlowDiagramBuilder {
             graph.nodes.append(node(of: diagram.vertices[index], parent: parents[identifier]))
         }
         graph.edges = drawnEdges(collapsedInto: collapsing.collapsedInto, defaultCurve: defaultCurve)
-        normalizeShapes(of: &graph)
-        assignColorSlots(to: &graph, order: containerOrder(parents: parents), paletteLength: paletteLength)
-        diagram.graph = graph
+        return graph
     }
 
     /// The styles of the classes named, each trimmed, the text styles of each after its styles.
@@ -101,6 +109,8 @@ extension AgentFlowDiagramBuilder {
     private mutating func flowParents(hidden: Set<String>) -> [String: String] {
         var parents: [String: String] = [:]
         let flowCount = diagram.flows.count
+        // The flows' indices are read through a local, so that the check below captures no copy of the builder.
+        let flowIndices = flowIndices
         func closesLoop(child: String, parent: String, at index: Int) -> Bool {
             // Only a flow handled earlier in this pass can already be above the parent.
             guard let childIndex = flowIndices[child], childIndex >= index else { return false }
