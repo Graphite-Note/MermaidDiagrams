@@ -6,8 +6,8 @@
  *              what metadata on a flow, a connector or an edge means, each count checked before anything is made.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A text as the grammar read it, with how it was written.
@@ -131,7 +131,7 @@ struct AgentFlowDiagramBuilder {
             guard case .text(let authored) = authoredShape ?? shape, case .text(let resolved) = shape else {
                 throw .invalidSyntax(line: line, problem: .agentFlow(.unknownShape((authoredShape ?? shape).javaScriptText)))
             }
-            guard authored == authored.lowercased(), !authored.contains("_") else {
+            guard authored == authored.lowercased(), !FoundationTextOnBytes.contains(authored, character: MermaidByte.underscore) else {
                 throw .invalidSyntax(line: line, problem: .agentFlow(.shapeNameNotLowercase(authored)))
             }
             guard AgentFlowShapes.isValidShape(resolved) else { throw .invalidSyntax(line: line, problem: .agentFlow(.unknownShape(resolved))) }

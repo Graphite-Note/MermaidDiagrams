@@ -6,8 +6,8 @@
  *              syntax error sits.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// The text Pele's parser reads: line breaks made `\n`, directives taken out (here blanked, so lines keep their
@@ -15,10 +15,21 @@
 /// Mermaid trims them before parsing. Comments stay: the agent flow's grammar reads them.
 enum AgentFlowPreparedText {
     static func units(of text: String) -> [UInt16] {
+        // Text in ASCII has a UTF-16 code unit per byte, of the same value: it is read from its bytes.
+        var units = text.utf8.allSatisfy({ byte in byte < 0x80 })
+            ? withLineFeeds(text.utf8.lazy.map(UInt16.init), capacity: text.utf8.count + 1)
+            : withLineFeeds(text.utf16, capacity: text.utf16.count + 1)
+        blankDirectives(in: &units)
+        units.append(10)
+        return withoutSpaceAfterClosingBraces(units)
+    }
+
+    /// The code units with each `\r\n` and `\r` made `\n`.
+    private static func withLineFeeds(_ written: some Sequence<UInt16>, capacity: Int) -> [UInt16] {
         var units: [UInt16] = []
-        units.reserveCapacity(text.utf16.count + 1)
+        units.reserveCapacity(capacity)
         var previousWasCarriageReturn = false
-        for unit in text.utf16 {
+        for unit in written {
             if unit == 13 {
                 units.append(10)
                 previousWasCarriageReturn = true
@@ -31,9 +42,7 @@ enum AgentFlowPreparedText {
             previousWasCarriageReturn = false
             units.append(unit)
         }
-        blankDirectives(in: &units)
-        units.append(10)
-        return withoutSpaceAfterClosingBraces(units)
+        return units
     }
 
     /// Each `%%{ … }%%` made spaces, its line breaks kept; one never closed runs to the end, as Pele's expression takes it.
@@ -54,6 +63,8 @@ enum AgentFlowPreparedText {
 
     /// `}[^\S\n]*\n` made `}\n`.
     private static func withoutSpaceAfterClosingBraces(_ units: [UInt16]) -> [UInt16] {
+        // Without a closing brace there is nothing to remove.
+        guard units.contains(125) else { return units }
         var kept: [UInt16] = []
         kept.reserveCapacity(units.count)
         var index = 0
@@ -104,17 +115,19 @@ extension AgentFlowParser {
         return line
     }
 
-    static let identifierTokens: Set<AgentFlowTokenKind> = [.number, .nodeString, .down, .minus, .defaultKeyword, .comma, .colon, .ampersand,
+    static let identifierTokens: AgentFlowTokenKindSet = [.number, .nodeString, .down, .minus, .defaultKeyword, .comma, .colon, .ampersand,
                                                              .numberSign, .asterisk, .unicodeText]
-    static let alphanumericTokens: Set<AgentFlowTokenKind> = [.number, .unicodeText, .nodeString, .direction, .down, .minus, .comma, .colon,
+    static let alphanumericTokens: AgentFlowTokenKindSet = [.number, .unicodeText, .nodeString, .direction, .down, .minus, .comma, .colon,
                                                                .ampersand, .numberSign, .asterisk]
-    static let textWithoutTagsTokens: Set<AgentFlowTokenKind> = [
+    static let textWithoutTagsTokens: AgentFlowTokenKindSet = [
         .number, .nodeString, .space, .minus, .ampersand, .unicodeText, .colon, .asterisk, .numberSign, .style, .linkStyle, .classDefinition,
         .classKeyword, .click, .graph, .direction, .flow, .connector, .global, .endKeyword, .down, .up, .startLink,
     ]
-    static let styleTokens: Set<AgentFlowTokenKind> = [.number, .nodeString, .colon, .space, .numberSign, .style]
-    static let separators: Set<AgentFlowTokenKind> = [.newline, .semicolon, .endOfFile, .comment]
-    static let trailingTokens: Set<AgentFlowTokenKind> = [.comment, .newline, .space, .endOfFile]
+    static let styleTokens: AgentFlowTokenKindSet = [.number, .nodeString, .colon, .space, .numberSign, .style]
+    static let separators: AgentFlowTokenKindSet = [.newline, .semicolon, .endOfFile, .comment]
+    static let trailingTokens: AgentFlowTokenKindSet = [.comment, .newline, .space, .endOfFile]
+    /// What a node's text holds after its first token.
+    static let nodeTextTokens: AgentFlowTokenKindSet = [.text, .tagStart, .tagEnd, .unicodeText]
     static let textTokens = "'UNICODE_TEXT', 'TEXT', 'TAGSTART'"
     static let separatorNames = "'COMMENT', 'SEMI', 'NEWLINE', 'EOF'"
     static let statementStart = "'COMMENT', 'SEMI', 'NEWLINE', 'SPACE', 'EOF', 'flow', 'global', 'connector', 'acc_title', 'acc_descr', "

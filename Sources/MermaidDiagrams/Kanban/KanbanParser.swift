@@ -5,7 +5,7 @@
  * Description: Reads a kanban board's outline into its columns and cards, as Mermaid's kanban database builds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -79,7 +79,7 @@ struct KanbanBoardBuilder: MermaidOutlineBuilding {
         } catch {
             throw .invalidSyntax(line: line, problem: .kanbanMetadataNotYAML(identifier: identifier))
         }
-        if let shape = fields["shape"], shape != shape.lowercased() || shape.contains("_") {
+        if let shape = fields["shape"], shape != shape.lowercased() || FoundationTextOnBytes.contains(shape, character: MermaidByte.underscore) {
             throw .invalidSyntax(line: line, problem: .kanbanShapeNameNotLowercase(shape))
         }
         return fields

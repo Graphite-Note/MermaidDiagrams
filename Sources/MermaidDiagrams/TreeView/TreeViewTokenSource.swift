@@ -6,7 +6,7 @@
  *              its tokens: an entry's name and annotations, the title and the accessibility text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -28,11 +28,13 @@ struct TreeViewTokenSource {
 
     init(lines: [TreeViewSourceLine]) {
         var bytes: [UInt8] = []
+        bytes.reserveCapacity(lines.reduce(lines.count) { count, line in count + line.text.utf8.count })
         var lineStarts: [Int] = []
+        lineStarts.reserveCapacity(lines.count)
         for (index, line) in lines.enumerated() {
             if index > 0 { bytes.append(MermaidByte.newline) }
             lineStarts.append(bytes.count)
-            bytes += Array(line.text.utf8)
+            bytes.append(contentsOf: line.text.utf8)
         }
         self.bytes = bytes
         self.lineStarts = lineStarts
@@ -94,11 +96,11 @@ struct TreeViewTokenSource {
             : Self.withoutTrailingBlanks(name)
         index += 1
         while index < tokens.count {
-            let written = text(of: tokens[index]).trimmingCharacters(in: .whitespaces)
+            let written = FoundationTextOnBytes.trimmed(text(of: tokens[index]), includingLineBreaks: false)
             switch tokens[index].kind {
-            case .classAnnotation: entry.classes = written.dropFirst(3).trimmingCharacters(in: .whitespaces)
+            case .classAnnotation: entry.classes = FoundationTextOnBytes.trimmed(String(written.dropFirst(3)), includingLineBreaks: false)
             case .iconAnnotation: entry.icon = String(written.dropFirst("icon(".count).dropLast())
-            case .descriptionAnnotation: entry.description = written.dropFirst(2).trimmingCharacters(in: .whitespaces)
+            case .descriptionAnnotation: entry.description = FoundationTextOnBytes.trimmed(String(written.dropFirst(2)), includingLineBreaks: false)
             default: return entry
             }
             index += 1

@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartBuilder.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Collects a quadrant chart as its statements are read, as Mermaid's quadrant database does: titles, axes,
+ *              quadrants, points with their coordinates and styles, and classes.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 import Foundation
 
 /// Collects a quadrant chart as its statements are read, as Mermaid's quadrant database does: a point's coordinates as
@@ -14,7 +26,7 @@ struct QuadrantChartBuilder {
 
     /// A later `title` replaces an earlier one; one with nothing but spaces leaves none.
     mutating func setTitle(_ title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = FoundationTextOnBytes.trimmed(title, includingLineBreaks: true)
         chart.title = trimmed.isEmpty ? nil : trimmed
     }
 
@@ -38,8 +50,20 @@ struct QuadrantChartBuilder {
         try countNode()
         let style = try QuadrantChartPointStyleSyntax.style(from: point.styles, line: line)
         chart.points.append(QuadrantChartPoint(label: Self.label(point.label) ?? DiagramLabel(lines: []),
-                                               xCoordinate: JavaScriptNumber.value(of: point.xCoordinate[...]),
-                                               yCoordinate: JavaScriptNumber.value(of: point.yCoordinate[...]), className: point.className, style: style))
+                                               xCoordinate: Self.coordinate(point.xCoordinate), yCoordinate: Self.coordinate(point.yCoordinate),
+                                               className: point.className, style: style))
+    }
+
+    /// A coordinate as JavaScript's `Number` reads it. The lexer writes `1`, `0`, or `0`, a character and digits
+    /// (`QuadrantChartPointSyntax`): `1`, `0` and `0.` with digits are read here, as `Number` reads them (the decimal
+    /// correctly rounded, as `Double` reads it), the rest by `JavaScriptNumber`.
+    private static func coordinate(_ written: String) -> Double? {
+        let bytes = written.utf8
+        guard let first = bytes.first else { return JavaScriptNumber.value(of: written[...]) }
+        if bytes.count == 1, first == UInt8(ascii: "1") || first == UInt8(ascii: "0") { return first == UInt8(ascii: "1") ? 1 : 0 }
+        let isDecimalFraction = bytes.count > 2 && first == UInt8(ascii: "0") && bytes.dropFirst().first == MermaidByte.period
+            && bytes.dropFirst(2).allSatisfy(MermaidByte.isDigit)
+        return isDecimalFraction ? Double(written) : JavaScriptNumber.value(of: written[...])
     }
 
     /// The styles of the class `name`; a later `classDef` of a name replaces an earlier one.

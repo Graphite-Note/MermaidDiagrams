@@ -6,7 +6,7 @@
  *              matter, and the icon they give a file, as Pele's detectIcon finds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -27,13 +27,15 @@ public struct TreeViewIconMaps: Equatable, Sendable {
 
     /// The maps in the front matter at the start of `bytes`, none without one.
     init(frontMatterOf bytes: [UInt8]) {
+        // A text without `Icons` or a backslash anywhere has none in its front matter's lines either.
+        guard Self.mayNameAnIconMap(bytes[...]) else { return }
         var keys: [(indentation: Int, key: String)] = []
         let lines = Self.frontMatterLines(of: bytes)
         // The two maps' keys can only be written with `Icons` in them, or with an escape, which takes a backslash.
-        guard lines.contains(where: Self.mayNameAnIconMap) else { return }
+        guard lines.contains(where: { line in Self.mayNameAnIconMap(ArraySlice(line.utf8)) }) else { return }
         for line in lines {
             let indentation = line.prefix { character in character == " " }.count
-            let content = line.trimmingCharacters(in: .whitespaces)
+            let content = FoundationTextOnBytes.trimmed(line, includingLineBreaks: false)
             guard !content.isEmpty, !content.hasPrefix("#"), let (key, value) = Self.keyAndValue(content) else { continue }
             while let last = keys.last, last.indentation >= indentation { keys.removeLast() }
             let path = keys.map(\.key)
@@ -46,13 +48,15 @@ public struct TreeViewIconMaps: Equatable, Sendable {
         }
     }
 
-    /// Whether a line holds `Icons` or a backslash, without which no key of it is `filenameIcons` or `extensionIcons`.
-    private static func mayNameAnIconMap(_ line: String) -> Bool {
-        let bytes = Array(line.utf8)
+    /// Whether bytes hold `Icons` or a backslash, without which no key of them is `filenameIcons` or `extensionIcons`.
+    private static func mayNameAnIconMap(_ bytes: ArraySlice<UInt8>) -> Bool {
         guard !bytes.contains(UInt8(ascii: "\\")) else { return true }
-        return bytes.count >= iconsWord.count && (0...(bytes.count - iconsWord.count)).contains { start in
-            bytes[start..<(start + iconsWord.count)].elementsEqual(iconsWord)
+        var searchStart = bytes.startIndex
+        while let candidate = bytes[searchStart...].firstIndex(of: iconsWord[0]) {
+            if bytes[candidate...].starts(with: iconsWord) { return true }
+            searchStart = candidate + 1
         }
+        return false
     }
 
     private static let iconsWord = Array("Icons".utf8)
@@ -77,7 +81,7 @@ public struct TreeViewIconMaps: Equatable, Sendable {
         while !cursor.isAtEnd {
             cursor.advance()
             let line = cursor.readRestOfLine()
-            if line.trimmingCharacters(in: .whitespaces) == "---" { return lines }
+            if FoundationTextOnBytes.trimmed(line, includingLineBreaks: false) == "---" { return lines }
             lines.append(line)
         }
         return []
@@ -87,10 +91,15 @@ public struct TreeViewIconMaps: Equatable, Sendable {
     private static func keyAndValue(_ content: String) -> (String, String)? {
         var reader = KanbanFlowReader(bytes: Array(content.utf8))
         guard let key = try? reader.readKey(), reader.skipsColonBeforeValue() else { return nil }
-        let rest = reader.rest.trimmingCharacters(in: .whitespaces)
+        let rest = FoundationTextOnBytes.trimmed(reader.rest, includingLineBreaks: false)
         if let first = rest.first, first == "\"" || first == "'" { return (key, rest) }
-        let withoutComment = rest.range(of: " #").map { comment in String(rest[..<comment.lowerBound]) } ?? rest
-        return (key, withoutComment.trimmingCharacters(in: .whitespaces))
+        // Without a space and a number sign in its bytes the value holds no comment, which is looked for only then.
+        let mayHoldComment = rest.utf8.indices.contains { index in
+            rest.utf8[index] == MermaidByte.space && rest.utf8.index(after: index) < rest.utf8.endIndex
+                && rest.utf8[rest.utf8.index(after: index)] == UInt8(ascii: "#")
+        }
+        let withoutComment = mayHoldComment ? rest.range(of: " #").map { comment in String(rest[..<comment.lowerBound]) } ?? rest : rest
+        return (key, FoundationTextOnBytes.trimmed(withoutComment, includingLineBreaks: false))
     }
 
     /// A value that YAML's JSON schema reads as text, or nil for null, a Boolean, a number or a collection.

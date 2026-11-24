@@ -6,7 +6,7 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 23/11/2026
  */
 
@@ -27,6 +27,8 @@ enum TreeViewBoxDrawingReader {
         let written = withoutCommentLines(MermaidByte.lines(of: text).enumerated().map { offset, line in
             TreeViewSourceLine(text: line, writtenLine: keywordLine + offset)
         })
+        // A text without a box character's bytes has no line to convert.
+        guard containsBoxCharacter(text) else { return written }
         let unchanged = written.map { line in passesUnchanged(line.text) }
         let content = written.indices.dropFirst().filter { index in !unchanged[index] && !isDecorationOnly(written[index].text) }
             .map { index in expandingTabs(written[index].text) }
@@ -65,6 +67,7 @@ enum TreeViewBoxDrawingReader {
     /// directive's `%%{`), with the lines of blanks just before it.
     private static func withoutCommentLines(_ lines: [TreeViewSourceLine]) -> [TreeViewSourceLine] {
         var kept: [TreeViewSourceLine] = []
+        kept.reserveCapacity(lines.count)
         for line in lines {
             if let first = firstScalarAfterBlanks(line.text), isOwnCharacter(first), first != "%" {
                 kept.append(line)
@@ -117,9 +120,21 @@ enum TreeViewBoxDrawingReader {
         !line.isEmpty && line.utf16.allSatisfy { unit in isWhitespace(unit) || unit == lightVertical || unit == heavyVertical }
     }
 
-    private static func containsBoxCharacter(_ line: String) -> Bool {
-        line.utf16.contains(where: isBoxCharacter)
+    /// Whether the text holds a dash, a branch or a vertical bar, light or heavy: read on its bytes, as each of them is
+    /// written `E2 94` and a last byte in UTF-8.
+    private static func containsBoxCharacter(_ text: String) -> Bool {
+        var beforePrevious: UInt8 = 0
+        var previous: UInt8 = 0
+        for byte in text.utf8 {
+            if beforePrevious == 0xE2, previous == 0x94, boxCharacterLastBytes.contains(byte) { return true }
+            beforePrevious = previous
+            previous = byte
+        }
+        return false
     }
+
+    /// The last bytes of `─`, `━`, `│`, `┃`, `└`, `┗`, `├` and `┣` in UTF-8, after `E2 94`.
+    private static let boxCharacterLastBytes: [UInt8] = [0x80, 0x81, 0x82, 0x83, 0x94, 0x97, 0x9C, 0xA3]
 
     /// The column of the line's first branch character, `├`, `└` or their heavy forms, in UTF-16 units as JavaScript counts.
     private static func branchColumn(in units: [UInt16]) -> Int? {

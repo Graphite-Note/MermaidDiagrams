@@ -6,8 +6,8 @@
  *              shape, `:::` classes, `&` groups, metadata after a node, and chains of links.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 extension AgentFlowParser {
@@ -18,7 +18,7 @@ extension AgentFlowParser {
         var label: AgentFlowText?
         var type: String?
         var properties: [String: String] = [:]
-        if let bracket = Self.brackets[current] {
+        if let bracket = Self.brackets[current.rawValue] {
             index += 1
             if bracket.opensTwice, current == bracket.opening {
                 index += 1
@@ -171,15 +171,22 @@ extension AgentFlowParser {
         var doubledType = ""
     }
 
-    static let brackets: [AgentFlowTokenKind: Bracket] = [
-        .squareStart: Bracket(opening: .squareStart, closing: .squareEnd, type: "square"),
-        .doubleCircleStart: Bracket(opening: .doubleCircleStart, closing: .doubleCircleEnd, type: "doublecircle"),
-        .parenthesisStart: Bracket(opening: .parenthesisStart, closing: .parenthesisEnd, type: "round", opensTwice: true, doubledType: "circle"),
-        .ellipseStart: Bracket(opening: .ellipseStart, closing: .ellipseEnd, type: "ellipse"),
-        .stadiumStart: Bracket(opening: .stadiumStart, closing: .stadiumEnd, type: "stadium"),
-        .subroutineStart: Bracket(opening: .subroutineStart, closing: .subroutineEnd, type: "subroutine"),
-        .cylinderStart: Bracket(opening: .cylinderStart, closing: .cylinderEnd, type: "cylinder"),
-        .diamondStart: Bracket(opening: .diamondStart, closing: .diamondStop, type: "diamond", opensTwice: true, doubledType: "hexagon"),
-        .tagEnd: Bracket(opening: .tagEnd, closing: .squareEnd, type: "odd"),
-    ]
+    /// The brackets by the raw value of the token that opens them, looked up without hashing; nil for any other token.
+    static let brackets: [Bracket?] = {
+        var byOpening = [Bracket?](repeating: nil, count: AgentFlowTokenKind.endOfFile.rawValue + 1)
+        for bracket in [
+            Bracket(opening: .squareStart, closing: .squareEnd, type: "square"),
+            Bracket(opening: .doubleCircleStart, closing: .doubleCircleEnd, type: "doublecircle"),
+            Bracket(opening: .parenthesisStart, closing: .parenthesisEnd, type: "round", opensTwice: true, doubledType: "circle"),
+            Bracket(opening: .ellipseStart, closing: .ellipseEnd, type: "ellipse"),
+            Bracket(opening: .stadiumStart, closing: .stadiumEnd, type: "stadium"),
+            Bracket(opening: .subroutineStart, closing: .subroutineEnd, type: "subroutine"),
+            Bracket(opening: .cylinderStart, closing: .cylinderEnd, type: "cylinder"),
+            Bracket(opening: .diamondStart, closing: .diamondStop, type: "diamond", opensTwice: true, doubledType: "hexagon"),
+            Bracket(opening: .tagEnd, closing: .squareEnd, type: "odd"),
+        ] {
+            byOpening[bracket.opening.rawValue] = bracket
+        }
+        return byOpening
+    }()
 }
