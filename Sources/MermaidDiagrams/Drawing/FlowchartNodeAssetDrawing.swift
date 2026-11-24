@@ -6,8 +6,8 @@
  *              where the icon goes, as Pele draws an icon node's form.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -21,7 +21,7 @@ enum FlowchartNodeAssetDrawing {
 
     static func frame(of asset: FlowchartNodeAsset, in node: FlowchartLayoutNode) -> CGPath? {
         guard case .icon = asset.kind else { return nil }
-        let box = asset.box(in: node.frame, hasLabel: !node.text.lines.isEmpty)
+        let box = asset.box(in: node.frame, hasLabel: node.text.lineCount > 0)
         switch asset.form {
         case .none: return nil
         case .square: return CGPath(rect: box, transform: nil)

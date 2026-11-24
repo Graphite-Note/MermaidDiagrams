@@ -5,8 +5,8 @@
  * Description: The room each commit and lane of a Git graph needs, along the history and across it, as Pele works it out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -51,7 +51,7 @@ struct GitGraphRoom {
             before[commit.branchIndex] = max(before[commit.branchIndex], isVertical ? commitRoom.labelSide : commitRoom.tagSide)
             after[commit.branchIndex] = max(after[commit.branchIndex], isVertical ? commitRoom.tagSide : commitRoom.labelSide)
         }
-        for (lane, name) in names.enumerated() where !name.lines.isEmpty {
+        for (lane, name) in names.enumerated() where name.lineCount > 0 {
             let reach = isVertical ? name.size.width / 2 + GitGraphGeometry.verticalNameReach : name.size.height / 2 + GitGraphGeometry.horizontalNameReach
             before[lane] = max(before[lane], reach)
             after[lane] = max(after[lane], reach)

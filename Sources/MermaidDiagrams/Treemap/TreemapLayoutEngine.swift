@@ -5,8 +5,8 @@
  * Description: Lays a treemap out with Pele's measurements, as wide as the container when that is narrower.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -53,7 +53,7 @@ public enum TreemapLayoutEngine {
         let (boxes, placed) = TreemapSquarifiedPlacement.place(diagram.nodes, width: width, height: height, insets: insets(of: diagram, width: width, height: height))
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleRoom)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let origin = CGPoint(x: padding + max(0, ((title?.size.width ?? 0) - CGFloat(width)) / 2), y: padding + titleHeight)
         let format = TreemapValueFormat(specifier: options.valueFormat)

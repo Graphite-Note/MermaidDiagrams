@@ -6,8 +6,8 @@
  *              Text and SVG place it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -31,10 +31,10 @@ extension DiagramSceneText {
     /// The block's lines, top to bottom. A turned text turns them about the block's center (`rotation`).
     public var lines: [DiagramSceneTextLine] {
         let top = block.center.y - block.size.height / 2
-        return block.lines.indices.map { index in
+        return (0..<block.lineCount).map { index in
             let middle = top + (CGFloat(index) + 0.5) * block.lineHeight
-            let width = block.lineWidths[index]
-            return DiagramSceneTextLine(text: block.lines[index], center: CGPoint(x: block.center.x, y: middle), width: width,
+            let width = block.lineWidth(at: index)
+            return DiagramSceneTextLine(text: block.line(at: index), center: CGPoint(x: block.center.x, y: middle), width: width,
                                         baselineStart: CGPoint(x: block.center.x - width / 2,
                                                                y: middle + block.fontSize * DiagramTextDrawing.baselineShiftRatio),
                                         runs: block.runs(ofLine: index))

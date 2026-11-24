@@ -6,8 +6,8 @@
  *              title and clear of the padding, the composites, blocks and arrows with their text, the edges' lines and marks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -62,7 +62,7 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
         let drawn = view.drawnSize
         var text = view.text
         let keepsOwnSize = if case .leaf(let shape) = view.kind { BlockViews.keepsOwnSize.contains(shape) } else { false }
-        if let measured = view.text, cell.span > 1, measured.size.width > 0, measured.lines.count > 1, drawn.width > cell.neededWidth, !keepsOwnSize {
+        if let measured = view.text, cell.span > 1, measured.size.width > 0, measured.lineCount > 1, drawn.width > cell.neededWidth, !keepsOwnSize {
             let room = measured.size.width + (drawn.width - cell.neededWidth)
             text = PlaneMapLabel.block(diagram.blocks[view.blockIndex].label, measurer: cache.measurer(for: view.appearance), maximumWidth: room)
         }

@@ -1,3 +1,15 @@
+/**
+ * File: XYChartText.swift
+ * -----------------------
+ * Layer: Core
+ * Description: The three sizes of an XY chart's text, as Pele's: the title in bold, the axes and the legend smaller, and
+ *              point labels smaller still, each measured into a block or none for an empty label.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// The three sizes of an XY chart's text, as Pele's: the title in bold at the text size, the axes and the legend at
@@ -28,6 +40,6 @@ struct XYChartText<Measurer: DiagramTextMeasuring> {
 
     private func block(_ label: DiagramLabel, measurer: Measurer, maximumWidth: CGFloat) -> DiagramTextBlock? {
         let block = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: maximumWidth)
-        return block.lines.isEmpty ? nil : block
+        return block.lineCount == 0 ? nil : block
     }
 }

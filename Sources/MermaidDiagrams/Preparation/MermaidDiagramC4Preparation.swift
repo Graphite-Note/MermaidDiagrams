@@ -6,8 +6,8 @@
  *              reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -29,25 +29,29 @@ extension MermaidDiagramAccessibility {
     /// Internet Banking System, system; Banking Customer A to Internet Banking System: Uses”. Each element's label is
     /// read once.
     init(c4 diagram: C4Diagram) {
-        let shapes = diagram.shapes
-        let shapeNames = shapes.indices.map { index in Self.c4Name(of: shapes[index].element) }
-        var nameByAlias: [String: String] = [:]
-        nameByAlias.reserveCapacity(shapes.count + diagram.boundaries.count)
-        for index in shapes.indices where shapes[index].element.aliasArgument == nil { nameByAlias[shapes[index].element.alias] = shapeNames[index] }
-        for boundary in diagram.boundaries.dropFirst() where boundary.element.aliasArgument == nil && nameByAlias[boundary.element.alias] == nil {
-            nameByAlias[boundary.element.alias] = Self.c4Name(of: boundary.element)
-        }
-        var summary: [String] = []
-        summary.reserveCapacity(shapes.count + diagram.relations.count)
-        for index in shapes.indices { summary.append(Self.joined(shapeNames[index], ", ", Self.spokenName(of: shapes[index].kind))) }
-        for relation in diagram.relations {
-            let from = nameByAlias[relation.from] ?? relation.from
-            let to = nameByAlias[relation.to] ?? relation.to
-            let label = Self.spoken(relation.label)
-            summary.append(label.isEmpty ? Self.joined(from, " to ", to) : Self.joined(from, " to ", to, ": ", label))
-        }
         self.init(kind: .c4, title: diagram.title.flatMap { title in title.isEmpty ? nil : Self.spoken(title) },
-                  description: diagram.accessibilityDescription, summary: summary, summarySeparator: "; ")
+                  description: diagram.accessibilityDescription, summarySeparator: "; ") {
+            let shapes = diagram.shapes
+            let shapeNames = shapes.indices.map { index in Self.c4Name(of: shapes[index].element) }
+            var nameByAlias: [String: String] = [:]
+            nameByAlias.reserveCapacity(shapes.count + diagram.boundaries.count)
+            for index in shapes.indices where shapes[index].element.aliasArgument == nil {
+                nameByAlias[shapes[index].element.alias] = shapeNames[index]
+            }
+            for boundary in diagram.boundaries.dropFirst() where boundary.element.aliasArgument == nil && nameByAlias[boundary.element.alias] == nil {
+                nameByAlias[boundary.element.alias] = Self.c4Name(of: boundary.element)
+            }
+            var summary: [String] = []
+            summary.reserveCapacity(shapes.count + diagram.relations.count)
+            for index in shapes.indices { summary.append(Self.joined(shapeNames[index], ", ", Self.spokenName(of: shapes[index].kind))) }
+            for relation in diagram.relations {
+                let from = nameByAlias[relation.from] ?? relation.from
+                let to = nameByAlias[relation.to] ?? relation.to
+                let label = Self.spoken(relation.label)
+                summary.append(label.isEmpty ? Self.joined(from, " to ", to) : Self.joined(from, " to ", to, ": ", label))
+            }
+            return summary
+        }
     }
 
     /// An element's label as drawn, else its alias.

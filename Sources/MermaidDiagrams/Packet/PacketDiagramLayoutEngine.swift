@@ -6,8 +6,8 @@
  *              container too narrow for it, as Pele turns one to fit.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -78,7 +78,7 @@ public enum PacketDiagramLayoutEngine {
         let titleWidth = isTurned ? DiagramWidthFitting.titleRoom(availableWidth: availableWidth) : wrappingWidth
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: titleWidth)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let titleHeight = title.map { title in title.size.height + (rowsHeight > 0 ? titleGap : 0) } ?? 0
         let left = padding + max(0, ((title?.size.width ?? 0) - rowsWidth) / 2)
         let placement = Grid(left: left, bitsPerRow: grid.bitsPerRow, bitWidth: grid.bitWidth, rowTops: tops, rowHeights: rowHeights,
@@ -104,7 +104,7 @@ public enum PacketDiagramLayoutEngine {
             row.map { piece in
                 let room = max(1, CGFloat(piece.lastBit - piece.firstBit + 1) * grid.bitWidth - gap - labelMargin)
                 let block = DiagramTextBlock(literal: texts[piece.fieldIndex], measurer: measurer, room: room)
-                return block.lines.isEmpty ? nil : block
+                return block.lineCount == 0 ? nil : block
             }
         }
     }

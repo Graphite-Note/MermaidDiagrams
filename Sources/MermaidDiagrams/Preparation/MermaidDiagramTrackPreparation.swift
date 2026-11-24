@@ -6,8 +6,8 @@
  *              their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -40,14 +40,18 @@ extension MermaidDiagramPreparationContext {
 extension MermaidDiagramAccessibility {
     /// Each frame by its kind and name, in the order of time: “Command AddItem”.
     init(eventModel diagram: EventModelDiagram) {
-        let frames = diagram.frames.map { frame in Self.spokenKind(frame.kind) + " " + frame.name }
-        self.init(kind: .eventModel, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription, summary: frames)
+        self.init(kind: .eventModel, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
+            let frames = diagram.frames.map { frame in Self.spokenKind(frame.kind) + " " + frame.name }
+            return frames
+        }
     }
 
     /// Each rule by its name, in the order they are written.
     init(railroad diagram: RailroadDiagram) {
-        self.init(kind: .railroad, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: diagram.rules.map(\.name))
+        self.init(kind: .railroad, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription) {
+            diagram.rules.map(\.name)
+        }
     }
 
     private static func spokenKind(_ kind: EventModelEntityKind) -> String {

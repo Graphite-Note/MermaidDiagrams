@@ -6,8 +6,8 @@
  *              projection from percent, the extent everything drawn reaches, and text centered or starting at a point.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -102,23 +102,10 @@ struct WardleyMapCanvas {
 
     /// `block`'s lines as blocks of one line each, starting at `x`, the first's baseline at `baseline`.
     static func lines(of block: DiagramTextBlock, x: CGFloat, baseline: CGFloat) -> [DiagramTextBlock] {
-        block.lines.indices.map { index in
+        (0..<block.lineCount).map { index in
             let lineBaseline = baseline + CGFloat(index) * block.lineHeight
-            return DiagramTextBlock(planeMapLine: block.lines[index], width: block.lineWidths[index], fontSize: block.fontSize, lineHeight: block.lineHeight,
-                                    center: CGPoint(x: x + block.lineWidths[index] / 2,
-                                                    y: lineBaseline - block.fontSize * DiagramTextDrawing.baselineShiftRatio))
+            return block.plainLineBlock(at: index, center: CGPoint(x: x + block.lineWidth(at: index) / 2,
+                                                                   y: lineBaseline - block.fontSize * DiagramTextDrawing.baselineShiftRatio))
         }
-    }
-}
-
-extension DiagramTextBlock {
-    /// One line already measured, centered at `center`: a line of a text written from its start, as a Wardley map's
-    /// labels are.
-    init(planeMapLine line: String, width: CGFloat, fontSize: CGFloat, lineHeight: CGFloat, center: CGPoint) {
-        lines = [line]
-        lineWidths = [width]
-        self.fontSize = fontSize
-        self.lineHeight = lineHeight
-        self.center = center
     }
 }

@@ -5,8 +5,8 @@
  * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -49,7 +49,7 @@ struct FlowchartMeasurement {
         self.textOffsets = textOffsets
         edgeTexts = diagram.edges.map { edge in
             edge.label.map { label in DiagramTextBlock(label: label, measurer: edgeText, maximumWidth: wrappingWidth) }
-                .flatMap { text in text.lines.isEmpty ? nil : text }
+                .flatMap { text in text.lineCount == 0 ? nil : text }
         }
         var selfLoopEdgeIndices = [[Int]](repeating: [], count: diagram.nodes.count)
         for (edgeIndex, edge) in diagram.edges.enumerated() where edge.sourceIndex == edge.targetIndex {

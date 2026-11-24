@@ -6,8 +6,8 @@
  *              diagrams: their scenes, their narrow scenes, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -30,11 +30,12 @@ extension MermaidDiagramAccessibility {
     /// Each requirement and element by its kind and name, then each relation as its two ends around its kind: “Requirement
     /// test_req”, “test_entity satisfies test_req”.
     init(requirement diagram: RequirementDiagram) {
-        let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
-        let elements = diagram.elements.map { element in "Element \(element.name)" }
-        let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
-        self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: requirements + elements + relations)
+        self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
+            let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
+            let elements = diagram.elements.map { element in "Element \(element.name)" }
+            let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
+            return requirements + elements + relations
+        }
     }
 }
 
@@ -54,14 +55,17 @@ extension MermaidDiagramPreparationContext {
 }
 
 extension MermaidDiagramAccessibility {
-    /// Each lane's title, then the text of each node drawn, as a flowchart's: “Customer, Warehouse, Browse catalogue, Pay”.
+    /// Each lane's title, then the text of each node drawn, as a flowchart's: “Customer, Warehouse, Browse catalogue, Pay”;
+    /// its title and description a flowchart's.
     init(swimlane diagram: FlowchartDiagram) {
         let flowchart = MermaidDiagramAccessibility(flowchart: diagram)
-        let nesting = FlowchartClusterNesting(diagram: diagram)
-        let laneTitles = diagram.subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
-            .map { subgraph in diagram.subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
-        let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
-        let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
-        self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description, summary: laneTitles + nodeTexts)
+        self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description) {
+            let nesting = FlowchartClusterNesting(diagram: diagram)
+            let laneTitles = diagram.subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
+                .map { subgraph in diagram.subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
+            let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
+            let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
+            return laneTitles + nodeTexts
+        }
     }
 }

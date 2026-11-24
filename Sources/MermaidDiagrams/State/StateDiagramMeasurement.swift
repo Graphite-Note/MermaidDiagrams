@@ -5,8 +5,8 @@
  * Description: A state diagram's text measured and its shapes sized, Pele's, with the spans its transitions spread along.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -69,7 +69,7 @@ struct StateDiagramMeasurement {
                 let detail = detailLines.isEmpty ? nil
                     : DiagramTextBlock(label: DiagramLabel(lines: detailLines), measurer: smallText, maximumWidth: wrappingWidth)
                 names.append(name)
-                details.append(detail.flatMap { block in block.lines.isEmpty ? nil : block })
+                details.append(detail.flatMap { block in block.lineCount == 0 ? nil : block })
                 stateSizes.append(Self.boxSize(name: name, details: details[index]))
             case .start, .end, .choice, .fork, .join:
                 names.append(nil)
@@ -82,7 +82,7 @@ struct StateDiagramMeasurement {
         self.stateSizes = stateSizes
         transitionTexts = diagram.transitions.map { transition in
             transition.label.map { label in DiagramTextBlock(label: label, measurer: smallText, maximumWidth: wrappingWidth) }
-                .flatMap { text in text.lines.isEmpty ? nil : text }
+                .flatMap { text in text.lineCount == 0 ? nil : text }
         }
         noteTexts = diagram.notes.map { note in DiagramTextBlock(label: note.text, measurer: smallText, maximumWidth: noteWrappingWidth) }
         noteSizes = noteTexts.map { text in

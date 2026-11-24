@@ -6,8 +6,8 @@
  *              before it when both are painted alike, opaque and apart, and a fill and the stroke of its path into one.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -49,7 +49,7 @@ struct DiagramSceneBuilder {
 
     mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
                        rotation: CGFloat? = nil, outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
-        guard let block, !block.lines.isEmpty else { return }
+        guard let block, block.lineCount > 0 else { return }
         finishRun()
         finishedItems.append(.text(DiagramSceneText(block: block, paint: paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced,
                                                     rotation: rotation, outline: outline, part: part)))

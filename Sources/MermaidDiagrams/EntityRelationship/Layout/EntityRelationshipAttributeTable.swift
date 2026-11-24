@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationshipAttributeTable.swift
+ * --------------------------------------------
+ * Layer: Core
+ * Description: An entity's attribute rows laid out as a table, each column as wide as its widest cell, each row as tall
+ *              as its tallest cell, every cell's lines starting at its column's left edge.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// An entity's attribute rows as a table, as Pele lays it out: each column as wide as its widest cell, a column no
@@ -82,17 +94,8 @@ private extension DiagramTextBlock {
     /// Each line as a block of its own that starts at `left`, the first centered on `firstLineCenterY` and each next
     /// one a line lower.
     func leftAlignedLines(left: CGFloat, firstLineCenterY: CGFloat) -> [DiagramTextBlock] {
-        lines.indices.map { index in
-            DiagramTextBlock(line: lines[index], width: lineWidths[index], fontSize: fontSize, lineHeight: lineHeight,
-                             center: CGPoint(x: left + lineWidths[index] / 2, y: firstLineCenterY + CGFloat(index) * lineHeight))
+        (0..<lineCount).map { index in
+            plainLineBlock(at: index, center: CGPoint(x: left + lineWidth(at: index) / 2, y: firstLineCenterY + CGFloat(index) * lineHeight))
         }
-    }
-
-    init(line: String, width: CGFloat, fontSize: CGFloat, lineHeight: CGFloat, center: CGPoint) {
-        lines = [line]
-        lineWidths = [width]
-        self.fontSize = fontSize
-        self.lineHeight = lineHeight
-        self.center = center
     }
 }

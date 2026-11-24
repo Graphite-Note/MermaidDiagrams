@@ -7,7 +7,7 @@
  *              before them the definitions of the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 24/11/2026
  */
 
@@ -234,22 +234,22 @@ struct DiagramSVGBody: ~Copyable {
     private mutating func addLines(of block: DiagramTextBlock) {
         let top = block.center.y - block.size.height / 2
         if let lineRuns = block.lineRuns { return addLines(of: block, runs: lineRuns, top: top) }
-        if block.lines.count == 1 {
+        if block.lineCount == 1 {
             content.reserve(Self.lineRoom)
             writePosition(ofLine: 0, in: block, top: top)
             content.write(" text-anchor=\"middle\">")
-            content.appendEscaped(block.lines[0])
+            block.withUTF8(ofLine: 0) { bytes in content.appendEscaped(bytes) }
             content.append("</text>")
             return
         }
         content.reserve(Self.lineRoom)
         content.write(" text-anchor=\"middle\">")
-        for (index, line) in block.lines.enumerated() {
+        for index in 0..<block.lineCount {
             content.reserve(Self.lineRoom)
             content.write("<tspan")
             writePosition(ofLine: index, in: block, top: top)
             content.write(byte: UInt8(ascii: ">"))
-            content.appendEscaped(line)
+            block.withUTF8(ofLine: index) { bytes in content.appendEscaped(bytes) }
             content.append("</tspan>")
         }
         content.append("</text>")
@@ -260,7 +260,7 @@ struct DiagramSVGBody: ~Copyable {
     private mutating func addLines(of block: DiagramTextBlock, runs lineRuns: [[DiagramTextRun]], top: CGFloat) {
         content.reserve(Self.lineRoom)
         content.write(" text-anchor=\"middle\">")
-        for lineIndex in block.lines.indices {
+        for lineIndex in 0..<block.lineCount {
             let runs = lineRuns[lineIndex]
             content.reserve(Self.lineRoom)
             guard !runs.isEmpty else {

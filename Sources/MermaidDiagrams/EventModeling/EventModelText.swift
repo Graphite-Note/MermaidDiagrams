@@ -6,8 +6,8 @@
  *              number of characters or of a width, and lines that start at a left edge.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -30,7 +30,7 @@ enum EventModelText {
     static func label(_ text: String?, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> DiagramTextBlock? {
         guard let text else { return nil }
         let block = DiagramTextBlock(label: DiagramLabelDecoder.label(from: text, form: .plain), measurer: measurer, maximumWidth: maximumWidth)
-        return block.lines.isEmpty ? nil : block
+        return block.lineCount == 0 ? nil : block
     }
 
     /// One block of `lines` as they are, wrapped nowhere.

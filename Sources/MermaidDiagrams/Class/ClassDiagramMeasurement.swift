@@ -5,8 +5,8 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -106,7 +106,7 @@ struct ClassDiagramMeasurement {
                               sourceEnd: relation.sourceEnd, targetEnd: relation.targetEnd, line: relation.line, relationIndex: relationIndex,
                               text: relation.label.map { label in
                                   DiagramTextBlock(label: label, measurer: measurers.members, maximumWidth: Self.textWrappingWidth)
-                              }.flatMap { text in text.lines.isEmpty ? nil : text },
+                              }.flatMap { text in text.lineCount == 0 ? nil : text },
                               sourceCardinality: cardinality(relation.sourceCardinality, measurers: measurers),
                               targetCardinality: cardinality(relation.targetCardinality, measurers: measurers)))
         }

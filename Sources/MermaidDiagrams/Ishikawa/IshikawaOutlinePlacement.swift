@@ -6,8 +6,8 @@
  *              the categories and the causes as an indented list, each joined to its parent by an elbow.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -27,7 +27,7 @@ enum IshikawaOutlinePlacement {
         let order = depthFirstOrder(diagram)
         let deepest = order.map(\.depth).max() ?? 0
         let indent = min(20, max(2, (room - 120) / CGFloat(max(1, deepest))))
-        let titleHeight = title.map { title in title.lines.isEmpty ? 0 : title.size.height + IshikawaLayoutEngine.titleGap } ?? 0
+        let titleHeight = title.map { title in title.lineCount == 0 ? 0 : title.size.height + IshikawaLayoutEngine.titleGap } ?? 0
         var top = padding + titleHeight
         var width = title?.size.width ?? 0
         var entries: [IshikawaLayoutOutlineEntry] = []

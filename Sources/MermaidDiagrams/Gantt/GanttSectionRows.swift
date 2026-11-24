@@ -5,8 +5,8 @@
  * Description: A Gantt chart's sections down its rows: names, runs of rows and shaded bands.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -54,7 +54,7 @@ struct GanttSectionRows {
             let band = CGRect(x: 0, y: top + CGFloat(row) * rowHeight, width: pageWidth, height: CGFloat(end - row) * rowHeight)
             let style = (sectionOrder[section] ?? 0) % styleCount
             if (sectionOrder.count > 1 || !section.isEmpty), style % 2 == 0 { bands.append(band) }
-            if var name = names[section], !name.lines.isEmpty {
+            if var name = names[section], name.lineCount > 0 {
                 name.center = CGPoint(x: GanttLayoutEngine.padding + GanttLayoutEngine.sectionInset + name.size.width / 2, y: band.midY)
                 placedNames.append(name)
             }

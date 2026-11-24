@@ -5,8 +5,8 @@
  * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,7 +47,7 @@ struct FlowchartClusterGraph {
         let nesting = FlowchartClusterNesting(diagram: diagram)
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
         titles = measuredTitles
         depths = nesting.subgraphDepths

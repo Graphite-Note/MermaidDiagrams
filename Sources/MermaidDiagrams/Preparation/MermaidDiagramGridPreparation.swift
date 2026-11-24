@@ -6,8 +6,8 @@
  *              their tight scenes for a narrow column, and what a screen reader says of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -48,21 +48,24 @@ extension MermaidDiagramPreparationContext {
 extension MermaidDiagramAccessibility {
     /// Each service by its title (its identifier without one), each group by its title, in the order written.
     init(architecture diagram: ArchitectureDiagram) {
-        let services = diagram.nodes.filter { node in node.kind == .service }.map { node in node.title ?? node.identifier }
-        let groups = diagram.groups.map { group in group.title ?? group.identifier }
-        self.init(kind: .architecture, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: groups + services)
+        self.init(kind: .architecture, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
+            let services = diagram.nodes.filter { node in node.kind == .service }.map { node in node.title ?? node.identifier }
+            let groups = diagram.groups.map { group in group.title ?? group.identifier }
+            return groups + services
+        }
     }
 
     /// Each block drawn by its text, breadth first as it is laid out, a composite by its title when it has one.
     init(block diagram: BlockDiagram) {
-        let summary = diagram.reachableBlockIndices.dropFirst().compactMap { index -> String? in
-            let block = diagram.blocks[index]
-            guard block.kind != .space else { return nil }
-            let label = DiagramLabelDecoder.label(from: block.label, form: .plain).spokenText
-            return label.isEmpty ? nil : label
+        self.init(kind: .block, title: diagram.title, description: nil) {
+            let summary = diagram.reachableBlockIndices.dropFirst().compactMap { index -> String? in
+                let block = diagram.blocks[index]
+                guard block.kind != .space else { return nil }
+                let label = DiagramLabelDecoder.label(from: block.label, form: .plain).spokenText
+                return label.isEmpty ? nil : label
+            }
+            return summary
         }
-        self.init(kind: .block, title: diagram.title, description: nil, summary: summary)
     }
 }
 

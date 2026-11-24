@@ -6,8 +6,8 @@
  *              then the text is cut and ends in an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -106,10 +106,6 @@ extension DiagramTextBlock {
     /// One line at `fontSize` that is `width` wide, its line as high as Pele's lines are (one and a half times the size,
     /// rounded), its center at the origin.
     init(line: String, width: CGFloat, fontSize: CGFloat) {
-        lines = [line]
-        lineWidths = [width]
-        self.fontSize = fontSize
-        lineHeight = (fontSize * CoreTextDiagramTextMeasurer.lineHeightRatio).rounded()
-        center = .zero
+        self.init(lines: [line], lineWidths: [width], fontSize: fontSize, lineHeight: (fontSize * CoreTextDiagramTextMeasurer.lineHeightRatio).rounded())
     }
 }

@@ -3,32 +3,52 @@
  * ---------------------------------------
  * Layer: Core
  * Description: What a screen reader says of a prepared diagram: its label, the title or the type's name, and its value,
- *              the description or a summary of what it shows; the summary's parts each built in one string.
+ *              the description or a summary of what it shows, made the first time it is read; the summary's parts each
+ *              built in one string.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// What a screen reader says of a diagram: its title, else the type's name, then its description, else a summary of
-/// what it shows (the nodes' text, the slices with their shares, each message), as the reading view says it.
+/// what it shows (the nodes' text, the slices with their shares, each message), as the reading view says it. The title
+/// and the description are known when the diagram is prepared; the summary is made the first time it is read
+/// (`summary`, `value`), from any thread, and kept.
 public struct MermaidDiagramAccessibility: Equatable, Sendable {
     /// `accTitle`, else the diagram's title, else nil.
     public let title: String?
     /// `accDescr`, or nil.
     public let description: String?
-    /// What the diagram shows, part by part, in the order it is written.
-    public let summary: [String]
     /// What the summary's parts are joined with: a comma for names, a semicolon for parts that hold commas.
     public let summarySeparator: String
     let kind: MermaidDiagramKind
+    /// The summary's parts, made when first read.
+    let summaryParts: MermaidDiagramAccessibilitySummary
 
     init(kind: MermaidDiagramKind, title: String?, description: String?, summary: [String], summarySeparator: String = ", ") {
+        self.init(kind: kind, title: title, description: description, summaryParts: .made(summary), summarySeparator: summarySeparator)
+    }
+
+    /// A summary `summary` makes the first time it is read: the diagram it captures is kept until then.
+    init(kind: MermaidDiagramKind, title: String?, description: String?, summarySeparator: String = ", ",
+         summary: @escaping @Sendable () -> [String]) {
+        self.init(kind: kind, title: title, description: description, summaryParts: .later(MermaidDiagramAccessibilityLaterSummary(summary)),
+                  summarySeparator: summarySeparator)
+    }
+
+    private init(kind: MermaidDiagramKind, title: String?, description: String?, summaryParts: MermaidDiagramAccessibilitySummary,
+                 summarySeparator: String) {
         self.kind = kind
         self.title = title
         self.description = description
-        self.summary = summary
+        self.summaryParts = summaryParts
         self.summarySeparator = summarySeparator
+    }
+
+    /// What the diagram shows, part by part, in the order it is written; made the first time it is read.
+    public var summary: [String] {
+        summaryParts.parts
     }
 
     /// The title, else the type's name (`MermaidDiagramKind.spokenName`).
@@ -39,6 +59,11 @@ public struct MermaidDiagramAccessibility: Equatable, Sendable {
     /// The description, else the summary.
     public var value: String {
         description ?? summary.joined(separator: summarySeparator)
+    }
+
+    public static func == (left: MermaidDiagramAccessibility, right: MermaidDiagramAccessibility) -> Bool {
+        left.kind == right.kind && left.title == right.title && left.description == right.description
+            && left.summarySeparator == right.summarySeparator && left.summary == right.summary
     }
 }
 

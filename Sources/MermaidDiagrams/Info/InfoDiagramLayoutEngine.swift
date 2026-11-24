@@ -5,8 +5,8 @@
  * Description: Lays an info diagram out with Pele's measurements.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -29,7 +29,7 @@ public enum InfoDiagramLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: InfoDiagram, text: Measurer, boldText: Measurer, font: DiagramFont) -> InfoDiagramLayout {
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: boldText, maximumWidth: wrappingWidth)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let version = DiagramTextBlock(label: DiagramLabel(MermaidDiagramsVersion.text), measurer: text, maximumWidth: wrappingWidth)
         let titleHeight = title.map { title in title.size.height + titleGap } ?? 0
         let size = CGSize(width: (max(title?.size.width ?? 0, version.size.width) + 2 * padding).rounded(.up),
