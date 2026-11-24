@@ -13,16 +13,16 @@
 /// compound layout: a pass takes a list of the length it needs, filled with one value, and gives it back when it is
 /// done, so that the storage a pass let go of is used again by a later one instead of being allocated and freed again.
 /// A workspace is made by each top-level layout call and lives no longer than it (no state is shared between layouts,
-/// which run on any thread). It keeps a few dozen lists of each element type at most, each no longer than the longest
-/// list of the layout, which `MermaidDiagramLimits` bounds.
+/// which run on any thread). It keeps at most 32 lists of each element type, each no longer than the longest list of
+/// the layout, which `MermaidDiagramLimits` bounds.
 final class LayeredFlatWorkspace {
     // Only the workspace's own methods touch the pools, one call at a time and never from within another, so the
     // runtime's exclusivity checks on them are left out.
-    @exclusivity(unchecked) private var integerLists = LayeredListPool<Int>(keeping: 32)
-    @exclusivity(unchecked) private var numberLists = LayeredListPool<Double>(keeping: 24)
-    @exclusivity(unchecked) private var flagLists = LayeredListPool<Bool>(keeping: 12)
-    @exclusivity(unchecked) private var kindLists = LayeredListPool<LayeredVertexKind>(keeping: 2)
-    @exclusivity(unchecked) private var endLists = LayeredListPool<LayeredSegmentEnd>(keeping: 4)
+    @exclusivity(unchecked) private var integerLists = LayeredListPool<32, Int>()
+    @exclusivity(unchecked) private var numberLists = LayeredListPool<24, Double>()
+    @exclusivity(unchecked) private var flagLists = LayeredListPool<12, Bool>()
+    @exclusivity(unchecked) private var kindLists = LayeredListPool<2, LayeredVertexKind>()
+    @exclusivity(unchecked) private var endLists = LayeredListPool<4, LayeredSegmentEnd>()
 
     init() {}
 
@@ -56,32 +56,30 @@ final class LayeredFlatWorkspace {
     func recycle(_ list: consuming [LayeredSegmentEnd]) { endLists.keep(list) }
 }
 
-/// The lists of one element type a workspace keeps, at most as many as it was made to keep (`keeping`, its room
-/// reserved once). A taker gets a kept list with room for what it asks, or a new one when none has.
-struct LayeredListPool<Element> {
-    private var lists: [[Element]] = []
+/// The lists of one element type a workspace keeps, at most `keeping`, held in the workspace itself so that keeping
+/// them costs no allocation of its own. A taker gets a kept list with room for what it asks, or a new one when none has.
+struct LayeredListPool<let keeping: Int, Element> {
+    private var lists = InlineArray<keeping, [Element]>(repeating: [])
     /// The room of each kept list, read without reaching into the lists themselves.
-    private var capacities: [Int] = []
-    private let keeping: Int
-
-    init(keeping: Int) {
-        self.keeping = keeping
-        lists.reserveCapacity(keeping)
-        capacities.reserveCapacity(keeping)
-    }
+    private var capacities = InlineArray<keeping, Int>(repeating: 0)
+    private var count = 0
 
     /// A kept list with room for `capacity`, the most recently kept first, taken out of the pool as it is, or nil.
     private mutating func takeFitting(_ capacity: Int) -> [Element]? {
-        var index = capacities.count - 1
+        var index = count - 1
         while index >= 0 && capacities[index] < capacity { index -= 1 }
         guard index >= 0 else { return nil }
-        let last = capacities.count - 1
-        if index != last {
-            lists.swapAt(index, last)
-            capacities.swapAt(index, last)
+        count -= 1
+        var list: [Element] = []
+        swap(&list, &lists[index])
+        if index != count {
+            // The last kept list moves into the place taken from.
+            var last: [Element] = []
+            swap(&last, &lists[count])
+            lists[index] = last
+            capacities[index] = capacities[count]
         }
-        capacities.removeLast()
-        return lists.removeLast()
+        return list
     }
 
     mutating func take(count: Int, repeating value: Element) -> [Element] {
@@ -105,8 +103,9 @@ struct LayeredListPool<Element> {
 
     mutating func keep(_ list: consuming [Element]) {
         let capacity = list.capacity
-        guard capacity > 0, lists.count < keeping else { return }
-        lists.append(list)
-        capacities.append(capacity)
+        guard capacity > 0, count < keeping else { return }
+        lists[count] = list
+        capacities[count] = capacity
+        count += 1
     }
 }

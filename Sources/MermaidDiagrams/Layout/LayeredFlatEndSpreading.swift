@@ -14,17 +14,21 @@ struct LayeredSideEnds {
     var segments: [Int] = []
     var room: [Double] = []
     var total: Double = 0
+    /// The second list the merge sort of `segments` writes into, kept from side to side.
+    var sortSpare: [Int] = []
 
     /// Empty lists from `workspace`.
     init(workspace: LayeredFlatWorkspace) {
         segments = workspace.emptyIntegers(capacity: 0)
         room = workspace.emptyNumbers(capacity: 0)
+        sortSpare = workspace.emptyIntegers(capacity: 0)
     }
 
     /// Gives the lists back to `workspace`.
     consuming func recycle(into workspace: LayeredFlatWorkspace) {
         workspace.recycle(segments)
         workspace.recycle(room)
+        workspace.recycle(sortSpare)
     }
 }
 
@@ -43,9 +47,12 @@ extension LayeredFlatGraph {
         for position in starts[vertex]..<starts[vertex + 1] where kinds[list[position]] != .held { ends.segments.append(list[position]) }
         if ends.segments.count < 2 { return }
         let positions = position
-        ends.segments.sortStably { first, second in
-            positions[other[first]] != positions[other[second]] ? Double(positions[other[first]] - positions[other[second]]) : Double(first - second)
+        var spare: [Int] = []
+        swap(&spare, &ends.sortSpare)
+        ends.segments.sortStably(spare: &spare) { first, second in
+            (positions[other[first]] != positions[other[second]] ? Double(positions[other[first]] - positions[other[second]]) : Double(first - second)) < 0
         }
+        swap(&spare, &ends.sortSpare)
         func fill(_ share: (_ leaves: Bool, _ same: Bool) -> Double) -> Double {
             var total: Double = 0
             ends.room.removeAll(keepingCapacity: true)

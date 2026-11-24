@@ -111,21 +111,26 @@ struct LayeredFlatEndSettling {
             ends.recycle(into: workspace)
             workspace.recycle(all)
         }
-        let position = graph.position
+        var spare = workspace.emptyIntegers(capacity: 0)
+        defer { workspace.recycle(spare) }
+        // The graph's lists read once, outside the loops, for both sides.
+        let position = graph.position, segmentFrom = graph.segmentFrom, segmentTo = graph.segmentTo
+        let predecessorStart = graph.predecessorStart, successorStart = graph.successorStart
+        let predecessorSegments = graph.predecessorSegments, successorSegments = graph.successorSegments
         for vertex in 0..<graph.nodeCount {
             let span = min(nodes[vertex].sideSpan, graph.vertexWidth[vertex])
             if span <= 0 || nodes[vertex].kind != .node { continue }
             for side in 0..<2 {
-                let other = side == 0 ? graph.segmentFrom : graph.segmentTo
-                let starts = side == 0 ? graph.predecessorStart : graph.successorStart
-                let list = side == 0 ? graph.predecessorSegments : graph.successorSegments
                 graph.fillSideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds, into: &ends)
                 if ends.segments.isEmpty { continue }
                 if ends.segments.count == 1 { ends.room.append(0) }
+                let starts = side == 0 ? predecessorStart : successorStart
                 all.removeAll(keepingCapacity: true)
-                all.append(contentsOf: list[starts[vertex]..<starts[vertex + 1]])
-                all.sortStably { first, second in
-                    position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]]) : Double(first - second)
+                all.append(contentsOf: (side == 0 ? predecessorSegments : successorSegments)[starts[vertex]..<starts[vertex + 1]])
+                let other = side == 0 ? segmentFrom : segmentTo
+                all.sortStably(spare: &spare) { first, second in
+                    (position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]])
+                        : Double(first - second)) < 0
                 }
                 found.append(Side(vertex: vertex, side: side, span: span, segmentStart: sideSegments.count, allStart: sideAll.count,
                                   allCount: all.count))
