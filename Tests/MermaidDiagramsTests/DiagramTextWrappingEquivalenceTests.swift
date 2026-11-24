@@ -4,7 +4,8 @@
  * Layer: Tests
  * Description: Checks that wrapping on UTF-8 bytes, with widths continued over printable ASCII, gives the lines and
  *              the widths, to the bit, of release 0.6.1's wrapping on Strings, kept here, on random labels of ASCII and
- *              other text, runs of JavaScript white space, soft hyphens and emphasis, at many widths.
+ *              other text, runs of JavaScript white space, soft hyphens and emphasis, at many widths; that a label's
+ *              bytes decide whether it is read for markup as its scalars did; and C4's spoken kind names.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
@@ -232,5 +233,61 @@ private struct StringPieceSoftHyphenWidths {
         }
         self.own = own
         self.rest = rest
+    }
+}
+
+/// Checks that the bytes alone decide whether a label is read for its markup as its scalars decided in release 0.6.1,
+/// and that what C4 diagrams say of their shapes' kinds is the kinds' names in words.
+final class DiagramLabelByteCheckEquivalenceTests: XCTestCase {
+    private static let parts = ["word", " ", "a", "<", "<br>", "\\", "\\n", "\n", "\r", "*", "_", "&", "&amp;", "#", ";", "#quot;", "#9829;",
+                                "# ;", "#;", "#a b;", "fa:fa-", "fab:fa-", "fas:fa-x", "fax:fa-", "f a:fa-", ":fa-", ":fa", "fa:", ":", "a:fa-b",
+                                "\u{FB02}", "\u{FB01}", "\u{FEFF}", "\u{FF01}", "é", "日本", "\u{A0}", "\t", "ok", "x1", "-"]
+
+    func testTheBytesDecideAsTheScalarsDid() {
+        var state: UInt64 = 0x00C0_FFEE_D00D
+        var markedCount = 0
+        for _ in 0..<30_000 {
+            var text = ""
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            for _ in 0..<Int((state >> 40) % 7) {
+                state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                text += Self.parts[Int((state >> 33) % UInt64(Self.parts.count))]
+            }
+            for isLiteral in [false, true] {
+                var scalars = Array(text.unicodeScalars)
+                if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
+                let expected = Self.isUnmarkedReadScalarByScalar(scalars)
+                XCTAssertEqual(DiagramLabelLineBreaks.isUnmarked(Array(text.utf8), isLiteral: isLiteral), expected, "\(text.debugDescription) \(isLiteral)")
+                if !expected { markedCount += 1 }
+            }
+        }
+        XCTAssertGreaterThan(markedCount, 10_000)
+    }
+
+    func testEachKindIsSpokenAsItsNameInWords() {
+        for kind in C4ShapeKind.allCases {
+            XCTAssertEqual(MermaidDiagramAccessibility.spokenName(of: kind), kind.rawValue.replacingOccurrences(of: "_", with: " "))
+        }
+    }
+}
+
+extension DiagramLabelByteCheckEquivalenceTests {
+    /// Release 0.6.1's test of whether Pele lays the text out as one line as written, trimmed (its `RE_MARKUP` test), on
+    /// the text's scalars: no `<`, backslash, line break, `*` or `_`, no `fa:fa-` icon, no `&`, and no Mermaid code
+    /// (`#name;`, which Pele hides behind characters it then tests for).
+    static func isUnmarkedReadScalarByScalar(_ scalars: [Unicode.Scalar]) -> Bool {
+        var hasHash = false
+        var hasSemicolon = false
+        for scalar in scalars {
+            switch scalar {
+            // Pele also reads for markup any text with a `ﬂ`, the first character of its hidden entity codes.
+            case "<", "\\", "\n", "*", "_", "&", "\u{FB02}": return false
+            case "#": hasHash = true
+            case ";": hasSemicolon = true
+            default: break
+            }
+        }
+        if hasHash, hasSemicolon, DiagramLabelEntities.mermaidCodesAsHTML(scalars) != scalars { return false }
+        return !DiagramLabelIcons.containsIconName(scalars[...])
     }
 }

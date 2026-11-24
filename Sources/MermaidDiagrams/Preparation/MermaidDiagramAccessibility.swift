@@ -3,11 +3,11 @@
  * ---------------------------------------
  * Layer: Core
  * Description: What a screen reader says of a prepared diagram: its label, the title or the type's name, and its value,
- *              the description or a summary of what it shows.
+ *              the description or a summary of what it shows; the summary's parts each built in one string.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// What a screen reader says of a diagram: its title, else the type's name, then its description, else a summary of
@@ -39,5 +39,15 @@ public struct MermaidDiagramAccessibility: Equatable, Sendable {
     /// The description, else the summary.
     public var value: String {
         description ?? summary.joined(separator: summarySeparator)
+    }
+}
+
+extension MermaidDiagramAccessibility {
+    /// The texts one after the other, in one string given its room at once, where `+` would make a string per step.
+    static func joined(_ parts: String...) -> String {
+        var text = ""
+        text.reserveCapacity(parts.reduce(0) { total, part in total + part.utf8.count })
+        for part in parts { text += part }
+        return text
     }
 }
