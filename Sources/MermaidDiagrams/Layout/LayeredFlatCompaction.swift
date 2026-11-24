@@ -6,7 +6,7 @@
  *              of working spans of the scratch arena that the four reuse.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -35,20 +35,22 @@ struct LayeredPositioningWork {
     /// The blocks in topological order, each once.
     private let topological: ScratchSpan<Int>
 
+    /// The spans are left as the arena hands them out: `align` sets the alignment (`resetAlignment` first) and
+    /// `compact` builds the block graph and writes every value before it reads it.
     init(vertexCount: Int, arena: DiagramScratchArena) {
         self.vertexCount = vertexCount
-        root = arena.span(count: vertexCount, repeating: 0)
-        align = arena.span(count: vertexCount, repeating: 0)
-        edgeFrom = arena.span(count: vertexCount, repeating: 0)
-        edgeTo = arena.span(count: vertexCount, repeating: 0)
-        remainingIn = arena.span(count: vertexCount, repeating: 0)
-        outFill = arena.span(count: vertexCount, repeating: 0)
-        outEdges = arena.span(count: vertexCount, repeating: 0)
-        topological = arena.span(count: vertexCount, repeating: 0)
-        outStart = arena.span(count: vertexCount + 1, repeating: 0)
-        shift = arena.span(count: vertexCount, repeating: 0.0)
-        edgeWidth = arena.span(count: vertexCount, repeating: 0.0)
-        across = arena.span(count: vertexCount, repeating: 0.0)
+        root = arena.uninitializedSpan(count: vertexCount)
+        align = arena.uninitializedSpan(count: vertexCount)
+        edgeFrom = arena.uninitializedSpan(count: vertexCount)
+        edgeTo = arena.uninitializedSpan(count: vertexCount)
+        remainingIn = arena.uninitializedSpan(count: vertexCount)
+        outFill = arena.uninitializedSpan(count: vertexCount)
+        outEdges = arena.uninitializedSpan(count: vertexCount)
+        topological = arena.uninitializedSpan(count: vertexCount)
+        outStart = arena.uninitializedSpan(count: vertexCount + 1)
+        shift = arena.uninitializedSpan(count: vertexCount)
+        edgeWidth = arena.uninitializedSpan(count: vertexCount)
+        across = arena.uninitializedSpan(count: vertexCount)
     }
 
     /// Aligns each vertex with its median neighbour above (upward) or below, sweeping each rank left to right or right

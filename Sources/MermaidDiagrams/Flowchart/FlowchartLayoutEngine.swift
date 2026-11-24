@@ -41,19 +41,23 @@ public enum FlowchartLayoutEngine {
     /// The flowchart for a container `availableWidth` wide (nil for none), as Pele fits it (flowchart/render.ts): one
     /// whose own direction runs across is turned to run down (its groups keep theirs) when it does not fit a container
     /// under 640 points and turned is narrower (`turnToFit`); either way it is laid out with the tight gaps, its title
-    /// wrapped to the container, when it does not fit and tight is narrower (`tighten`).
+    /// wrapped to the container, when it does not fit and tight is narrower (`tighten`). Its collapsed groups are folded
+    /// and its text measured once for every layout tried, as turning and tightening change neither.
     public static func layout(_ diagram: FlowchartDiagram, typography: DiagramTypography, limits: MermaidDiagramLimits,
                               availableWidth: CGFloat?) throws(FlowchartLayoutError) -> FlowchartLayout {
+        let folded = diagram.hasCollapsedSubgraph ? FlowchartCollapsedGroups.collapsing(diagram) : diagram
+        let measured = FlowchartMeasurement(diagram: folded, nodeText: typography.nodeText, edgeText: typography.edgeText, wrappingWidth: wrappingWidth)
         func fitted(_ diagram: FlowchartDiagram) throws(FlowchartLayoutError) -> FlowchartLayout {
             try DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: FlowchartLayout) in layout.size.width }) { isTight throws(FlowchartLayoutError) in
-                try layout(diagram, nodeText: typography.nodeText, edgeText: typography.edgeText, font: typography.font, limits: limits,
-                           spacing: isTight ? .compact : .standard,
+                try layout(diagram, measured: measured, nodeText: typography.nodeText, font: typography.font, limits: limits,
+                           spacing: isTight ? compactSpacing : spacing,
+                           groupPadding: isTight ? FlowchartClusterGraph.tightClusterPadding : FlowchartClusterGraph.clusterPadding,
                            titleWidth: isTight ? DiagramWidthFitting.titleRoom(availableWidth: availableWidth) : .greatestFiniteMagnitude)
             }
         }
-        guard let turned = diagram.rootTurnedToRunDown else { return try fitted(diagram) }
+        guard let turned = folded.rootTurnedToRunDown else { return try fitted(folded) }
         return try DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: FlowchartLayout) in layout.size.width }) { isDown throws(FlowchartLayoutError) in
-            try fitted(isDown ? turned : diagram)
+            try fitted(isDown ? turned : folded)
         }
     }
 
@@ -61,8 +65,20 @@ public enum FlowchartLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ written: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, font: DiagramFont,
                                                        limits: MermaidDiagramLimits, spacing diagramSpacing: DiagramSpacing = .standard,
                                                        titleWidth: CGFloat = .greatestFiniteMagnitude) throws(FlowchartLayoutError) -> FlowchartLayout {
-        // A collapsed group is drawn as one node, what it holds left out (`FlowchartCollapsedGroups`).
-        let diagram = FlowchartCollapsedGroups.collapsing(written)
+        // A collapsed group is drawn as one node, what it holds left out (`FlowchartCollapsedGroups`); a flowchart without
+        // one is laid out as it is, not copied.
+        guard written.hasCollapsedSubgraph else {
+            return try measuredLayout(written, nodeText: nodeText, edgeText: edgeText, font: font, limits: limits, spacing: diagramSpacing,
+                                      titleWidth: titleWidth)
+        }
+        return try measuredLayout(FlowchartCollapsedGroups.collapsing(written), nodeText: nodeText, edgeText: edgeText, font: font, limits: limits,
+                                  spacing: diagramSpacing, titleWidth: titleWidth)
+    }
+
+    /// `diagram`, its collapsed groups folded, measured and laid out.
+    private static func measuredLayout<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer,
+                                                                        font: DiagramFont, limits: MermaidDiagramLimits, spacing diagramSpacing: DiagramSpacing,
+                                                                        titleWidth: CGFloat) throws(FlowchartLayoutError) -> FlowchartLayout {
         let isTight = diagramSpacing == .compact
         let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText, wrappingWidth: wrappingWidth)
         return try layout(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: isTight ? compactSpacing : spacing,
