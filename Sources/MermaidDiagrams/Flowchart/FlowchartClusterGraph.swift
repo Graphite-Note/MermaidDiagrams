@@ -5,7 +5,7 @@
  * Description: A flowchart with subgraphs as a graph of nested boxes to lay out.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 24/11/2026
  */
 
@@ -46,10 +46,7 @@ struct FlowchartClusterGraph {
                                          edgeTextRoom: CGSize, groupPadding: CGFloat = clusterPadding) {
         let nesting = FlowchartClusterNesting(diagram: diagram)
         let subgraphCount = diagram.subgraphCount
-        let measuredTitles = diagram.subgraphs.map { subgraph in
-            let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lineCount == 0 ? nil : title
-        }
+        let measuredTitles = Self.titles(of: diagram, measurer: titleText)
         titles = measuredTitles
         depths = nesting.subgraphDepths
         representedSubgraphs = nesting.representedSubgraphs
@@ -86,6 +83,15 @@ struct FlowchartClusterGraph {
                                     edges: edges.layout, direction: diagram.direction.layeredDirection)
     }
 
+    /// Each group's title, measured unwrapped, or nil for a group without one.
+    private static func titles<Measurer: DiagramTextMeasuring>(of diagram: FlowchartDiagram, measurer: Measurer) -> [DiagramTextBlock?] {
+        (diagram.model.extras?.groups ?? []).map { group in
+            let title = DiagramTextBlock(label: diagram.model.label(group.title) ?? DiagramLabel(lines: []), measurer: measurer,
+                                         maximumWidth: .greatestFiniteMagnitude)
+            return title.lineCount == 0 ? nil : title
+        }
+    }
+
     /// A group's box: Pele's padding, the title's band along the top, at least as wide as the title. A flowchart's group
     /// spreads the edges meeting it along its whole side (flowchart/render.ts gives it an infinite span); an agent flow's
     /// keeps them at its middle, as agentflow/render.ts gives its groups, like its nodes, no span.
@@ -108,6 +114,8 @@ struct FlowchartClusterGraph {
         }
         var layout: [LayeredClusterEdge] = []
         var diagramIndices: [Int] = []
+        layout.reserveCapacity(diagram.edgeCount)
+        diagramIndices.reserveCapacity(diagram.edgeCount)
         for edgeIndex in 0..<diagram.edgeCount {
             let ends = diagram.edgeEnds(at: edgeIndex)
             let source = end(of: ends.source)

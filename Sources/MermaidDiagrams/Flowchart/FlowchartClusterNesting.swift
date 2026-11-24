@@ -2,10 +2,11 @@
  * File: FlowchartClusterNesting.swift
  * -----------------------------------
  * Layer: Core
- * Description: Where each node and group of a flowchart sits among its groups, and which way each runs.
+ * Description: Where each node and group of a flowchart sits among its groups, and which way each runs, read from the
+ *              group records of the flowchart's model.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -29,23 +30,25 @@ struct FlowchartClusterNesting {
     let subgraphOrder: [Int]
 
     init(diagram: FlowchartDiagram) {
-        let subgraphs = diagram.subgraphs
+        let groups = diagram.model.extras?.groups ?? []
+        let members = diagram.model.extras?.groupMembers ?? []
         var nodeSubgraphs = [Int?](repeating: nil, count: diagram.nodeCount)
         var representedSubgraphs = [Int?](repeating: nil, count: diagram.nodeCount)
-        var subgraphParents = [Int?](repeating: nil, count: subgraphs.count)
-        for (index, subgraph) in subgraphs.enumerated() {
-            for node in subgraph.nodeIndices { nodeSubgraphs[node] = index }
-            for child in subgraph.childSubgraphIndices { subgraphParents[child] = index }
-            if let node = subgraph.representingNodeIndex { representedSubgraphs[node] = index }
+        var subgraphParents = [Int?](repeating: nil, count: groups.count)
+        for (index, group) in groups.enumerated() {
+            for member in group.nodeIndices { nodeSubgraphs[Int(members[Int(member)])] = index }
+            for member in group.childGroupIndices { subgraphParents[Int(members[Int(member)])] = index }
+            if group.representingNodeIndex >= 0 { representedSubgraphs[Int(group.representingNodeIndex)] = index }
         }
         let crossed = Self.crossedSubgraphs(of: diagram, nodeSubgraphs: nodeSubgraphs, representedSubgraphs: representedSubgraphs,
                                             subgraphParents: subgraphParents)
-        let kept = subgraphs.indices.map { index in crossed.contains(index) ? nil : subgraphs[index].direction }
-        // `FlowchartDiagram.subgraphs` lists each group before the groups inside it.
-        var depths = [Int](repeating: 0, count: subgraphs.count)
-        var directions = [FlowchartDirection](repeating: diagram.direction, count: subgraphs.count)
-        for index in subgraphs.indices {
+        // The model lists each group before the groups inside it.
+        var depths = [Int](repeating: 0, count: groups.count)
+        var kept = [FlowchartDirection?](repeating: nil, count: groups.count)
+        var directions = [FlowchartDirection](repeating: diagram.direction, count: groups.count)
+        for index in groups.indices {
             let parent = subgraphParents[index]
+            kept[index] = crossed[index] ? nil : groups[index].direction
             depths[index] = parent.map { depths[$0] + 1 } ?? 0
             directions[index] = kept[index] ?? parent.map { directions[$0] } ?? diagram.direction
         }
@@ -55,40 +58,60 @@ struct FlowchartClusterNesting {
         subgraphDepths = depths
         subgraphDirections = kept
         nodeDirections = nodeSubgraphs.map { subgraph in subgraph.map { directions[$0] } ?? diagram.direction }
-        var order = Array(subgraphs.indices)
-        for (place, subgraph) in Self.closingOrder(of: subgraphs, subgraphParents: subgraphParents).reversed().enumerated() { order[subgraph] = place }
+        var order = Array(groups.indices)
+        for (place, subgraph) in Self.closingOrder(of: groups, members: members, subgraphParents: subgraphParents).reversed().enumerated() {
+            order[subgraph] = place
+        }
         subgraphOrder = order
     }
 
-    /// The groups an edge crosses the border of: those around one of its ends and not the other.
+    /// For each group, whether an edge crosses its border: it is around one of the edge's ends and not the other.
     private static func crossedSubgraphs(of diagram: FlowchartDiagram, nodeSubgraphs: [Int?], representedSubgraphs: [Int?],
-                                         subgraphParents: [Int?]) -> Set<Int> {
-        func around(_ node: Int) -> Set<Int> {
-            var groups = Set<Int>()
-            var group = representedSubgraphs[node].map { subgraph in subgraphParents[subgraph] } ?? nodeSubgraphs[node]
-            while let current = group, !groups.contains(current) {
-                groups.insert(current)
+                                         subgraphParents: [Int?]) -> [Bool] {
+        var crossed = [Bool](repeating: false, count: subgraphParents.count)
+        guard !subgraphParents.isEmpty else { return crossed }
+        // The edge whose ends' groups were last marked around its source, and around its target; a chain that comes
+        // back to a group it passed stops there.
+        var aroundSource = [Int](repeating: -1, count: subgraphParents.count)
+        var aroundTarget = [Int](repeating: -1, count: subgraphParents.count)
+        func firstGroup(around node: Int) -> Int? {
+            representedSubgraphs[node].map { subgraph in subgraphParents[subgraph] } ?? nodeSubgraphs[node]
+        }
+        func mark(around node: Int, edge: Int, in marks: inout [Int]) {
+            var group = firstGroup(around: node)
+            while let current = group, marks[current] != edge {
+                marks[current] = edge
                 group = subgraphParents[current]
             }
-            return groups
         }
-        var crossed = Set<Int>()
+        func markCrossed(around node: Int, edge: Int, marks: [Int], others: [Int]) {
+            var group = firstGroup(around: node)
+            var visited = 0
+            while let current = group, marks[current] == edge, visited < marks.count {
+                if others[current] != edge { crossed[current] = true }
+                visited += 1
+                group = subgraphParents[current]
+            }
+        }
         for edgeIndex in 0..<diagram.edgeCount {
             let (source, target) = diagram.edgeEnds(at: edgeIndex)
             guard source != target else { continue }
-            let sourceGroups = around(source)
-            let targetGroups = around(target)
-            crossed.formUnion(sourceGroups.symmetricDifference(targetGroups))
+            mark(around: source, edge: edgeIndex, in: &aroundSource)
+            mark(around: target, edge: edgeIndex, in: &aroundTarget)
+            markCrossed(around: source, edge: edgeIndex, marks: aroundSource, others: aroundTarget)
+            markCrossed(around: target, edge: edgeIndex, marks: aroundTarget, others: aroundSource)
         }
         return crossed
     }
 
     /// The groups in the order their ends are written: each group's inner groups, in order, before it.
-    private static func closingOrder(of subgraphs: [FlowchartSubgraph], subgraphParents: [Int?]) -> [Int] {
+    private static func closingOrder(of groups: [FlowchartGroupRecord], members: [Int32], subgraphParents: [Int?]) -> [Int] {
         var order: [Int] = []
-        var isListed = [Bool](repeating: false, count: subgraphs.count)
-        for root in subgraphs.indices where subgraphParents[root] == nil {
-            var stack: [(subgraph: Int, isClosing: Bool)] = [(root, false)]
+        order.reserveCapacity(groups.count)
+        var isListed = [Bool](repeating: false, count: groups.count)
+        var stack: [(subgraph: Int, isClosing: Bool)] = []
+        for root in groups.indices where subgraphParents[root] == nil {
+            stack.append((root, false))
             while let (subgraph, isClosing) = stack.popLast() {
                 if isClosing {
                     order.append(subgraph)
@@ -97,7 +120,10 @@ struct FlowchartClusterNesting {
                 if isListed[subgraph] { continue }
                 isListed[subgraph] = true
                 stack.append((subgraph, true))
-                for child in subgraphs[subgraph].childSubgraphIndices.reversed() where !isListed[child] { stack.append((child, false)) }
+                for member in groups[subgraph].childGroupIndices.reversed() {
+                    let child = Int(members[Int(member)])
+                    if !isListed[child] { stack.append((child, false)) }
+                }
             }
         }
         return order

@@ -5,7 +5,7 @@
  * Description: Puts a placed flowchart on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.11
+ * Version: 0.12
  * Date: 24/11/2026
  */
 
@@ -34,79 +34,24 @@ struct FlowchartPageAssembly {
         edges = Array(repeating: nil, count: diagram.edgeCount)
     }
 
-    mutating func placeNodes(flowCenters: [CGPoint]) {
-        nodeCenters = flowCenters.map(axes.pagePoint)
+    private func edgeAlong(_ points: [CGPoint], edgeIndex: Int, textCenter: CGPoint, segmentsRunVertically: [Bool]) -> FlowchartLayoutEdge {
+        FlowchartPagePieces.edge(edgeIndex, of: diagram, along: points, segmentsRunVertically: segmentsRunVertically, textCenter: textCenter, measured: measured)
     }
 
-    /// The edges between two different nodes, along their routes. `layeredEdgeIndices[i]` is the edge of the
-    /// placement's `i`-th route.
-    mutating func placeEdges(layeredEdgeIndices: [Int], placement: LayeredPlacement) {
-        var ends: [FlowchartEdgePorts.End] = []
-        ends.reserveCapacity(2 * layeredEdgeIndices.count)
-        for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
-            let route = placement.edgeRoutes[layeredIndex]
-            let (source, target) = diagram.edgeEnds(at: edgeIndex)
-            let leavesDownstream = route[1].y > route[0].y
-            let arrivesFromUpstream = route[route.count - 2].y < route[route.count - 1].y
-            ends.append(FlowchartEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: true, node: source,
-                                               side: leavesDownstream ? axes.downstreamSide : axes.upstreamSide, neighborAcross: route[1].x))
-            ends.append(FlowchartEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: false, node: target,
-                                               side: arrivesFromUpstream ? axes.upstreamSide : axes.downstreamSide,
-                                               neighborAcross: route[route.count - 2].x))
-        }
-        let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edgeCount, nodeCenters: nodeCenters, shapes: measured.layoutShapes(of: diagram),
-                                       shapeSizes: measured.shapeSizes, spreadsEnds: measured.spreadsEdgeEnds, endsAtMiddle: measured.assetNodes)
-        for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
-            let route = placement.edgeRoutes[layeredIndex]
-            // Each end where Pele's layout settled it, moved onto its shape's outline; the spread ends where it left none.
-            // Only the path's two ends are read, each put on the page alone.
-            let path = placement.edgePaths[layeredIndex]
-            let (source, target) = diagram.edgeEnds(at: edgeIndex)
-            guard let sourcePoint = path.first.map(axes.pagePoint).flatMap({ end in outlineEnd(end, node: source, loopSide: axes.loopSide) })
-                      ?? ports.sourcePoints[edgeIndex],
-                  let targetPoint = path.last.map(axes.pagePoint).flatMap({ end in outlineEnd(end, node: target, loopSide: axes.loopSide) })
-                      ?? ports.targetPoints[edgeIndex]
-            else { continue }
-            let points = Self.joined(sourcePoint, route.dropFirst().dropLast(), targetPoint, through: axes.pagePoint)
-            let textCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint)
-                ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
-            edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, textCenter: textCenter)
-        }
-    }
-
-    private func edgeAlong(_ points: [CGPoint], edgeIndex: Int, textCenter: CGPoint, segmentsRunVertically: [Bool]? = nil) -> FlowchartLayoutEdge {
-        let edge = diagram.edgeDrawing(at: edgeIndex)
-        let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
-        let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-        let drawn = segmentsRunVertically.map { axes in
-            DiagramRouteDrawing.path(through: points, segmentsRunVertically: axes, startTrim: startTrim, endTrim: endTrim)
-        } ?? DiagramRouteDrawing.path(through: points, flowIsVertical: axes.flowIsVertical, startTrim: startTrim, endTrim: endTrim)
-        let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
-        return FlowchartLayoutEdge(stroke: edge.stroke, path: drawn.path,
-                                   sourceMark: mark(edge.sourceArrowhead, tip: points[0], direction: leaving),
-                                   targetMark: mark(edge.targetArrowhead, tip: points[points.count - 1], direction: drawn.endDirection),
-                                   text: centered(measured.edgeTexts[edgeIndex], at: textCenter), style: edge.style)
-    }
-
-    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`FlowchartSelfLoops`); a group's
-    /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
-    /// does not count among the loops drawn before the next one.
+    /// The loops of every node that has edges to itself; a group's from the middle of its box. An invisible loop, which
+    /// is not drawn, does not count among the loops drawn before the next one.
     mutating func placeSelfLoops() {
-        for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() {
+        guard !measured.selfLoopEdgeIndices.isEmpty else { return }
+        for node in 0..<diagram.nodeCount {
             let isGroup = clustered?.representedSubgraphs[node] != nil
             let flowRunsAcross = (clustered?.loopSides[node] ?? axes.loopSide) == .bottom
             var loopIndex = 0
-            for edgeIndex in loopEdgeIndices {
-                let edge = diagram.edgeDrawing(at: edgeIndex)
-                defer { if edge.stroke != .invisible { loopIndex += 1 } }
-                let text = measured.edgeTexts[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: nodeCenters[node], shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
-                                                   flowRunsAcross: flowRunsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
-                                                   textSize: text?.size)
-                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: loop.path,
-                                                       sourceMark: mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoNodeAtLeave),
-                                                       targetMark: mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving),
-                                                       text: centered(text, at: loop.textCenter), style: edge.style)
+            for edgeIndex in measured.selfLoopEdgeIndices[node] {
+                let edge = FlowchartPagePieces.selfLoop(edgeIndex, of: diagram, node: node, center: nodeCenters[node],
+                                                        shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
+                                                        flowRunsAcross: flowRunsAcross, measured: measured)
+                if edge.stroke != .invisible { loopIndex += 1 }
+                edges[edgeIndex] = edge
             }
         }
     }
@@ -136,13 +81,7 @@ struct FlowchartPageAssembly {
             ends.append(Self.routeEnd(of: route, edgeIndex: edgeIndex, isSourceEnd: true, item: endItem(of: source)))
             ends.append(Self.routeEnd(of: route, edgeIndex: edgeIndex, isSourceEnd: false, item: endItem(of: target)))
         }
-        let boxCenters = placement.clusterFrames.map { frame in CGPoint(x: frame.midX, y: frame.midY) }
-        let ports = FlowchartEdgePorts(ends: ends, edgeCount: diagram.edgeCount, nodeCenters: nodeCenters + boxCenters,
-                                       shapes: measured.layoutShapes(of: diagram) + Array(repeating: .rectangle, count: boxCenters.count),
-                                       shapeSizes: measured.shapeSizes + placement.clusterFrames.map { frame in frame.size },
-                                       keptClear: FlowchartBorderCrossings.crossings(routes: placement.edgeRoutes, frames: placement.clusterFrames,
-                                                                                 firstBoxNode: nodeCount),
-                                       spreadsEnds: measured.spreadsEdgeEnds, endsAtMiddle: measured.assetNodes)
+        let ports = boxedPorts(ends, placement: placement)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
             if placement.strayEdgeIndices.contains(layoutIndex) {
@@ -152,14 +91,41 @@ struct FlowchartPageAssembly {
                 continue
             }
             let (source, target) = diagram.edgeEnds(at: edgeIndex)
-            guard let sourcePoint = route.points.first.flatMap({ end in clusteredEnd(end, node: source, placement: placement) }) ?? ports.sourcePoints[edgeIndex],
-                  let targetPoint = route.points.last.flatMap({ end in clusteredEnd(end, node: target, placement: placement) }) ?? ports.targetPoints[edgeIndex]
+            guard let sourcePoint = route.points.first.flatMap({ end in clusteredEnd(end, node: source, placement: placement) }) ?? ports.sources[edgeIndex],
+                  let targetPoint = route.points.last.flatMap({ end in clusteredEnd(end, node: target, placement: placement) }) ?? ports.targets[edgeIndex]
             else { continue }
             let points = Self.joined(sourcePoint, route.points.dropFirst().dropLast(), targetPoint) { point in point }
             edgePoints.append(points)
             let textCenter = placement.edgeLabelCenters[layoutIndex]
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, textCenter: textCenter, segmentsRunVertically: route.segmentsRunVertically)
+        }
+    }
+
+    /// Where the ends of the edges through boxes meet their nodes and boxes where the layout left none: spread along each
+    /// side, clear of where other edges cross a box's border.
+    private func boxedPorts(_ ends: [FlowchartEdgePorts.End], placement: LayeredClusterPlacement) -> (sources: [CGPoint?], targets: [CGPoint?]) {
+        let nodeCount = diagram.nodeCount
+        return DiagramScratchArena.withCurrentThread { arena in
+            let endSpan: ScratchSpan<FlowchartEdgePorts.End> = arena.uninitializedSpan(count: ends.count)
+            for (index, end) in ends.enumerated() { endSpan[index] = end }
+            let itemCount = nodeCount + placement.clusterFrames.count
+            let items = FlowchartEdgePorts.Items(count: itemCount, arena: arena)
+            for node in 0..<nodeCount {
+                items.centers[node] = nodeCenters[node]
+                items.sizes[node] = measured.shapeSizes[node]
+                items.spreadsEnds[node] = measured.spreadsEdgeEnds(of: node)
+            }
+            for (box, frame) in placement.clusterFrames.enumerated() {
+                items.centers[nodeCount + box] = CGPoint(x: frame.midX, y: frame.midY)
+                items.sizes[nodeCount + box] = frame.size
+                items.spreadsEnds[nodeCount + box] = measured.spreadsEdgeEnds
+            }
+            let kept = FlowchartBorderCrossings.crossings(routes: placement.edgeRoutes, frames: placement.clusterFrames, firstBoxNode: nodeCount,
+                                                          arena: arena)
+            let points = FlowchartEdgePorts.Points(edgeCount: diagram.edgeCount, arena: arena)
+            FlowchartEdgePorts.place(endSpan, items: items, of: diagram, measured: measured, keptClear: kept, into: points, arena: arena)
+            return ((0..<diagram.edgeCount).map(points.sourcePoint(of:)), (0..<diagram.edgeCount).map(points.targetPoint(of:)))
         }
     }
 
@@ -176,7 +142,7 @@ struct FlowchartPageAssembly {
     /// A route's end on the outline of `node`'s shape, from the side of its layout box the layout left it on.
     private func outlineEnd(_ end: CGPoint, node: Int, loopSide: DiagramSide) -> CGPoint? {
         FlowchartRouteEnds.outlinePoint(of: end, center: nodeCenters[node], boxSize: measured.layoutSize(of: node, loopSide: loopSide),
-                                        shape: measured.assetNodes.contains(node) ? .rectangle : diagram.nodeShape(at: node),
+                                        shape: measured.layoutShape(of: node, in: diagram),
                                         shapeSize: measured.shapeSizes[node])
     }
 
@@ -212,28 +178,12 @@ struct FlowchartPageAssembly {
         }
     }
 
-    private func mark(_ arrowhead: FlowchartArrowhead, tip: CGPoint, direction: CGVector) -> DiagramEdgeMark? {
-        arrowhead == .none ? nil : DiagramEdgeMark(arrowhead: arrowhead, tip: tip, direction: direction)
-    }
-
-    private func centered(_ text: DiagramTextBlock?, at center: CGPoint) -> DiagramTextBlock? {
-        guard var text else { return nil }
-        text.center = center
-        return text
-    }
-
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
     /// title, and centered under the title when the title is wider. The drawing is the layout's box, `extent` on the
     /// page from the origin, as Pele sizes its page from the layout's width and height.
     func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat, extent: CGSize) -> FlowchartLayout {
         func placedNode(_ node: Int) -> FlowchartLayoutNode {
-            var text = measured.nodeTexts[node]
-            text.center = CGPoint(x: nodeCenters[node].x, y: nodeCenters[node].y + measured.textOffsets[node])
-            let size = measured.shapeSizes[node]
-            return FlowchartLayoutNode(shape: diagram.nodeShape(at: node),
-                                       frame: CGRect(x: nodeCenters[node].x - size.width / 2, y: nodeCenters[node].y - size.height / 2,
-                                                     width: size.width, height: size.height),
-                                       text: text, style: diagram.nodeStyle(at: node), asset: diagram.nodeAsset(at: node))
+            FlowchartPagePieces.node(node, of: diagram, center: nodeCenters[node], measured: measured)
         }
         let bounds = CGRect(origin: .zero, size: extent)
         let titleSize = title?.size ?? .zero

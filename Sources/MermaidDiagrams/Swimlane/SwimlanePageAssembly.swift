@@ -6,7 +6,7 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 24/11/2026
  */
 
@@ -112,7 +112,7 @@ struct SwimlanePageAssembly {
         guard graph.nesting.representedSubgraphs[node] == nil else { return point }
         let frame = placement.frames[graph.nodeBoxes[node]]
         guard let side = Self.side(of: point, on: frame) else { return point }
-        let shape = measured.assetNodes.contains(node) ? .rectangle : diagram.nodeShape(at: node)
+        let shape = measured.layoutShape(of: node, in: diagram)
         return FlowchartEdgePorts.outlinePoint(center: CGPoint(x: frame.midX, y: frame.midY), shape: shape,
                                                size: measured.shapeSizes[node], side: side,
                                                offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
@@ -122,7 +122,9 @@ struct SwimlanePageAssembly {
     /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
     /// does not count among the loops drawn before the next one.
     private mutating func placeSelfLoops() {
-        for (node, loopEdgeIndices) in measured.selfLoopEdgeIndices.enumerated() {
+        guard !measured.selfLoopEdgeIndices.isEmpty else { return }
+        for node in 0..<diagram.nodeCount {
+            let loopEdgeIndices = measured.selfLoopEdgeIndices[node]
             let isGroup = graph.nesting.representedSubgraphs[node] != nil
             var loopIndex = 0
             for edgeIndex in loopEdgeIndices {

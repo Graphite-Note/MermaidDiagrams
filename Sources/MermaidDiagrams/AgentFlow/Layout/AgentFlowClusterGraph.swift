@@ -7,7 +7,7 @@
  *              between a node and a flow around it held back to be drawn afterwards.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -15,9 +15,20 @@
 /// (`LayeredClusterLayout`): the graph's nodes that are not open flows first, in the graph's order, then one node
 /// standing for each open flow (`representingNodeIndex`), which edges to the flow meet; the flows as subgraphs, each
 /// before the flows inside it. An edge between a node and a flow around it has no place in the layout (Pele's `held`
-/// edges): it is left out and drawn afterwards.
+/// edges): it is left out and drawn afterwards. The flowchart's model is written straight from the graph, its records
+/// made once (`flowchart(titles:title:)`), with no list of nodes, edges or subgraphs in between.
 struct AgentFlowClusterGraph {
-    var flowchart = FlowchartDiagram()
+    /// The flowchart's direction.
+    let direction: FlowchartDirection
+    /// The flowchart's nodes and edges as its model keeps them, their identifiers' bytes, and for each subgraph what it
+    /// directly holds: its node indices, then its subgraph indices, by `subgraphMembers`' starts.
+    private var nodeRecords: [FlowchartNodeRecord] = []
+    private var edgeRecords: [FlowchartEdgeRecord] = []
+    private var identifierBytes: [UInt8] = []
+    private var subgraphIdentifiers: [MermaidTextRange] = []
+    private var subgraphMembers: [Int32] = []
+    private var subgraphMemberStarts: [Int] = [0]
+    private var subgraphChildStarts: [Int] = []
     /// For each flowchart node standing for itself, its graph node.
     private(set) var drawnGraphIndices: [Int] = []
     /// For each subgraph, its graph node.
@@ -36,6 +47,7 @@ struct AgentFlowClusterGraph {
     private(set) var heldEdges: [(edgeIndex: Int, source: Int, target: Int)] = []
 
     init(graph: AgentFlowGraph, direction: FlowchartDirection) {
+        self.direction = direction
         var indexByIdentifier: [String: Int] = [:]
         for (index, node) in graph.nodes.enumerated() where indexByIdentifier[node.identifier] == nil { indexByIdentifier[node.identifier] = index }
         parents = graph.nodes.map { node in
@@ -48,10 +60,36 @@ struct AgentFlowClusterGraph {
             return (source, target)
         }
         for (source, target) in ends { inheritCrossedDirections(source: source, target: target) }
-        // The flowchart is made once, from its lists, as it keeps them as one model.
-        let (nodes, subgraphs) = placeNodes(graph: graph)
-        let edges = placeEdges(graph: graph, indexByIdentifier: indexByIdentifier)
-        flowchart = FlowchartDiagram(direction: direction, nodes: nodes, edges: edges, subgraphs: subgraphs)
+        placeNodes(graph: graph)
+        placeEdges(graph: graph, indexByIdentifier: indexByIdentifier)
+    }
+
+    /// How many nodes the flowchart has: the graph's nodes that are not open flows, and one for each open flow.
+    var flowchartNodeCount: Int { nodeRecords.count }
+
+    /// The flowchart's edges from a node to itself, by node.
+    var selfLoopEdgeIndices: FlowchartSelfLoopIndex { FlowchartSelfLoopIndex(nodeCount: nodeRecords.count, edges: edgeRecords) }
+
+    /// The flowchart, each subgraph titled by `titles` in the subgraphs' order and the diagram by `title`.
+    func flowchart(titles: [DiagramLabel], title: String?) -> FlowchartDiagram {
+        var parts = FlowchartModelParts()
+        parts.nodes = nodeRecords
+        parts.edges = edgeRecords
+        if !subgraphIdentifiers.isEmpty {
+            let rare = parts.rare
+            rare.groupMembers = subgraphMembers
+            rare.decodedLabels = titles
+            for subgraph in subgraphIdentifiers.indices {
+                let graphIndex = subgraphGraphIndices[subgraph]
+                rare.groups.append(FlowchartGroupRecord(identifier: subgraphIdentifiers[subgraph], generatedNumber: -1,
+                                                        title: .decoded(at: subgraph), direction: directions[graphIndex],
+                                                        representingNodeIndex: Int32(flowchartIndices[graphIndex]), isCollapsed: false,
+                                                        nodeIndices: Int32(subgraphMemberStarts[subgraph])..<Int32(subgraphChildStarts[subgraph]),
+                                                        childGroupIndices: Int32(subgraphChildStarts[subgraph])..<Int32(subgraphMemberStarts[subgraph + 1])))
+            }
+        }
+        return FlowchartDiagram(direction: direction, model: parts.takeModel(text: MermaidSourceText(bytes: identifierBytes)), title: title,
+                                accessibilityTitle: nil, accessibilityDescription: nil, unappliedStatementCount: 0)
     }
 
     /// How many open flows each node is inside; a chain that loops is cut where it meets itself.
@@ -102,42 +140,69 @@ struct AgentFlowClusterGraph {
     }
 
     /// The nodes, then a node standing for each open flow, and the flows as subgraphs, outer ones first.
-    private mutating func placeNodes(graph: AgentFlowGraph) -> (nodes: [FlowchartNode], subgraphs: [FlowchartSubgraph]) {
-        var nodes: [FlowchartNode] = []
-        var subgraphs: [FlowchartSubgraph] = []
+    private mutating func placeNodes(graph: AgentFlowGraph) {
         flowchartIndices = Array(repeating: 0, count: graph.nodes.count)
         subgraphIndices = Array(repeating: nil, count: graph.nodes.count)
         for (index, node) in graph.nodes.enumerated() where !node.isGroup {
-            flowchartIndices[index] = nodes.count
+            flowchartIndices[index] = nodeRecords.count
             drawnGraphIndices.append(index)
             let shape = node.shape == "collapsedGroup" ? FlowchartNodeShape.rectangle : AgentFlowShapes.drawnShape(node.shape)
-            nodes.append(FlowchartNode(identifier: node.identifier, label: DiagramLabel(lines: []), shape: shape))
+            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(node.identifier), label: .none, shape: shape))
         }
         let groups = graph.nodes.indices.filter { index in graph.nodes[index].isGroup }.sorted { first, second in
             depths[first] != depths[second] ? depths[first] < depths[second] : first < second
         }
         for group in groups {
-            subgraphIndices[group] = subgraphs.count
+            subgraphIndices[group] = subgraphGraphIndices.count
             subgraphGraphIndices.append(group)
-            flowchartIndices[group] = nodes.count
-            nodes.append(FlowchartNode(identifier: graph.nodes[group].identifier, label: DiagramLabel(lines: [])))
-            subgraphs.append(FlowchartSubgraph(identifier: graph.nodes[group].identifier, title: DiagramLabel(lines: []),
-                                               direction: directions[group], representingNodeIndex: nodes.count - 1))
+            flowchartIndices[group] = nodeRecords.count
+            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(graph.nodes[group].identifier), label: .none, shape: .rectangle))
         }
+        for group in groups { subgraphIdentifiers.append(appendedIdentifier(graph.nodes[group].identifier)) }
+        placeSubgraphMembers()
+    }
+
+    /// What each subgraph holds directly, in the graph's order: its nodes, then its subgraphs.
+    private mutating func placeSubgraphMembers() {
+        let subgraphCount = subgraphGraphIndices.count
+        guard subgraphCount > 0 else { return }
+        var nodeCounts = [Int](repeating: 0, count: subgraphCount)
+        var childCounts = [Int](repeating: 0, count: subgraphCount)
+        for (index, parent) in parents.enumerated() where parent >= 0 {
+            guard let subgraph = subgraphIndices[parent] else { continue }
+            if subgraphIndices[index] != nil { childCounts[subgraph] += 1 } else { nodeCounts[subgraph] += 1 }
+        }
+        subgraphChildStarts = []
+        var nodeFill: [Int] = []
+        var childFill: [Int] = []
+        for subgraph in 0..<subgraphCount {
+            nodeFill.append(subgraphMemberStarts[subgraph])
+            subgraphChildStarts.append(subgraphMemberStarts[subgraph] + nodeCounts[subgraph])
+            childFill.append(subgraphChildStarts[subgraph])
+            subgraphMemberStarts.append(subgraphChildStarts[subgraph] + childCounts[subgraph])
+        }
+        subgraphMembers = [Int32](repeating: 0, count: subgraphMemberStarts[subgraphCount])
         for (index, parent) in parents.enumerated() where parent >= 0 {
             guard let subgraph = subgraphIndices[parent] else { continue }
             if let child = subgraphIndices[index] {
-                subgraphs[subgraph].childSubgraphIndices.append(child)
+                subgraphMembers[childFill[subgraph]] = Int32(child)
+                childFill[subgraph] += 1
             } else {
-                subgraphs[subgraph].nodeIndices.append(flowchartIndices[index])
+                subgraphMembers[nodeFill[subgraph]] = Int32(flowchartIndices[index])
+                nodeFill[subgraph] += 1
             }
         }
-        return (nodes, subgraphs)
+    }
+
+    /// `identifier`'s bytes appended to the flowchart's text, and their range.
+    private mutating func appendedIdentifier(_ identifier: String) -> MermaidTextRange {
+        let start = identifierBytes.count
+        identifierBytes.append(contentsOf: identifier.utf8)
+        return MermaidTextRange(start: start, end: identifierBytes.count)
     }
 
     /// Each edge between drawn ends, laid out unless it joins a node and a flow around it.
-    private mutating func placeEdges(graph: AgentFlowGraph, indexByIdentifier: [String: Int]) -> [FlowchartEdge] {
-        var edges: [FlowchartEdge] = []
+    private mutating func placeEdges(graph: AgentFlowGraph, indexByIdentifier: [String: Int]) {
         for (edgeIndex, edge) in graph.edges.enumerated() {
             guard let source = indexByIdentifier[edge.start], let target = indexByIdentifier[edge.end] else { continue }
             if contains(source, target) || contains(target, source) {
@@ -145,11 +210,10 @@ struct AgentFlowClusterGraph {
                 continue
             }
             laidOutEdgeIndices.append(edgeIndex)
-            edges.append(FlowchartEdge(sourceIndex: flowchartIndices[source], targetIndex: flowchartIndices[target],
-                                                 stroke: edge.thickness == "dotted" ? .dotted : .solid, targetArrowhead: Self.arrowhead(of: edge),
-                                                 minimumRankSpan: max(1, edge.minimumLength ?? 1)))
+            edgeRecords.append(FlowchartEdgeRecord(sourceIndex: Int32(flowchartIndices[source]), targetIndex: Int32(flowchartIndices[target]),
+                                                   minimumRankSpan: Int32(max(1, edge.minimumLength ?? 1)), stroke: edge.thickness == "dotted" ? .dotted : .solid,
+                                                   sourceArrowhead: .none, targetArrowhead: Self.arrowhead(of: edge), label: .none))
         }
-        return edges
     }
 
     static func arrowhead(of edge: AgentFlowGraphEdge) -> FlowchartArrowhead {
@@ -169,6 +233,6 @@ struct AgentFlowClusterGraph {
             parent = parents[parent]
             hops += 1
         }
-        return flowchart.direction
+        return direction
     }
 }

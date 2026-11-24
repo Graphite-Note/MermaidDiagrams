@@ -6,7 +6,7 @@
  *              and for a narrow container turned to run down and tightened as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 24/11/2026
  */
 
@@ -82,30 +82,12 @@ public enum FlowchartLayoutEngine {
             return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing,
                                      groupPadding: groupPadding, title: title)
         }
-        let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let layeredEdgeIndices = (0..<diagram.edgeCount).filter { edgeIndex in diagram.edgeEnds(at: edgeIndex).source != diagram.edgeEnds(at: edgeIndex).target }
-        let spanSide: DiagramSide = diagram.direction.layeredDirection.runsVertically ? .top : .left
-        let graph = LayeredGraph(nodeSizes: measured.layoutSizes(loopSide: flowAxes.loopSide).map(flowAxes.flowSize(of:)),
-                                 edges: layeredEdgeIndices.map { edgeIndex in
-                                     let (source, target) = diagram.edgeEnds(at: edgeIndex)
-                                     let labelSize = measured.edgeTexts[edgeIndex].map { text in
-                                         flowAxes.flowSize(of: CGSize(width: text.size.width + edgeTextRoom.width,
-                                                                      height: text.size.height + edgeTextRoom.height))
-                                     }
-                                     return LayeredEdge(source: source, target: target, minimumRankSpan: diagram.edgeMinimumRankSpan(at: edgeIndex),
-                                                        labelSize: labelSize)
-                                 },
-                                 nodeSideSpans: (0..<diagram.nodeCount).map { node in measured.sideSpan(of: node, shape: diagram.nodeShape(at: node), side: spanSide) })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        let laidOut = DiagramScratchArena.withCurrentThread { arena in
+            FlowchartRankedLayout.layout(diagram, measured: measured, font: font, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount,
+                                         title: title, arena: arena)
         }
-        var page = FlowchartPageAssembly(diagram: diagram, measured: measured,
-                                         axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: placement.extent.height))
-        page.placeNodes(flowCenters: placement.nodeCenters)
-        page.placeEdges(layeredEdgeIndices: layeredEdgeIndices, placement: placement)
-        page.placeSelfLoops()
-        let extent = flowAxes.flowIsVertical ? placement.extent : CGSize(width: placement.extent.height, height: placement.extent.width)
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap, extent: extent)
+        guard let laidOut else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        return laidOut
     }
 
     /// A flowchart with subgraphs: each group a box laid out on its own and placed in the box around it, as Pele does
