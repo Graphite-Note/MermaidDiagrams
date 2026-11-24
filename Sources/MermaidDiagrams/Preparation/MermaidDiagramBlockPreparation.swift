@@ -6,7 +6,7 @@
  *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -34,10 +34,13 @@ extension MermaidDiagramAccessibility {
     /// Each block drawn by its text, breadth first as it is laid out, a composite by its title when it has one.
     init(block diagram: BlockDiagram) {
         self.init(kind: .block, title: diagram.title, description: nil) {
+            let model = diagram.model
             let summary = diagram.reachableBlockIndices.dropFirst().compactMap { index -> String? in
-                let block = diagram.blocks[index]
+                let block = model.blocks[index]
                 guard block.kind != .space else { return nil }
-                let label = DiagramLabelDecoder.label(from: block.label, form: .plain).spokenText
+                let label = model.bytes.withUnsafeBufferPointer { buffer in
+                    DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: buffer[block.label.lowerBound..<block.label.upperBound]), form: .plain)
+                }.spokenText
                 return label.isEmpty ? nil : label
             }
             return summary
@@ -48,6 +51,6 @@ extension MermaidDiagramAccessibility {
 extension BlockDiagram {
     /// Whether the root reaches no block but spaces: nothing is drawn.
     var drawsNoBlock: Bool {
-        !reachableBlockIndices.dropFirst().contains { index in blocks[index].kind != .space }
+        !reachableBlockIndices.dropFirst().contains { index in model.blocks[index].kind != .space }
     }
 }

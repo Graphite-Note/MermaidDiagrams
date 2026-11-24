@@ -6,8 +6,8 @@
  *              or a column, else one bend, or straight across, whichever crosses the fewest other blocks.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -186,13 +186,32 @@ enum BlockEdgeRouting {
 
     /// How many obstacles other than the two ends the route crosses.
     static func hits(_ points: [CGPoint], source: Int, target: Int, outlines: [BlockOutline], obstacles: [Int]) -> Int {
-        var count = 0
-        for obstacle in obstacles where obstacle != source && obstacle != target {
-            for index in 0..<(points.count - 1) where outlines[obstacle].isCrossed(from: points[index], to: points[index + 1]) {
-                count += 1
-                break
+        // Every route is checked against every block (the layout's quadratic budget), so the loops run on the lists'
+        // memory, without an iterator per obstacle.
+        guard points.count > 1 else { return 0 }
+        return points.withUnsafeBufferPointer { points in
+            outlines.withUnsafeBufferPointer { outlines in
+                obstacles.withUnsafeBufferPointer { obstacles in
+                    var count = 0
+                    var obstacleIndex = 0
+                    while obstacleIndex < obstacles.count {
+                        let obstacle = obstacles[obstacleIndex]
+                        obstacleIndex += 1
+                        guard obstacle != source, obstacle != target else { continue }
+                        precondition(obstacle >= 0 && obstacle < outlines.count, "An obstacle is a cell of the layout")
+                        let outline = outlines[obstacle]
+                        var index = 0
+                        while index < points.count - 1 {
+                            if outline.isCrossed(from: points[index], to: points[index + 1]) {
+                                count += 1
+                                break
+                            }
+                            index += 1
+                        }
+                    }
+                    return count
+                }
             }
         }
-        return count
     }
 }

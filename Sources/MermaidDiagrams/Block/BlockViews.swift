@@ -6,8 +6,8 @@
  *              text, its shape's or arrow's size around it, a composite's title and the room around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,8 +47,12 @@ struct BlockViews {
     private(set) var views: [BlockView] = []
     /// Each cell's container's place, -1 for the root.
     private(set) var parentIndices: [Int] = []
-    /// The cell of each block drawn (not a space), by its identifier.
-    private(set) var cellIndicesByIdentifier: [String: Int] = [:]
+    /// The cell of each block drawn (not a space), by its identifier's interned number, -1 for none; the last block of
+    /// an identifier reached has it.
+    private(set) var cellIndicesByIdentifierNumber: [Int32]
+    /// The cell of the block drawn under the root's identifier, `root`, which no number names: the root, or the last
+    /// block written `root` reached.
+    private(set) var rootIdentifierCellIndex = -1
 
     /// Shapes kept at their own size in a larger cell, where the others stretch to fill it.
     static let keepsOwnSize: Set<FlowchartNodeShape> = [.circle, .doubleCircle, .diamond]
@@ -57,36 +61,70 @@ struct BlockViews {
 
     init<Measurer: DiagramTextMeasuring>(_ diagram: BlockDiagram, measurers: BlockMeasurers<Measurer>, gap: CGFloat, wrappingWidth: CGFloat,
                                          titleWidth: CGFloat) {
-        var cache = BlockMeasurerCache(measurers: measurers)
+        var cache = BlockMeasurerCache(measurers: measurers, model: diagram.model)
+        self.init(diagram, cache: &cache, gap: gap, wrappingWidth: wrappingWidth, titleWidth: titleWidth)
+    }
+
+    /// The views of `diagram`, its blocks' looks and their measurers kept in `cache`, which the layout goes on using.
+    init<Measurer: DiagramTextMeasuring>(_ diagram: BlockDiagram, cache: inout BlockMeasurerCache<Measurer>, gap: CGFloat, wrappingWidth: CGFloat,
+                                         titleWidth: CGFloat) {
+        let model = diagram.model
         var queue = [(block: BlockDiagram.rootIndex, parent: -1)]
-        queue.reserveCapacity(diagram.blocks.count)
-        cells.reserveCapacity(diagram.blocks.count)
-        views.reserveCapacity(diagram.blocks.count)
-        parentIndices.reserveCapacity(diagram.blocks.count)
-        cellIndicesByIdentifier.reserveCapacity(diagram.blocks.count)
+        queue.reserveCapacity(model.blocks.count)
+        cells.reserveCapacity(model.blocks.count)
+        views.reserveCapacity(model.blocks.count)
+        parentIndices.reserveCapacity(model.blocks.count)
+        cellIndicesByIdentifierNumber = Array(repeating: -1, count: model.edges.isEmpty ? 0 : model.identifierCount)
         var next = 0
         while next < queue.count {
             let (blockIndex, parent) = queue[next]
             next += 1
-            let block = diagram.blocks[blockIndex]
-            let measured = Self.measured(block, at: blockIndex, diagram: diagram, cache: &cache, gap: gap, wrappingWidth: wrappingWidth,
-                                         titleWidth: titleWidth)
-            var cell = measured.cell
+            let block = model.blocks[blockIndex]
+            let (measuredCell, view) = Self.measured(block, at: blockIndex, model: model, cache: &cache, gap: gap, wrappingWidth: wrappingWidth,
+                                                     titleWidth: titleWidth)
+            var cell = consume measuredCell
             if blockIndex == BlockDiagram.rootIndex { (cell.neededWidth, cell.neededHeight) = (0, 0) }
             let index = cells.count
             if parent >= 0 { cells[parent].childIndices.append(index) }
-            cells.append(cell)
-            views.append(measured.view)
+            let kind = view.kind
+            cells.append(consume cell)
+            views.append(consume view)
             parentIndices.append(parent)
-            if measured.view.kind != .space { cellIndicesByIdentifier[block.identifier] = index }
-            if measured.view.kind == .composite {
-                for child in block.childIndices { queue.append((child, index)) }
+            if kind != .space { recordCell(index, of: block, in: model) }
+            if kind == .composite {
+                cells[index].childIndices.reserveCapacity(Int(block.children.count))
+                for child in model.childIndices[block.children.range] { queue.append((Int(child), index)) }
             }
         }
     }
 
+    /// The cell of `block`, kept by its identifier's number for the edges to find, when the diagram has edges.
+    private mutating func recordCell(_ index: Int, of block: BlockRecord, in model: BlockModel) {
+        if block.identifierNumber < 0 || block.identifierNumber == model.rootIdentifierNumber { rootIdentifierCellIndex = index }
+        guard block.identifierNumber >= 0, Int(block.identifierNumber) < cellIndicesByIdentifierNumber.count else { return }
+        cellIndicesByIdentifierNumber[Int(block.identifierNumber)] = Int32(index)
+    }
+
+    /// The cell of each block drawn (not a space) by its identifier, the last block of an identifier reached having it:
+    /// what the numbers keep, as text, for tests.
+    func cellIndicesByIdentifier(in diagram: BlockDiagram) -> [String: Int] {
+        var cellIndices: [String: Int] = [:]
+        for (index, view) in views.enumerated() where view.kind != .space {
+            cellIndices[diagram.model.identifier(of: diagram.model.blocks[view.blockIndex])] = index
+        }
+        return cellIndices
+    }
+
+    /// The cell of the block drawn under the identifier numbered `number` in the diagram's edges, nil for none.
+    func cellIndex(ofIdentifierNumber number: Int32, in model: BlockModel) -> Int? {
+        if number == model.rootIdentifierNumber { return rootIdentifierCellIndex >= 0 ? rootIdentifierCellIndex : nil }
+        guard number >= 0, Int(number) < cellIndicesByIdentifierNumber.count else { return nil }
+        let index = cellIndicesByIdentifierNumber[Int(number)]
+        return index >= 0 ? Int(index) : nil
+    }
+
     /// A block's cell and view, measured.
-    private static func measured<Measurer: DiagramTextMeasuring>(_ block: BlockDiagramBlock, at blockIndex: Int, diagram: BlockDiagram,
+    private static func measured<Measurer: DiagramTextMeasuring>(_ block: BlockRecord, at blockIndex: Int, model: BlockModel,
                                                                  cache: inout BlockMeasurerCache<Measurer>, gap: CGFloat, wrappingWidth: CGFloat,
                                                                  titleWidth: CGFloat) -> (cell: BlockCell, view: BlockView) {
         var cell = BlockCell()
@@ -95,27 +133,27 @@ struct BlockViews {
             cell.isSpace = true
             return (cell, BlockView(blockIndex: blockIndex, kind: .space, text: nil, appearance: BlockAppearance(), textOffset: .zero))
         }
-        let appearance = cache.appearance(classNames: block.classNames, styles: block.styles, classes: diagram.classes)
+        let appearance = cache.appearance(of: block)
         let measurer = cache.measurer(for: appearance)
         switch block.kind {
         case .composite:
-            cell.columns = block.columns ?? -1
-            let title = PlaneMapLabel.block(block.label, measurer: measurer, maximumWidth: titleWidth)
+            cell.columns = block.hasColumns ? block.columns : -1
+            let title = model.textBlock(of: block.label, measurer: measurer, maximumWidth: titleWidth)
             let titleHeight = title.map { text in text.size.height + 4 } ?? 0
             cell.titleHeight = titleHeight
             cell.neededWidth = (title?.size.width ?? 0) + 2 * gap
             cell.neededHeight = titleHeight + 2 * gap
             return (cell, BlockView(blockIndex: blockIndex, kind: .composite, text: title, appearance: appearance, textOffset: .zero))
         case .arrow:
-            let text = PlaneMapLabel.block(block.label, measurer: measurer, maximumWidth: wrappingWidth)
-            let directions = BlockArrowDirections(written: block.directions)
+            let text = model.textBlock(of: block.label, measurer: measurer, maximumWidth: wrappingWidth)
+            let directions = BlockArrowDirections(written: model.strings(block.directions))
             let isBlank = text?.lines.allSatisfy { line in line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true
             let (size, offset) = BlockArrowShape.size(of: directions, textSize: isBlank ? .zero : text?.size ?? .zero)
             (cell.neededWidth, cell.neededHeight) = (size.width, size.height)
             return (cell, BlockView(blockIndex: blockIndex, kind: .arrow(directions), text: text, appearance: appearance, textOffset: offset))
         default:
-            let shape = if case .shape(let shape) = block.kind { shape } else { FlowchartNodeShape.rectangle }
-            let text = PlaneMapLabel.block(block.label, measurer: measurer, maximumWidth: wrappingWidth)
+            let shape = block.kind == .shape ? block.shape : FlowchartNodeShape.rectangle
+            let text = model.textBlock(of: block.label, measurer: measurer, maximumWidth: wrappingWidth)
             let textSize = text?.size ?? .zero
             let (size, offset) = FlowchartShapeGeometry.size(of: shape, textSize: textSize)
             cell.neededWidth = size.width
@@ -129,6 +167,13 @@ struct BlockViews {
 /// The measurer of each look a block's text asks for, made once: the diagram's own for the usual one.
 struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
     let measurers: BlockMeasurers<Measurer>
+    /// The measurer of a block's text at the diagram's size and its size, kept apart from `measurers` so that a block
+    /// measured in the usual look copies the measurer alone.
+    private let nodeText: Measurer
+    private let nodeTextSize: CGFloat
+    private let model: BlockModel?
+    /// The diagram's classes by name, made when the first block that has classes or a style is met.
+    private var classes: [String: BlockClassDefinition]?
     private var restyled: [BlockTextLook: Measurer] = [:]
     /// The appearance of each pair of class names and styles met, read once: blocks of one class share theirs.
     private var appearances: [BlockStyling: BlockAppearance] = [:]
@@ -146,8 +191,19 @@ struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
         let isItalic: Bool
     }
 
-    init(measurers: BlockMeasurers<Measurer>) {
+    init(measurers: BlockMeasurers<Measurer>, model: BlockModel? = nil) {
         self.measurers = measurers
+        nodeText = measurers.nodeText
+        nodeTextSize = measurers.nodeText.fontSize
+        self.model = model
+    }
+
+    /// The appearance of `block` of the cache's model: the usual one, or that of its classes and style.
+    mutating func appearance(of block: BlockRecord) -> BlockAppearance {
+        guard let model else { return BlockAppearance() }
+        guard block.hasStyling || !model.classes.isEmpty else { return BlockAppearance() }
+        if classes == nil { classes = model.classDictionary() }
+        return appearance(classNames: model.classNames(of: block), styles: block.styles.map(model.strings), classes: classes ?? [:])
     }
 
     /// The appearance of a block of `classNames` with `styles`, the diagram's classes being `classes` for every call.
@@ -166,8 +222,8 @@ struct BlockMeasurerCache<Measurer: DiagramTextMeasuring> {
     }
 
     mutating func measurer(for appearance: BlockAppearance) -> Measurer {
-        let fontSize = appearance.fontSize ?? measurers.nodeText.fontSize
-        guard fontSize != measurers.nodeText.fontSize || appearance.isBold || appearance.isItalic else { return measurers.nodeText }
+        let fontSize = appearance.fontSize ?? nodeTextSize
+        guard fontSize != nodeTextSize || appearance.isBold || appearance.isItalic else { return nodeText }
         let look = BlockTextLook(fontSize: fontSize, isBold: appearance.isBold, isItalic: appearance.isItalic)
         if let known = restyled[look] { return known }
         let made = measurers.restyled(fontSize, appearance.isBold, appearance.isItalic)

@@ -3,11 +3,11 @@
  * ------------------------
  * Layer: Core
  * Description: A block diagram read from Mermaid text: its blocks in their nested grids, its edges, its classes and
- *              styles, as Pele's block database keeps them.
+ *              styles, as Pele's block database keeps them, a view over the flat model the reader leaves.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,22 +19,35 @@ import CoreGraphics
 /// of the same identifier made, stays in the list unreached, as Pele's map keeps it.
 public struct BlockDiagram: Equatable, Sendable {
     public internal(set) var title: String?
-    /// Every block, the root at `rootIndex`.
-    public internal(set) var blocks: [BlockDiagramBlock]
-    /// The edges in the order written, each link of a statement with several (`A --> B --> C`) its own.
-    public internal(set) var edges: [BlockDiagramEdge]
-    /// The classes `classDef` defines, by name.
-    public internal(set) var classes: [String: BlockClassDefinition]
     /// The front matter's or a directive's `block.padding`, between 0 and 200, or nil for Pele's 12 points.
     public internal(set) var padding: CGFloat?
+    /// The blocks, edges and classes as plain records over the text's bytes, which the layout reads; the lists below
+    /// are made from it when read.
+    let model: BlockModel
 
     /// The root's place in `blocks`: always the first.
     public static let rootIndex = 0
 
+    init(model: BlockModel) {
+        self.model = model
+    }
+
+    /// A diagram of these values, as 0.7.0's reader made them.
     init(blocks: [BlockDiagramBlock], edges: [BlockDiagramEdge], classes: [String: BlockClassDefinition]) {
-        self.blocks = blocks
-        self.edges = edges
-        self.classes = classes
+        model = BlockModel(blocks: blocks, edges: edges, classes: classes)
+    }
+
+    /// Every block, the root at `rootIndex`, made from the model when read.
+    public var blocks: [BlockDiagramBlock] { model.blocks.indices.map(model.block(at:)) }
+    /// The edges in the order written, each link of a statement with several (`A --> B --> C`) its own.
+    public var edges: [BlockDiagramEdge] { model.edges.map(model.edge) }
+    /// The classes `classDef` defines, by name.
+    public var classes: [String: BlockClassDefinition] { model.classDictionary() }
+
+    /// Two diagrams are equal when their titles, padding, blocks, edges and classes are.
+    public static func == (first: BlockDiagram, second: BlockDiagram) -> Bool {
+        first.title == second.title && first.padding == second.padding && first.blocks == second.blocks && first.edges == second.edges
+            && first.classes == second.classes
     }
 
     /// The blocks the root holds, each container's after its own, outermost first: what is laid out, breadth first.
@@ -42,7 +55,7 @@ public struct BlockDiagram: Equatable, Sendable {
         var order = [Self.rootIndex]
         var next = 0
         while next < order.count {
-            order.append(contentsOf: blocks[order[next]].childIndices)
+            order.append(contentsOf: model.childIndices[model.blocks[order[next]].children.range].lazy.map(Int.init))
             next += 1
         }
         return order

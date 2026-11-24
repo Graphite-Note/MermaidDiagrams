@@ -6,8 +6,8 @@
  *              grids, the edges routed and their texts settled, gaps widened where texts do not fit, and the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -46,13 +46,19 @@ public enum BlockLayoutEngine {
                                                        availableWidth: CGFloat? = nil, isTight: Bool = false) throws(BlockLayoutError) -> BlockLayout {
         let gap = min(diagram.padding ?? Self.gap, isTight ? tightGap : .infinity)
         let titleWidth = isTight ? DiagramWidthFitting.titleRoom(availableWidth: availableWidth) : PlaneMapLabel.unwrappedWidth
-        let views = BlockViews(diagram, measurers: measurers, gap: gap, wrappingWidth: isTight ? tightWrappingWidth : wrappingWidth, titleWidth: titleWidth)
+        var cache = BlockMeasurerCache(measurers: measurers, model: diagram.model)
+        let views = BlockViews(diagram, cache: &cache, gap: gap, wrappingWidth: isTight ? tightWrappingWidth : wrappingWidth, titleWidth: titleWidth)
+        // The edges' ends are found before the views go to the placement, which then holds the only copy of the cells
+        // and views it changes.
+        let drawnEdges = self.drawnEdges(of: diagram, views: views, edgeText: measurers.edgeText)
         var placement = BlockPlacement(views, gap: gap)
         try placement.place()
-        var edges = edgePlacement(of: diagram, views: views, edgeText: measurers.edgeText, obstacleCount: placement.obstacleIndices.count)
+        var edges = BlockEdgePlacement(edgeIndices: drawnEdges.indices, ends: drawnEdges.ends, textSizes: drawnEdges.textSizes,
+                                       edgeTextSize: measurers.edgeText.fontSize, obstacleCount: placement.obstacleIndices.count,
+                                       cellCount: placement.cells.count)
         try settle(&edges, &placement, isTight: isTight, availableWidth: availableWidth)
         let title = PlaneMapLabel.block(diagram.title, measurer: measurers.titleText, maximumWidth: titleWidth)
-        var assembly = BlockLayoutAssembly(diagram: diagram, placement: placement, edges: edges, measurers: measurers)
+        var assembly = BlockLayoutAssembly(diagram: diagram, placement: placement, edges: edges, cache: cache)
         return assembly.layout(title: title, font: font)
     }
 
@@ -70,26 +76,33 @@ public enum BlockLayoutEngine {
         return tight.size.width < fitted.size.width ? tight : fitted
     }
 
-    /// The edges whose both ends are drawn, with their texts measured.
-    private static func edgePlacement<Measurer: DiagramTextMeasuring>(of diagram: BlockDiagram, views: BlockViews, edgeText: Measurer,
-                                                                      obstacleCount: Int) -> BlockEdgePlacement {
+    /// The edges whose both ends are drawn, their ends' cells and their texts' sizes.
+    private static func drawnEdges<Measurer: DiagramTextMeasuring>(of diagram: BlockDiagram, views: BlockViews, edgeText: Measurer)
+        -> (indices: [Int], ends: [(source: Int, target: Int)], textSizes: [CGSize]) {
         var edgeIndices: [Int] = []
         var ends: [(source: Int, target: Int)] = []
         var textSizes: [CGSize] = []
-        for (index, edge) in diagram.edges.enumerated() {
-            guard let source = views.cellIndicesByIdentifier[edge.sourceIdentifier], let target = views.cellIndicesByIdentifier[edge.targetIdentifier] else { continue }
+        let model = diagram.model
+        guard !model.edges.isEmpty else { return ([], [], []) }
+        edgeIndices.reserveCapacity(model.edges.count)
+        ends.reserveCapacity(model.edges.count)
+        textSizes.reserveCapacity(model.edges.count)
+        for (index, edge) in model.edges.enumerated() {
+            guard let source = views.cellIndex(ofIdentifierNumber: edge.sourceNumber, in: model),
+                  let target = views.cellIndex(ofIdentifierNumber: edge.targetNumber, in: model) else { continue }
             edgeIndices.append(index)
             ends.append((source, target))
-            textSizes.append(PlaneMapLabel.block(edge.label, measurer: edgeText, maximumWidth: wrappingWidth)?.size ?? .zero)
+            textSizes.append(model.textBlock(of: edge.label, measurer: edgeText, maximumWidth: wrappingWidth)?.size ?? .zero)
         }
-        return BlockEdgePlacement(edgeIndices: edgeIndices, ends: ends, textSizes: textSizes, edgeTextSize: edgeText.fontSize,
-                                  obstacleCount: obstacleCount, cellCount: views.cells.count)
+        return (edgeIndices, ends, textSizes)
     }
 
     /// Pele's rounds: the texts stacked, and where they do not fit the gaps widened and the grid laid out again, up to
     /// three times; kept only when that leaves the texts covering each other less and the drawing within the width.
     private static func settle(_ edges: inout BlockEdgePlacement, _ placement: inout BlockPlacement, isTight: Bool,
                                availableWidth: CGFloat?) throws(BlockLayoutError) {
+        // Without edges there is nothing to route or stack: the routes stay empty, as routing none leaves them.
+        guard !edges.ends.isEmpty else { return }
         let mayGrow = edges.ends.count * edges.ends.count <= BlockEdgePlacement.obstacleBudget
         guard edges.settle(&placement, grow: mayGrow, isTight: isTight) else { return }
         let before = edges.textOverlap

@@ -6,8 +6,8 @@
  *              brackets, a block arrow's directions, and links with and without text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 extension BlockLexer {
@@ -78,7 +78,7 @@ extension BlockLexer {
         case PlaneMapByte.colon:
             let end = skippingDigits(from: position + 1)
             guard end > position + 1 else { return false }
-            put(.size, text(from: position + 1, to: end), end: end)
+            put(.size, from: position + 1, to: end, end: end)
             return true
         default: return nil
         }
@@ -119,12 +119,12 @@ extension BlockLexer {
             let start = skippingWhitespace(from: position + 7)
             guard start > position + 7 else { return nil }
             if hasPrefix("auto", at: start), !isWord(at: start + 4) {
-                put(.columns, "-1", end: start + 4)
+                put(.columns, literal: .minusOne, end: start + 4)
                 return true
             }
             let end = skippingDigits(from: start)
             guard end > start else { return nil }
-            put(.columns, text(from: start, to: end), end: end)
+            put(.columns, from: start, to: end, end: end)
             return true
         }
         guard hasPrefix("class", at: position) else { return nil }
@@ -143,12 +143,12 @@ extension BlockLexer {
             if byte(at: position + 5) == PlaneMapByte.colon {
                 let end = skippingDigits(from: position + 6)
                 if end > position + 6 {
-                    put(.space, text(from: position + 6, to: end), end: end)
+                    put(.space, from: position + 6, to: end, end: end)
                     return true
                 }
             }
             guard !isWord(at: position + 5) else { return nil }
-            put(.space, "1", end: position + 5)
+            put(.space, literal: .one, end: position + 5)
             return true
         }
         guard hasPrefix("style", at: position) else { return nil }
