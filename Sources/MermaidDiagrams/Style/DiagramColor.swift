@@ -2,7 +2,7 @@
  * File: DiagramColor.swift
  * ------------------------
  * Layer: Core
- * Description: A color a diagram's own statements give, a hexadecimal one read on its bytes.
+ * Description: A color a diagram's own statements give, read on its bytes when they are ASCII.
  *
  * Authors: Bahey Shalash
  * Version: 0.4
@@ -47,23 +47,6 @@ public struct DiagramColor: Hashable, Sendable {
             self = DiagramColor(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
         } else {
             return nil
-        }
-    }
-
-    /// The color an ASCII value written with `#` reads as, without the spaces and tabs around it (Foundation's
-    /// `whitespaces` in ASCII) and in either case, as `init?(cssText:)` reads it through its characters: `.some(nil)`
-    /// for one that is no color; nil, to be read through its characters, for any other value.
-    private static func readOnBytes(_ cssText: String) -> DiagramColor?? {
-        var text = cssText
-        return text.withUTF8 { bytes -> DiagramColor?? in
-            var start = 0
-            var end = bytes.count
-            while start < end, bytes[start] == MermaidByte.space || bytes[start] == MermaidByte.tab { start += 1 }
-            while end > start, bytes[end - 1] == MermaidByte.space || bytes[end - 1] == MermaidByte.tab { end -= 1 }
-            guard start < end, bytes[start] == UInt8(ascii: "#") else { return nil }
-            let written = UnsafeBufferPointer(rebasing: bytes[start..<end])
-            guard !written.contains(where: { byte in byte >= 0x80 }) else { return nil }
-            return .some(hexadecimal(written))
         }
     }
 

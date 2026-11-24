@@ -6,7 +6,7 @@
  *              (FlowchartModelEquivalenceTests): collects a flowchart as its statements are read.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -245,18 +245,18 @@ struct ReferenceFlowchartDiagramBuilder {
         }
         switch statement {
         case .classDefinition(let names, let declarations):
-            let (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            let (style, hasUnappliedDeclaration) = ReferenceDiagramElementStyle.reading(declarations)
             for name in names { classStyles[name] = (classStyles[name] ?? DiagramElementStyle()).overridden(by: style) }
             if hasUnappliedDeclaration { countUnappliedStatement() }
         case .classAssignment(let identifiers, let className):
             for identifier in identifiers { classAssignments.append((identifier, className)) }
         case .nodeStyle(let identifier, let declarations):
             addNodeNamedByStyle(identifier)
-            let (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            let (style, hasUnappliedDeclaration) = ReferenceDiagramElementStyle.reading(declarations)
             nodeStyleStatements.append((identifier, style))
             if hasUnappliedDeclaration { countUnappliedStatement() }
         case .linkStyle(let indices, let declarations):
-            var (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            var (style, hasUnappliedDeclaration) = ReferenceDiagramElementStyle.reading(declarations)
             // An edge has no inside to fill; its text color is not set from here.
             style.fill = nil
             if style.textColor != nil {

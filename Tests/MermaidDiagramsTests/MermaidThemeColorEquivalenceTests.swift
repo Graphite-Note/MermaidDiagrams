@@ -124,7 +124,11 @@ struct RandomThemedTexts {
         let hexadecimal = "#" + String((0..<random.below(10)).map { _ in digits[digits.index(digits.startIndex, offsetBy: random.below(digits.count))] })
         let body = random.below(3) == 0 ? pick(["red", "Red", "grey", "transparent", "none", "currentColor", "rgb(1, 2, 3)", "rgba(10%,20%,30%,0.5)",
                                                  "hsl(120 50% 50%)", "var(--pele-series-2)", "light-dark(#fff, #000)", "#", "##fff", "#ｆｆｆ", "#fff ",
-                                                 "#f\u{301}ff", "oklch(70% 0.1 200)", "color-mix(in srgb, red, blue)", "", "#12345g"]) : hexadecimal
+                                                 "#f\u{301}ff", "oklch(70% 0.1 200)", "color-mix(in srgb, red, blue)", "", "#12345g", "rgb(255,0,0)",
+                                                 "RGB(1 2 3 / 50%)", "rgba(1,2,3,4,5)", "rgb(1,2)", "rgb( 1 , 2 , 3 )", "rgb(1e2,inf,nan)", "rgb()",
+                                                 "rgba(10%, 20%, 30%, 40%)", "rgb(", "rgbx(1,2,3)", "rgb(1,,2,3)", "rgb(-5,300,2.5)", "Transparent",
+                                                 "NONE", "LightGoldenRodYellow", "rgb(1\r\n,2,3)", "rgb(1,2,3", "rgba(1 2 3 4)", "rgb(0x10,1,2)",
+                                                 "rgb(1%,2,3)", "rgb(+1,.5,1.)", "rgb(1/2/3)", "rgb ( 1, 2, 3)", "lightgoldenrodyellowx", "red "]) : hexadecimal
         return pick(["", "", " ", "\t", "\n", "\u{A0}", "\u{2028}", "\u{0B}"]) + body + pick(["", "", " ", "\t", "\n", "\u{A0}", "\u{FEFF}"])
     }
 
