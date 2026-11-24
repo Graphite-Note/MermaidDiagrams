@@ -5,8 +5,8 @@
  * Description: A position in a diagram's UTF-8 bytes, with its line, and the text the diagram's configuration is read from.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 /// A position in a diagram's UTF-8 bytes, with the line it is on. Readers move it forward only; a lookahead copies it.
@@ -38,6 +38,15 @@ struct MermaidTextCursor {
         source = MermaidCursorSource(bytes: sourceBytes, readFrontMatter: readFrontMatter)
         position = 0
         line = 1
+    }
+
+    /// A cursor right after the type's keyword the front end found: on the text's bytes, an array made of the caller's
+    /// String when preprocessing changed none, with the text as written and its front matter.
+    init(_ frontEnd: MermaidFrontEndResult) {
+        bytes = frontEnd.text.legacyBytes
+        source = MermaidCursorSource(bytes: frontEnd.sourceBytes ?? bytes, readFrontMatter: frontEnd.readFrontMatter ?? MermaidReadFrontMatter(frontMatter: nil))
+        position = frontEnd.keyword.upperBound
+        line = bytes.withUnsafeBufferPointer { buffer in MermaidSourceText.line(at: frontEnd.keyword.upperBound, in: buffer) }
     }
 
     var isAtEnd: Bool { position >= bytes.count }
