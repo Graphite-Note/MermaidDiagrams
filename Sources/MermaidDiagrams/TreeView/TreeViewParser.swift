@@ -6,7 +6,7 @@
  *              from their indentation, as Mermaid's tree view grammar and database do.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -45,6 +45,8 @@ enum TreeViewParser {
             index += 1
         }
         var tree = TreeViewTreeBuilder(limits: limits)
+        // An entry takes a token or more: room for one per token left is made once.
+        tree.reserveCapacity(min(tokens.count - index, limits.maximumNodeCount))
         while index < tokens.count {
             let entry = try source.entry(in: tokens, from: &index)
             try tree.add(entry)
@@ -75,6 +77,14 @@ struct TreeViewTreeBuilder {
     init(limits: MermaidDiagramLimits) {
         self.limits = limits
     }
+
+    mutating func reserveCapacity(_ entryCount: Int) {
+        entries.reserveCapacity(entryCount)
+        openEntries.reserveCapacity(min(entryCount, Self.typicalDepth))
+    }
+
+    /// Deeper than most trees are written.
+    private static let typicalDepth = 16
 
     mutating func add(_ written: TreeViewWrittenEntry) throws(MermaidDiagramReadError) {
         guard entries.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }

@@ -6,7 +6,7 @@
  *              the header and its direction, then the document's statements, and Jison's errors with their lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -83,7 +83,7 @@ struct AgentFlowParser {
     }
 
     /// Tokens of `kinds` run together: an identifier, or what follows `interpolate`.
-    mutating func joined(_ kinds: Set<AgentFlowTokenKind>) throws(MermaidDiagramReadError) -> String {
+    mutating func joined(_ kinds: AgentFlowTokenKindSet) throws(MermaidDiagramReadError) -> String {
         guard kinds.contains(current) else { throw failure(expecting: "'NODE_STRING'") }
         var joined = text(at: index)
         index += 1
@@ -107,7 +107,7 @@ struct AgentFlowParser {
         }
         var written = text(at: index)
         index += 1
-        while [.text, .tagStart, .tagEnd, .unicodeText].contains(current) {
+        while Self.nodeTextTokens.contains(current) {
             written += text(at: index)
             index += 1
         }

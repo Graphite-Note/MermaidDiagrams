@@ -6,7 +6,7 @@
  *              one sits in the text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -56,7 +56,7 @@ struct AgentFlowTokens {
 
     /// The text of the token at `index` in `units`.
     func text(at index: Int, in units: [UInt16]) -> String {
-        if let replaced = replacedTexts[index] { return replaced }
+        if !replacedTexts.isEmpty, let replaced = replacedTexts[index] { return replaced }
         return UnicodeScalarText.string(utf16: units[starts[index]..<ends[index]])
     }
 
@@ -73,4 +73,22 @@ struct AgentFlowSourceSpan: Equatable {
     var firstColumn: Int
     var lastLine: Int
     var lastColumn: Int
+}
+
+/// A set of token kinds held in the bits of two integers, tested without hashing as the parser tests each token.
+struct AgentFlowTokenKindSet: ExpressibleByArrayLiteral {
+    private var lowBits: UInt64 = 0
+    private var highBits: UInt64 = 0
+
+    init(arrayLiteral kinds: AgentFlowTokenKind...) {
+        for kind in kinds {
+            precondition(kind.rawValue < 128, "a token kind beyond the set's 128 bits")
+            if kind.rawValue < 64 { lowBits |= 1 << UInt64(kind.rawValue) } else { highBits |= 1 << UInt64(kind.rawValue - 64) }
+        }
+    }
+
+    @inline(__always)
+    func contains(_ kind: AgentFlowTokenKind) -> Bool {
+        kind.rawValue < 64 ? lowBits & (1 << UInt64(kind.rawValue)) != 0 : highBits & (1 << UInt64(kind.rawValue - 64)) != 0
+    }
 }

@@ -6,7 +6,7 @@
  *              agentflow.jison: its start conditions, its stack of them, and Jison's way of counting lines and columns.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -51,6 +51,12 @@ struct AgentFlowLexer {
 
     private init(units: [UInt16]) {
         self.units = units
+        // About one token for every two or three code units: room for them is made once.
+        let expectedTokenCount = units.count / 2 + 16
+        tokens.kinds.reserveCapacity(expectedTokenCount)
+        tokens.starts.reserveCapacity(expectedTokenCount)
+        tokens.ends.reserveCapacity(expectedTokenCount)
+        tokens.locations.reserveCapacity(4 * expectedTokenCount)
         nextDirection = Self.firstIndex(of: Self.directionWord, in: units, from: 0) ?? -1
         nextCommercialAt = units.firstIndex(of: UInt16(AgentFlowCharacter.commercialAt)) ?? -1
     }

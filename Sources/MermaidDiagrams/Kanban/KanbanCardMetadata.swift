@@ -6,8 +6,8 @@
  *              reads it with js-yaml and Pele with its own YAML reader.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 import Foundation
@@ -105,5 +105,5 @@ struct KanbanCardMetadata {
 }
 
 private extension String {
-    var trimmed: String { trimmingCharacters(in: .whitespaces) }
+    var trimmed: String { FoundationTextOnBytes.trimmed(self, includingLineBreaks: false) }
 }

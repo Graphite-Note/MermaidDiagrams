@@ -7,7 +7,7 @@
  *              boundaries nested through a counter, not recursion.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -22,7 +22,8 @@ struct C4Parser {
         case statement, macro, statementOrEnd, afterTitle, afterMacro
     }
 
-    private let units: [UInt16]
+    /// The text from the keyword on, in UTF-8.
+    private let bytes: [UInt8]
     private let tokens: C4Tokens
     /// The line of the text the keyword is on.
     private let firstLine: Int
@@ -30,16 +31,16 @@ struct C4Parser {
     private var builder: C4DiagramBuilder
 
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> C4Diagram {
-        let units = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
-        var parser = C4Parser(units: units, firstLine: cursor.line, limits: limits)
+        let bytes = Array(cursor.bytes[(cursor.position - keyword.utf8.count)...])
+        var parser = C4Parser(bytes: bytes, firstLine: cursor.line, limits: limits)
         try parser.readDiagram()
         return parser.builder.diagram
     }
 
-    private init(units: [UInt16], firstLine: Int, limits: MermaidDiagramLimits) {
-        self.units = units
+    private init(bytes: [UInt8], firstLine: Int, limits: MermaidDiagramLimits) {
+        self.bytes = bytes
         self.firstLine = firstLine
-        tokens = C4Lexer.tokens(of: units)
+        tokens = C4Lexer.tokens(of: bytes)
         builder = C4DiagramBuilder(limits: limits)
     }
 
@@ -107,19 +108,19 @@ struct C4Parser {
     private mutating func readTitleOrAccessibility(_ token: C4TokenKind) throws(MermaidDiagramReadError) {
         switch token {
         case .title:
-            builder.diagram.title = text(at: index, droppingFirst: 6)
+            builder.diagram.title = text(at: index, droppingWordAndSpaceOf: Self.titleWordLength)
             index += 1
         case .accessibilityDescriptionStatement:
-            builder.setAccessibilityDescription(text(at: index, droppingFirst: 15))
+            builder.setAccessibilityDescription(text(at: index, droppingWordAndSpaceOf: Self.accessibilityDescriptionWordLength))
             index += 1
         case .accessibilityDescriptionMultilineValue:
-            builder.setAccessibilityDescription(C4Characters.trimmed(text(at: index)))
+            builder.setAccessibilityDescription(trimmedText(at: index))
             index += 1
         default:
             index += 1
             let isTitle = token == .accessibilityTitle
             guard current == (isTitle ? .accessibilityTitleValue : .accessibilityDescriptionValue) else { throw failure(expecting: .accessibilityValue) }
-            let value = C4Characters.trimmed(text(at: index))
+            let value = trimmedText(at: index)
             index += 1
             // The grammar hands `accTitle:` to the title, so it becomes the visible title.
             if isTitle { builder.diagram.title = value } else { builder.setAccessibilityDescription(value) }
@@ -165,10 +166,12 @@ struct C4Parser {
     /// One argument or more: quoted or bare text (trimmed), empty ones, and `$key="value"`.
     private mutating func readArguments() throws(MermaidDiagramReadError) -> [C4Argument] {
         var arguments: [C4Argument] = []
+        // Room for the arguments of most macros, made once.
+        arguments.reserveCapacity(Self.typicalArgumentCount)
         while true {
             switch current {
             case .string:
-                arguments.append(.positional(C4Characters.trimmed(text(at: index))))
+                arguments.append(.positional(trimmedText(at: index)))
                 index += 1
             case .emptyArgument:
                 arguments.append(.positional(""))
@@ -176,8 +179,8 @@ struct C4Parser {
             case .namedArgumentKey:
                 index += 1
                 guard current == .namedArgumentValue else { throw failure(expecting: .namedValue) }
-                let key = C4Characters.trimmed(text(at: index - 1))
-                arguments.append(.named(C4NamedArgument(key: key, value: C4Characters.trimmed(text(at: index)))))
+                let key = trimmedText(at: index - 1)
+                arguments.append(.named(C4NamedArgument(key: key, value: trimmedText(at: index))))
                 index += 1
             default:
                 guard !arguments.isEmpty else { throw failure(expecting: .arguments) }
@@ -191,16 +194,37 @@ struct C4Parser {
         index += 1
     }
 
-    private func text(at tokenIndex: Int, droppingFirst droppedCount: Int = 0) -> String {
-        let start = min(tokens.starts[tokenIndex] + droppedCount, tokens.ends[tokenIndex])
-        return UnicodeScalarText.string(utf16: units[start..<tokens.ends[tokenIndex]])
+    private func text(at tokenIndex: Int) -> String {
+        String(decoding: bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]], as: UTF8.self)
+    }
+
+    /// The token's text without the white space at its ends, as JavaScript's `trim` leaves it: trimmed on its bytes,
+    /// with the white space `C4Characters.trimmed` trims.
+    private func trimmedText(at tokenIndex: Int) -> String {
+        String(decoding: JavaScriptWhitespace.trimmed(bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]]), as: UTF8.self)
+    }
+
+    /// The text of a `title` or `accDescription` statement after its word and the one white space character after it,
+    /// which may take more than one byte.
+    private func text(at tokenIndex: Int, droppingWordAndSpaceOf wordLength: Int) -> String {
+        let end = tokens.ends[tokenIndex]
+        let spaceStart = min(tokens.starts[tokenIndex] + wordLength, end)
+        let start = min(spaceStart + JavaScriptWhitespace.length(in: bytes, at: spaceStart), end)
+        return String(decoding: bytes[start..<end], as: UTF8.self)
     }
 
     /// The line the token at `tokenIndex` starts on, in the whole text.
     private func line(at tokenIndex: Int) -> Int {
-        let offset = tokenIndex < tokens.starts.count ? tokens.starts[tokenIndex] : units.count
-        return firstLine + units[..<min(offset, units.count)].count { unit in unit == C4Characters.lineFeed }
+        let offset = tokenIndex < tokens.starts.count ? tokens.starts[tokenIndex] : bytes.count
+        return firstLine + bytes[..<min(offset, bytes.count)].count { byte in byte == MermaidByte.newline }
     }
+
+    /// More arguments than most macros are written with: a shape takes at most seven, a relation eight.
+    private static let typicalArgumentCount = 8
+
+    /// The lengths of `title` and `accDescription`, which their statements' texts follow after one white space character.
+    private static let titleWordLength = 5
+    private static let accessibilityDescriptionWordLength = 14
 
     private func failure(expecting expected: C4ExpectedSyntax) -> MermaidDiagramReadError {
         let token = current

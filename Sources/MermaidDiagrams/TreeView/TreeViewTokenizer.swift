@@ -6,8 +6,8 @@
  *              first that matches taken, as its Langium lexer does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A token of a tree view's text, by the byte range it covers.
@@ -55,6 +55,8 @@ struct TreeViewTokenizer {
     /// The tokens, or the byte offset of the first place no token matches.
     mutating func tokens() -> Result<[TreeViewToken], TreeViewLexingFailure> {
         var tokens: [TreeViewToken] = []
+        // About one token for every eight bytes: room for them is made once.
+        tokens.reserveCapacity(bytes.count / 8 + 4)
         while position < bytes.count {
             let start = position
             if let (kind, end) = visibleToken(at: start) {

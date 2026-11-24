@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A link as the grammar read it: its arrow, its line, the ranks it spans, its meaning, its text and identifier.
@@ -39,7 +39,7 @@ struct AgentFlowLinkInfo: Equatable {
             stroke = "dotted"
             length = dots
         }
-        if let start, (start.contains(".") ? "dotted" : "normal") != stroke {
+        if let start, (FoundationTextOnBytes.contains(start, character: MermaidByte.period) ? "dotted" : "normal") != stroke {
             self.type = "INVALID"
             self.stroke = "INVALID"
             return
@@ -171,10 +171,10 @@ extension AgentFlowDiagramBuilder {
 
     mutating func setDirection(_ written: String) {
         var direction = C4Characters.trimmed(written)
-        if direction.contains("<") { direction = "RL" }
-        if direction.contains("^") { direction = "BT" }
-        if direction.contains(">") { direction = "LR" }
-        if direction.contains("v") { direction = "TB" }
+        if FoundationTextOnBytes.contains(direction, character: MermaidByte.lessThan) { direction = "RL" }
+        if FoundationTextOnBytes.contains(direction, character: UInt8(ascii: "^")) { direction = "BT" }
+        if FoundationTextOnBytes.contains(direction, character: MermaidByte.greaterThan) { direction = "LR" }
+        if FoundationTextOnBytes.contains(direction, character: UInt8(ascii: "v")) { direction = "TB" }
         if direction == "TD" { direction = "TB" }
         diagram.directionKeyword = direction
     }

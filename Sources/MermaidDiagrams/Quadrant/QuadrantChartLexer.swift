@@ -6,7 +6,7 @@
  *              lexer): comments, titles, accessibility statements, keywords, texts, points and punctuation.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -29,6 +29,8 @@ struct QuadrantChartLexer {
 
     private init(cursor: MermaidTextCursor) {
         self.cursor = cursor
+        // About one token for every three bytes: room for them is made once.
+        tokens.reserveCapacity((cursor.bytes.count - cursor.position) / 3 + 8)
     }
 
     private mutating func readToken(startingWith byte: UInt8) throws(MermaidDiagramReadError) {
@@ -38,15 +40,19 @@ struct QuadrantChartLexer {
             while let next = cursor.peek(), next == MermaidByte.newline || next == MermaidByte.carriageReturn { cursor.advance() }
             return append(.lineBreak, from: start)
         }
-        if let title = readTitle() { return append(.title, content: .text(title), from: start) }
-        if let statement = try MermaidAccessibilityStatement.read(&cursor) { return append(.accessibility, content: .accessibility(statement), from: start) }
+        // Each keyword is tried only where its first letter is, in either case: the rules are tried in the same order.
+        let lowercased = MermaidByte.lowercased(byte)
+        if lowercased == Self.titleKeyword[0], let title = readTitle() { return append(.title, content: .text(title), from: start) }
+        if lowercased == Self.accessibilityKeywordStart, let statement = try MermaidAccessibilityStatement.read(&cursor) {
+            return append(.accessibility, content: .accessibility(statement), from: start)
+        }
         if let keyword = readKeywordWithSpaces() { return append(keyword, from: start) }
-        if isAtWord(Self.classDefinitionKeyword) {
+        if lowercased == Self.classDefinitionKeyword[0], isAtWord(Self.classDefinitionKeyword) {
             cursor.advance(by: Self.classDefinitionKeyword.count)
             return append(.classDefinition, from: start)
         }
         if byte == MermaidByte.quotationMark { return try readString(from: start) }
-        if cursor.hasPrefix(Self.classMarker) { return try readClassName(from: start) }
+        if byte == MermaidByte.colon, cursor.hasPrefix(Self.classMarker) { return try readClassName(from: start) }
         if let coordinates = try QuadrantChartPointSyntax.readPoint(&cursor) { return append(.point, content: coordinates, from: start) }
         try readRunOrCharacter(startingWith: byte, from: start)
     }
@@ -201,6 +207,8 @@ struct QuadrantChartLexer {
     }()
 
     private static let titleKeyword = Array("title".utf8)
+    /// The first letter of `accTitle` and `accDescr`, lowercased.
+    private static let accessibilityKeywordStart = UInt8(ascii: "a")
     private static let classDefinitionKeyword = Array("classdef".utf8)
     private static let xAxisKeyword = Array("x-axis".utf8)
     private static let yAxisKeyword = Array("y-axis".utf8)

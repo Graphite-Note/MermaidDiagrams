@@ -3,10 +3,10 @@
  * -------------------
  * Layer: Core
  * Description: The tokens of a C4 diagram, by the names Mermaid's Jison grammar gives them, the macro keywords they
- *              are read from, and the characters its lexer tests on UTF-16 code units.
+ *              are read from, and the characters JavaScript's string functions test on UTF-16 code units.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -71,14 +71,16 @@ enum C4TokenKind: Int, Comparable {
     ]
 }
 
-/// The tokens of a text: each one's kind and where its text starts and ends, in UTF-16 code units, as Pele keeps them.
+/// The tokens of a text: each one's kind and where its text starts and ends, in UTF-8 bytes (Pele keeps UTF-16 code
+/// units, which cover the same characters).
 struct C4Tokens {
     var kinds: [C4TokenKind] = []
     var starts: [Int] = []
     var ends: [Int] = []
 }
 
-/// The characters the lexer tests, on UTF-16 code units as Pele's `charCodeAt` reads them (`util/chars.ts`).
+/// The characters Pele's `util/chars.ts` tests, on UTF-16 code units as its `charCodeAt` reads them: what the agent flow's
+/// reader and the C4 layout test and trim, and the word characters the C4 lexer tests on ASCII bytes.
 enum C4Characters {
     /// White space as JavaScript's `\s` sees it.
     static func isSpace(_ unit: UInt16) -> Bool {
@@ -99,6 +101,10 @@ enum C4Characters {
 
     /// `text` without white space at either end, as JavaScript's `trim` leaves it.
     static func trimmed(_ text: String) -> String {
+        // In UTF-8 an ASCII byte is the character: text starting and ending with one that is not white space is trimmed.
+        if let first = text.utf8.first, let last = text.utf8.last, first < 0x80, last < 0x80, !isSpace(UInt16(first)), !isSpace(UInt16(last)) {
+            return text
+        }
         if let first = text.utf16.first, let last = text.utf16.last, !isSpace(first), !isSpace(last) { return text }
         let units = Array(text.utf16)
         guard let first = units.firstIndex(where: { unit in !isSpace(unit) }), let last = units.lastIndex(where: { unit in !isSpace(unit) }) else {

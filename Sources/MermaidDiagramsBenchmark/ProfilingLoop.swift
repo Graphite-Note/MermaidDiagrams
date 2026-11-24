@@ -2,12 +2,13 @@
  * File: ProfilingLoop.swift
  * -------------------------
  * Layer: Benchmark
- * Description: Repeats the reading and layout, the whole preparation (with its SVG, or with the narrow scene Graphite
- *              asks for) or the painting of one of the Pele comparison's cases for a few seconds, so that a sampler
- *              (sample, Instruments' Time Profiler) sees only that work.
+ * Description: Repeats the reading alone, the reading and layout, the whole preparation (with its SVG, or with the
+ *              narrow scene Graphite asks for) or the painting of one of the Pele comparison's cases for a few seconds,
+ *              so that a sampler (sample, Instruments' Time Profiler) sees only that work, and prints the time a round
+ *              took per input.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -15,13 +16,16 @@ import CoreGraphics
 import Foundation
 import MermaidDiagrams
 
-/// `--profile <case> [reading|preparation|narrow|painting] [seconds]`: the case is a name of Pele's benchmark (`tree: 500
-/// nodes`) or a documentation corpus (`treemap-docs`); `preparation` prepares without a narrow scene and writes the SVG,
+/// `--profile <case> [parsing|reading|preparation|narrow|painting] [seconds]`: the case is a name of Pele's benchmark
+/// (`tree: 500 nodes`) or a documentation corpus (`treemap-docs`); `parsing` reads the text into its model and lays
+/// nothing out, `reading` reads and lays out; `preparation` prepares without a narrow scene and writes the SVG,
 /// as the comparison with Pele times it, and `narrow` prepares with the narrow scene for Graphite's narrowest column and
 /// reads it, so that it is laid out, and writes no SVG, as Graphite prepares a diagram it shows in a narrow column; the
-/// work repeats until the seconds (5 by default) are spent, then prints how many rounds it made.
+/// work repeats until the seconds (5 by default) are spent, then prints how many rounds it made and the mean time of a
+/// round per input, in microseconds.
 enum ProfilingLoop {
     enum Work: String {
+        case parsing
         case reading
         case preparation
         case narrow
@@ -38,13 +42,17 @@ enum ProfilingLoop {
         let sources = try sources(of: caseName)
         let round = try workRound(work, sources: sources, typography: typography)
         let clock = ContinuousClock()
-        let end = clock.now + .milliseconds(Int(seconds * 1_000))
+        let start = clock.now
+        let end = start + .milliseconds(Int(seconds * 1_000))
         var roundCount = 0
         while clock.now < end {
             round()
             roundCount += 1
         }
-        print("\(caseName), \(work.rawValue): \(roundCount) rounds of \(sources.count) inputs in \(seconds) s")
+        let elapsed = clock.now - start
+        let microseconds = Double(elapsed.components.seconds) * 1e6 + Double(elapsed.components.attoseconds) / 1e12
+        let perInput = microseconds / Double(max(roundCount * sources.count, 1))
+        print("\(caseName), \(work.rawValue): \(roundCount) rounds of \(sources.count) inputs in \(seconds) s, \(String(format: "%.3f", perInput)) µs an input")
     }
 
     private static func sources(of caseName: String) throws -> [String] {
@@ -55,6 +63,10 @@ enum ProfilingLoop {
 
     private static func workRound(_ work: Work, sources: [String], typography: DiagramTypography) throws -> () -> Void {
         switch work {
+        case .parsing:
+            return {
+                for source in sources { _ = try? MermaidDiagramReader.read(source, limits: .standard) }
+            }
         case .reading:
             return {
                 for source in sources {
@@ -79,14 +91,19 @@ enum ProfilingLoop {
                 }
             }
         case .painting:
-            let scenes = sources.compactMap { source in
-                (try? MermaidDiagramReader.read(source, limits: .standard)).flatMap { diagram in DiagramSceneBenchmark.laidOut(diagram, typography: typography) }?.scene()
-            }
-            let contexts = scenes.map { scene in MermaidDiagramsBenchmark.bitmapContext(size: scene.size) }
-            return {
-                for (scene, context) in zip(scenes, contexts) {
-                    if let context { DiagramSceneRenderer.draw(scene, in: context, palette: MermaidDiagramsBenchmark.palette) }
-                }
+            return paintingRound(sources: sources, typography: typography)
+        }
+    }
+
+    /// Paints the scenes of the sources, laid out once, each in a bitmap of its own.
+    private static func paintingRound(sources: [String], typography: DiagramTypography) -> () -> Void {
+        let scenes = sources.compactMap { source in
+            (try? MermaidDiagramReader.read(source, limits: .standard)).flatMap { diagram in DiagramSceneBenchmark.laidOut(diagram, typography: typography) }?.scene()
+        }
+        let contexts = scenes.map { scene in MermaidDiagramsBenchmark.bitmapContext(size: scene.size) }
+        return {
+            for (scene, context) in zip(scenes, contexts) {
+                if let context { DiagramSceneRenderer.draw(scene, in: context, palette: MermaidDiagramsBenchmark.palette) }
             }
         }
     }
