@@ -6,7 +6,7 @@
  *              a graph in nested groups, ported step for step from layout/compound.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 

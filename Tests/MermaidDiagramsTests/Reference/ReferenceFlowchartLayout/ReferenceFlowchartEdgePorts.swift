@@ -6,7 +6,7 @@
  *              a flowchart's edges meet their nodes: the ends on one side spread along it, then moved onto the shape's
  *              outline.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

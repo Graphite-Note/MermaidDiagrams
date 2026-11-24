@@ -5,7 +5,7 @@
  * Description: The 0.7.0 FlowchartMeasurement kept as the reference the 0.8.0 flowchart layout is checked against: a
  *              flowchart's text measured and its shapes sized, before the layout places anything.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

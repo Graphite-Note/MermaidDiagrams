@@ -5,7 +5,7 @@
  * Description: The 0.7.0 FlowchartClusterGraph kept as the reference the 0.8.0 flowchart layout is checked against: a
  *              flowchart with subgraphs as a graph of nested boxes to lay out.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

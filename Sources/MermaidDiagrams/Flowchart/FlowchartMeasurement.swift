@@ -4,7 +4,7 @@
  * Layer: Core
  * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.7
  * Date: 24/11/2026
  */

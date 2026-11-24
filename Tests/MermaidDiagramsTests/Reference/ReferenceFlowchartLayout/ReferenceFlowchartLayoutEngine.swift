@@ -6,7 +6,7 @@
  *              lays a flowchart out in Pele's style, its groups as nested boxes and its collapsed groups as single
  *              nodes, and for a narrow container turned to run down and tightened as Pele fits it.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

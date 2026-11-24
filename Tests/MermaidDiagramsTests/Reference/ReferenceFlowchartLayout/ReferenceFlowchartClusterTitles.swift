@@ -5,7 +5,7 @@
  * Description: The 0.7.0 FlowchartClusterTitles kept as the reference the 0.8.0 flowchart layout is checked against:
  *              where a group's title sits along the top of its box, clear of the edges crossing it where it can be.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

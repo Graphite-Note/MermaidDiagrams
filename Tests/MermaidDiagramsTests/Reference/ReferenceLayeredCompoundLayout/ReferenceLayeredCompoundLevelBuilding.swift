@@ -6,7 +6,7 @@
  *              graph of one level of Pele's compound layout, its ports and held ends included.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 

@@ -5,7 +5,7 @@
  * Description: The 0.7.0 FlowchartFlowAxes kept as the reference the 0.8.0 flowchart layout is checked against: how a
  *              flowchart's direction maps flow space onto the page.
  *
- * Authors: felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

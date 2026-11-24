@@ -5,7 +5,7 @@
  * Description: The 0.7.0 FlowchartClusterNesting kept as the reference the 0.8.0 flowchart layout is checked against:
  *              where each node and group of a flowchart sits among its groups, and which way each runs.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

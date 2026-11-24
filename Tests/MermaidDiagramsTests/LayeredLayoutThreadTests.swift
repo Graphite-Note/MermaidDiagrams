@@ -7,7 +7,7 @@
  *              narrow scenes, gives the output it gives prepared alone on one thread.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -19,7 +19,8 @@ import XCTest
 
 final class LayeredLayoutThreadTests: XCTestCase {
     /// The documentation corpora of every type whose layout runs on the arena, flat and in clusters.
-    private static let corpusNames = ["flowchart-docs", "state-docs", "class-docs", "er-docs", "requirement-docs", "usecase-docs", "agentflow-docs"]
+    private static let corpusNames = ["flowchart-docs", "state-docs", "class-docs", "er-docs", "requirement-docs", "usecase-docs", "agentflow-docs",
+                                      "swimlane-docs"]
 
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow
     /// widths (a narrow fitting lays the diagram out again inside the preparation): every SVG, narrow SVG and spoken
@@ -30,7 +31,10 @@ final class LayeredLayoutThreadTests: XCTestCase {
         for name in Self.corpusNames { sources += try PeleResults.sources(ofCorpus: name) }
         // Pele's generated tree and mesh of 50 nodes, whose layouts grow the arena past its first chunks.
         sources += PeleResults.generatedBenchmarkInputs.filter { input in input.name.contains("50 nodes") }.map(\.source)
-        XCTAssertGreaterThan(sources.count, 200)
+        // Pele's tree of 500 nodes, whose layout takes the arena past what it keeps between two uses, so that each thread
+        // trims its chunks while the others lay out.
+        sources += PeleResults.generatedBenchmarkInputs.filter { input in input.name == "tree: 500 nodes" }.map(\.source)
+        XCTAssertGreaterThan(sources.count, 250)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }
         let shared = SharedInputs(sources: sources, expected: expected, typography: typography, widths: widths)

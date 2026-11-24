@@ -6,7 +6,7 @@
  *              from a flowchart's, a swimlane's or an agent flow's node to itself, looped beside it as Pele's loopPath
  *              draws them, and the room they take in the node's place.
  *
- * Authors: Bahey Shalash, felixchvl
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.1
  * Date: 24/11/2026
  */

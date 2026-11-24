@@ -6,7 +6,7 @@
  *              Pele's compound layout across levels, keeps placings to compare, and hints ports.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
