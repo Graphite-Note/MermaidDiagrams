@@ -2,11 +2,12 @@
  * File: SankeyDrawingParts.swift
  * ------------------------------
  * Layer: Core
- * Description: A laid-out Sankey diagram's geometry grouped by how it is painted: bands, bars, labels and title.
+ * Description: A laid-out Sankey diagram's geometry grouped by how it is painted: bands, bars, labels and title; a band's
+ *              outline recorded into a Core Graphics path or a lane of the scene's workspace alike.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -112,9 +113,19 @@ public struct SankeyBandDrawing {
         targetColor = target.color
         sourcePaint = source.paint ?? .series(link.sourceSeriesIndex)
         targetPaint = target.paint ?? .series(link.targetSeriesIndex)
+        let path = CGMutablePath()
+        Self.addOutline(of: link, to: DiagramCoreGraphicsPath(mutable: path))
+        outline = path
+        startX = link.startX
+        endX = link.endX
+        sourceSeriesIndex = link.sourceSeriesIndex
+        targetSeriesIndex = link.targetSeriesIndex
+    }
+
+    /// The band's outline: along its top from the source to the target, down its end, back along its bottom and closed.
+    static func addOutline<Path: DiagramPathRecording>(of link: SankeyLayoutLink, to path: Path) {
         let middleX = (link.startX + link.endX) / 2
         let half = link.halfThickness
-        let path = CGMutablePath()
         path.move(to: CGPoint(x: link.startX, y: link.sourceY - half))
         path.addCurve(to: CGPoint(x: link.endX, y: link.targetY - half), control1: CGPoint(x: middleX, y: link.sourceY - half),
                       control2: CGPoint(x: middleX, y: link.targetY - half))
@@ -122,10 +133,5 @@ public struct SankeyBandDrawing {
         path.addCurve(to: CGPoint(x: link.startX, y: link.sourceY + half), control1: CGPoint(x: middleX, y: link.targetY + half),
                       control2: CGPoint(x: middleX, y: link.sourceY + half))
         path.closeSubpath()
-        outline = path
-        startX = link.startX
-        endX = link.endX
-        sourceSeriesIndex = link.sourceSeriesIndex
-        targetSeriesIndex = link.targetSeriesIndex
     }
 }

@@ -2,11 +2,12 @@
  * File: RadarCurveSpline.swift
  * ----------------------------
  * Layer: Core
- * Description: The closed curve through a radar chart's points: a Catmull-Rom spline as cubic Bézier segments.
+ * Description: The closed curve through a radar chart's points: a Catmull-Rom spline as cubic Bézier segments, recorded
+ *              into a Core Graphics path or a lane of the scene's workspace alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +18,20 @@ import CoreGraphics
 enum RadarCurveSpline {
     static func closedPath(through points: [CGPoint], tension: CGFloat) -> CGPath {
         let path = CGMutablePath()
-        guard let first = points.first else { return path }
+        addClosedCurve(through: points, tension: tension, to: DiagramCoreGraphicsPath(mutable: path))
+        return path
+    }
+
+    /// The straight-edged closed polygon through the points, for a radar drawn without curves and a polygonal graticule.
+    static func closedPolygon(through points: [CGPoint]) -> CGPath {
+        let path = CGMutablePath()
+        addClosedPolygon(through: points, to: DiagramCoreGraphicsPath(mutable: path))
+        return path
+    }
+
+    /// The spline's elements recorded into `path`, which is empty: nothing for no points.
+    static func addClosedCurve<Path: DiagramPathRecording>(through points: [CGPoint], tension: CGFloat, to path: Path) {
+        guard let first = points.first else { return }
         path.move(to: first)
         let count = points.count
         for index in 0..<count {
@@ -29,16 +43,13 @@ enum RadarCurveSpline {
                           control2: CGPoint(x: to.x - (after.x - from.x) * tension, y: to.y - (after.y - from.y) * tension))
         }
         path.closeSubpath()
-        return path
     }
 
-    /// The straight-edged polygon through `points`, closed.
-    static func closedPolygon(through points: [CGPoint]) -> CGPath {
-        let path = CGMutablePath()
-        guard let first = points.first else { return path }
+    /// The polygon's elements recorded into `path`, which is empty: nothing for no points.
+    static func addClosedPolygon<Path: DiagramPathRecording>(through points: [CGPoint], to path: Path) {
+        guard let first = points.first else { return }
         path.move(to: first)
         for point in points.dropFirst() { path.addLine(to: point) }
         path.closeSubpath()
-        return path
     }
 }

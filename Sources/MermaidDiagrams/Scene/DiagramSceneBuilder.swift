@@ -7,7 +7,7 @@
  *              it records into the thread's blocks and makes the scene's storage once, at the end.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 24/11/2026
  */
 
@@ -79,6 +79,10 @@ struct DiagramSceneBuilder: ~Copyable {
     mutating func fillAndStroke(_ lane: DiagramPathLane, fill: DiagramPaint, stroke paint: DiagramPaint, _ stroke: DiagramStroke,
                                 part: DiagramScenePart) {
         add(lane, painting: .fillAndStroke(fill, paint, stroke), part: part)
+    }
+
+    mutating func fill(_ lane: DiagramPathLane, _ gradient: DiagramLinearGradient, part: DiagramScenePart) {
+        add(lane, painting: .gradientFill(gradient), part: part)
     }
 
     // MARK: Text
