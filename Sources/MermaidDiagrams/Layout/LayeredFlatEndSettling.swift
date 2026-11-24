@@ -21,7 +21,7 @@ struct LayeredFlatEndSettling {
     /// How many free ends each side of each vertex has, side 0 first (`LayeredFlatGraph.freeEnds`).
     let free: ScratchSpan<Int>
     let emptyRanks: ScratchSpan<Bool>?
-    unowned(unsafe) let arena: DiagramScratchArena
+    let arena: DiagramScratchArena
     /// The pooled sums and counts of a run being fitted, kept between runs so that every fit reuses one pair.
     private var poolSum: ScratchList<Double>
     private var poolCount: ScratchList<Int>

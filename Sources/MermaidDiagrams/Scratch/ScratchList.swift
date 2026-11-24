@@ -5,7 +5,7 @@
  * Description: A list of plain values that grows inside a scratch arena, for work whose length is found as it goes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -16,7 +16,7 @@
 struct ScratchList<Element: BitwiseCopyable>: RandomAccessCollection {
     private var storage: ScratchSpan<Element>
     private(set) var count = 0
-    private unowned(unsafe) let arena: DiagramScratchArena
+    private let arena: DiagramScratchArena
 
     init(storage: ScratchSpan<Element>, arena: DiagramScratchArena) {
         self.storage = storage

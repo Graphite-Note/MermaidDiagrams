@@ -6,7 +6,7 @@
  *              taken back all at once, so that a layout's working lists cost no allocation and no reference counting.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -17,11 +17,13 @@ import Foundation
 /// stays valid while more is taken; growth adds a chunk. Only plain values (`BitwiseCopyable`) live here: nothing is
 /// retained, initialized or destroyed, and taking memory back is setting the cursor.
 ///
-/// Each thread has its own arena (`withCurrentThread`), so no lock is needed; a call made from within another on the same
-/// thread (an agent flow laying a flowchart out, a narrow fitting) takes a mark and gives back only what it took. After
-/// the outermost call the arena keeps at most `retainedByteLimit` bytes of chunks and frees the rest, so a large graph
-/// does not leave its memory behind; `releaseCurrentThreadArena()` frees all of it, for a host short of memory.
-final class DiagramScratchArena {
+/// An arena is a handle to its state, which it allocated itself: copying it copies the handle, so passing or keeping
+/// one costs no reference counting. Each thread has its own arena (`withCurrentThread`), so no lock is needed, freed
+/// with its thread; an arena made with `init()` is freed by `deallocate()`. A call made from within another on the
+/// same thread (an agent flow laying a flowchart out, a narrow fitting) takes a mark and gives back only what it took.
+/// After the outermost call the arena keeps at most `retainedByteLimit` bytes of chunks and frees the rest, so a large
+/// graph does not leave its memory behind; `releaseCurrentThreadArena()` frees all of it, for a host short of memory.
+struct DiagramScratchArena: Equatable {
     /// The most bytes of chunks an arena keeps between two outermost uses.
     static let retainedByteLimit = 256 * 1024
     /// The size of an arena's first chunk; each later chunk is at least twice the size of the one before it.
@@ -35,30 +37,42 @@ final class DiagramScratchArena {
         let byteCount: Int
     }
 
-    private var chunks: [Chunk] = []
-    /// The chunk the cursor is in, and the cursor and the end of that chunk.
-    private var chunkIndex = 0
-    private var cursor: UnsafeMutableRawPointer
-    private var chunkEnd: UnsafeMutableRawPointer
-    /// How many calls of `withCurrentThread` are running on this arena.
-    private var depth = 0
-
-    init() {
-        let first = Chunk(start: Self.allocateChunk(byteCount: Self.firstChunkByteCount), byteCount: Self.firstChunkByteCount)
-        chunks.append(first)
-        cursor = first.start
-        chunkEnd = first.start + first.byteCount
+    /// What an arena knows, kept where its handle points.
+    private struct State {
+        var chunks: [Chunk]
+        /// The chunk the cursor is in, and the cursor and the end of that chunk.
+        var chunkIndex = 0
+        var cursor: UnsafeMutableRawPointer
+        var chunkEnd: UnsafeMutableRawPointer
+        /// How many calls of `withCurrentThread` are running on this arena.
+        var depth = 0
     }
 
-    deinit {
-        for chunk in chunks { chunk.start.deallocate() }
+    private let state: UnsafeMutablePointer<State>
+
+    /// A new arena with one chunk of the first size; `deallocate()` frees it.
+    init() {
+        let first = Chunk(start: Self.allocateChunk(byteCount: Self.firstChunkByteCount), byteCount: Self.firstChunkByteCount)
+        state = UnsafeMutablePointer<State>.allocate(capacity: 1)
+        state.initialize(to: State(chunks: [first], cursor: first.start, chunkEnd: first.start + first.byteCount))
+    }
+
+    private init(state: UnsafeMutablePointer<State>) {
+        self.state = state
+    }
+
+    /// Frees the arena and every chunk it holds: no span or list it handed out, and no copy of it, may be used after.
+    func deallocate() {
+        for chunk in state.pointee.chunks { chunk.start.deallocate() }
+        state.deinitialize(count: 1)
+        state.deallocate()
     }
 
     /// The bytes of every chunk the arena holds now.
-    var heldByteCount: Int { chunks.reduce(0) { total, chunk in total + chunk.byteCount } }
+    var heldByteCount: Int { state.pointee.chunks.reduce(0) { total, chunk in total + chunk.byteCount } }
 
     /// How many chunks the arena holds now.
-    var chunkCount: Int { chunks.count }
+    var chunkCount: Int { state.pointee.chunks.count }
 
     private static func allocateChunk(byteCount: Int) -> UnsafeMutableRawPointer {
         UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: alignment)
@@ -67,10 +81,11 @@ final class DiagramScratchArena {
     /// `byteCount` bytes, aligned to `alignment`, valid until the arena is released past them.
     @inline(__always)
     func allocate(byteCount: Int) -> UnsafeMutableRawPointer {
+        let cursor = state.pointee.cursor
         let misalignment = Int(bitPattern: cursor) & (Self.alignment - 1)
         let start = misalignment == 0 ? cursor : cursor + (Self.alignment - misalignment)
-        if byteCount <= chunkEnd - start {
-            cursor = start + byteCount
+        if byteCount <= state.pointee.chunkEnd - start {
+            state.pointee.cursor = start + byteCount
             return start
         }
         return allocateInNextChunk(byteCount: byteCount)
@@ -79,18 +94,19 @@ final class DiagramScratchArena {
     /// Moves the cursor to the next chunk that holds `byteCount` bytes, freeing kept chunks too small on the way and
     /// adding a chunk when none is left.
     private func allocateInNextChunk(byteCount: Int) -> UnsafeMutableRawPointer {
-        while chunkIndex + 1 < chunks.count && chunks[chunkIndex + 1].byteCount < byteCount {
-            chunks[chunkIndex + 1].start.deallocate()
-            chunks.remove(at: chunkIndex + 1)
+        let chunkIndex = state.pointee.chunkIndex
+        while chunkIndex + 1 < state.pointee.chunks.count && state.pointee.chunks[chunkIndex + 1].byteCount < byteCount {
+            state.pointee.chunks[chunkIndex + 1].start.deallocate()
+            state.pointee.chunks.remove(at: chunkIndex + 1)
         }
-        if chunkIndex + 1 == chunks.count {
-            let size = max(byteCount, 2 * chunks[chunkIndex].byteCount)
-            chunks.append(Chunk(start: Self.allocateChunk(byteCount: size), byteCount: size))
+        if chunkIndex + 1 == state.pointee.chunks.count {
+            let size = max(byteCount, 2 * state.pointee.chunks[chunkIndex].byteCount)
+            state.pointee.chunks.append(Chunk(start: Self.allocateChunk(byteCount: size), byteCount: size))
         }
-        chunkIndex += 1
-        let chunk = chunks[chunkIndex]
-        cursor = chunk.start + byteCount
-        chunkEnd = chunk.start + chunk.byteCount
+        state.pointee.chunkIndex = chunkIndex + 1
+        let chunk = state.pointee.chunks[chunkIndex + 1]
+        state.pointee.cursor = chunk.start + byteCount
+        state.pointee.chunkEnd = chunk.start + chunk.byteCount
         return chunk.start
     }
 
@@ -132,42 +148,47 @@ final class DiagramScratchArena {
         fileprivate let cursor: UnsafeMutableRawPointer
     }
 
-    func mark() -> Mark { Mark(chunkIndex: chunkIndex, cursor: cursor) }
+    @inline(__always)
+    func mark() -> Mark { Mark(chunkIndex: state.pointee.chunkIndex, cursor: state.pointee.cursor) }
 
     /// Gives back everything taken since `mark`: the spans and lists taken after it must no longer be used. The chunks
     /// stay, to be used again.
+    @inline(__always)
     func release(to mark: Mark) {
         #if DEBUG
         poisonFreedBytes(from: mark)
         #endif
-        chunkIndex = mark.chunkIndex
-        cursor = mark.cursor
-        chunkEnd = chunks[chunkIndex].start + chunks[chunkIndex].byteCount
+        state.pointee.cursor = mark.cursor
+        if mark.chunkIndex != state.pointee.chunkIndex {
+            state.pointee.chunkIndex = mark.chunkIndex
+            let chunk = state.pointee.chunks[mark.chunkIndex]
+            state.pointee.chunkEnd = chunk.start + chunk.byteCount
+        }
     }
 
     /// Gives back everything, and frees the chunks beyond the first ones that together hold at most
     /// `retainedByteLimit` bytes; the first chunk is always kept.
     func reset() {
-        release(to: Mark(chunkIndex: 0, cursor: chunks[0].start))
-        var kept = chunks[0].byteCount
+        release(to: Mark(chunkIndex: 0, cursor: state.pointee.chunks[0].start))
+        guard state.pointee.chunks.count > 1 else { return }
+        var kept = state.pointee.chunks[0].byteCount
         var keptCount = 1
-        while keptCount < chunks.count && kept + chunks[keptCount].byteCount <= Self.retainedByteLimit {
-            kept += chunks[keptCount].byteCount
+        while keptCount < state.pointee.chunks.count && kept + state.pointee.chunks[keptCount].byteCount <= Self.retainedByteLimit {
+            kept += state.pointee.chunks[keptCount].byteCount
             keptCount += 1
         }
-        for chunk in chunks[keptCount...] { chunk.start.deallocate() }
-        chunks.removeSubrange(keptCount...)
+        for chunk in state.pointee.chunks[keptCount...] { chunk.start.deallocate() }
+        state.pointee.chunks.removeSubrange(keptCount...)
     }
 
-    /// Frees every chunk but the first, which shrinks back to its first size.
+    /// Frees every chunk, and starts again from one of the first size.
     fileprivate func releaseMemory() {
-        for chunk in chunks { chunk.start.deallocate() }
-        chunks.removeAll()
+        for chunk in state.pointee.chunks { chunk.start.deallocate() }
         let first = Chunk(start: Self.allocateChunk(byteCount: Self.firstChunkByteCount), byteCount: Self.firstChunkByteCount)
-        chunks.append(first)
-        chunkIndex = 0
-        cursor = first.start
-        chunkEnd = first.start + first.byteCount
+        state.pointee.chunks = [first]
+        state.pointee.chunkIndex = 0
+        state.pointee.cursor = first.start
+        state.pointee.chunkEnd = first.start + first.byteCount
     }
 
     #if DEBUG
@@ -176,8 +197,9 @@ final class DiagramScratchArena {
     private func poisonFreedBytes(from mark: Mark) {
         var index = mark.chunkIndex
         var start = mark.cursor
-        while index <= chunkIndex {
-            let end = index == chunkIndex ? cursor : chunks[index].start + chunks[index].byteCount
+        let chunks = state.pointee.chunks
+        while index <= state.pointee.chunkIndex {
+            let end = index == state.pointee.chunkIndex ? state.pointee.cursor : chunks[index].start + chunks[index].byteCount
             if end > start { start.initializeMemory(as: UInt8.self, repeating: 0xA5, count: end - start) }
             index += 1
             if index < chunks.count { start = chunks[index].start }
@@ -192,10 +214,10 @@ final class DiagramScratchArena {
     static func withCurrentThread<Result>(_ body: (DiagramScratchArena) throws -> Result) rethrows -> Result {
         let arena = current
         let start = arena.mark()
-        arena.depth += 1
+        arena.state.pointee.depth += 1
         defer {
-            arena.depth -= 1
-            if arena.depth == 0 { arena.reset() } else { arena.release(to: start) }
+            arena.state.pointee.depth -= 1
+            if arena.state.pointee.depth == 0 { arena.reset() } else { arena.release(to: start) }
         }
         return try body(arena)
     }
@@ -203,7 +225,7 @@ final class DiagramScratchArena {
     /// Frees the memory the calling thread's arena keeps, all but one small chunk; nothing happens while a call of
     /// `withCurrentThread` is running on this thread. For a host told that memory is short: preparing never needs it.
     static func releaseCurrentThreadArena() {
-        guard let arena = existingCurrent, arena.depth == 0 else { return }
+        guard let arena = existingCurrent, arena.state.pointee.depth == 0 else { return }
         arena.releaseMemory()
     }
 
@@ -211,13 +233,18 @@ final class DiagramScratchArena {
     static var current: DiagramScratchArena {
         if let arena = existingCurrent { return arena }
         let arena = DiagramScratchArena()
-        pthread_setspecific(DiagramScratchArenaThreadKey.key, Unmanaged.passRetained(arena).toOpaque())
+        pthread_setspecific(DiagramScratchArenaThreadKey.key, UnsafeRawPointer(arena.state))
         return arena
     }
 
     private static var existingCurrent: DiagramScratchArena? {
         guard let pointer = pthread_getspecific(DiagramScratchArenaThreadKey.key) else { return nil }
-        return Unmanaged<DiagramScratchArena>.fromOpaque(pointer).takeUnretainedValue()
+        return DiagramScratchArena(state: pointer.assumingMemoryBound(to: State.self))
+    }
+
+    /// Frees the arena whose state is at `pointer`, as its thread ends.
+    fileprivate static func deallocateArena(at pointer: UnsafeMutableRawPointer) {
+        DiagramScratchArena(state: pointer.assumingMemoryBound(to: State.self)).deallocate()
     }
 }
 
@@ -225,9 +252,7 @@ final class DiagramScratchArena {
 private enum DiagramScratchArenaThreadKey {
     static let key: pthread_key_t = {
         var key = pthread_key_t()
-        let status = pthread_key_create(&key) { pointer in
-            Unmanaged<DiagramScratchArena>.fromOpaque(pointer).release()
-        }
+        let status = pthread_key_create(&key) { pointer in DiagramScratchArena.deallocateArena(at: pointer) }
         precondition(status == 0, "No thread key is left for the scratch arena")
         return key
     }()

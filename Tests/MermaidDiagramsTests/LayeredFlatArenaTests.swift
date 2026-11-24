@@ -19,6 +19,7 @@ final class LayeredFlatArenaTests: XCTestCase {
     func testLinkListsKeepTheOrderOfTheLinksOfEachKey() {
         var generator = LayeredWorkspaceGenerator(seed: 0xC0FF_EE11)
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         for count in [1, 2, 7, 30] {
             let linkCount = Int.random(in: 0..<(4 * count), using: &generator)
             let keys = (0..<linkCount).map { _ in Int.random(in: 0..<count, using: &generator) }

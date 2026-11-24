@@ -34,7 +34,7 @@ struct LayeredFlatCrossingReduction {
     var groupSum = ScratchSpan<Double>.empty
     var groupCount = ScratchSpan<Int>.empty
     var groupFirst = ScratchSpan<Int>.empty
-    unowned(unsafe) let arena: DiagramScratchArena
+    let arena: DiagramScratchArena
 
     /// The reduction's lists come from `arena`; the caller gives them back once the reduction is finished.
     init(graph: LayeredFlatGraph, nodes: ScratchSpan<LayeredFlatNode>, arena: DiagramScratchArena) {

@@ -20,6 +20,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     /// gap counts one track.
     func testLonePieceOnStraightTracksTakesTheFirstTrackOneTrackHigh() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         var tracks = Self.tracks(arena: arena, from: [0, 40], to: [100, -60], rank: [0, 1], isCurved: false, room: [50, 50, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [0, 0])
@@ -32,6 +33,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     /// gap keeps its height.
     func testLoneCurveTakesNoLevelAndLeavesItsGapAsItWas() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         var tracks = Self.tracks(arena: arena, from: [0], to: [300], rank: [0], isCurved: true, room: [20, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [-1])
@@ -44,6 +46,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     /// the list takes track 0 and the second track 1, both in one group two tracks high.
     func testTwoCrossingPiecesTakeTracksOfTheirOwnInOneGroup() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         var tracks = Self.tracks(arena: arena, from: [0, 100], to: [100, 0], rank: [0, 0], isCurved: false, room: [50, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [0, 1])

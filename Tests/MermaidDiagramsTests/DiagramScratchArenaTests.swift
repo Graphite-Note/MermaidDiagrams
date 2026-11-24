@@ -19,6 +19,7 @@ final class DiagramScratchArenaTests: XCTestCase {
     /// Spans taken while the arena adds chunk after chunk keep their values: growth never moves a span.
     func testSpansStayWhereTheyAreWhileTheArenaGrows() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         var spans: [ScratchSpan<Int>] = []
         for index in 0..<200 {
             let span = arena.span(count: 37 * index + 1, repeating: index)
@@ -36,6 +37,7 @@ final class DiagramScratchArenaTests: XCTestCase {
     /// did, and leaves what was taken before it as it was.
     func testReleaseToAMarkGivesBackOnlyWhatCameAfterIt() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         let before = arena.span(count: 100, repeating: 7.5)
         let mark = arena.mark()
         let first = arena.span(count: 50, repeating: 1)
@@ -54,7 +56,7 @@ final class DiagramScratchArenaTests: XCTestCase {
             let kept = outer.span(count: 64, repeating: 11)
             let cursorAfterKept = outer.mark()
             DiagramScratchArena.withCurrentThread { inner in
-                XCTAssertTrue(inner === outer)
+                XCTAssertEqual(inner, outer)
                 _ = inner.span(count: 300_000, repeating: 5)
             }
             XCTAssertTrue(kept.allSatisfy { value in value == 11 })
@@ -72,6 +74,7 @@ final class DiagramScratchArenaTests: XCTestCase {
     /// out room as before.
     func testResetKeepsAtMostTheRetainedLimit() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         for size in [1_000, 40_000, 200_000, 3_000_000, 10] { _ = arena.span(count: size, repeating: UInt8(1)) }
         XCTAssertGreaterThan(arena.heldByteCount, DiagramScratchArena.retainedByteLimit)
         arena.reset()
@@ -109,6 +112,7 @@ final class DiagramScratchArenaTests: XCTestCase {
     /// losing its room.
     func testListsGrowInTheArenaAndKeepTheirValues() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         var list = arena.list(capacity: 2, of: Int.self)
         for value in 0..<10_000 { list.append(value) }
         XCTAssertEqual(Array(list), Array(0..<10_000))
@@ -127,6 +131,7 @@ final class DiagramScratchArenaTests: XCTestCase {
     /// A span reads and writes through any copy of it, reverses a range, copies another's values and sorts integers.
     func testSpansAreSharedViewsOfTheirValues() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         let span = arena.span(count: 6, repeating: 0)
         let copy = span
         for index in span.indices { copy[index] = index * 10 }

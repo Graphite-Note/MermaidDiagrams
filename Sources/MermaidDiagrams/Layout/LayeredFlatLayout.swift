@@ -23,7 +23,7 @@ struct LayeredFlatLayout {
     /// Every edge's route, one after another (`LayeredSpanEdge.pointStart`).
     var points: ScratchList<CGPoint>
     let options: LayeredFlatOptions
-    unowned(unsafe) let arena: DiagramScratchArena
+    let arena: DiagramScratchArena
     /// 2 when every edge gets a middle rank of its own, for labels or parallel edges; else 1.
     let step: Int
     /// The ranks each edge passes, and whether it is drawn as one direct curve instead of through bends.

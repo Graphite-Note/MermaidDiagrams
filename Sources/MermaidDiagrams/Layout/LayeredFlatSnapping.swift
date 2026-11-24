@@ -29,7 +29,7 @@ struct LayeredFlatSnapping {
     private let lastMember: ScratchSpan<Int>
     private let memberCount: ScratchSpan<Int>
     private let nextMember: ScratchSpan<Int>
-    unowned(unsafe) let arena: DiagramScratchArena
+    let arena: DiagramScratchArena
 
     /// The snapping's lists come from `arena`; the caller gives them back once the snapping is finished.
     init(graph: LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: ScratchSpan<Bool>?, arena: DiagramScratchArena) {

@@ -39,7 +39,7 @@ struct LayeredFlatTracks {
     /// The pieces of the gap being given levels that turn onto levels, and those beside them; cleared after each gap.
     let isLevel: ScratchSpan<Bool>
     let isBeside: ScratchSpan<Bool>
-    unowned(unsafe) let arena: DiagramScratchArena
+    let arena: DiagramScratchArena
 
     /// The pieces' tracks and levels, the track counts and the tall gaps are taken from `arena` first, for the caller to
     /// read once the tracks are assigned.

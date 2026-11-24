@@ -19,6 +19,7 @@ final class ScratchSortingEquivalenceTests: XCTestCase {
     func testSpanSortOrdersAsTheArraySortDoes() {
         var generator = ScratchSortingGenerator(seed: 0x5EED_50A7)
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         for length in 0...140 {
             for _ in 0..<4 {
                 let keys = (0..<length).map { _ -> Double in
@@ -46,6 +47,7 @@ final class ScratchSortingEquivalenceTests: XCTestCase {
     /// A comparison that is always NaN keeps every order as it is, as the array's does.
     func testAComparisonThatIsAlwaysNaNKeepsTheOrder() {
         let arena = DiagramScratchArena()
+        defer { arena.deallocate() }
         let span = arena.span(count: 50, repeating: 0)
         for index in 0..<50 { span[index] = 49 - index }
         let difference = Double.nan
