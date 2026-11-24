@@ -6,8 +6,8 @@
  *              texts, and its title, and why a layout is refused.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -43,10 +43,10 @@ public struct RequirementLayoutBox: Equatable, Sendable {
 public struct RequirementLayoutRelation: Equatable, Sendable {
     public let kind: RequirementRelationKind
     /// The line, which starts past a containment mark.
-    public let path: DiagramPath
+    public internal(set) var path: DiagramPath
     /// A containment's circled plus at its source, or the open arrowhead at its target.
-    public let mark: RequirementRelationMark
-    public let text: DiagramTextBlock
+    public internal(set) var mark: RequirementRelationMark
+    public internal(set) var text: DiagramTextBlock
 }
 
 /// The mark at a relation's end.
@@ -79,5 +79,15 @@ extension RequirementLayoutRelation {
         case .arrow(let tip, let direction): .arrow(tip: tip.translated(by: offset), direction: direction)
         }
         return RequirementLayoutRelation(kind: kind, path: path.translated(by: offset), mark: movedMark, text: text.translated(by: offset))
+    }
+
+    /// Moved by `offset` where it stands, each point as `translated(by:)` moves it: its path's points in their own list.
+    mutating func translate(by offset: CGVector) {
+        path.translate(by: offset)
+        mark = switch mark {
+        case .containment(let point, let towardBox): .containment(point: point.translated(by: offset), towardBox: towardBox)
+        case .arrow(let tip, let direction): .arrow(tip: tip.translated(by: offset), direction: direction)
+        }
+        text = text.translated(by: offset)
     }
 }
