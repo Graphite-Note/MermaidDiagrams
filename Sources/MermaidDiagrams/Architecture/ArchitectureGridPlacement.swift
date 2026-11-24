@@ -7,8 +7,8 @@
  *              block, unconnected parts side by side.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// The cells of an architecture diagram: each node's, and each group's rectangle of cells (one cell for an empty one).
@@ -81,6 +81,7 @@ struct ArchitectureGridPlacement {
         }
         for group in 0..<groupCount { children[parents[nodeCount + group]].append(nodeCount + group) }
         addLinks(of: diagram)
+        links.finish(itemCount: itemCount)
     }
 
     /// The alignments' links (a row's members left to right, a column's top to bottom), then the edges' between unlike
@@ -144,22 +145,56 @@ struct ArchitectureGridLink {
     let secondItem: Int
 }
 
-/// The links, and for each item the links of alignments and of edges it is an end of, in the order added.
+/// The links, and for each item the links of alignments and of edges it is an end of, in the order added: every link
+/// is added first, then `finish(itemCount:)` sorts the ends by item, keeping their order, into one list of each kind
+/// with where each item's run starts.
 struct ArchitectureGridLinks {
     private(set) var all: [ArchitectureGridLink] = []
-    private(set) var hintLinksByItem: [Int: [Int]] = [:]
-    private(set) var edgeLinksByItem: [Int: [Int]] = [:]
+    /// Whether each link of `all` is an alignment's.
+    private var isHintLink: [Bool] = []
+    private var hintStarts: [Int] = [0]
+    private var hintLinks: [Int] = []
+    private var edgeStarts: [Int] = [0]
+    private var edgeLinks: [Int] = []
 
     mutating func add(_ link: ArchitectureGridLink, isHint: Bool) {
-        let index = all.count
         all.append(link)
-        if isHint {
-            hintLinksByItem[link.firstItem, default: []].append(index)
-            hintLinksByItem[link.secondItem, default: []].append(index)
-        } else {
-            edgeLinksByItem[link.firstItem, default: []].append(index)
-            edgeLinksByItem[link.secondItem, default: []].append(index)
+        isHintLink.append(isHint)
+    }
+
+    /// Sorts the links' ends by item, `itemCount` items, each item's in the order the links were added, the first end
+    /// of a link before its second.
+    mutating func finish(itemCount: Int) {
+        (hintStarts, hintLinks) = ends(itemCount: itemCount, ofHints: true)
+        (edgeStarts, edgeLinks) = ends(itemCount: itemCount, ofHints: false)
+    }
+
+    private func ends(itemCount: Int, ofHints: Bool) -> (starts: [Int], links: [Int]) {
+        var starts = [Int](repeating: 0, count: itemCount + 1)
+        for (index, link) in all.enumerated() where isHintLink[index] == ofHints {
+            starts[link.firstItem + 1] += 1
+            starts[link.secondItem + 1] += 1
         }
+        for item in 0..<itemCount { starts[item + 1] += starts[item] }
+        var next = starts
+        var links = [Int](repeating: 0, count: starts[itemCount])
+        for (index, link) in all.enumerated() where isHintLink[index] == ofHints {
+            links[next[link.firstItem]] = index
+            next[link.firstItem] += 1
+            links[next[link.secondItem]] = index
+            next[link.secondItem] += 1
+        }
+        return (starts, links)
+    }
+
+    /// The links of alignments `item` is an end of, in the order added.
+    func hintLinks(of item: Int) -> ArraySlice<Int> {
+        item + 1 < hintStarts.count ? hintLinks[hintStarts[item]..<hintStarts[item + 1]] : []
+    }
+
+    /// The links of edges `item` is an end of, in the order added.
+    func edgeLinks(of item: Int) -> ArraySlice<Int> {
+        item + 1 < edgeStarts.count ? edgeLinks[edgeStarts[item]..<edgeStarts[item + 1]] : []
     }
 }
 

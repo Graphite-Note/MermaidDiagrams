@@ -6,8 +6,8 @@
  *              its tokens: an entry's name and annotations, the title and the accessibility text.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -25,6 +25,12 @@ struct TreeViewTokenSource {
     let bytes: [UInt8]
     private let lineStarts: [Int]
     private let writtenLines: [Int]
+
+    init(bytes: [UInt8], lineStarts: [Int], writtenLines: [Int]) {
+        self.bytes = bytes
+        self.lineStarts = lineStarts
+        self.writtenLines = writtenLines
+    }
 
     init(lines: [TreeViewSourceLine]) {
         var bytes: [UInt8] = []

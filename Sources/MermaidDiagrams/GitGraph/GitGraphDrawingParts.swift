@@ -2,11 +2,12 @@
  * File: GitGraphDrawingParts.swift
  * --------------------------------
  * Layer: Core
- * Description: A laid-out Git graph's geometry grouped by how it is painted, with the paints of its branch names.
+ * Description: A laid-out Git graph's geometry grouped by how it is painted, with the paints of its branch names, as
+ *              Core Graphics paths recorded by the drawing its scene shares (GitGraphScenePaths).
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -77,40 +78,19 @@ public struct GitGraphDrawingParts {
     static let tagHoleRadius: CGFloat = 1.5
 
     public init(layout: GitGraphLayout) {
-        let groups = (0..<Self.seriesColorCount).map { _ in GroupPaths() }
-        let marks = GitGraphSymbolDrawing()
-        for (laneIndex, lane) in layout.lanes.enumerated() {
-            let paths = groups[laneIndex % Self.seriesColorCount]
-            paths.laneLines.addLines(between: [lane.lineStart, lane.lineEnd])
-            if let frame = lane.nameFrame {
-                paths.nameBoxes.addRoundedRect(in: frame, cornerWidth: Self.nameBoxCornerRadius, cornerHeight: Self.nameBoxCornerRadius)
-            }
+        let paths = GitGraphScenePaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        colorGroups = paths.groups.enumerated().compactMap { seriesIndex, group in
+            group.isPainted ? ColorGroup(seriesIndex: seriesIndex, laneLines: group.laneLines.path, nameBoxes: group.nameBoxes.path, curves: group.curves.path,
+                                         cherryPickCurves: group.cherryPickCurves.path, straightLines: group.straightLines.path, rings: group.rings.path,
+                                         symbols: group.symbols.path) : nil
         }
-        for connector in layout.connectors {
-            let paths = groups[connector.laneIndex % Self.seriesColorCount]
-            switch connector.style {
-            case .alongLane: paths.straightLines.addPath(DiagramEdgeDrawing.path(connector.path))
-            case .acrossLanes: paths.curves.addPath(DiagramEdgeDrawing.path(connector.path))
-            case .cherryPick: paths.cherryPickCurves.addPath(DiagramEdgeDrawing.path(connector.path))
-            }
-        }
-        let labelPatches = CGMutablePath()
-        let tagBoxes = CGMutablePath()
-        let tagHoles = CGMutablePath()
-        for commit in layout.commits {
-            let paths = groups[commit.laneIndex % Self.seriesColorCount]
-            marks.add(commit.symbol, at: commit.center, symbols: paths.symbols, rings: paths.rings)
-            if let label = commit.label { Self.addPatch(of: label, to: labelPatches) }
-            for tag in commit.tags { Self.addTag(tag.frame, box: tagBoxes, hole: tagHoles) }
-        }
-        colorGroups = groups.enumerated().compactMap { seriesIndex, paths in paths.group(seriesIndex: seriesIndex) }
-        reverseCrosses = marks.reverseCrosses
-        cherryStems = marks.cherryStems
-        cherryFruits = marks.cherryFruits
-        self.labelPatches = labelPatches
+        reverseCrosses = paths.reverseCrosses.path
+        cherryStems = paths.cherryStems.path
+        cherryFruits = paths.cherryFruits.path
+        labelPatches = paths.labelPatches.path
         labels = layout.commits.compactMap(\.label)
-        self.tagBoxes = tagBoxes
-        self.tagHoles = tagHoles
+        tagBoxes = paths.tagBoxes.path
+        tagHoles = paths.tagHoles.path
         tagTexts = layout.commits.flatMap { commit in commit.tags.map(\.text) }
         names = layout.lanes.compactMap(\.name)
         namePaints = Self.namePaints(layout)
@@ -121,42 +101,6 @@ public struct GitGraphDrawingParts {
     private static func namePaints(_ layout: GitGraphLayout) -> [DiagramPaint] {
         layout.lanes.enumerated().compactMap { laneIndex, lane in
             lane.name.map { _ in layout.seriesColors.ink(ofSeries: laneIndex).map(DiagramPaint.color) ?? .background }
-        }
-    }
-
-    /// The rounded patch behind an id, centered on its text and turned with it.
-    private static func addPatch(of label: GitGraphLayoutCommitLabel, to patches: CGMutablePath) {
-        let center = label.text.center
-        let frame = CGRect(x: center.x - label.patchSize.width / 2, y: center.y - label.patchSize.height / 2, width: label.patchSize.width,
-                           height: label.patchSize.height)
-        let turn = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: label.angle).translatedBy(x: -center.x, y: -center.y)
-        patches.addRoundedRect(in: frame, cornerWidth: labelPatchCornerRadius, cornerHeight: labelPatchCornerRadius, transform: turn)
-    }
-
-    /// A tag's box, its point at the middle of its left side, and the hole at the point's base.
-    private static func addTag(_ frame: CGRect, box: CGMutablePath, hole: CGMutablePath) {
-        let pointBase = frame.minX + GitGraphGeometry.tagPointLength
-        box.addLines(between: [CGPoint(x: frame.minX, y: frame.midY), CGPoint(x: pointBase, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
-                               CGPoint(x: frame.maxX, y: frame.maxY), CGPoint(x: pointBase, y: frame.maxY)])
-        box.closeSubpath()
-        hole.addEllipse(in: CGRect(x: pointBase - tagHoleRadius, y: frame.midY - tagHoleRadius, width: 2 * tagHoleRadius, height: 2 * tagHoleRadius))
-    }
-
-    /// Core Graphics paths are references: a copy of these adds to the same paths.
-    private struct GroupPaths {
-        let laneLines = CGMutablePath()
-        let nameBoxes = CGMutablePath()
-        let curves = CGMutablePath()
-        let cherryPickCurves = CGMutablePath()
-        let straightLines = CGMutablePath()
-        let rings = CGMutablePath()
-        let symbols = CGMutablePath()
-
-        /// The group, or nil when nothing takes its color: no lane, and no commit when lanes are hidden.
-        func group(seriesIndex: Int) -> ColorGroup? {
-            guard !laneLines.isEmpty || !symbols.isEmpty || !rings.isEmpty else { return nil }
-            return ColorGroup(seriesIndex: seriesIndex, laneLines: laneLines, nameBoxes: nameBoxes, curves: curves, cherryPickCurves: cherryPickCurves,
-                              straightLines: straightLines, rings: rings, symbols: symbols)
         }
     }
 }
