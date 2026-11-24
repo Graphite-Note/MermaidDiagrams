@@ -6,7 +6,7 @@
  *              the title and accessibility text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -65,7 +65,7 @@ struct UserJourneyDiagramBuilder {
     /// An actor's name without the spaces and line breaks at its ends, as JavaScript's `trim` leaves it. A name of ASCII
     /// alone is trimmed on its bytes: the ASCII characters with Unicode's White_Space property are the tab to the carriage
     /// return and the space.
-    private static func trimmed(_ name: Substring) -> String {
+    static func trimmed(_ name: Substring) -> String {
         let bytes = name.utf8
         if bytes.allSatisfy({ byte in byte < 0x80 }) {
             func isWhiteSpace(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
@@ -75,6 +75,11 @@ struct UserJourneyDiagramBuilder {
             while end > start, isWhiteSpace(bytes[bytes.index(before: end)]) { end = bytes.index(before: end) }
             return String(name[start..<end])
         }
+        return trimmedScalarByScalar(name)
+    }
+
+    /// `trimmed(_:)` scalar by scalar through Unicode's White_Space property, for any name.
+    static func trimmedScalarByScalar(_ name: Substring) -> String {
         var scalars = name.unicodeScalars
         while let first = scalars.first, first.properties.isWhitespace { scalars = scalars.dropFirst() }
         while let last = scalars.last, last.properties.isWhitespace { scalars = scalars.dropLast() }
