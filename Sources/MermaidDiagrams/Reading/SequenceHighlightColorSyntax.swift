@@ -1,3 +1,15 @@
+/**
+ * File: SequenceHighlightColorSyntax.swift
+ * ----------------------------------------
+ * Layer: Core
+ * Description: Reads the CSS color a sequence diagram's `rect` or `box` line writes, its color names looked up in a
+ *              table read once.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
 import Foundation
 
 /// Reads the CSS color a `rect` block's line writes: `rgb()` and `rgba()`, `hsl()` and `hsla()` (with commas, or with
