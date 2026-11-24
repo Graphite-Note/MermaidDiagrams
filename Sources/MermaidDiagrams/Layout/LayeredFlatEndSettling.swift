@@ -5,7 +5,7 @@
  * Description: Moves the ends of edges along their sides once the nodes have places, so that edges run straight.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -18,18 +18,20 @@ struct LayeredFlatEndSettling {
     let across: [Double]
     let fromEnds: [LayeredSegmentEnd]
     let toEnds: [LayeredSegmentEnd]
-    let free: [[Int]]
+    /// How many free ends each side of each vertex has, side 0 first (`LayeredFlatGraph.freeEnds`).
+    let free: [Int]
     let emptyRanks: [Bool]?
+    let workspace: LayeredFlatWorkspace
     /// The pooled sums and counts of a run being fitted, kept between runs so that every fit reuses one pair.
-    private var poolSum: [Double] = []
-    private var poolCount: [Int] = []
+    private var poolSum: [Double]
+    private var poolCount: [Int]
     /// The free ends of every side in order, with their least gaps, and all their ends in order, one side after another.
-    private var sideSegments: [Int] = []
-    private var sideRoom: [Double] = []
-    private var sideAll: [Int] = []
+    private var sideSegments: [Int]
+    private var sideRoom: [Double]
+    private var sideAll: [Int]
 
     init(graph: consuming LayeredFlatGraph, nodes: [LayeredFlatNode], across: [Double], fromEnds: [LayeredSegmentEnd],
-         toEnds: [LayeredSegmentEnd], free: [[Int]], emptyRanks: [Bool]?) {
+         toEnds: [LayeredSegmentEnd], free: [Int], emptyRanks: [Bool]?, workspace: LayeredFlatWorkspace) {
         self.graph = graph
         self.nodes = nodes
         self.across = across
@@ -37,6 +39,24 @@ struct LayeredFlatEndSettling {
         self.toEnds = toEnds
         self.free = free
         self.emptyRanks = emptyRanks
+        self.workspace = workspace
+        // Every segment has an end on each side: no side list holds more than all of them.
+        let endCount = 2 * self.graph.segmentCount
+        poolSum = workspace.emptyNumbers(capacity: 0)
+        poolCount = workspace.emptyIntegers(capacity: 0)
+        sideSegments = workspace.emptyIntegers(capacity: endCount)
+        sideRoom = workspace.emptyNumbers(capacity: endCount)
+        sideAll = workspace.emptyIntegers(capacity: endCount)
+    }
+
+    /// The graph with its ends settled, the settling's own lists given back to the workspace.
+    consuming func finished() -> LayeredFlatGraph {
+        workspace.recycle(poolSum)
+        workspace.recycle(poolCount)
+        workspace.recycle(sideSegments)
+        workspace.recycle(sideRoom)
+        workspace.recycle(sideAll)
+        return graph
     }
 
     /// One side of a node whose ends may move: where its free ends and their least gaps start in `sideSegments` and
@@ -53,7 +73,7 @@ struct LayeredFlatEndSettling {
     /// Where the end of `segment` on `vertex` should be, from the middle of its side, following the edge up (side 0)
     /// or down to the next point held in place.
     private func wanted(_ segment: Int, side: Int, vertex: Int, span: Double, isAgain: Bool) -> Double {
-        if free[side][vertex] < 2 { return 0 }
+        if free[side * graph.vertexCount + vertex] < 2 { return 0 }
         let segment = graph.followed(segment, isUpward: side == 0, emptyRanks: emptyRanks)
         let other = side == 0 ? graph.segmentFrom[segment] : graph.segmentTo[segment]
         let point = across[other] + (side == 0 ? graph.segmentFromOffset[segment] : graph.segmentToOffset[segment])
@@ -65,7 +85,7 @@ struct LayeredFlatEndSettling {
         var middle = point
         var width: Double = 0
         let otherEnd = side == 0 ? fromEnds[segment] : toEnds[segment]
-        if other < graph.nodeCount && nodes[other].kind == .node && otherEnd != .held && free[1 - side][other] >= 2 {
+        if other < graph.nodeCount && nodes[other].kind == .node && otherEnd != .held && free[(1 - side) * graph.vertexCount + other] >= 2 {
             width = max(0, min(nodes[other].sideSpan, graph.vertexWidth[other]))
             if width > 0 { middle = across[other] }
         }
@@ -84,23 +104,33 @@ struct LayeredFlatEndSettling {
     /// The sides whose ends may move, their ends written to `sideSegments`, `sideRoom` and `sideAll`.
     private mutating func sides() -> [Side] {
         var found: [Side] = []
-        var ends = LayeredSideEnds()
-        var all: [Int] = []
-        let position = graph.position
+        found.reserveCapacity(2 * graph.nodeCount)
+        var ends = LayeredSideEnds(workspace: workspace)
+        var all = workspace.emptyIntegers(capacity: 0)
+        defer {
+            ends.recycle(into: workspace)
+            workspace.recycle(all)
+        }
+        var spare = workspace.emptyIntegers(capacity: 0)
+        defer { workspace.recycle(spare) }
+        // The graph's lists read once, outside the loops, for both sides.
+        let position = graph.position, segmentFrom = graph.segmentFrom, segmentTo = graph.segmentTo
+        let predecessorStart = graph.predecessorStart, successorStart = graph.successorStart
+        let predecessorSegments = graph.predecessorSegments, successorSegments = graph.successorSegments
         for vertex in 0..<graph.nodeCount {
             let span = min(nodes[vertex].sideSpan, graph.vertexWidth[vertex])
             if span <= 0 || nodes[vertex].kind != .node { continue }
             for side in 0..<2 {
-                let other = side == 0 ? graph.segmentFrom : graph.segmentTo
-                let starts = side == 0 ? graph.predecessorStart : graph.successorStart
-                let list = side == 0 ? graph.predecessorSegments : graph.successorSegments
                 graph.fillSideEnds(of: vertex, side: side, span: span, kinds: side == 0 ? toEnds : fromEnds, into: &ends)
                 if ends.segments.isEmpty { continue }
                 if ends.segments.count == 1 { ends.room.append(0) }
+                let starts = side == 0 ? predecessorStart : successorStart
                 all.removeAll(keepingCapacity: true)
-                all.append(contentsOf: list[starts[vertex]..<starts[vertex + 1]])
-                all.sortStably { first, second in
-                    position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]]) : Double(first - second)
+                all.append(contentsOf: (side == 0 ? predecessorSegments : successorSegments)[starts[vertex]..<starts[vertex + 1]])
+                let other = side == 0 ? segmentFrom : segmentTo
+                all.sortStably(spare: &spare) { first, second in
+                    (position[other[first]] != position[other[second]] ? Double(position[other[first]] - position[other[second]])
+                        : Double(first - second)) < 0
                 }
                 found.append(Side(vertex: vertex, side: side, span: span, segmentStart: sideSegments.count, allStart: sideAll.count,
                                   allCount: all.count))

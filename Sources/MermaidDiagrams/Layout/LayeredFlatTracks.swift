@@ -5,7 +5,7 @@
  * Description: Gives the pieces of edges that cross one gap of Pele's layered layout their tracks or levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -22,6 +22,17 @@ struct LayeredEdgePieces {
     var isWide: [Bool] = []
 
     var count: Int { from.count }
+
+    /// Gives the lists back to `workspace`.
+    consuming func recycle(into workspace: LayeredFlatWorkspace) {
+        workspace.recycle(from)
+        workspace.recycle(to)
+        workspace.recycle(rank)
+        workspace.recycle(lower)
+        workspace.recycle(track)
+        workspace.recycle(levels)
+        workspace.recycle(isWide)
+    }
 }
 
 /// Pele's `assignTracks` (layout/layered.ts): two pieces of a gap share a track only where they cannot be mistaken
@@ -39,19 +50,36 @@ struct LayeredFlatTracks {
     /// The pieces of the gap being given levels that turn onto levels, and those beside them; cleared after each gap.
     var isLevel: [Bool]
     var isBeside: [Bool]
+    let workspace: LayeredFlatWorkspace
 
-    init(pieces: LayeredEdgePieces, isCurved: Bool, room: [Double], rankCount: Int) {
+    init(pieces: LayeredEdgePieces, isCurved: Bool, room: [Double], rankCount: Int, workspace: LayeredFlatWorkspace) {
         self.pieces = pieces
         self.isCurved = isCurved
         self.room = room
-        trackCount = [Int](repeating: 0, count: rankCount)
-        tallGap = [Double](repeating: 0, count: rankCount)
-        low = pieces.from.indices.map { piece in min(pieces.from[piece], pieces.to[piece]) }
-        high = pieces.from.indices.map { piece in max(pieces.from[piece], pieces.to[piece]) }
-        self.pieces.track = [Int](repeating: -1, count: pieces.count)
-        self.pieces.levels = [Int](repeating: 0, count: pieces.count)
-        isLevel = [Bool](repeating: false, count: isCurved ? pieces.count : 0)
-        isBeside = isLevel
+        self.workspace = workspace
+        trackCount = workspace.integers(count: rankCount, repeating: 0)
+        tallGap = workspace.numbers(count: rankCount, repeating: 0)
+        var low = workspace.emptyNumbers(capacity: pieces.count)
+        var high = workspace.emptyNumbers(capacity: pieces.count)
+        for piece in 0..<pieces.count {
+            low.append(min(pieces.from[piece], pieces.to[piece]))
+            high.append(max(pieces.from[piece], pieces.to[piece]))
+        }
+        self.low = low
+        self.high = high
+        self.pieces.track = workspace.integers(count: pieces.count, repeating: -1)
+        self.pieces.levels = workspace.integers(count: pieces.count, repeating: 0)
+        isLevel = workspace.flags(count: isCurved ? pieces.count : 0, repeating: false)
+        isBeside = workspace.flags(count: isCurved ? pieces.count : 0, repeating: false)
+    }
+
+    /// Gives the lists only the tracks' own work reads back to the workspace; the pieces, the track counts and the tall
+    /// gaps are the caller's.
+    consuming func recycle() {
+        workspace.recycle(low)
+        workspace.recycle(high)
+        workspace.recycle(isLevel)
+        workspace.recycle(isBeside)
     }
 
     func isWithin(_ at: Double, _ piece: Int) -> Int {
@@ -78,11 +106,16 @@ struct LayeredFlatTracks {
     /// How often two pieces cross with `first` on the higher track.
     func crossings(_ first: Int, _ second: Int) -> Int { isWithin(pieces.to[first], second) + isWithin(pieces.from[second], first) }
 
-    /// Pairs of list indices, smaller first, that may meet or clash: those whose spans across come within reach.
+    /// Pairs of list indices, smaller first, that may meet or clash: those whose spans across come within reach. In a
+    /// list of the workspace.
     func nearPairs(_ list: [Int]) -> [Int] {
-        var byLow = Array(list.indices)
-        byLow.sortStably { first, second in low[list[first]] - low[list[second]] }
-        var pairs: [Int] = []
+        var byLow = workspace.emptyIntegers(capacity: list.count)
+        byLow.append(contentsOf: list.indices)
+        var spare = workspace.emptyIntegers(capacity: 0)
+        byLow.sortStably(spare: &spare) { first, second in low[list[first]] - low[list[second]] < 0 }
+        workspace.recycle(consume spare)
+        defer { workspace.recycle(byLow) }
+        var pairs = workspace.emptyIntegers(capacity: 0)
         for position in byLow.indices {
             let first = byLow[position]
             let reach = high[list[first]] + 4 * LayeredFlatConstants.inLine
@@ -99,22 +132,39 @@ struct LayeredFlatTracks {
 
     /// Gives every piece that does not run straight down a track across its gap (or a level), and counts the tracks.
     mutating func assign() {
-        // The pieces of each gap, and the gaps in the order their first pieces come.
-        var byRank = [[Int]](repeating: [], count: trackCount.count)
-        var rankOrder: [Int] = []
+        // The pieces of each gap in the order they come, one gap after another, and the gaps in the order their first
+        // pieces come.
+        let rankCount = trackCount.count
+        var rankStart = workspace.integers(count: rankCount + 1, repeating: 0)
         for piece in 0..<pieces.count where abs(pieces.from[piece] - pieces.to[piece]) >= LayeredFlatConstants.inLine {
-            if byRank[pieces.rank[piece]].isEmpty { rankOrder.append(pieces.rank[piece]) }
-            byRank[pieces.rank[piece]].append(piece)
+            rankStart[pieces.rank[piece] + 1] += 1
         }
+        for rank in 0..<rankCount { rankStart[rank + 1] += rankStart[rank] }
+        var rankPieces = workspace.integers(count: rankStart[rankCount], repeating: 0)
+        var fill = workspace.emptyIntegers(capacity: rankCount)
+        fill.append(contentsOf: rankStart[0..<rankCount])
+        var rankOrder = workspace.emptyIntegers(capacity: 0)
+        for piece in 0..<pieces.count where abs(pieces.from[piece] - pieces.to[piece]) >= LayeredFlatConstants.inLine {
+            let rank = pieces.rank[piece]
+            if fill[rank] == rankStart[rank] { rankOrder.append(rank) }
+            rankPieces[fill[rank]] = piece
+            fill[rank] += 1
+        }
+        var all = workspace.emptyIntegers(capacity: 0)
         for rank in rankOrder {
-            let all = byRank[rank]
+            all.removeAll(keepingCapacity: true)
+            all.append(contentsOf: rankPieces[rankStart[rank]..<rankStart[rank + 1]])
             if !isCurved {
-                var list = all
-                trackCount[rank] = lay(&list)
+                trackCount[rank] = lay(&all)
                 continue
             }
             if all.count > LayeredFlatConstants.maximumWeighedPieces { continue }
             assignLevels(rank: rank, all: all)
         }
+        workspace.recycle(consume rankStart)
+        workspace.recycle(consume rankPieces)
+        workspace.recycle(consume fill)
+        workspace.recycle(consume rankOrder)
+        workspace.recycle(consume all)
     }
 }

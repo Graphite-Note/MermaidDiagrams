@@ -6,7 +6,7 @@
  *              shape's outline.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -41,22 +41,42 @@ struct FlowchartEdgePorts {
          spreadsEnds: Bool = true, endsAtMiddle: Set<Int> = []) {
         sourcePoints = Array(repeating: nil, count: edgeCount)
         targetPoints = Array(repeating: nil, count: edgeCount)
-        var endsBySide = [[End]](repeating: [], count: nodeCenters.count * DiagramSide.allCases.count)
-        for end in ends { endsBySide[Self.sideKey(node: end.node, side: end.side)].append(end) }
-        for sideEnds in endsBySide where !sideEnds.isEmpty {
-            let ordered = sideEnds.sorted { first, second in (first.neighborAcross, first.edgeIndex) < (second.neighborAcross, second.edgeIndex) }
-            guard let side = ordered.first?.side, let node = ordered.first?.node else { continue }
-            let span = spreadsEnds && !endsAtMiddle.contains(node) ? FlowchartShapeGeometry.span(of: shapes[node], size: shapeSizes[node], side: side) : 0
-            let step = ordered.count > 1 ? min(Self.portSeparation, span / CGFloat(ordered.count - 1)) : 0
-            func spread(_ position: Int) -> CGFloat { (CGFloat(position) - CGFloat(ordered.count - 1) / 2) * step }
-            // Only a side with points to keep clear of makes its offsets as an array first.
-            let kept = keptClear.isEmpty ? [] : keptClear[Self.sideKey(node: node, side: side)] ?? []
-            let clearOffsets = kept.isEmpty ? nil : Self.clear(ordered.indices.map(spread), of: kept, reach: span / 2)
-            for (position, end) in ordered.enumerated() {
-                let offset = clearOffsets?[position] ?? spread(position)
-                let point = Self.outlinePoint(center: nodeCenters[node], shape: shapes[node], size: shapeSizes[node], side: side, offset: offset)
-                if end.isSourceEnd { sourcePoints[end.edgeIndex] = point } else { targetPoints[end.edgeIndex] = point }
+        // The ends grouped by side, side after side, each side's in the order they come: one list instead of a list per
+        // side. Each side's ends are then sorted in place as its own list would have been.
+        let sideCount = nodeCenters.count * DiagramSide.allCases.count
+        var sideStart = [Int](repeating: 0, count: sideCount + 1)
+        for end in ends { sideStart[Self.sideKey(node: end.node, side: end.side) + 1] += 1 }
+        for side in 0..<sideCount { sideStart[side + 1] += sideStart[side] }
+        var grouped = ends
+        var fill = Array(sideStart[0..<sideCount])
+        for end in ends {
+            let key = Self.sideKey(node: end.node, side: end.side)
+            grouped[fill[key]] = end
+            fill[key] += 1
+        }
+        for key in 0..<sideCount where sideStart[key + 1] > sideStart[key] {
+            grouped[sideStart[key]..<sideStart[key + 1]].sort { first, second in
+                (first.neighborAcross, first.edgeIndex) < (second.neighborAcross, second.edgeIndex)
             }
+            placeSide(grouped[sideStart[key]..<sideStart[key + 1]], nodeCenters: nodeCenters, shapes: shapes, shapeSizes: shapeSizes,
+                      keptClear: keptClear, spreadsEnds: spreadsEnds, endsAtMiddle: endsAtMiddle)
+        }
+    }
+
+    /// The ends of one side, in their order along it, spread around its middle and moved onto the shape's outline.
+    private mutating func placeSide(_ ordered: ArraySlice<End>, nodeCenters: [CGPoint], shapes: [FlowchartNodeShape], shapeSizes: [CGSize],
+                                    keptClear: [Int: [CGFloat]], spreadsEnds: Bool, endsAtMiddle: Set<Int>) {
+        guard let side = ordered.first?.side, let node = ordered.first?.node else { return }
+        let span = spreadsEnds && !endsAtMiddle.contains(node) ? FlowchartShapeGeometry.span(of: shapes[node], size: shapeSizes[node], side: side) : 0
+        let step = ordered.count > 1 ? min(Self.portSeparation, span / CGFloat(ordered.count - 1)) : 0
+        func spread(_ position: Int) -> CGFloat { (CGFloat(position) - CGFloat(ordered.count - 1) / 2) * step }
+        // Only a side with points to keep clear of makes its offsets as an array first.
+        let kept = keptClear.isEmpty ? [] : keptClear[Self.sideKey(node: node, side: side)] ?? []
+        let clearOffsets = kept.isEmpty ? nil : Self.clear((0..<ordered.count).map(spread), of: kept, reach: span / 2)
+        for (position, end) in ordered.enumerated() {
+            let offset = clearOffsets?[position] ?? spread(position)
+            let point = Self.outlinePoint(center: nodeCenters[node], shape: shapes[node], size: shapeSizes[node], side: side, offset: offset)
+            if end.isSourceEnd { sourcePoints[end.edgeIndex] = point } else { targetPoints[end.edgeIndex] = point }
         }
     }
 

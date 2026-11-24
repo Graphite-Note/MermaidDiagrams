@@ -5,7 +5,7 @@
  * Description: Puts a placed flowchart on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.9
+ * Version: 0.10
  * Date: 23/11/2026
  */
 
@@ -42,6 +42,7 @@ struct FlowchartPageAssembly {
     /// placement's `i`-th route.
     mutating func placeEdges(layeredEdgeIndices: [Int], placement: LayeredPlacement) {
         var ends: [FlowchartEdgePorts.End] = []
+        ends.reserveCapacity(2 * layeredEdgeIndices.count)
         for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
             let edge = diagram.edges[edgeIndex]
@@ -58,12 +59,15 @@ struct FlowchartPageAssembly {
         for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
             let route = placement.edgeRoutes[layeredIndex]
             // Each end where Pele's layout settled it, moved onto its shape's outline; the spread ends where it left none.
-            let path = placement.edgePaths[layeredIndex].map(axes.pagePoint)
+            // Only the path's two ends are read, each put on the page alone.
+            let path = placement.edgePaths[layeredIndex]
             let edge = diagram.edges[edgeIndex]
-            guard let sourcePoint = path.first.flatMap({ end in outlineEnd(end, node: edge.sourceIndex, loopSide: axes.loopSide) }) ?? ports.sourcePoints[edgeIndex],
-                  let targetPoint = path.last.flatMap({ end in outlineEnd(end, node: edge.targetIndex, loopSide: axes.loopSide) }) ?? ports.targetPoints[edgeIndex]
+            guard let sourcePoint = path.first.map(axes.pagePoint).flatMap({ end in outlineEnd(end, node: edge.sourceIndex, loopSide: axes.loopSide) })
+                      ?? ports.sourcePoints[edgeIndex],
+                  let targetPoint = path.last.map(axes.pagePoint).flatMap({ end in outlineEnd(end, node: edge.targetIndex, loopSide: axes.loopSide) })
+                      ?? ports.targetPoints[edgeIndex]
             else { continue }
-            let points = [sourcePoint] + route.dropFirst().dropLast().map(axes.pagePoint) + [targetPoint]
+            let points = Self.joined(sourcePoint, route.dropFirst().dropLast(), targetPoint, through: axes.pagePoint)
             let textCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint)
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, textCenter: textCenter)
@@ -150,12 +154,22 @@ struct FlowchartPageAssembly {
             guard let sourcePoint = route.points.first.flatMap({ end in clusteredEnd(end, node: edge.sourceIndex, placement: placement) }) ?? ports.sourcePoints[edgeIndex],
                   let targetPoint = route.points.last.flatMap({ end in clusteredEnd(end, node: edge.targetIndex, placement: placement) }) ?? ports.targetPoints[edgeIndex]
             else { continue }
-            let points = [sourcePoint] + route.points.dropFirst().dropLast() + [targetPoint]
+            let points = Self.joined(sourcePoint, route.points.dropFirst().dropLast(), targetPoint) { point in point }
             edgePoints.append(points)
             let textCenter = placement.edgeLabelCenters[layoutIndex]
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, textCenter: textCenter, segmentsRunVertically: route.segmentsRunVertically)
         }
+    }
+
+    /// `first`, the points between, each put through `place`, and `last`, in one list made once.
+    private static func joined(_ first: CGPoint, _ between: ArraySlice<CGPoint>, _ last: CGPoint, through place: (CGPoint) -> CGPoint) -> [CGPoint] {
+        var points: [CGPoint] = []
+        points.reserveCapacity(between.count + 2)
+        points.append(first)
+        for point in between { points.append(place(point)) }
+        points.append(last)
+        return points
     }
 
     /// A route's end on the outline of `node`'s shape, from the side of its layout box the layout left it on.
@@ -220,11 +234,6 @@ struct FlowchartPageAssembly {
                                                      width: size.width, height: size.height),
                                        text: text, style: diagram.nodes[node].style, asset: diagram.nodes[node].asset)
         }
-        // A node that stands for a group is its box, not a node.
-        let nodes = clustered.map { clustered in
-            diagram.nodes.indices.filter { node in clustered.representedSubgraphs[node] == nil }.map(placedNode)
-        } ?? diagram.nodes.indices.map(placedNode)
-        let placedEdges = edges.compactMap { edge in edge }
         let bounds = CGRect(origin: .zero, size: extent)
         let titleSize = title?.size ?? .zero
         let innerWidth = max(bounds.width, titleSize.width)
@@ -233,8 +242,15 @@ struct FlowchartPageAssembly {
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (bounds.height + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        return FlowchartLayout(size: size, font: font, nodes: nodes.map { node in node.translated(by: offset) },
-                               edges: placedEdges.map { edge in edge.translated(by: offset) }, title: placedTitle,
+        // A node that stands for a group is its box, not a node. Each list is made once, as long as what it holds.
+        let isDrawn = { (node: Int) in clustered?.representedSubgraphs[node] == nil }
+        var nodes: [FlowchartLayoutNode] = []
+        nodes.reserveCapacity(diagram.nodes.indices.reduce(0) { count, node in isDrawn(node) ? count + 1 : count })
+        for node in diagram.nodes.indices where isDrawn(node) { nodes.append(placedNode(node).translated(by: offset)) }
+        var placedEdges: [FlowchartLayoutEdge] = []
+        placedEdges.reserveCapacity(edges.reduce(0) { count, edge in edge == nil ? count : count + 1 })
+        for case let edge? in edges { placedEdges.append(edge.translated(by: offset)) }
+        return FlowchartLayout(size: size, font: font, nodes: nodes, edges: placedEdges, title: placedTitle,
                                clusters: clusters.map { cluster in cluster.translated(by: offset) })
     }
 }

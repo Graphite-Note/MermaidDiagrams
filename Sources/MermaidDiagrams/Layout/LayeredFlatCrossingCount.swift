@@ -5,7 +5,7 @@
  * Description: Counts the crossings of an order of Pele's layered layout, with a tree over each rank's places.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -36,24 +36,60 @@ struct LayeredFlatCrossingReduction {
     var groupSum: [Double] = []
     var groupCount: [Int] = []
     var groupFirst: [Int] = []
+    /// The rank being arranged by groups.
+    var arrangedRow: [Int] = []
+    let workspace: LayeredFlatWorkspace
 
-    init(graph: LayeredFlatGraph, nodes: [LayeredFlatNode]) {
+    init(graph: consuming LayeredFlatGraph, nodes: [LayeredFlatNode], workspace: LayeredFlatWorkspace) {
+        self.workspace = workspace
         self.graph = graph
-        pins = nodes.map(\.pin)
-        widest = Self.widestRank(of: graph)
-        let segmentCount = graph.segmentCount
-        usesPlaces = graph.hasOffsets
-        place = [Int](repeating: 0, count: graph.hasOffsets ? segmentCount : 0)
-        placeWithinNode = [Int](repeating: 0, count: graph.hasOffsets ? segmentCount : 0)
-        placeCount = [Int](repeating: 0, count: graph.hasOffsets ? graph.vertexCount : 0)
-        leaving = graph.successorSegments
-        hasMixedOffsets = [Bool](repeating: false, count: graph.hasOffsets ? graph.vertexCount : 0)
+        var pins = workspace.emptyIntegers(capacity: nodes.count)
+        for node in nodes { pins.append(node.pin) }
+        self.pins = pins
+        widest = Self.widestRank(of: self.graph)
+        let segmentCount = self.graph.segmentCount
+        let vertexCount = self.graph.vertexCount
+        let hasOffsets = self.graph.hasOffsets
+        usesPlaces = hasOffsets
+        place = workspace.integers(count: hasOffsets ? segmentCount : 0, repeating: 0)
+        placeWithinNode = workspace.integers(count: hasOffsets ? segmentCount : 0, repeating: 0)
+        placeCount = workspace.integers(count: hasOffsets ? vertexCount : 0, repeating: 0)
+        if hasOffsets {
+            leaving = workspace.emptyIntegers(capacity: segmentCount)
+            leaving.append(contentsOf: self.graph.successorSegments)
+        } else {
+            leaving = self.graph.successorSegments
+        }
+        hasMixedOffsets = workspace.flags(count: hasOffsets ? vertexCount : 0, repeating: false)
         var size = 1
-        while size < (graph.hasOffsets ? widest + segmentCount : widest) { size <<= 1 }
-        tree = [Int](repeating: 0, count: 2 * size)
-        targets = [Int](repeating: 0, count: segmentCount)
-        barycenter = [Double](repeating: 0, count: graph.vertexCount)
-        if graph.hasOffsets { orderPlacesByOffset() }
+        while size < (hasOffsets ? widest + segmentCount : widest) { size <<= 1 }
+        tree = workspace.integers(count: 2 * size, repeating: 0)
+        targets = workspace.integers(count: segmentCount, repeating: 0)
+        barycenter = workspace.numbers(count: vertexCount, repeating: 0)
+        movingVertices = workspace.emptyIntegers(capacity: 0)
+        sortSpare = workspace.emptyIntegers(capacity: 0)
+        if hasOffsets { orderPlacesByOffset() }
+    }
+
+    /// The ordered graph, the reduction's own lists given back to the workspace.
+    consuming func finished() -> LayeredFlatGraph {
+        workspace.recycle(pins)
+        workspace.recycle(place)
+        workspace.recycle(placeWithinNode)
+        workspace.recycle(placeCount)
+        if usesPlaces { workspace.recycle(leaving) }
+        workspace.recycle(hasMixedOffsets)
+        workspace.recycle(tree)
+        workspace.recycle(targets)
+        workspace.recycle(barycenter)
+        workspace.recycle(movingVertices)
+        workspace.recycle(sortSpare)
+        workspace.recycle(groupDepth)
+        workspace.recycle(groupSum)
+        workspace.recycle(groupCount)
+        workspace.recycle(groupFirst)
+        workspace.recycle(arrangedRow)
+        return graph
     }
 
     /// How many vertices the graph's widest rank holds.
@@ -63,12 +99,14 @@ struct LayeredFlatCrossingReduction {
         return widest
     }
 
-    /// Sorts `list[start..<end]` by `offsets` when they differ there; whether they did.
-    private static func sortedByOffset(_ list: inout [Int], start: Int, end: Int, offsets: [Double]) -> Bool {
+    /// Sorts `list[start..<end]` by `offsets` when they differ there, through `run` and `spare`; whether they did.
+    private static func sortedByOffset(_ list: inout [Int], start: Int, end: Int, offsets: [Double], run: inout [Int],
+                                       spare: inout [Int]) -> Bool {
         guard start + 1 < end else { return false }
         for index in (start + 1)..<end where offsets[list[index]] != offsets[list[start]] {
-            var run = Array(list[start..<end])
-            run.sortStably { first, second in offsets[first] - offsets[second] }
+            run.removeAll(keepingCapacity: true)
+            run.append(contentsOf: list[start..<end])
+            run.sortStably(spare: &spare) { first, second in offsets[first] - offsets[second] < 0 }
             list.replaceSubrange(start..<end, with: run)
             return true
         }
@@ -77,19 +115,27 @@ struct LayeredFlatCrossingReduction {
 
     /// Local offset indices and counts, which do not depend on the order.
     private mutating func orderPlacesByOffset() {
-        var arriving = graph.predecessorSegments
+        var arriving = workspace.emptyIntegers(capacity: graph.segmentCount)
+        arriving.append(contentsOf: graph.predecessorSegments)
+        var run = workspace.emptyIntegers(capacity: 0)
+        var spare = workspace.emptyIntegers(capacity: 0)
+        defer {
+            workspace.recycle(arriving)
+            workspace.recycle(run)
+            workspace.recycle(spare)
+        }
         for vertex in 0..<graph.vertexCount {
             placeCount[vertex] = 1
             let start = graph.predecessorStart[vertex]
             let end = graph.predecessorStart[vertex + 1]
-            if Self.sortedByOffset(&arriving, start: start, end: end, offsets: graph.segmentToOffset) {
+            if Self.sortedByOffset(&arriving, start: start, end: end, offsets: graph.segmentToOffset, run: &run, spare: &spare) {
                 for index in (start + 1)..<end {
                     if graph.segmentToOffset[arriving[index]] != graph.segmentToOffset[arriving[index - 1]] { placeCount[vertex] += 1 }
                     placeWithinNode[arriving[index]] = placeCount[vertex] - 1
                 }
             }
             if Self.sortedByOffset(&leaving, start: graph.successorStart[vertex], end: graph.successorStart[vertex + 1],
-                                   offsets: graph.segmentFromOffset) {
+                                   offsets: graph.segmentFromOffset, run: &run, spare: &spare) {
                 hasMixedOffsets[vertex] = true
             }
         }

@@ -5,7 +5,7 @@
  * Description: Gives the ends of edges on one side of a node places of their own, and lines border ports up with ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -14,6 +14,22 @@ struct LayeredSideEnds {
     var segments: [Int] = []
     var room: [Double] = []
     var total: Double = 0
+    /// The second list the merge sort of `segments` writes into, kept from side to side.
+    var sortSpare: [Int] = []
+
+    /// Empty lists from `workspace`.
+    init(workspace: LayeredFlatWorkspace) {
+        segments = workspace.emptyIntegers(capacity: 0)
+        room = workspace.emptyNumbers(capacity: 0)
+        sortSpare = workspace.emptyIntegers(capacity: 0)
+    }
+
+    /// Gives the lists back to `workspace`.
+    consuming func recycle(into workspace: LayeredFlatWorkspace) {
+        workspace.recycle(segments)
+        workspace.recycle(room)
+        workspace.recycle(sortSpare)
+    }
 }
 
 extension LayeredFlatGraph {
@@ -31,9 +47,12 @@ extension LayeredFlatGraph {
         for position in starts[vertex]..<starts[vertex + 1] where kinds[list[position]] != .held { ends.segments.append(list[position]) }
         if ends.segments.count < 2 { return }
         let positions = position
-        ends.segments.sortStably { first, second in
-            positions[other[first]] != positions[other[second]] ? Double(positions[other[first]] - positions[other[second]]) : Double(first - second)
+        var spare: [Int] = []
+        swap(&spare, &ends.sortSpare)
+        ends.segments.sortStably(spare: &spare) { first, second in
+            (positions[other[first]] != positions[other[second]] ? Double(positions[other[first]] - positions[other[second]]) : Double(first - second)) < 0
         }
+        swap(&spare, &ends.sortSpare)
         func fill(_ share: (_ leaves: Bool, _ same: Bool) -> Double) -> Double {
             var total: Double = 0
             ends.room.removeAll(keepingCapacity: true)
@@ -55,8 +74,10 @@ extension LayeredFlatGraph {
     }
 
     /// Gives the ends that meet one side of a node places of their own along it, around its middle (Pele's `spread`).
-    mutating func spreadEnds(nodes: [LayeredFlatNode], fromEnds: [LayeredSegmentEnd], toEnds: [LayeredSegmentEnd]) {
-        var ends = LayeredSideEnds()
+    mutating func spreadEnds(nodes: [LayeredFlatNode], fromEnds: [LayeredSegmentEnd], toEnds: [LayeredSegmentEnd],
+                             workspace: LayeredFlatWorkspace) {
+        var ends = LayeredSideEnds(workspace: workspace)
+        defer { ends.recycle(into: workspace) }
         for vertex in 0..<nodeCount {
             let span = min(nodes[vertex].sideSpan, vertexWidth[vertex])
             if span <= 0 || nodes[vertex].kind != .node { continue }
@@ -72,12 +93,13 @@ extension LayeredFlatGraph {
         }
     }
 
-    /// How many ends that may move each node has on the side its edges arrive at, and on the other (Pele's `freeEnds`).
-    func freeEnds(fromEnds: [LayeredSegmentEnd], toEnds: [LayeredSegmentEnd]) -> [[Int]] {
-        var free = [[Int]](repeating: [Int](repeating: 0, count: vertexCount), count: 2)
+    /// How many ends that may move each node has on the side its edges arrive at, and on the other (Pele's `freeEnds`):
+    /// side `side` of vertex `vertex` at `side * vertexCount + vertex`.
+    func freeEnds(fromEnds: [LayeredSegmentEnd], toEnds: [LayeredSegmentEnd], workspace: LayeredFlatWorkspace) -> [Int] {
+        var free = workspace.integers(count: 2 * vertexCount, repeating: 0)
         for segment in 0..<segmentCount {
-            if toEnds[segment] != .held { free[0][segmentTo[segment]] += 1 }
-            if fromEnds[segment] != .held { free[1][segmentFrom[segment]] += 1 }
+            if toEnds[segment] != .held { free[segmentTo[segment]] += 1 }
+            if fromEnds[segment] != .held { free[vertexCount + segmentFrom[segment]] += 1 }
         }
         return free
     }

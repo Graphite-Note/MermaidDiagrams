@@ -5,7 +5,7 @@
  * Description: The first two steps of Pele's layered layout: edges that close cycles turned around, then ranks.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -13,26 +13,37 @@
 enum LayeredFlatRanking {
     /// Turns around the edges that close a cycle, found by a depth-first walk from each node in declaration order, and
     /// the edges that run into a start port or out of an end port.
-    static func orient(nodes: [LayeredFlatNode], edges: inout [LayeredFlatEdge]) {
+    static func orient(nodes: [LayeredFlatNode], edges: inout [LayeredFlatEdge], workspace: LayeredFlatWorkspace) {
         let nodeCount = nodes.count
-        var start = [Int](repeating: 0, count: nodeCount + 1)
+        var start = workspace.integers(count: nodeCount + 1, repeating: 0)
         for index in edges.indices {
             edges[index].isReversed = nodes[edges[index].head].kind == .startPort || nodes[edges[index].tail].kind == .endPort
             if !edges[index].isReversed { start[edges[index].tail + 1] += 1 }
         }
         for node in 0..<nodeCount { start[node + 1] += start[node] }
-        var outgoing = [Int](repeating: 0, count: start[nodeCount])
-        var fill = Array(start[0..<nodeCount])
+        var outgoing = workspace.integers(count: start[nodeCount], repeating: 0)
+        // Each node's fill of its edges out, then its cursor over them.
+        var cursor = workspace.emptyIntegers(capacity: nodeCount)
+        cursor.append(contentsOf: start[0..<nodeCount])
         for index in edges.indices where !edges[index].isReversed {
-            outgoing[fill[edges[index].tail]] = index
-            fill[edges[index].tail] += 1
+            outgoing[cursor[edges[index].tail]] = index
+            cursor[edges[index].tail] += 1
         }
-        // 0 unvisited, 1 on the walk, 2 done. The fill's list becomes each node's cursor over its edges out.
-        var state = [UInt8](repeating: 0, count: nodeCount)
-        var cursor = consume fill
+        reverseCycles(edges: &edges, start: start, outgoing: outgoing, cursor: &cursor, workspace: workspace)
+        workspace.recycle(consume start)
+        workspace.recycle(consume outgoing)
+        workspace.recycle(consume cursor)
+    }
+
+    /// The depth-first walk of `orient`: an edge that reaches a node still on the walk closes a cycle and is turned
+    /// around. `start` and `outgoing` list each node's edges out; `cursor` is each node's place in its list.
+    private static func reverseCycles(edges: inout [LayeredFlatEdge], start: [Int], outgoing: [Int], cursor: inout [Int],
+                                      workspace: LayeredFlatWorkspace) {
+        let nodeCount = cursor.count
+        // 0 unvisited, 1 on the walk, 2 done.
+        var state = workspace.integers(count: nodeCount, repeating: 0)
         for node in 0..<nodeCount { cursor[node] = start[node] }
-        var stack: [Int] = []
-        stack.reserveCapacity(nodeCount)
+        var stack = workspace.emptyIntegers(capacity: nodeCount)
         for root in 0..<nodeCount where state[root] == 0 {
             stack.append(root)
             state[root] = 1
@@ -53,6 +64,8 @@ enum LayeredFlatRanking {
                 }
             }
         }
+        workspace.recycle(consume state)
+        workspace.recycle(consume stack)
     }
 
     /// The edges as they run after `orient`, with their lengths, and each node's edges out and in.
@@ -65,12 +78,17 @@ enum LayeredFlatRanking {
         var inStart: [Int]
         var inEdges: [Int]
 
-        init(nodeCount: Int, edges: [LayeredFlatEdge], step: Int) {
-            from = edges.map { edge in edge.isReversed ? edge.head : edge.tail }
-            to = edges.map { edge in edge.isReversed ? edge.tail : edge.head }
-            length = edges.map { edge in max(1, edge.minimumLength) * step }
-            outStart = [Int](repeating: 0, count: nodeCount + 1)
-            inStart = [Int](repeating: 0, count: nodeCount + 1)
+        init(nodeCount: Int, edges: [LayeredFlatEdge], step: Int, workspace: LayeredFlatWorkspace) {
+            from = workspace.emptyIntegers(capacity: edges.count)
+            to = workspace.emptyIntegers(capacity: edges.count)
+            length = workspace.emptyIntegers(capacity: edges.count)
+            for edge in edges {
+                from.append(edge.isReversed ? edge.head : edge.tail)
+                to.append(edge.isReversed ? edge.tail : edge.head)
+                length.append(max(1, edge.minimumLength) * step)
+            }
+            outStart = workspace.integers(count: nodeCount + 1, repeating: 0)
+            inStart = workspace.integers(count: nodeCount + 1, repeating: 0)
             for index in edges.indices {
                 outStart[from[index] + 1] += 1
                 inStart[to[index] + 1] += 1
@@ -79,30 +97,45 @@ enum LayeredFlatRanking {
                 outStart[node + 1] += outStart[node]
                 inStart[node + 1] += inStart[node]
             }
-            outEdges = [Int](repeating: 0, count: edges.count)
-            inEdges = [Int](repeating: 0, count: edges.count)
-            var outFill = Array(outStart[0..<nodeCount])
-            var inFill = Array(inStart[0..<nodeCount])
+            outEdges = workspace.integers(count: edges.count, repeating: 0)
+            inEdges = workspace.integers(count: edges.count, repeating: 0)
+            var outFill = workspace.emptyIntegers(capacity: nodeCount)
+            outFill.append(contentsOf: outStart[0..<nodeCount])
+            var inFill = workspace.emptyIntegers(capacity: nodeCount)
+            inFill.append(contentsOf: inStart[0..<nodeCount])
             for index in edges.indices {
                 outEdges[outFill[from[index]]] = index
                 outFill[from[index]] += 1
                 inEdges[inFill[to[index]]] = index
                 inFill[to[index]] += 1
             }
+            workspace.recycle(consume outFill)
+            workspace.recycle(consume inFill)
+        }
+
+        /// Gives the lists back to `workspace`.
+        consuming func recycle(into workspace: LayeredFlatWorkspace) {
+            workspace.recycle(from)
+            workspace.recycle(to)
+            workspace.recycle(length)
+            workspace.recycle(outStart)
+            workspace.recycle(outEdges)
+            workspace.recycle(inStart)
+            workspace.recycle(inEdges)
         }
     }
 
     /// Gives every node its rank: the longest path from the nodes no edge enters, then eight passes that move each node
     /// towards the side with more edges, ports put above or below everything else.
-    static func rank(nodes: inout [LayeredFlatNode], edges: [LayeredFlatEdge], step: Int) {
+    static func rank(nodes: inout [LayeredFlatNode], edges: [LayeredFlatEdge], step: Int, workspace: LayeredFlatWorkspace) {
         let nodeCount = nodes.count
-        let oriented = OrientedEdges(nodeCount: nodeCount, edges: edges, step: step)
-        var ranks = [Int](repeating: 0, count: nodeCount)
+        let oriented = OrientedEdges(nodeCount: nodeCount, edges: edges, step: step, workspace: workspace)
+        var ranks = workspace.integers(count: nodeCount, repeating: 0)
         // Start ports go above every node later, so they don't push their targets down a rank.
         for node in 0..<nodeCount where nodes[node].kind == .startPort { ranks[node] = -step }
-        var remainingIn = (0..<nodeCount).map { node in oriented.inStart[node + 1] - oriented.inStart[node] }
-        var topological: [Int] = []
-        topological.reserveCapacity(nodeCount)
+        var remainingIn = workspace.emptyIntegers(capacity: nodeCount)
+        for node in 0..<nodeCount { remainingIn.append(oriented.inStart[node + 1] - oriented.inStart[node]) }
+        var topological = workspace.emptyIntegers(capacity: nodeCount)
         for node in 0..<nodeCount where remainingIn[node] == 0 { topological.append(node) }
         var queueIndex = 0
         while queueIndex < topological.count {
@@ -118,6 +151,10 @@ enum LayeredFlatRanking {
         }
         balance(&ranks, topological: topological, oriented: oriented)
         normalize(&nodes, ranks: &ranks, step: step)
+        oriented.recycle(into: workspace)
+        workspace.recycle(consume ranks)
+        workspace.recycle(consume remainingIn)
+        workspace.recycle(consume topological)
     }
 
     /// Longest-path ranking leaves loosely attached nodes far from their neighbours: each node moves toward the side

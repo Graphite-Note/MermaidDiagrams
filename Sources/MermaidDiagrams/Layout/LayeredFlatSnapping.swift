@@ -5,7 +5,7 @@
  * Description: Brings nearly straight edges of Pele's layered layout into line, moving blocks of what is in line.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -13,14 +13,15 @@
 /// with it, where the vertices beside it leave room; what is in line stays in line, so each move straightens one more
 /// edge. The blocks are joined smaller into larger, as a union of member lists.
 struct LayeredFlatSnapping {
-    let graph: LayeredFlatGraph
+    /// Moved in and back out (`finished`), so that the graph is never copied.
+    private(set) var graph: LayeredFlatGraph
     let options: LayeredFlatOptions
     let emptyRanks: [Bool]?
     /// Each edge from one point held in place to the next: its upper and lower vertices and offsets.
-    private var upper: [Int] = []
-    private var lower: [Int] = []
-    private var upperOffset: [Double] = []
-    private var lowerOffset: [Double] = []
+    private var upper: [Int]
+    private var lower: [Int]
+    private var upperOffset: [Double]
+    private var lowerOffset: [Double]
     private var block: [Int]
     /// The members of each block as a list in the order they joined: its first and last member and how many it has,
     /// and each member's next (-1 after the last).
@@ -28,20 +29,25 @@ struct LayeredFlatSnapping {
     private var lastMember: [Int]
     private var memberCount: [Int]
     private var nextMember: [Int]
+    let workspace: LayeredFlatWorkspace
 
-    init(graph: LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: [Bool]?) {
-        self.graph = graph
+    init(graph: consuming LayeredFlatGraph, options: LayeredFlatOptions, emptyRanks: [Bool]?, workspace: LayeredFlatWorkspace) {
         self.options = options
         self.emptyRanks = emptyRanks
-        block = Array(0..<graph.vertexCount)
-        firstMember = block
-        lastMember = block
-        memberCount = [Int](repeating: 1, count: graph.vertexCount)
-        nextMember = [Int](repeating: -1, count: graph.vertexCount)
-        upper.reserveCapacity(graph.segmentCount)
-        lower.reserveCapacity(graph.segmentCount)
-        upperOffset.reserveCapacity(graph.segmentCount)
-        lowerOffset.reserveCapacity(graph.segmentCount)
+        self.workspace = workspace
+        let vertexCount = graph.vertexCount
+        block = workspace.emptyIntegers(capacity: vertexCount)
+        block.append(contentsOf: 0..<vertexCount)
+        firstMember = workspace.emptyIntegers(capacity: vertexCount)
+        firstMember.append(contentsOf: 0..<vertexCount)
+        lastMember = workspace.emptyIntegers(capacity: vertexCount)
+        lastMember.append(contentsOf: 0..<vertexCount)
+        memberCount = workspace.integers(count: vertexCount, repeating: 1)
+        nextMember = workspace.integers(count: vertexCount, repeating: -1)
+        upper = workspace.emptyIntegers(capacity: graph.segmentCount)
+        lower = workspace.emptyIntegers(capacity: graph.segmentCount)
+        upperOffset = workspace.emptyNumbers(capacity: graph.segmentCount)
+        lowerOffset = workspace.emptyNumbers(capacity: graph.segmentCount)
         for segment in 0..<graph.segmentCount {
             let from = graph.segmentFrom[segment]
             if emptyRanks != nil && graph.vertexKind[from] == .bend && emptyRanks?[graph.vertexRank[from]] == true { continue }
@@ -51,6 +57,21 @@ struct LayeredFlatSnapping {
             upperOffset.append(graph.segmentFromOffset[segment])
             lowerOffset.append(graph.segmentToOffset[followed])
         }
+        self.graph = graph
+    }
+
+    /// The graph, the snapping's lists given back to the workspace.
+    consuming func finished() -> LayeredFlatGraph {
+        workspace.recycle(upper)
+        workspace.recycle(lower)
+        workspace.recycle(upperOffset)
+        workspace.recycle(lowerOffset)
+        workspace.recycle(block)
+        workspace.recycle(firstMember)
+        workspace.recycle(lastMember)
+        workspace.recycle(memberCount)
+        workspace.recycle(nextMember)
+        return graph
     }
 
     private func offAxis(_ edge: Int, across: [Double]) -> Double {
@@ -108,17 +129,20 @@ struct LayeredFlatSnapping {
     }
 
     mutating func snap(_ across: inout [Double]) {
-        var near: [Int] = []
+        var near = workspace.emptyIntegers(capacity: 0)
+        defer { workspace.recycle(near) }
         for edge in upper.indices {
             let distance = abs(offAxis(edge, across: across))
             if distance < 0.01 { join(upper[edge], lower[edge]) } else if distance <= LayeredFlatConstants.bendSnap { near.append(edge) }
         }
         if near.isEmpty { return }
-        let current = across
-        near.sortStably { first, second in
-            let difference = abs(offAxis(first, across: current)) - abs(offAxis(second, across: current))
-            return difference != 0 ? difference : Double(first - second)
+        // Sorted by the places before any edge snaps: nothing moves while the sort reads them.
+        var spare = workspace.emptyIntegers(capacity: 0)
+        near.sortStably(spare: &spare) { first, second in
+            let difference = abs(offAxis(first, across: across)) - abs(offAxis(second, across: across))
+            return (difference != 0 ? difference : Double(first - second)) < 0
         }
+        workspace.recycle(consume spare)
         for edge in near { snapEdge(edge, across: &across) }
     }
 
@@ -151,10 +175,10 @@ struct LayeredFlatSnapping {
 
 extension LayeredFlatGraph {
     /// The ranks between the first and the last that hold nothing but bends of edges, or nil when none does.
-    func emptyRanks() -> [Bool]? {
-        var empty = [Bool](repeating: false, count: maximumRank + 1)
-        var any = false
+    func emptyRanks(workspace: LayeredFlatWorkspace) -> [Bool]? {
         guard maximumRank > 1 else { return nil }
+        var empty = workspace.flags(count: maximumRank + 1, repeating: false)
+        var any = false
         for rank in 1..<maximumRank {
             var only = rankStart[rank + 1] > rankStart[rank]
             for index in rankStart[rank]..<rankStart[rank + 1] where vertexKind[order[index]] != .bend { only = false }
@@ -163,6 +187,8 @@ extension LayeredFlatGraph {
                 any = true
             }
         }
-        return any ? empty : nil
+        if any { return empty }
+        workspace.recycle(consume empty)
+        return nil
     }
 }

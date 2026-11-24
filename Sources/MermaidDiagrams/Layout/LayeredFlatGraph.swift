@@ -5,7 +5,7 @@
  * Description: The graph Pele's layered layout orders and positions: every edge cut into rank-to-rank segments.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 23/11/2026
  */
 
@@ -42,10 +42,10 @@ struct LayeredFlatGraph {
     var segmentCount: Int { segmentFrom.count }
 
     /// Each vertex's segments down (`successors`) and up, as runs of segment indices.
-    static func adjacency(vertexCount: Int, segmentFrom: [Int], segmentTo: [Int])
+    static func adjacency(vertexCount: Int, segmentFrom: [Int], segmentTo: [Int], workspace: LayeredFlatWorkspace)
         -> (successorStart: [Int], successorSegments: [Int], predecessorStart: [Int], predecessorSegments: [Int]) {
-        var successorStart = [Int](repeating: 0, count: vertexCount + 1)
-        var predecessorStart = [Int](repeating: 0, count: vertexCount + 1)
+        var successorStart = workspace.integers(count: vertexCount + 1, repeating: 0)
+        var predecessorStart = workspace.integers(count: vertexCount + 1, repeating: 0)
         for segment in segmentFrom.indices {
             successorStart[segmentFrom[segment] + 1] += 1
             predecessorStart[segmentTo[segment] + 1] += 1
@@ -54,25 +54,49 @@ struct LayeredFlatGraph {
             successorStart[vertex + 1] += successorStart[vertex]
             predecessorStart[vertex + 1] += predecessorStart[vertex]
         }
-        var successorSegments = [Int](repeating: 0, count: segmentFrom.count)
-        var predecessorSegments = [Int](repeating: 0, count: segmentFrom.count)
-        var successorFill = Array(successorStart[0..<vertexCount])
-        var predecessorFill = Array(predecessorStart[0..<vertexCount])
+        var successorSegments = workspace.integers(count: segmentFrom.count, repeating: 0)
+        var predecessorSegments = workspace.integers(count: segmentFrom.count, repeating: 0)
+        var successorFill = workspace.emptyIntegers(capacity: vertexCount)
+        successorFill.append(contentsOf: successorStart[0..<vertexCount])
+        var predecessorFill = workspace.emptyIntegers(capacity: vertexCount)
+        predecessorFill.append(contentsOf: predecessorStart[0..<vertexCount])
         for segment in segmentFrom.indices {
             successorSegments[successorFill[segmentFrom[segment]]] = segment
             successorFill[segmentFrom[segment]] += 1
             predecessorSegments[predecessorFill[segmentTo[segment]]] = segment
             predecessorFill[segmentTo[segment]] += 1
         }
+        workspace.recycle(consume successorFill)
+        workspace.recycle(consume predecessorFill)
         return (successorStart, successorSegments, predecessorStart, predecessorSegments)
     }
 
     /// Where each rank's vertices start in `order`, by rank, with the end of the last rank after it.
-    static func rankStarts(vertexRank: [Int], maximumRank: Int) -> [Int] {
-        var rankStart = [Int](repeating: 0, count: maximumRank + 2)
+    static func rankStarts(vertexRank: [Int], maximumRank: Int, workspace: LayeredFlatWorkspace) -> [Int] {
+        var rankStart = workspace.integers(count: maximumRank + 2, repeating: 0)
         for rank in vertexRank { rankStart[rank + 1] += 1 }
         for rank in 0...maximumRank { rankStart[rank + 1] += rankStart[rank] }
         return rankStart
+    }
+
+    /// Gives the graph's lists back to `workspace` once the layout is done with it.
+    consuming func recycle(into workspace: LayeredFlatWorkspace) {
+        workspace.recycle(vertexWidth)
+        workspace.recycle(vertexKind)
+        workspace.recycle(vertexRank)
+        workspace.recycle(segmentFrom)
+        workspace.recycle(segmentTo)
+        workspace.recycle(segmentFromOffset)
+        workspace.recycle(segmentToOffset)
+        workspace.recycle(successorStart)
+        workspace.recycle(successorSegments)
+        workspace.recycle(predecessorStart)
+        workspace.recycle(predecessorSegments)
+        workspace.recycle(rankStart)
+        workspace.recycle(order)
+        workspace.recycle(position)
+        workspace.recycle(isRankFixed)
+        if let vertexGroup { workspace.recycle(consume vertexGroup) }
     }
 
     /// Sets every vertex's position in its rank from `order`.
