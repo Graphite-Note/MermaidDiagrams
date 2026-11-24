@@ -7,22 +7,27 @@
  *              folded rows inside rails.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// The track, arrows, boxes and counts of one rule, placed part by part from its measured boxes.
+/// The track, arrows, boxes and counts of one rule, placed part by part from its measured boxes. What it keeps is
+/// moved by `displacement` as it is kept, every point exactly as moving the placed rule afterwards would move it: the
+/// placement itself works on the unmoved positions.
 struct RailroadTrackPlacement {
     let metrics: RailroadMetrics
-    private(set) var track = RailroadTrackDrawing()
+    let displacement: CGVector
+    private(set) var track: RailroadTrackDrawing
     private(set) var arrows: [RailroadLayoutArrow] = []
     private(set) var boxes: [RailroadLayoutBox] = []
     private(set) var counts: [DiagramTextBlock] = []
 
-    init(metrics: RailroadMetrics) {
+    init(metrics: RailroadMetrics, displacement: CGVector) {
         self.metrics = metrics
+        self.displacement = displacement
+        track = RailroadTrackDrawing(displacement: displacement)
     }
 
     /// A straight piece of track from `start` to `end` on `y`, when it has a length.
@@ -76,8 +81,9 @@ struct RailroadTrackPlacement {
     }
 
     private mutating func placeLeaf(_ box: RailroadTrackBox, left: CGFloat, baseline: CGFloat) {
-        let frame = CGRect(x: left, y: baseline - metrics.height / 2, width: box.width, height: metrics.height)
-        let center = CGPoint(x: frame.midX, y: baseline)
+        let unmoved = CGRect(x: left, y: baseline - metrics.height / 2, width: box.width, height: metrics.height)
+        let center = CGPoint(x: unmoved.midX, y: baseline)
+        let frame = unmoved.offsetBy(dx: displacement.dx, dy: displacement.dy)
         switch box.kind {
         case .terminal:
             boxes.append(RailroadLayoutBox(kind: .terminal, frame: frame, text: placed([box.text], metrics.terminalText, center: center), questionMarks: []))
@@ -118,7 +124,8 @@ struct RailroadTrackPlacement {
                 track.vertical(to: baseline + nextOffset)
                 track.horizontal(to: start)
                 let tip = CGPoint(x: start, y: baseline + nextOffset)
-                arrows.append(RailroadLayoutArrow(points: [CGPoint(x: tip.x - arrow, y: tip.y - arrow / 2), tip, CGPoint(x: tip.x - arrow, y: tip.y + arrow / 2)]))
+                arrows.append(RailroadLayoutArrow(points: [CGPoint(x: tip.x - arrow, y: tip.y - arrow / 2), tip, CGPoint(x: tip.x - arrow, y: tip.y + arrow / 2)]
+                    .map { point in point.translated(by: displacement) }))
                 offset = nextOffset
             } else {
                 track.move(to: CGPoint(x: start + row.width, y: rowBaseline))
@@ -188,7 +195,8 @@ struct RailroadTrackPlacement {
         track.vertical(to: baseline + arc)
         track.turn(.northToWest, radius: arc)
         let tip = CGPoint(x: middle - arrow / 2, y: loopY)
-        arrows.append(RailroadLayoutArrow(points: [tip, CGPoint(x: tip.x + arrow, y: loopY - arrow / 2), CGPoint(x: tip.x + arrow, y: loopY + arrow / 2)]))
+        arrows.append(RailroadLayoutArrow(points: [tip, CGPoint(x: tip.x + arrow, y: loopY - arrow / 2), CGPoint(x: tip.x + arrow, y: loopY + arrow / 2)]
+            .map { point in point.translated(by: displacement) }))
         if !box.text.isEmpty {
             let baselineOfCount = loopY + RailroadMetrics.countSize + 3
             counts.append(placed([box.text], metrics.countText,
@@ -197,8 +205,9 @@ struct RailroadTrackPlacement {
         place(child, left: childLeft, baseline: baseline)
     }
 
+    /// The lines as one block whose center, before the move, is `center`.
     private func placed(_ lines: [String], _ measurer: CoreTextDiagramTextMeasurer, center: CGPoint) -> DiagramTextBlock {
-        EventModelText.placed(EventModelText.block(lines, measurer: measurer), center: center)
+        EventModelText.placed(EventModelText.block(lines, measurer: measurer), center: center.translated(by: displacement))
     }
 }
 
@@ -215,26 +224,34 @@ struct RailroadTrackDrawing {
         case northToWest
     }
 
+    /// What every point kept is moved by; `current`, which the next pieces start from, is not moved.
+    let displacement: CGVector
     private(set) var paths: [DiagramPath] = []
     private var start = CGPoint.zero
     private var segments: [DiagramPathSegment] = []
     private var current = CGPoint.zero
+
+    init(displacement: CGVector) {
+        self.displacement = displacement
+    }
 
     /// How far along its tangents a cubic Bézier's handles reach to draw a quarter circle.
     private static let handle: CGFloat = 0.5522847498
 
     mutating func move(to point: CGPoint) {
         finish()
-        start = point
+        start = point.translated(by: displacement)
         current = point
     }
 
     mutating func horizontal(to x: CGFloat) {
-        add(.line(to: CGPoint(x: x, y: current.y)), ending: CGPoint(x: x, y: current.y))
+        let ending = CGPoint(x: x, y: current.y)
+        add(.line(to: ending.translated(by: displacement)), ending: ending)
     }
 
     mutating func vertical(to y: CGFloat) {
-        add(.line(to: CGPoint(x: current.x, y: y)), ending: CGPoint(x: current.x, y: y))
+        let ending = CGPoint(x: current.x, y: y)
+        add(.line(to: ending.translated(by: displacement)), ending: ending)
     }
 
     mutating func turn(_ turn: Turn, radius: CGFloat) {
@@ -250,7 +267,8 @@ struct RailroadTrackDrawing {
         case .northToWest: (end, first, second) = (CGVector(dx: -radius, dy: -radius), CGVector(dx: 0, dy: -handle), CGVector(dx: handle - radius, dy: -radius))
         }
         let ending = point.translated(by: end)
-        add(.curve(to: ending, control1: point.translated(by: first), control2: point.translated(by: second)), ending: ending)
+        add(.curve(to: ending.translated(by: displacement), control1: point.translated(by: first).translated(by: displacement),
+                   control2: point.translated(by: second).translated(by: displacement)), ending: ending)
     }
 
     /// The pieces, the last one finished.
