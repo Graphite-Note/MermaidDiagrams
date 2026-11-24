@@ -84,20 +84,25 @@ enum SequenceHighlightColorSyntax {
         min(1, max(0, value))
     }
 
-    /// Looks `name` up in `namedColors`, a name then its six hexadecimal digits, by spaces and line breaks.
+    /// Looks `name` up among CSS's color names.
     private static func namedColor(_ name: String) -> SequenceHighlightColor? {
+        guard let value = namedColorValues[name] else { return nil }
+        let maximumChannel: Double = 255
+        return SequenceHighlightColor(red: Double(value >> 16 & 0xFF) / maximumChannel, green: Double(value >> 8 & 0xFF) / maximumChannel,
+                                      blue: Double(value & 0xFF) / maximumChannel)
+    }
+
+    /// `namedColors` read once: each name's six hexadecimal digits, the first value a name is given winning.
+    private static let namedColorValues: [String: UInt32] = {
         let tokens = namedColors.split(whereSeparator: { character in character == " " || character == "\n" })
+        var values: [String: UInt32] = [:]
         var index = 0
         while index + 1 < tokens.count {
-            if tokens[index] == name, let value = UInt32(tokens[index + 1], radix: 16) {
-                let maximumChannel: Double = 255
-                return SequenceHighlightColor(red: Double(value >> 16 & 0xFF) / maximumChannel, green: Double(value >> 8 & 0xFF) / maximumChannel,
-                                              blue: Double(value & 0xFF) / maximumChannel)
-            }
+            if values[String(tokens[index])] == nil, let value = UInt32(tokens[index + 1], radix: 16) { values[String(tokens[index])] = value }
             index += 2
         }
-        return nil
-    }
+        return values
+    }()
 
     /// CSS's color names (CSS Color Module Level 4) and their sRGB values.
     private static let namedColors = """
