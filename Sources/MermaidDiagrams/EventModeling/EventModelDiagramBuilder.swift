@@ -6,8 +6,8 @@
  *              namespace, each frame's data, and the relations its sources name or the frame before it implies.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Builds an `EventModelDiagram` from what `EventModelParser` read, as Pele's `buildEventModel` does after Mermaid's
@@ -76,6 +76,41 @@ enum EventModelDiagramBuilder {
     /// The text between the outer braces (or, without a brace, inside the quotation marks), without carriage returns,
     /// the blank lines at either end and the indentation its lines share, each line without its trailing whitespace.
     static func blockText(_ raw: String) -> String {
+        if let ascii = raw.utf8.withContiguousStorageIfAvailable(asciiBlockText), let text = ascii { return text }
+        return blockTextOfScalars(raw)
+    }
+
+    /// `blockText` of a text of ASCII alone, read on its bytes; nil for a text with a byte beyond ASCII. JavaScript's
+    /// whitespace within ASCII is the tab to the carriage return and the space.
+    private static func asciiBlockText(_ bytes: UnsafeBufferPointer<UInt8>) -> String? {
+        guard bytes.allSatisfy({ byte in byte < 0x80 }) else { return nil }
+        func isBlank(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
+        let opening = bytes.firstIndex(of: UInt8(ascii: "{"))
+        let closing = bytes.lastIndex(of: UInt8(ascii: "}"))
+        var inner = 0..<0
+        if let opening, let closing, closing > opening {
+            inner = (opening + 1)..<closing
+        } else if opening == nil, bytes.count >= 2 {
+            inner = 1..<(bytes.count - 1)
+        }
+        let kept = bytes[inner].filter { byte in byte != MermaidByte.carriageReturn }
+        var lines = kept.split(separator: MermaidByte.newline, omittingEmptySubsequences: false)
+        while let first = lines.first, first.allSatisfy(isBlank) { lines.removeFirst() }
+        while let last = lines.last, last.allSatisfy(isBlank) { lines.removeLast() }
+        let indent = lines.filter { line in !line.allSatisfy(isBlank) }.map { line in line.prefix(while: isBlank).count }.min() ?? 0
+        var text: [UInt8] = []
+        text.reserveCapacity(kept.count)
+        for (index, line) in lines.enumerated() {
+            if index > 0 { text.append(MermaidByte.newline) }
+            var kept = line.dropFirst(min(indent, line.count))
+            while let last = kept.last, isBlank(last) { kept = kept.dropLast() }
+            text += kept
+        }
+        return String(decoding: text, as: UTF8.self)
+    }
+
+    /// `blockText` read scalar by scalar, for any text.
+    static func blockTextOfScalars(_ raw: String) -> String {
         let scalars = Array(raw.unicodeScalars)
         let opening = scalars.firstIndex(of: "{")
         let closing = scalars.lastIndex(of: "}")
