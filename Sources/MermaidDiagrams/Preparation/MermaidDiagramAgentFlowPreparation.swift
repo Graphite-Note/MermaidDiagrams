@@ -6,8 +6,8 @@
  *              column when it runs across, and what a screen reader says of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -34,11 +34,12 @@ extension MermaidDiagramAccessibility {
     /// Each node drawn by its text, in the graph's order (flows first, by their titles), each flow without a title
     /// left out.
     init(agentFlow diagram: AgentFlowDiagram) {
-        let texts = diagram.graph.nodes.compactMap { node -> String? in
-            let spoken = AgentFlowMeasurement.label(node.label, type: node.labelType).spokenText
-            return spoken.isEmpty ? nil : spoken
+        self.init(kind: .agentFlow, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
+            let texts = diagram.graph.nodes.compactMap { node -> String? in
+                let spoken = AgentFlowMeasurement.label(node.label, type: node.labelType).spokenText
+                return spoken.isEmpty ? nil : spoken
+            }
+            return texts
         }
-        self.init(kind: .agentFlow, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: texts)
     }
 }

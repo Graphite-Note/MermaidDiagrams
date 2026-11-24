@@ -6,8 +6,8 @@
  *              hears of them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -52,44 +52,51 @@ extension MermaidDiagramPreparationContext {
 extension MermaidDiagramAccessibility {
     /// The package's name and version, which is all an info diagram shows besides its title.
     init(info diagram: InfoDiagram) {
-        self.init(kind: .info, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription,
-                  summary: [MermaidDiagramsVersion.text])
+        self.init(kind: .info, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription) {
+            [MermaidDiagramsVersion.text]
+        }
     }
 
     /// Each field with its bits, in the order the fields are written: “Source Port: bits 0 to 15”, “URG: bit 106”.
     init(packet diagram: PacketDiagram) {
-        let fields = diagram.fields.map { field in
-            let label = DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines)
-            let bits = field.firstBit == field.lastBit ? "bit \(field.firstBit)" : "bits \(field.firstBit) to \(field.lastBit)"
-            return label.isEmpty ? bits : "\(label): \(bits)"
+        self.init(kind: .packet, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription, summarySeparator: "; ") {
+            let fields = diagram.fields.map { field in
+                let label = DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines)
+                let bits = field.firstBit == field.lastBit ? "bit \(field.firstBit)" : "bits \(field.firstBit) to \(field.lastBit)"
+                return label.isEmpty ? bits : "\(label): \(bits)"
+            }
+            return fields
         }
-        self.init(kind: .packet, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription, summary: fields,
-                  summarySeparator: "; ")
     }
 
     /// Each curve with its value on each axis, when it is drawn: “Alice: Math 85, Science 90”; a curve that is not drawn is
     /// named alone.
     init(radar chart: RadarChart) {
-        let curves = chart.curves.map { curve in
-            let name = curve.label.spokenText
-            guard curve.values.count == chart.axes.count, !chart.axes.isEmpty else { return name }
-            let values = zip(chart.axes, curve.values).map { axis, value in "\(axis.label.spokenText) \(Self.written(value))" }
-            return name + ": " + values.joined(separator: ", ")
+        self.init(kind: .radar, title: chart.accessibilityTitle ?? chart.title, description: chart.accessibilityDescription, summarySeparator: "; ") {
+            let curves = chart.curves.map { curve in
+                let name = curve.label.spokenText
+                guard curve.values.count == chart.axes.count, !chart.axes.isEmpty else { return name }
+                let values = zip(chart.axes, curve.values).map { axis, value in "\(axis.label.spokenText) \(Self.written(value))" }
+                return name + ": " + values.joined(separator: ", ")
+            }
+            return curves
         }
-        self.init(kind: .radar, title: chart.accessibilityTitle ?? chart.title, description: chart.accessibilityDescription, summary: curves,
-                  summarySeparator: "; ")
     }
 
     /// Each node in the order it is written: a section by its name, a leaf with its value as the treemap writes it
     /// (“Item A1: 10”).
     init(treemap diagram: TreemapDiagram) {
-        let format = TreemapValueFormat(specifier: diagram.options.valueFormat)
-        let nodes = diagram.nodes.map { node in
-            let name = DiagramLabelDecoder.decodingEntities(node.name).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !node.isSection, node.size > 0, diagram.options.showsValues else { return name }
-            return "\(name): \(format.text(node.size))"
+        self.init(kind: .treemap, title: diagram.accessibilityTitle ?? diagram.title,
+                  description: diagram.accessibilityDescription, summarySeparator: "; ") {
+            let format = TreemapValueFormat(specifier: diagram.options.valueFormat)
+            let nodes = diagram.nodes.map { node in
+                let name = DiagramLabelDecoder.decodingEntities(node.name).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !node.isSection, node.size > 0, diagram.options.showsValues else { return name }
+                return "\(name): \(format.text(node.size))"
+            }
+            return nodes
         }
-        self.init(kind: .treemap, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription, summary: nodes,
-                  summarySeparator: "; ")
     }
 }
