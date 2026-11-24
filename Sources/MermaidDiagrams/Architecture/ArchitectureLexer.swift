@@ -7,8 +7,8 @@
  *              matches more, white space, front matter, directives and comments hidden.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// A token of an architecture diagram, Pele's `T`.
@@ -47,6 +47,8 @@ enum ArchitectureLexer {
         var terminals = PlaneMapTerminals(bytes: cursor.bytes)
         var position = cursor.position
         var tokens: [(token: ArchitectureToken, start: Int, end: Int)] = []
+        // About one token in four bytes in the documentation's examples.
+        tokens.reserveCapacity((cursor.bytes.count - position) / 4 + 1)
         while position < cursor.bytes.count {
             let start = position
             guard let (token, end) = match(at: start, terminals: &terminals) else {
@@ -91,28 +93,44 @@ enum ArchitectureLexer {
         }
     }
 
-    /// A keyword, an accessibility statement, a title or an identifier.
+    /// A keyword, an accessibility statement, a title or an identifier. Each keyword starts with a letter of its own,
+    /// so the one the first byte names is the only one tried; `accDescr` and `accTitle` start with `a`, `title` with `t`.
     private static func word(at start: Int, terminals: inout PlaneMapTerminals) -> (ArchitectureToken?, Int)? {
         let identifierEnd = endOfIdentifier(at: start, terminals: terminals)
-        for (keyword, token) in keywords where terminals.hasPrefix(keyword, at: start) {
+        let first = terminals.bytes[start]
+        if let (keyword, token) = keyword(startingWith: first), terminals.hasPrefix(keyword, at: start) {
             let end = start + keyword.utf8.count
             if let identifierEnd, identifierEnd > end { return (.identifier(terminals.text(from: start, to: identifierEnd)), identifierEnd) }
             return (token, end)
         }
-        if let end = terminals.endOfAccessibilityDescription(at: start) {
-            return (.accessibilityDescription(PlaneMapTerminalValues.accessibilityDescription(terminals.text(from: start, to: end))), end)
+        if first == UInt8(ascii: "a") {
+            if let end = terminals.endOfAccessibilityDescription(at: start) {
+                return (.accessibilityDescription(PlaneMapTerminalValues.accessibilityDescription(terminals.text(from: start, to: end))), end)
+            }
+            if let end = terminals.endOfAccessibilityTitle(at: start) {
+                return (.accessibilityTitle(PlaneMapTerminalValues.accessibilityTitle(terminals.text(from: start, to: end))), end)
+            }
         }
-        if let end = terminals.endOfAccessibilityTitle(at: start) {
-            return (.accessibilityTitle(PlaneMapTerminalValues.accessibilityTitle(terminals.text(from: start, to: end))), end)
+        if first == UInt8(ascii: "t"), let end = endOfTitle(at: start, terminals: terminals) {
+            return (.title(PlaneMapTerminalValues.title(terminals.text(from: start, to: end))), end)
         }
-        if let end = endOfTitle(at: start, terminals: terminals) { return (.title(PlaneMapTerminalValues.title(terminals.text(from: start, to: end))), end) }
         return identifierEnd.map { end in (.identifier(terminals.text(from: start, to: end)), end) }
     }
 
-    /// The words of Pele's table, in its order (`architecture-beta` is read as the diagram's keyword).
-    private static let keywords: [(String, ArchitectureToken)] = [
-        ("junction", .junction), ("service", .service), ("column", .column), ("group", .group), ("align", .align), ("row", .row), ("in", .inGroup),
-    ]
+    /// The word of Pele's table (`architecture-beta` is read as the diagram's keyword) that starts with `first`: no two
+    /// start with the same letter, so Pele's order of trying them does not matter.
+    private static func keyword(startingWith first: UInt8) -> (String, ArchitectureToken)? {
+        switch first {
+        case UInt8(ascii: "j"): ("junction", .junction)
+        case UInt8(ascii: "s"): ("service", .service)
+        case UInt8(ascii: "c"): ("column", .column)
+        case UInt8(ascii: "g"): ("group", .group)
+        case UInt8(ascii: "a"): ("align", .align)
+        case UInt8(ascii: "r"): ("row", .row)
+        case UInt8(ascii: "i"): ("in", .inGroup)
+        default: nil
+        }
+    }
 
     /// `[\w]([-\w]*\w)?`: a word character, then word characters and hyphens ending on a word character.
     static func endOfIdentifier(at start: Int, terminals: PlaneMapTerminals) -> Int? {

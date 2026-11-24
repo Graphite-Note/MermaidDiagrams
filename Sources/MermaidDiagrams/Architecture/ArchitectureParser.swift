@@ -7,7 +7,7 @@
  *              accessibility statements, each error with its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -202,11 +202,49 @@ struct ArchitectureParser {
     /// Mermaid's `ArchitectureValueConverter` for a bracketed title: inside the brackets, trimmed, and without its
     /// quotation marks (`\"` and `\'` unescaped) when it is quoted.
     static func labelValue(_ written: String) -> String {
+        if let value = asciiLabelValue(written) { return value }
         var value = String(written.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         let isQuoted = ((value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")))
         if isQuoted {
             value = String(value.dropFirst().dropLast()).replacingOccurrences(of: "\\\"", with: "\"").replacingOccurrences(of: "\\'", with: "'")
         }
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `labelValue` on the bytes of a title all in ASCII, where each byte is a character; nil for other text.
+    private static func asciiLabelValue(_ written: String) -> String? {
+        let bytes = written.utf8
+        guard bytes.count >= 2, bytes.allSatisfy({ byte in byte < 0x80 }) else { return nil }
+        var start = bytes.index(after: bytes.startIndex)
+        var end = bytes.index(before: bytes.endIndex)
+        func isTrimmed(_ byte: UInt8) -> Bool { byte == PlaneMapByte.space || (byte >= PlaneMapByte.tab && byte <= PlaneMapByte.carriageReturn) }
+        while start < end, isTrimmed(bytes[start]) { start = bytes.index(after: start) }
+        while start < end, isTrimmed(bytes[bytes.index(before: end)]) { end = bytes.index(before: end) }
+        // A lone quotation mark is quoted too, as `hasPrefix` and `hasSuffix` both find it: its inside is empty.
+        guard start < end, bytes[start] == PlaneMapByte.quotationMark || bytes[start] == PlaneMapByte.apostrophe,
+              bytes[bytes.index(before: end)] == bytes[start] else {
+            return String(Substring(bytes[start..<end]))
+        }
+        // Quoted: inside the quotation marks, `\"` and `\'` unescaped, trimmed again.
+        var unescaped: [UInt8] = []
+        unescaped.reserveCapacity(bytes.distance(from: start, to: end))
+        var index = bytes.index(after: start)
+        let inner = bytes.index(before: end)
+        while index < inner {
+            let byte = bytes[index]
+            let next = bytes.index(after: index)
+            if byte == PlaneMapByte.backslash, next < inner, bytes[next] == PlaneMapByte.quotationMark || bytes[next] == PlaneMapByte.apostrophe {
+                unescaped.append(bytes[next])
+                index = bytes.index(after: next)
+                continue
+            }
+            unescaped.append(byte)
+            index = next
+        }
+        var first = 0
+        var last = unescaped.count
+        while first < last, isTrimmed(unescaped[first]) { first += 1 }
+        while first < last, isTrimmed(unescaped[last - 1]) { last -= 1 }
+        return String(decoding: unescaped[first..<last], as: UTF8.self)
     }
 }

@@ -5,7 +5,7 @@
  * Description: Reads a Git graph's statements as Mermaid's grammar does and plays them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -16,7 +16,7 @@
 /// history cannot take, as in Mermaid.
 struct GitGraphParser {
     private var lexer: GitGraphLexer
-    private var current: (token: GitGraphToken, start: MermaidTextCursor)
+    private var current: (token: GitGraphToken, start: Int, line: Int)
     private var statements: [(statement: GitGraphStatement, line: Int)] = []
     private var diagram = GitGraphDiagram()
 
@@ -70,7 +70,7 @@ struct GitGraphParser {
                 try advance()
                 try endStatement()
             case .statement(let keyword):
-                let line = current.start.line
+                let line = current.line
                 try advance()
                 statements.append((try readStatement(keyword), line))
                 try endStatement()
@@ -154,6 +154,7 @@ struct GitGraphParser {
     /// Plays the statements read.
     private mutating func play(limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) {
         var builder = try GitGraphDiagramBuilder(limits: limits, options: diagram.options)
+        builder.reserveRoom(forStatementCount: statements.count)
         defer { (diagram.commits, diagram.branches) = builder.played() }
         for (statement, line) in statements { try builder.play(statement, line: line) }
     }
@@ -163,12 +164,12 @@ struct GitGraphParser {
     }
 
     private func problem(_ problem: MermaidSyntaxProblem) -> MermaidDiagramReadError {
-        .invalidSyntax(line: current.start.line, problem: problem)
+        .invalidSyntax(line: current.line, problem: problem)
     }
 
     /// The text at the current token, which the statement does not take.
     private func unexpected() -> MermaidDiagramReadError {
-        problem(.unexpectedText(current.start.excerpt()))
+        problem(.unexpectedText(lexer.excerpt(at: current.start)))
     }
 
     /// The values a statement writes after its keyword: later ones replace earlier ones, and tags add up.

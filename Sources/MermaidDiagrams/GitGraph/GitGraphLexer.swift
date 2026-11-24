@@ -1,3 +1,15 @@
+/**
+ * File: GitGraphLexer.swift
+ * -------------------------
+ * Layer: Core
+ * Description: Reads the tokens of a Git graph's statements from its UTF-8 bytes as Mermaid's Git graph lexer does,
+ *              trying at each token only the keywords and attributes its first byte can start.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 23/11/2026
+ */
+
 /// Reads the tokens of a Git graph's statements from its UTF-8 bytes as the lexer of Mermaid's Git graph grammar does
 /// (Pele's port of it): of the token types that match where a token starts, the first in Mermaid's order wins, and a
 /// keyword followed by more of a name (`commits`, `TBD`) is that name. Keywords are compared exactly, case included.
@@ -11,13 +23,21 @@ struct GitGraphLexer {
         self.cursor = cursor
     }
 
-    /// Skips what separates tokens and reads the token there. `start` is a copy of the cursor at its first byte, for
-    /// the line and the text an error reports.
-    mutating func readToken() throws(MermaidDiagramReadError) -> (token: GitGraphToken, start: MermaidTextCursor) {
+    /// Skips what separates tokens and reads the token there, with the position and line of its first byte, for the
+    /// line and the text an error reports: numbers, so that no copy of the cursor is kept for each token.
+    mutating func readToken() throws(MermaidDiagramReadError) -> (token: GitGraphToken, start: Int, line: Int) {
         skipSeparators()
-        let start = cursor
-        guard let byte = cursor.peek() else { return (.endOfText, start) }
-        return (try token(startingWith: byte), start)
+        let start = cursor.position
+        let line = cursor.line
+        guard let byte = cursor.peek() else { return (.endOfText, start, line) }
+        return (try token(startingWith: byte), start, line)
+    }
+
+    /// The text an error reports at `position`, a token's start.
+    func excerpt(at position: Int) -> String {
+        var start = MermaidTextCursor(bytes: cursor.bytes)
+        start.advance(by: position)
+        return start.excerpt()
     }
 
     /// Whether the cursor is where the `gitGraph` keyword may end: at a space, a line break, a comment or the end.
@@ -68,16 +88,23 @@ struct GitGraphLexer {
         case MermaidByte.quotationMark, Self.apostrophe: return try readQuotedText(closedBy: byte)
         default: break
         }
-        if cursor.hasPrefix(Self.diagramKeywordWithColon) {
+        // Each of the words below is tried only at the byte it starts with: `gitGraph:` at `g`, the attributes at theirs,
+        // the accessibility statements (in any case) at `a` or `A`, and `title` at `t`.
+        if byte == UInt8(ascii: "g"), cursor.hasPrefix(Self.diagramKeywordWithColon) {
             cursor.advance(by: Self.diagramKeywordWithColon.count)
             return .diagramKeywordWithColon
         }
-        if let attribute = readAttribute() { return .attribute(attribute) }
-        if let accessibility = try MermaidAccessibilityStatement.read(&cursor) { return .accessibility(accessibility) }
-        if let title = readTitle() { return .title(title) }
+        if let attribute = readAttribute(startingWith: byte) { return .attribute(attribute) }
+        if MermaidByte.lowercased(byte) == UInt8(ascii: "a"), let accessibility = try MermaidAccessibilityStatement.read(&cursor) {
+            return .accessibility(accessibility)
+        }
+        if byte == UInt8(ascii: "t"), let title = readTitle() { return .title(title) }
         if MermaidByte.isDigit(byte), let integer = readInteger(startingWith: byte) { return .integer(integer) }
-        guard let name = readName() else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
-        return keywordToken(for: name) ?? .name(name)
+        guard let length = nameLength() else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
+        let start = cursor.position
+        cursor.advance(by: length)
+        if let keyword = keywordToken(from: start, length: length) { return keyword }
+        return .name(cursor.text(from: start, to: cursor.position))
     }
 
     /// `\n`, `\r\n` or `\r`, as Mermaid reads a text whose line breaks it first makes `\n`.
@@ -109,9 +136,24 @@ struct GitGraphLexer {
         return .quotedText(String(decoding: bytes, as: UTF8.self))
     }
 
-    /// `id:`, `msg:`, `tag:`, `type:`, `parent:` or `order:`, the colon written right after the word.
-    private mutating func readAttribute() -> GitGraphAttribute? {
-        guard let match = Self.attributesByWriting.first(where: { written, _ in cursor.hasPrefix(written) }) else { return nil }
+    /// `id:`, `msg:`, `tag:`, `type:`, `parent:` or `order:`, the colon written right after the word. No two start with
+    /// the same byte, so the one `first` starts is the only one tried.
+    private mutating func readAttribute(startingWith first: UInt8) -> GitGraphAttribute? {
+        let match: (written: [UInt8], attribute: GitGraphAttribute)
+        switch first {
+        case UInt8(ascii: "p"): match = Self.attributesByWriting[0]
+        case UInt8(ascii: "o"): match = Self.attributesByWriting[1]
+        case UInt8(ascii: "t"): match = Self.attributesByWriting[2]
+        case UInt8(ascii: "m"): match = Self.attributesByWriting[3]
+        case UInt8(ascii: "i"): match = Self.attributesByWriting[5]
+        default: return nil
+        }
+        guard cursor.hasPrefix(match.written) else {
+            // `tag:` starts with `t` too, as `type:` does.
+            guard first == UInt8(ascii: "t"), cursor.hasPrefix(Self.attributesByWriting[4].written) else { return nil }
+            cursor.advance(by: Self.attributesByWriting[4].written.count)
+            return Self.attributesByWriting[4].attribute
+        }
         cursor.advance(by: match.written.count)
         return match.attribute
     }
@@ -149,9 +191,9 @@ struct GitGraphLexer {
         return Int(cursor.text(from: start, to: cursor.position)) ?? Int.max
     }
 
-    /// A name: a letter, a digit or `_`, then letters, digits, `_`, `-`, `.` and `/`, up to the last that is no `.` or
-    /// `/`. Nil when the byte at the cursor starts none.
-    private mutating func readName() -> String? {
+    /// The length of the name at the cursor: a letter, a digit or `_`, then letters, digits, `_`, `-`, `.` and `/`, up
+    /// to the last that is no `.` or `/`. Nil when the byte at the cursor starts none.
+    private func nameLength() -> Int? {
         guard let first = cursor.peek(), Self.isWordByte(first) else { return nil }
         var length = 1
         var offset = 1
@@ -159,29 +201,51 @@ struct GitGraphLexer {
             offset += 1
             if byte != MermaidByte.period, byte != Self.slash { length = offset }
         }
-        let start = cursor.position
-        cursor.advance(by: length)
-        return cursor.text(from: start, to: cursor.position)
+        return length
     }
 
-    /// The keyword a whole name is, or nil for a name.
-    private func keywordToken(for name: String) -> GitGraphToken? {
-        switch name {
-        case "commit": .statement(.commit)
-        case "branch": .statement(.branch)
-        case "merge": .statement(.merge)
-        case "checkout", "switch": .statement(.checkout)
-        case "cherry-pick": .statement(.cherryPick)
-        case "NORMAL": .commitType(.normal)
-        case "REVERSE": .commitType(.reverse)
-        case "HIGHLIGHT": .commitType(.highlight)
-        case "LR": .direction(.leftToRight)
-        case "TB": .direction(.topToBottom)
-        case "BT": .direction(.bottomToTop)
-        case "gitGraph" where isAtKeywordEnd: .diagramKeyword
-        default: nil
+    /// The keyword the whole name of `length` bytes at `start` is, or nil for a name; the cursor is past the name. The
+    /// name's bytes are compared with the keywords its first byte can start.
+    private func keywordToken(from start: Int, length: Int) -> GitGraphToken? {
+        let bytes = cursor.bytes
+        func isWord(_ keyword: [UInt8]) -> Bool {
+            guard keyword.count == length else { return false }
+            for offset in 0..<length where bytes[start + offset] != keyword[offset] { return false }
+            return true
         }
+        switch bytes[start] {
+        case UInt8(ascii: "c"):
+            if isWord(Self.commitKeyword) { return .statement(.commit) }
+            if isWord(Self.checkoutKeyword) { return .statement(.checkout) }
+            if isWord(Self.cherryPickKeyword) { return .statement(.cherryPick) }
+        case UInt8(ascii: "b"): if isWord(Self.branchKeyword) { return .statement(.branch) }
+        case UInt8(ascii: "m"): if isWord(Self.mergeKeyword) { return .statement(.merge) }
+        case UInt8(ascii: "s"): if isWord(Self.switchKeyword) { return .statement(.checkout) }
+        case UInt8(ascii: "N"): if isWord(Self.normalKeyword) { return .commitType(.normal) }
+        case UInt8(ascii: "R"): if isWord(Self.reverseKeyword) { return .commitType(.reverse) }
+        case UInt8(ascii: "H"): if isWord(Self.highlightKeyword) { return .commitType(.highlight) }
+        case UInt8(ascii: "L"): if isWord(Self.leftToRightKeyword) { return .direction(.leftToRight) }
+        case UInt8(ascii: "T"): if isWord(Self.topToBottomKeyword) { return .direction(.topToBottom) }
+        case UInt8(ascii: "B"): if isWord(Self.bottomToTopKeyword) { return .direction(.bottomToTop) }
+        case UInt8(ascii: "g"): if isWord(Self.diagramKeyword), isAtKeywordEnd { return .diagramKeyword }
+        default: break
+        }
+        return nil
     }
+
+    private static let commitKeyword = Array("commit".utf8)
+    private static let checkoutKeyword = Array("checkout".utf8)
+    private static let cherryPickKeyword = Array("cherry-pick".utf8)
+    private static let branchKeyword = Array("branch".utf8)
+    private static let mergeKeyword = Array("merge".utf8)
+    private static let switchKeyword = Array("switch".utf8)
+    private static let normalKeyword = Array("NORMAL".utf8)
+    private static let reverseKeyword = Array("REVERSE".utf8)
+    private static let highlightKeyword = Array("HIGHLIGHT".utf8)
+    private static let leftToRightKeyword = Array("LR".utf8)
+    private static let topToBottomKeyword = Array("TB".utf8)
+    private static let bottomToTopKeyword = Array("BT".utf8)
+    private static let diagramKeyword = Array("gitGraph".utf8)
 
     /// An ASCII letter, digit or `_`: what JavaScript's `\w` matches.
     private static func isWordByte(_ byte: UInt8) -> Bool {

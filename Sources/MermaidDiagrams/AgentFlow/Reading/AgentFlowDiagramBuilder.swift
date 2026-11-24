@@ -6,7 +6,7 @@
  *              what metadata on a flow, a connector or an edge means, each count checked before anything is made.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -33,8 +33,8 @@ struct AgentFlowDiagramBuilder {
     var pairCounts: [String: Int] = [:]
     var flowCount = 0
     var tooltips: [String: String] = [:]
-    /// Mappings of bare references, which become attachments when metadata follows them.
-    var bareMappings: Set<Int> = []
+    /// Whether each mapping, by its place, is of a bare reference, which becomes an attachment when metadata follows it.
+    var isBareMapping: [Bool] = []
     var firstMappings: [String: Int] = [:]
     /// The diagnostics recorded, by the identifier they are about, so that each finding is recorded once.
     var reportedDiagnostics: [String: [AgentFlowDiagnostic]] = [:]
@@ -42,6 +42,21 @@ struct AgentFlowDiagramBuilder {
     init(limits: MermaidDiagramLimits, lineOffset: Int) {
         self.limits = limits
         self.lineOffset = lineOffset
+    }
+
+    /// Room for the nodes, edges and mappings a text of `tokenCount` tokens names, made once: the documentation's
+    /// examples name a node for about every sixteen tokens and an edge for about every twenty-four.
+    mutating func reserveRoom(forTokenCount tokenCount: Int) {
+        let nodeCount = min(tokenCount / 16, limits.maximumNodeCount)
+        let edgeCount = min(tokenCount / 24, limits.maximumEdgeCount)
+        vertexIndices.reserveCapacity(nodeCount)
+        firstMappings.reserveCapacity(nodeCount + edgeCount)
+        diagram.vertices.reserveCapacity(nodeCount)
+        diagram.mappings.reserveCapacity(nodeCount + edgeCount)
+        isBareMapping.reserveCapacity(nodeCount + edgeCount)
+        edgeIndices.reserveCapacity(edgeCount)
+        pairCounts.reserveCapacity(edgeCount)
+        diagram.edges.reserveCapacity(edgeCount)
     }
 
     /// Nodes, flows and connectors made so far.
@@ -72,7 +87,16 @@ struct AgentFlowDiagramBuilder {
         }
         if try applyToOtherElement(identifier, document: document) { return }
         let index = try vertexIndex(of: identifier)
-        var vertex = diagram.vertices[index]
+        let lineOffset = lineOffset
+        // Changed where it is in the list, not copied out and back: a statement that fails ends the whole reading.
+        try Self.update(&diagram.vertices[index], named: identifier, text: text, type: type, styles: styles, properties: properties,
+                        document: document, authoredShape: authoredShape, span: metadataSpan, lineOffset: lineOffset)
+    }
+
+    /// What one statement says of a node: its text, shape, styles, properties and metadata.
+    private static func update(_ vertex: inout AgentFlowVertex, named identifier: String, text: AgentFlowText?, type: String?, styles: [String]?,
+                               properties: [String: String], document: SequenceAttributeValue?, authoredShape: SequenceAttributeValue?,
+                               span: AgentFlowSourceSpan?, lineOffset: Int) throws(MermaidDiagramReadError) {
         if let text {
             vertex.labelType = text.type
             vertex.text = Self.unquoted(C4Characters.trimmed(text.text))
@@ -81,14 +105,14 @@ struct AgentFlowDiagramBuilder {
         }
         if let type { vertex.type = type }
         vertex.styles += styles ?? []
-        vertex.properties = (vertex.properties ?? [:]).merging(properties) { _, new in new }
+        // A node always has properties once named, empty when none were written.
+        vertex.properties = properties.isEmpty ? vertex.properties ?? [:] : (vertex.properties ?? [:]).merging(properties) { _, new in new }
         if let document {
             vertex.metadata = AgentFlowMetadataReading.merged(vertex.metadata, with: document)
             if case .mapping(let fields) = document {
-                try apply(fields, authoredShape: authoredShape, to: &vertex, span: metadataSpan)
+                try apply(fields, authoredShape: authoredShape, to: &vertex, line: (span?.firstLine ?? 1) + lineOffset)
             }
         }
-        diagram.vertices[index] = vertex
     }
 
     /// Metadata for a flow or a connector, or anything for an edge, goes to it: true when it did.
@@ -124,10 +148,9 @@ struct AgentFlowDiagramBuilder {
 
     /// A metadata mapping's `shape` and `label`, as Mermaid applies them: a shape must be text, in lowercase without an
     /// underscore as written, and one Mermaid knows once its alias is resolved.
-    private func apply(_ fields: [String: SequenceAttributeValue], authoredShape: SequenceAttributeValue?, to vertex: inout AgentFlowVertex,
-                       span: AgentFlowSourceSpan?) throws(MermaidDiagramReadError) {
+    private static func apply(_ fields: [String: SequenceAttributeValue], authoredShape: SequenceAttributeValue?, to vertex: inout AgentFlowVertex,
+                              line: Int) throws(MermaidDiagramReadError) {
         if let shape = fields["shape"], shape.isTruthy {
-            let line = line(of: span)
             guard case .text(let authored) = authoredShape ?? shape, case .text(let resolved) = shape else {
                 throw .invalidSyntax(line: line, problem: .agentFlow(.unknownShape((authoredShape ?? shape).javaScriptText)))
             }

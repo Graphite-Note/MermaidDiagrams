@@ -7,8 +7,8 @@
  *              tables or relationships, the order they appear in, and whether the statements about them agree.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 23/11/2026
  */
 
 /// Why the drafts were not resolved: statements that contradict each other, at the offset of the one that does, or
@@ -105,11 +105,12 @@ struct UseCaseDiagramBuilder {
 
     /// `identifiers` in the order they are first mentioned, those mentioned at one offset in their own order.
     func inMentionOrder(_ identifiers: [String]) -> [String] {
-        identifiers.enumerated().sorted { first, second in
-            let firstOffset = firstMention[first.element] ?? 0
-            let secondOffset = firstMention[second.element] ?? 0
-            return firstOffset != secondOffset ? firstOffset < secondOffset : first.offset < second.offset
-        }.map(\.element)
+        guard identifiers.count > 1 else { return identifiers }
+        // Each id's offset looked up once, not at every comparison of the sort.
+        let offsets = identifiers.map { identifier in firstMention[identifier] ?? 0 }
+        return identifiers.indices.sorted { first, second in
+            offsets[first] != offsets[second] ? offsets[first] < offsets[second] : first < second
+        }.map { place in identifiers[place] }
     }
 
     mutating func register(_ name: UseCaseDraftName, as kind: UseCaseSymbolKind) {
@@ -135,7 +136,9 @@ struct UseCaseDiagramBuilder {
         enum Declaration {
             case element(Int), boundary(Int), json(Int), relationship(Int)
         }
+        reserveRoom()
         var declarations: [(offset: Int, declaration: Declaration)] = []
+        declarations.reserveCapacity(drafts.elements.count + drafts.boundaries.count + drafts.jsons.count + drafts.relationships.count)
         for relationship in drafts.relationships {
             mention(relationship.source.name.identifier, at: relationship.source.name.start)
             mention(relationship.target.name.identifier, at: relationship.target.name.start)
@@ -168,6 +171,16 @@ struct UseCaseDiagramBuilder {
                 try unique(relationship.identifier ?? "", as: .edge, at: relationship.identifierStart ?? 0)
             }
         }
+    }
+
+    /// Room for every id the drafts can declare or mention, made once: each declaration, and both ends of each relationship.
+    private mutating func reserveRoom() {
+        let declarationCount = drafts.elements.count + drafts.boundaries.count + drafts.jsons.count + drafts.relationships.count
+        firstMention.reserveCapacity(declarationCount + drafts.relationships.count)
+        symbols.reserveCapacity(declarationCount + drafts.relationships.count)
+        elements.reserveCapacity(drafts.elements.count + 2 * drafts.relationships.count)
+        elementOrder.reserveCapacity(drafts.elements.count + 2 * drafts.relationships.count)
+        boundaryOrder.reserveCapacity(drafts.boundaries.count)
     }
 
     /// The boundary a draft is declared in, when its title makes an id: one whose title makes none is no parent.

@@ -5,7 +5,7 @@
  * Description: Gantt statements read as Mermaid's grammar reads them.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -231,6 +231,17 @@ final class GanttChartParserTests: XCTestCase {
         XCTAssertEqual(readError("gantt\ngantt"), .invalidSyntax(line: 2, problem: .unexpectedText("gantt")))
         XCTAssertEqual(readError("gantt\naccDescription old style"), .invalidSyntax(line: 2, problem: .unexpectedText("accDescription old style")))
         XCTAssertEqual(readError("gantt\naccDescr {\nnever closed"), .invalidSyntax(line: 2, problem: .unclosedAccessibilityDescription))
+    }
+
+    /// Mermaid's lexer takes `href` and `call` before white space as the words of a click, in any case, so a line that
+    /// starts with them is no task; the keyword statements are tried only at the letters that start one, `h` and `c`
+    /// among them.
+    func testHrefAndCallBeforeWhiteSpaceStartNoTask() {
+        XCTAssertEqual(readError("gantt\nhref docs : 1d"), .invalidSyntax(line: 2, problem: .unexpectedText("href docs : 1d")))
+        XCTAssertEqual(readError("gantt\nCALL\tback : 1d"), .invalidSyntax(line: 2, problem: .unexpectedText("CALL\tback : 1d")))
+        XCTAssertEqual(readError("gantt\nsection A\n  Call me : 1d"), .invalidSyntax(line: 3, problem: .unexpectedText("Call me : 1d")))
+        XCTAssertNil(readError("gantt\nhrefs : 1d"), "A longer word is a task's name.")
+        XCTAssertNil(readError("gantt\ncaller : 1d"))
     }
 
     func testTasksPastTheNodeLimitAreRefused() {

@@ -6,7 +6,7 @@
  *              lexer produces it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 23/11/2026
  */
 
@@ -31,6 +31,8 @@ struct RequirementLexer {
         self.bytes = bytes
         position = start
         directions = RequirementDirectionStatements(bytes: bytes, from: start)
+        // About one token in five bytes in the documentation's examples.
+        tokens.reserveCapacity((bytes.count - start) / 5 + 2)
     }
 
     /// The tokens of the text from `start`.
@@ -183,8 +185,7 @@ struct RequirementLexer {
     private mutating func readWord() {
         var end = position + 1
         while end < bytes.count, Self.isWordByte(bytes[end]) { end += 1 }
-        if end - position <= RequirementKeywords.longestKeywordLength,
-           let keyword = RequirementKeywords.byLowercaseWord[String(decoding: bytes[position..<end].map(MermaidByte.lowercased), as: UTF8.self)] {
+        if end - position <= RequirementKeywords.longestKeywordLength, let keyword = Self.keyword(from: position, to: end, in: bytes) {
             if keyword == .style || keyword == .classDefinition || keyword == .classAssignment { push(.styleStatement) }
             emit(keyword, from: position, to: end)
             return
@@ -304,6 +305,29 @@ struct RequirementLexer {
 
     private static let accessibilityTitleWord = Array("acctitle".utf8)
     private static let accessibilityDescriptionWord = Array("accdescr".utf8)
+
+    /// The keyword the word from `start` to `end` is in any case, or nil: compared byte by byte, made lowercase, with the
+    /// keywords of its length that start with its first letter, without making it a string to look it up.
+    private static func keyword(from start: Int, to end: Int, in bytes: [UInt8]) -> RequirementTokenKind? {
+        let first = MermaidByte.lowercased(bytes[start])
+        guard first < 0x80 else { return nil }
+        let length = end - start
+        candidates: for (word, kind) in keywordsByFirstByte[Int(first)] where word.count == length {
+            for offset in 1..<length where MermaidByte.lowercased(bytes[start + offset]) != word[offset] { continue candidates }
+            return kind
+        }
+        return nil
+    }
+
+    /// `RequirementKeywords.byLowercaseWord`'s words as bytes, by their first byte.
+    private static let keywordsByFirstByte: [[(word: [UInt8], kind: RequirementTokenKind)]] = {
+        var byFirstByte = [[(word: [UInt8], kind: RequirementTokenKind)]](repeating: [], count: 128)
+        for (word, kind) in RequirementKeywords.byLowercaseWord {
+            let bytes = Array(word.utf8)
+            byFirstByte[Int(bytes[0])].append((bytes, kind))
+        }
+        return byFirstByte
+    }()
 }
 
 extension RequirementLexer {

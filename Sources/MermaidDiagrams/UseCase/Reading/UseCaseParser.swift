@@ -7,7 +7,7 @@
  *              then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -29,8 +29,16 @@ struct UseCaseParser {
     /// PlantUML's statements that people are most likely to try, which Mermaid turns away.
     private static let forbiddenWords: Set<String> = ["allowmixing", "newpage", "package", "rectangle", "skinparam"]
 
+    /// Whether the identifier at `token` is one of `forbiddenWords` in any case. An identifier is ASCII's word
+    /// characters only, so its length made lowercase is its length, and only a length of theirs (7, 9, 11) is looked up.
+    private func isForbiddenWord(_ token: Int) -> Bool {
+        let length = tokens.ends[token] - tokens.starts[token]
+        guard length == 7 || length == 9 || length == 11 else { return false }
+        return Self.forbiddenWords.contains(image(token).lowercased())
+    }
+
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> UseCaseDiagram {
-        let written = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
+        let written = Self.codeUnits(of: cursor.bytes[(cursor.position - keyword.utf8.count)...])
         let text = UseCaseSourcePreparation.prepared(written)
         let tokens: UseCaseTokens
         do {
@@ -53,6 +61,25 @@ struct UseCaseParser {
             case .tooManyNodes: throw .tooManyNodes(limit: limits.maximumNodeCount)
             }
         }
+    }
+
+    /// The text's UTF-16 code units, which Pele's lexer reads: in ASCII a unit per byte, of its value, made without
+    /// making the bytes a string first.
+    static func codeUnits(of bytes: ArraySlice<UInt8>) -> [UInt16] {
+        var isASCII = true
+        let units = [UInt16](unsafeUninitializedCapacity: bytes.count) { buffer, count in
+            var written = 0
+            for byte in bytes {
+                guard byte < 0x80 else {
+                    isASCII = false
+                    break
+                }
+                buffer[written] = UInt16(byte)
+                written += 1
+            }
+            count = written
+        }
+        return isASCII ? units : Array(String(decoding: bytes, as: UTF8.self).utf16)
     }
 
     /// The largest spacing Pele takes from the options.
@@ -216,7 +243,7 @@ struct UseCaseParser {
             return try lineEnd()
         }
         let follows = next.isIn(.followsName) || (kind == .identifier && (next == .leftParenthesis || next == .leftBracket))
-        if !follows || (kind == .identifier && Self.forbiddenWords.contains(image(first).lowercased())) { throw unexpected(.statement) }
+        if !follows || (kind == .identifier && isForbiddenWord(first)) { throw unexpected(.statement) }
         try entity(isTopLevel: true)
     }
 

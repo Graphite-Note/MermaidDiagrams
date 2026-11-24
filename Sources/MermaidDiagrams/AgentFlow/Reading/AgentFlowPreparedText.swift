@@ -6,7 +6,7 @@
  *              syntax error sits.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 23/11/2026
  */
 
@@ -14,14 +14,45 @@
 /// numbers), a line break added at the end, and the spaces between a closing brace and the end of its line removed, as
 /// Mermaid trims them before parsing. Comments stay: the agent flow's grammar reads them.
 enum AgentFlowPreparedText {
-    static func units(of text: String) -> [UInt16] {
+    /// The prepared code units of the text's UTF-8 `bytes`, those of a string.
+    static func units(of bytes: ArraySlice<UInt8>) -> [UInt16] {
         // Text in ASCII has a UTF-16 code unit per byte, of the same value: it is read from its bytes.
-        var units = text.utf8.allSatisfy({ byte in byte < 0x80 })
-            ? withLineFeeds(text.utf8.lazy.map(UInt16.init), capacity: text.utf8.count + 1)
-            : withLineFeeds(text.utf16, capacity: text.utf16.count + 1)
+        var units: [UInt16]
+        if bytes.allSatisfy({ byte in byte < 0x80 }) {
+            units = withLineFeeds(asciiBytes: bytes)
+        } else {
+            let text = String(decoding: bytes, as: UTF8.self)
+            units = withLineFeeds(text.utf16, capacity: text.utf16.count + 1)
+        }
         blankDirectives(in: &units)
         units.append(10)
-        return withoutSpaceAfterClosingBraces(units)
+        removeSpaceAfterClosingBraces(in: &units)
+        return units
+    }
+
+    /// The code units of bytes all in ASCII, with each `\r\n` and `\r` made `\n`, written in one pass into room for one
+    /// more unit.
+    private static func withLineFeeds(asciiBytes bytes: ArraySlice<UInt8>) -> [UInt16] {
+        [UInt16](unsafeUninitializedCapacity: bytes.count + 1) { buffer, count in
+            var written = 0
+            var previousWasCarriageReturn = false
+            for byte in bytes {
+                if byte == 13 {
+                    buffer[written] = 10
+                    written += 1
+                    previousWasCarriageReturn = true
+                    continue
+                }
+                if byte == 10, previousWasCarriageReturn {
+                    previousWasCarriageReturn = false
+                    continue
+                }
+                previousWasCarriageReturn = false
+                buffer[written] = UInt16(byte)
+                written += 1
+            }
+            count = written
+        }
     }
 
     /// The code units with each `\r\n` and `\r` made `\n`.
@@ -61,16 +92,18 @@ enum AgentFlowPreparedText {
         }
     }
 
-    /// `}[^\S\n]*\n` made `}\n`.
-    private static func withoutSpaceAfterClosingBraces(_ units: [UInt16]) -> [UInt16] {
+    /// `}[^\S\n]*\n` made `}\n`, in place: the units kept are moved down over those removed, which only ever lie ahead
+    /// of the unit being read.
+    private static func removeSpaceAfterClosingBraces(in units: inout [UInt16]) {
         // Without a closing brace there is nothing to remove.
-        guard units.contains(125) else { return units }
-        var kept: [UInt16] = []
-        kept.reserveCapacity(units.count)
-        var index = 0
+        guard let firstBrace = units.firstIndex(of: 125) else { return }
+        var kept = firstBrace
+        var index = firstBrace
         while index < units.count {
-            kept.append(units[index])
-            guard units[index] == 125 else {
+            let unit = units[index]
+            units[kept] = unit
+            kept += 1
+            guard unit == 125 else {
                 index += 1
                 continue
             }
@@ -78,7 +111,7 @@ enum AgentFlowPreparedText {
             while end < units.count, units[end] != 10, C4Characters.isSpace(units[end]) { end += 1 }
             index = end < units.count && units[end] == 10 ? end : index + 1
         }
-        return kept
+        units.removeLast(units.count - kept)
     }
 }
 
