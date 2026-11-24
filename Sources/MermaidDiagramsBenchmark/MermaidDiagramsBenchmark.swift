@@ -46,6 +46,9 @@ struct MermaidDiagramsBenchmark {
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
             return try ProfilingLoop.run(arguments: Array(CommandLine.arguments[(profileIndex + 1)...]), typography: typography)
         }
+        if let prototypeIndex = CommandLine.arguments.firstIndex(of: "--prototype-svg") {
+            return try PrototypeSVGBenchmark.run(arguments: Array(CommandLine.arguments[(prototypeIndex + 1)...]), typography: typography)
+        }
         if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
             return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
         }

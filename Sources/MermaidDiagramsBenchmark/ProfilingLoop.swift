@@ -30,6 +30,10 @@ enum ProfilingLoop {
         case preparation
         case narrow
         case painting
+        case scene
+        case svg
+        case accessibility
+        case parts
     }
 
     static func run(arguments: [String], typography: DiagramTypography) throws {
@@ -92,6 +96,38 @@ enum ProfilingLoop {
             }
         case .painting:
             return paintingRound(sources: sources, typography: typography)
+        case .scene:
+            let laidOut = sources.compactMap { source in
+                (try? MermaidDiagramReader.read(source, limits: .standard)).flatMap { diagram in DiagramSceneBenchmark.laidOut(diagram, typography: typography) }
+            }
+            return { for diagram in laidOut { _ = diagram.scene() } }
+        case .svg:
+            let prepared = sources.compactMap { source in
+                try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil,
+                                                       now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+            }
+            return { for diagram in prepared { _ = diagram.svgDocument() } }
+        case .parts:
+            let diagrams = sources.compactMap { source in try? MermaidDiagramReader.read(source, limits: .standard) }
+            let flowcharts = diagrams.compactMap { diagram -> FlowchartLayout? in
+                guard case .flowchart(let flowchart) = diagram else { return nil }
+                return try? FlowchartLayoutEngine.layout(flowchart, typography: typography, limits: .standard)
+            }
+            let journeys = diagrams.compactMap { diagram -> UserJourneyLayout? in
+                guard case .userJourney(let journey) = diagram else { return nil }
+                return UserJourneyLayoutEngine.layout(journey, typography: typography)
+            }
+            return {
+                for layout in flowcharts { _ = FlowchartDrawingParts(layout: layout) }
+                for layout in journeys { _ = UserJourneyDrawingParts(layout: layout) }
+            }
+        case .accessibility:
+            return {
+                for source in sources {
+                    _ = try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil,
+                                                               now: GanttChartCorpus.now, timeZone: GanttChartCorpus.timeZone)
+                }
+            }
         }
     }
 

@@ -104,7 +104,7 @@ extension DiagramSVGColors {
     }
 
     /// `#rrggbb` of sRGB components, each clamped to 0...1, written through a table of digits.
-    private static func hexadecimal(components: SRGBComponents) -> String {
+    static func hexadecimal(components: SRGBComponents) -> String {
         String(unsafeUninitializedCapacity: 7) { characters in
             characters[0] = UInt8(ascii: "#")
             writeChannel(components.red, into: characters, at: 1)
