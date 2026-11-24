@@ -7,8 +7,8 @@
  *              and gradients are written whole, each without copying the document.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import XCTest
@@ -154,10 +154,11 @@ final class DiagramSVGWriterTests: XCTestCase {
         let gradient = DiagramLinearGradient(startPaint: .accent, endPaint: .series(2), startPoint: .zero, endPoint: CGPoint(x: 40, y: 0))
         let shape = DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 40, height: 10), transform: nil),
                                       painting: .gradientFill(gradient), part: DiagramScenePart.allCases[0])
-        let items = Array(repeating: DiagramSceneItem.shape(shape), count: 200)
+        let scene = DiagramScene(size: CGSize(width: 40, height: 10), font: DiagramFont(postScriptName: nil, size: 16),
+                                 items: Array(repeating: DiagramSceneItem.shape(shape), count: 200))
         let content = body.content.storageAddress
-        body.appendDefinitions(of: items)
-        for item in items { body.add(item) }
+        body.appendDefinitions(of: scene)
+        body.addItems(of: scene)
         XCTAssertLessThan(body.content.count, reserved)
         XCTAssertEqual(body.content.storageAddress, content, "the document's buffer is written in place")
         XCTAssertEqual(body.content.growthCount, 0)

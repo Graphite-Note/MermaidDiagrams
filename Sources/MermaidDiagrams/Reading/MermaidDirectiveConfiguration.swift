@@ -5,8 +5,8 @@
  * Description: Reads the configuration a diagram's `%%{init: …}%%` directives give, as Pele reads it.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -24,9 +24,12 @@ enum MermaidDirectiveConfiguration {
     /// those inside an option that is an object under their path. A directive that gives `section` a value other than an
     /// object leaves the type no option, as in Pele, and a `null` option is no option.
     static func apply(section: String, in bytes: [UInt8], from start: Int, to options: inout MermaidConfigurationOptions) {
-        // Most diagrams have no directive: nothing is decoded for them.
-        guard contains(directiveStart, in: bytes, from: start) else { return }
-        guard let sectionValue = configuration(in: bytes, from: start)[section] else { return }
+        apply(section: section, of: configuration(in: bytes, from: start), to: &options)
+    }
+
+    /// The options the directives' merged `configuration` sets under `section`, applied over `options`.
+    static func apply(section: String, of configuration: [String: DirectiveValue], to options: inout MermaidConfigurationOptions) {
+        guard let sectionValue = configuration[section] else { return }
         guard case .object(let directiveOptions) = sectionValue else {
             options.removeAll()
             return
@@ -34,21 +37,48 @@ enum MermaidDirectiveConfiguration {
         for (name, value) in directiveOptions { options.record(value, named: name) }
     }
 
-    /// Every `init` directive's object merged in their order.
+    /// Every `init` directive's object in `bytes[start...]` merged in their order; empty, with nothing copied, when the
+    /// text holds no directive, as most diagrams do.
     static func configuration(in bytes: [UInt8], from start: Int) -> [String: DirectiveValue] {
+        guard contains(directiveStart, in: bytes, from: start) else { return [:] }
         var text = Array(bytes[min(start, bytes.count)...])
         for index in text.indices where text[index] == apostrophe { text[index] = MermaidByte.quotationMark }
         var configuration: [String: DirectiveValue] = [:]
         var position = 0
         while let match = nextDirective(in: text, from: position) {
             position = max(match.end, match.start + 1)
-            guard match.name == "init" || match.name == "initialize", let content = match.content else { continue }
-            let trimmed = String(decoding: text[content], as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            let read = try? JSONDecoder().decode(DirectiveValue.self, from: Data(trimmed.utf8)) // Unreadable JSON is left out, as in Pele.
-            guard case .object(let object) = read else { continue }
+            guard match.name == "init" || match.name == "initialize", let content = match.content,
+                  let object = text.withUnsafeBufferPointer({ buffer in object(in: UnsafeBufferPointer(rebasing: buffer[content])) }) else { continue }
             merge(object, into: &configuration)
         }
         return configuration
+    }
+
+    /// The object a directive's content writes, its white space trimmed as Foundation trims it: read on its bytes
+    /// (`MermaidConfigurationJSONReader`) when it is JSON read there, else by `JSONDecoder`; nil when it is not an
+    /// object or its JSON cannot be read, and the directive is then left out, as in Pele.
+    static func object(in content: UnsafeBufferPointer<UInt8>) -> [String: DirectiveValue]? {
+        if let trimmed = asciiTrimmed(content), let object = MermaidConfigurationJSONReader.object(in: trimmed) { return object }
+        let trimmed = String(decoding: content, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let read = try? JSONDecoder().decode(DirectiveValue.self, from: Data(trimmed.utf8)) // Unreadable JSON is left out, as in Pele.
+        guard case .object(let object) = read else { return nil }
+        return object
+    }
+
+    /// `content` without the ASCII white space at its ends (tabs, line breaks, vertical tabs, form feeds, carriage returns
+    /// and spaces, the ASCII members of Foundation's `whitespacesAndNewlines`); nil when a byte beyond ASCII is then at
+    /// an end, where Foundation might trim more.
+    private static func asciiTrimmed(_ content: UnsafeBufferPointer<UInt8>) -> UnsafeBufferPointer<UInt8>? {
+        var start = 0
+        var end = content.count
+        while start < end, isASCIIWhitespaceOrNewline(content[start]) { start += 1 }
+        while end > start, isASCIIWhitespaceOrNewline(content[end - 1]) { end -= 1 }
+        guard start < end, content[start] < 0x80, content[end - 1] < 0x80 else { return nil }
+        return UnsafeBufferPointer(rebasing: content[start..<end])
+    }
+
+    private static func isASCIIWhitespaceOrNewline(_ byte: UInt8) -> Bool {
+        byte == MermaidByte.space || (0x09...0x0D).contains(byte)
     }
 
     /// A directive found as Mermaid's pattern finds it: its name, its content (nil when it is a single word or nothing)

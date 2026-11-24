@@ -3,12 +3,12 @@
  * --------------------------------------
  * Layer: Tests
  * Description: The thread's scene workspace hands out lanes that keep their blocks between recordings, gives a recording
- *              begun inside another a workspace of its own, frees blocks grown past a mebibyte, empties and marks a lane
- *              that goes past its element limit instead of growing without bound, and keeps one workspace per thread;
- *              and the sines, cosines and angles the lanes look up are the system's own.
+ *              begun inside another a workspace of its own, frees blocks grown past a mebibyte, alone or together, empties
+ *              and marks a lane that goes past its element limit instead of growing without bound, and keeps one
+ *              workspace per thread; and the sines, cosines and angles the lanes look up are the system's own.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -68,18 +68,49 @@ final class DiagramSceneWorkspaceTests: XCTestCase {
     }
 
     /// A lane grown past a mebibyte by one scene is freed when the recording ends, so a thread keeps at most that much
-    /// a lane between scenes.
+    /// a lane between scenes. Run on a thread of its own, whose workspace no scene of another test has grown.
     func testBlocksGrownPastTheLimitAreFreedAfterTheRecording() {
-        DiagramSceneWorkspace.withRecording { workspace in
-            let lane = workspace.makeLane()
-            lane.move(to: .zero)
-            for index in 0..<100_000 { lane.addCurve(to: CGPoint(x: index, y: 1), control1: .zero, control2: CGPoint(x: 1, y: index)) }
-            XCTAssertGreaterThan(workspace.pooledByteCount, DiagramSceneWorkspace.largestKeptByteCount)
+        onAThreadOfItsOwn {
+            DiagramSceneWorkspace.withRecording { workspace in
+                let lane = workspace.makeLane()
+                lane.move(to: .zero)
+                for index in 0..<100_000 { lane.addCurve(to: CGPoint(x: index, y: 1), control1: .zero, control2: CGPoint(x: 1, y: index)) }
+                XCTAssertGreaterThan(workspace.pooledByteCount, DiagramSceneWorkspace.largestKeptByteCount)
+            }
+            DiagramSceneWorkspace.withRecording { workspace in
+                XCTAssertLessThanOrEqual(workspace.pooledByteCount, workspace.pooledLaneCount * DiagramSceneWorkspace.largestKeptByteCount)
+                XCTAssertLessThan(workspace.pooledByteCount, 64 * 1_024)
+            }
         }
-        DiagramSceneWorkspace.withRecording { workspace in
-            XCTAssertLessThanOrEqual(workspace.pooledByteCount, workspace.pooledLaneCount * DiagramSceneWorkspace.largestKeptByteCount)
-            XCTAssertLessThan(workspace.pooledByteCount, 64 * 1_024)
+    }
+
+    /// Lanes each under a mebibyte but together over it, as a scene of many large parts leaves them, are all made small
+    /// again when the recording ends, so that a thread keeps at most a mebibyte of lanes between scenes.
+    func testLanesTogetherPastTheLimitAreFreedAfterTheRecording() {
+        onAThreadOfItsOwn {
+            DiagramSceneWorkspace.withRecording { workspace in
+                for _ in 0..<8 {
+                    let lane = workspace.makeLane()
+                    lane.move(to: .zero)
+                    for index in 0..<10_000 { lane.addLine(to: CGPoint(x: index, y: 1)) }
+                }
+                XCTAssertGreaterThan(workspace.pooledByteCount, DiagramSceneWorkspace.largestKeptByteCount)
+            }
+            DiagramSceneWorkspace.withRecording { workspace in
+                XCTAssertEqual(workspace.pooledLaneCount, 8)
+                XCTAssertLessThan(workspace.pooledByteCount, 64 * 1_024)
+            }
         }
+    }
+
+    private func onAThreadOfItsOwn(_ body: @escaping @Sendable () -> Void) {
+        let finished = expectation(description: "the thread ran")
+        let thread = Thread {
+            body()
+            finished.fulfill()
+        }
+        thread.start()
+        wait(for: [finished], timeout: 60)
     }
 
     /// A lane given more elements than its limit is emptied and marked, without trapping, and so are its additions of

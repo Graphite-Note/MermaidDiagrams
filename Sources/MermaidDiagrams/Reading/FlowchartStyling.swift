@@ -6,7 +6,7 @@
  *              are read and given to the nodes and edges once the text is read, only when a statement styled anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 24/11/2026
  */
 
@@ -33,7 +33,7 @@ extension FlowchartParser {
         }
         switch statement {
         case .classDefinition(let names, let declarations):
-            let (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            let (style, hasUnappliedDeclaration) = (declarations.style, declarations.hasUnappliedDeclaration)
             for name in names {
                 let merged = (styling?.classStyles[name] ?? DiagramElementStyle()).overridden(by: style)
                 styling?.classStyles[name] = merged
@@ -47,11 +47,11 @@ extension FlowchartParser {
         case .nodeStyle(let identifier, let declarations):
             let name = lists.names.intern(Array(identifier.utf8), in: bytes)
             addNodeNamedByStyle(name)
-            let (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            let (style, hasUnappliedDeclaration) = (declarations.style, declarations.hasUnappliedDeclaration)
             styling?.nodeStyleStatements.append((Int32(name), style))
             if hasUnappliedDeclaration { unappliedStatementCount += 1 }
         case .linkStyle(let indices, let declarations):
-            var (style, hasUnappliedDeclaration) = DiagramElementStyle.reading(declarations)
+            var (style, hasUnappliedDeclaration) = (declarations.style, declarations.hasUnappliedDeclaration)
             // An edge has no inside to fill; its text color is not set from here.
             style.fill = nil
             if style.textColor != nil {
@@ -87,29 +87,29 @@ extension FlowchartParser {
     /// `style`; an edge takes `linkStyle default`, then the `linkStyle` of its index.
     mutating func applyStyles() {
         guard let styling else { return }
-        var classNamesByNode: [Int: [String]] = [:]
+        let defaultStyle = styling.classStyles["default"] ?? DiagramElementStyle()
+        // Each node's style is built in its list's place, in the order the statements were written: the `default`
+        // class, then each class given to it, then its own `style` statements.
+        var styles = [DiagramElementStyle](repeating: defaultStyle, count: parts.nodes.count)
         for assignment in styling.classAssignments {
             let node = Int(lists.names.names[Int(assignment.name)].nodeIndex)
             guard node >= 0 else {
                 unappliedStatementCount += 1
                 continue
             }
-            classNamesByNode[node, default: []].append(assignment.className)
+            styles[node] = styles[node].overridden(by: styling.classStyles[assignment.className] ?? DiagramElementStyle())
         }
-        var ownStylesByNode: [Int: DiagramElementStyle] = [:]
+        var ownStyles = [DiagramElementStyle?](repeating: nil, count: parts.nodes.count)
         for statement in styling.nodeStyleStatements {
             let node = Int(lists.names.names[Int(statement.name)].nodeIndex)
             guard node >= 0 else {
                 unappliedStatementCount += 1
                 continue
             }
-            ownStylesByNode[node] = (ownStylesByNode[node] ?? DiagramElementStyle()).overridden(by: statement.style)
+            ownStyles[node] = (ownStyles[node] ?? DiagramElementStyle()).overridden(by: statement.style)
         }
-        let defaultStyle = styling.classStyles["default"] ?? DiagramElementStyle()
         parts.rare.nodeStyles = parts.nodes.indices.map { node in
-            var style = defaultStyle
-            for className in classNamesByNode[node] ?? [] { style = style.overridden(by: styling.classStyles[className] ?? DiagramElementStyle()) }
-            style = style.overridden(by: ownStylesByNode[node] ?? DiagramElementStyle())
+            let style = ownStyles[node].map { own in styles[node].overridden(by: own) } ?? styles[node]
             return style.isEmpty ? nil : style
         }
         styleEdges(styling.linkStyleStatements)
@@ -117,7 +117,7 @@ extension FlowchartParser {
 
     private mutating func styleEdges(_ statements: [(indices: [Int]?, style: DiagramElementStyle)]) {
         var defaultEdgeStyle = DiagramElementStyle()
-        var edgeStyles: [Int: DiagramElementStyle] = [:]
+        var edgeStyles = [DiagramElementStyle?](repeating: nil, count: parts.edges.count)
         for statement in statements {
             guard let indices = statement.indices else {
                 defaultEdgeStyle = defaultEdgeStyle.overridden(by: statement.style)

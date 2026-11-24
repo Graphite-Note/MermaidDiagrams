@@ -5,8 +5,8 @@
  * Description: How a diagram's statements change the look of one node or edge.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,10 +47,14 @@ public struct DiagramElementStyle: Equatable, Sendable {
 
     /// The style a list of declarations writes (`fill:#f9f,stroke:#333,stroke-width:4px,color:#fff,stroke-dasharray: 5 5`), and
     /// whether some declaration was not applied: a property this look has no place for (`font-size`) or a value not read.
+    /// An ASCII list is read on its bytes (`reading(bytes:)`), any other through its characters.
     static func reading(_ declarations: String) -> (style: DiagramElementStyle, hasUnappliedDeclaration: Bool) {
+        var text = declarations
+        let readOnBytes = text.withUTF8 { bytes in bytes.contains { byte in byte >= 0x80 } ? nil : reading(bytes: bytes) }
+        if let readOnBytes { return readOnBytes }
         var style = DiagramElementStyle()
         var hasUnappliedDeclaration = false
-        for (property, written) in asciiPropertiesAndValues(declarations) ?? propertiesAndValues(declarations) {
+        for (property, written) in propertiesAndValues(declarations) {
             guard let property else {
                 if !written.isEmpty { hasUnappliedDeclaration = true }
                 continue
@@ -75,7 +79,7 @@ public struct DiagramElementStyle: Equatable, Sendable {
     }
 
     /// Sets the property to the value written; false when the property or the value is not read.
-    private mutating func set(_ property: String, to value: String) -> Bool {
+    mutating func set(_ property: String, to value: String) -> Bool {
         switch property {
         case "fill":
             guard let color = DiagramColor(cssText: value) else { return false }
@@ -124,41 +128,6 @@ public struct DiagramElementStyle: Equatable, Sendable {
         let allAreUsable = lengths.count == parts.count && lengths.allSatisfy { length in length >= 0 && length <= largestDashLength }
         guard allAreUsable, lengths.reduce(0, +) >= shortestDashPattern else { return nil }
         return lengths
-    }
-
-    /// The declarations of an ASCII list read from its bytes, as `propertiesAndValues` reads them from its characters:
-    /// in ASCII a character is a byte, `.whitespaces` a space or a tab and lowering a byte's own. Nil for text beyond
-    /// ASCII.
-    static func asciiPropertiesAndValues(_ declarations: String) -> [(property: String?, value: String)]? {
-        var text = declarations
-        return text.withUTF8 { bytes -> [(property: String?, value: String)]? in
-            guard !bytes.contains(where: { byte in byte >= 0x80 }) else { return nil }
-            func trimmed(_ range: Range<Int>, lowered: Bool = false) -> String {
-                var start = range.lowerBound
-                var end = range.upperBound
-                while start < end, bytes[start] == MermaidByte.space || bytes[start] == MermaidByte.tab { start += 1 }
-                while end > start, bytes[end - 1] == MermaidByte.space || bytes[end - 1] == MermaidByte.tab { end -= 1 }
-                guard lowered else { return String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self) }
-                return String(decoding: bytes[start..<end].map(MermaidByte.lowercased), as: UTF8.self)
-            }
-            var read: [(property: String?, value: String)] = []
-            var start = 0
-            var depth = 0
-            for index in 0...bytes.count {
-                if index < bytes.count {
-                    let byte = bytes[index]
-                    if byte == UInt8(ascii: "(") { depth += 1 } else if byte == UInt8(ascii: ")") { depth = max(0, depth - 1) }
-                    guard byte == MermaidByte.comma, depth == 0 else { continue }
-                }
-                if let colon = bytes[start..<index].firstIndex(of: MermaidByte.colon) {
-                    read.append((trimmed(start..<colon, lowered: true), trimmed((colon + 1)..<index)))
-                } else {
-                    read.append((nil, trimmed(start..<index)))
-                }
-                start = index + 1
-            }
-            return read
-        }
     }
 
     /// The text split at commas outside parentheses, so `rgb(1, 2, 3)` stays whole.

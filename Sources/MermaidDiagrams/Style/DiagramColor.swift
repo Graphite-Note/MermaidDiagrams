@@ -2,11 +2,11 @@
  * File: DiagramColor.swift
  * ------------------------
  * Layer: Core
- * Description: A color a diagram's own statements give.
+ * Description: A color a diagram's own statements give, read on its bytes when they are ASCII.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -30,6 +30,11 @@ public struct DiagramColor: Hashable, Sendable {
     /// `rgb(r, g, b)`, `rgba(r, g, b, a)` (channels 0 to 255 or percentages, opacity 0 to 1 or a percentage), a CSS color
     /// name, and `none` or `transparent`, which are no color at all. Case and spaces around the value do not matter.
     public init?(cssText: String) {
+        if let read = Self.readOnBytes(cssText) {
+            guard let color = read else { return nil }
+            self = color
+            return
+        }
         let text = cssText.trimmingCharacters(in: .whitespaces).lowercased()
         if text.hasPrefix("#") {
             guard let color = Self.hexadecimalColor(String(text.dropFirst())) else { return nil }
@@ -42,6 +47,42 @@ public struct DiagramColor: Hashable, Sendable {
             self = DiagramColor(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
         } else {
             return nil
+        }
+    }
+
+    /// `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa` of ASCII bytes that start with `#`, the digits in either case; nil for
+    /// any other bytes. Each channel is the integer its digits write, divided by 255, as `hexadecimalColor` divides it.
+    static func hexadecimal(_ written: UnsafeBufferPointer<UInt8>) -> DiagramColor? {
+        let digitCount = written.count - 1
+        guard digitCount == 3 || digitCount == 4 || digitCount == 6 || digitCount == 8 else { return nil }
+        var channels: (UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 255)
+        for channel in 0..<(digitCount <= 4 ? digitCount : digitCount / 2) {
+            let value: UInt64
+            if digitCount <= 4 {
+                guard let digit = hexadecimalDigit(written[1 + channel]) else { return nil }
+                value = digit * 17
+            } else {
+                guard let high = hexadecimalDigit(written[1 + 2 * channel]), let low = hexadecimalDigit(written[2 + 2 * channel]) else { return nil }
+                value = high * 16 + low
+            }
+            switch channel {
+            case 0: channels.0 = value
+            case 1: channels.1 = value
+            case 2: channels.2 = value
+            default: channels.3 = value
+            }
+        }
+        return DiagramColor(red: Double(channels.0) / 255, green: Double(channels.1) / 255, blue: Double(channels.2) / 255,
+                            alpha: digitCount == 4 || digitCount == 8 ? Double(channels.3) / 255 : 1)
+    }
+
+    /// The value of an ASCII hexadecimal digit in either case, or nil.
+    static func hexadecimalDigit(_ byte: UInt8) -> UInt64? {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): UInt64(byte - UInt8(ascii: "0"))
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): UInt64(byte - UInt8(ascii: "a") + 10)
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): UInt64(byte - UInt8(ascii: "A") + 10)
+        default: nil
         }
     }
 

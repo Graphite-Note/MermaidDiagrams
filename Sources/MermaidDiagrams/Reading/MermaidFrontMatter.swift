@@ -2,12 +2,12 @@
  * File: MermaidFrontMatter.swift
  * ------------------------------
  * Layer: Core
- * Description: Finds a diagram's front matter as Pele's preprocess.ts finds it and reads it as YAML: its title, its
- *              configuration, and whether it is YAML at all.
+ * Description: Finds a diagram's front matter as Pele's preprocess.ts finds it, on the text's own bytes, and reads it
+ *              once as YAML into a flat tree: its title, its configuration, and whether it is YAML at all.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// A `---` fenced YAML block at the start of a diagram's text, found as Pele's `matchFrontMatter` finds it (the way
@@ -25,6 +25,11 @@ struct MermaidFrontMatter {
 
     /// The front matter at the start of `bytes`, whose line breaks are line feeds; nil when there is none.
     static func find(in bytes: [UInt8]) -> MermaidFrontMatter? {
+        bytes.withUnsafeBufferPointer { buffer in find(in: buffer) }
+    }
+
+    /// The front matter at the start of `bytes` where they stand, a String's own or an array's: only its body is copied.
+    static func find(in bytes: UnsafeBufferPointer<UInt8>) -> MermaidFrontMatter? {
         var indentEnd = 0
         while indentEnd < bytes.count, !isLineBreak(bytes[indentEnd]), case let length = JavaScriptWhitespace.length(in: bytes, at: indentEnd),
               length > 0 { indentEnd += length }
@@ -55,10 +60,10 @@ struct MermaidFrontMatter {
         return MermaidFrontMatter(bodyBytes: body(bytes[bodyStart..<lastOpeningEnd], indent: bytes[..<indentEnd]), end: end + 1)
     }
 
-    /// What the YAML holds, or nil when Pele's reader refuses it (Pele then refuses the diagram: `Front matter is not
-    /// valid YAML`).
-    func value() -> DirectiveValue? {
-        MermaidYAMLDocument.value(of: bodyBytes)
+    /// What the YAML holds, read once into a flat tree, or nil when Pele's reader refuses it (Pele then refuses the
+    /// diagram: `Front matter is not valid YAML`).
+    func tree() -> MermaidYAMLTree? {
+        MermaidYAMLTree.read(bodyBytes)
     }
 
     /// The front matter's `title`, as Pele takes it: `String(title)` when it is truthy.
@@ -67,10 +72,16 @@ struct MermaidFrontMatter {
         return MermaidYAMLDocument.javaScriptText(title)
     }
 
+    /// The `title` of the front matter's tree, as Pele takes it: `String(title)` when it is truthy.
+    static func title(in tree: MermaidYAMLTree) -> String? {
+        guard let title = tree.entry(of: MermaidYAMLTree.root, named: "title"), tree.isTruthy(title) else { return nil }
+        return tree.javaScriptText(title)
+    }
+
     /// The position of the line break that ends the closing fence starting after the line break at `position`: the
     /// last line break in the white space after the fence (the opening fence's indent, the first `indentEnd` bytes, and
     /// `---`); nil when the fence does not stand there or no line break ends it.
-    private static func closingEnd(indentEnd: Int, in bytes: [UInt8], at position: Int) -> Int? {
+    private static func closingEnd(indentEnd: Int, in bytes: UnsafeBufferPointer<UInt8>, at position: Int) -> Int? {
         let fenceStart = position + 1
         guard fenceStart + indentEnd <= bytes.count else { return nil }
         for offset in 0..<indentEnd where bytes[fenceStart + offset] != bytes[offset] { return nil }
@@ -86,7 +97,7 @@ struct MermaidFrontMatter {
 
     /// The body's bytes, each line without the indent when it starts with it. The lines are compared as Swift's
     /// characters, as `hasPrefix` compares them, so that a combining mark after the indent keeps a line as it is.
-    private static func body(_ written: ArraySlice<UInt8>, indent: ArraySlice<UInt8>) -> [UInt8] {
+    private static func body(_ written: Slice<UnsafeBufferPointer<UInt8>>, indent: Slice<UnsafeBufferPointer<UInt8>>) -> [UInt8] {
         guard !indent.isEmpty else { return Array(written) }
         let indentText = String(decoding: indent, as: UTF8.self)
         let lines = String(decoding: written, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false)
@@ -98,7 +109,7 @@ struct MermaidFrontMatter {
         byte == MermaidByte.newline || byte == MermaidByte.carriageReturn
     }
 
-    private static func hasDashes(in bytes: [UInt8], at position: Int) -> Bool {
+    private static func hasDashes(in bytes: UnsafeBufferPointer<UInt8>, at position: Int) -> Bool {
         position + 3 <= bytes.count && bytes[position] == MermaidByte.hyphen && bytes[position + 1] == MermaidByte.hyphen
             && bytes[position + 2] == MermaidByte.hyphen
     }
@@ -106,12 +117,15 @@ struct MermaidFrontMatter {
     private static let dashes = Array("---".utf8)
 }
 
-/// A diagram's front matter as the reader found it, its YAML read once: no front matter, or the front matter and what
-/// it holds (nil when it is not YAML). The reader keeps it on its cursor, so that a type's options do not read the YAML
-/// again (`MermaidConfigurationOptions`).
+/// A diagram's front matter as the reader found it, its YAML read once: no front matter, or the front matter and the
+/// tree of what it holds (nil when it is not YAML). The reader keeps it on its cursor, so that a type's options do not
+/// read the YAML again (`MermaidConfigurationOptions`).
 struct MermaidReadFrontMatter {
     let frontMatter: MermaidFrontMatter?
-    let value: DirectiveValue?
+    let tree: MermaidYAMLTree?
+
+    /// No front matter.
+    static let absent = MermaidReadFrontMatter(frontMatter: nil)
 
     /// The front matter at the start of `bytes`, found and read.
     init(in bytes: [UInt8]) {
@@ -120,6 +134,11 @@ struct MermaidReadFrontMatter {
 
     init(frontMatter: MermaidFrontMatter?) {
         self.frontMatter = frontMatter
-        value = frontMatter?.value()
+        tree = frontMatter?.tree()
+    }
+
+    /// What the YAML holds as a configuration's values, made from the tree each time it is asked for.
+    var value: DirectiveValue? {
+        tree.map { tree in tree.value(of: MermaidYAMLTree.root) }
     }
 }

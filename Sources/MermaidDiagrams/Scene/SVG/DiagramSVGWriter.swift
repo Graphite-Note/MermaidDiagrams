@@ -7,7 +7,7 @@
  *              to a host as those bytes or made a String once.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 24/11/2026
  */
 
@@ -71,9 +71,9 @@ public struct DiagramSVGWriter: Sendable {
                           isLabelled: (title != nil, description != nil), into: &document.content)
         if let title { appendHeadElement("title", suffix: "-title", text: title, into: &document.content) }
         if let description { appendHeadElement("desc", suffix: "-desc", text: description, into: &document.content) }
-        if DiagramSVGBody.hasGradientFills(scene.items) { document.appendDefinitions(of: scene.items) }
+        if DiagramSVGBody.hasGradientFills(scene) { document.appendDefinitions(of: scene) }
         if paintsBackground { appendBackground(of: scene, into: &document) }
-        document.addItems(of: scene.items)
+        document.addItems(of: scene)
         document.content.append("</svg>")
     }
 

@@ -8,7 +8,7 @@
  *              took per input.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 24/11/2026
  */
 
@@ -16,13 +16,13 @@ import CoreGraphics
 import Foundation
 import MermaidDiagrams
 
-/// `--profile <case> [parsing|reading|preparation|narrow|painting|svg|svg-bytes|svg-flat] [seconds]`: the case is a name of Pele's benchmark
+/// `--profile <case> [parsing|reading|preparation|narrow|painting|svg|svg-bytes|svg-flat|scene] [seconds]`: the case is a name of Pele's benchmark
 /// (`tree: 500 nodes`) or a documentation corpus (`treemap-docs`); `parsing` reads the text into its model and lays
 /// nothing out, `reading` reads and lays out; `preparation` prepares without a narrow scene and writes the SVG,
 /// as the comparison with Pele times it, and `narrow` prepares with the narrow scene for Graphite's narrowest column and
 /// reads it, so that it is laid out, and writes no SVG, as Graphite prepares a diagram it shows in a narrow column;
 /// `svg` writes the SVG of inputs prepared once, `svg-bytes` hands its bytes to a host and `svg-flat` writes it from
-/// scenes whose paths hold their elements (`SVGWritingLoop`); the
+/// scenes whose paths hold their elements (`SVGWritingLoop`), and `scene` makes the scenes of layouts made once; the
 /// work repeats until the seconds (5 by default) are spent, then prints how many rounds it made and the mean time of a
 /// round per input, in microseconds.
 enum ProfilingLoop {
@@ -35,6 +35,7 @@ enum ProfilingLoop {
         case svg
         case svgBytes = "svg-bytes"
         case svgFlat = "svg-flat"
+        case scene
     }
 
     static func run(arguments: [String], typography: DiagramTypography) throws {
@@ -97,10 +98,20 @@ enum ProfilingLoop {
             }
         case .painting:
             return paintingRound(sources: sources, typography: typography)
+        case .scene:
+            return sceneRound(sources: sources, typography: typography)
         case .svg, .svgBytes, .svgFlat:
             let form: SVGWritingLoop.Form = work == .svg ? .string : (work == .svgBytes ? .bytes : .flatPaths)
             return SVGWritingLoop.round(sources: sources, typography: typography, form: form)
         }
+    }
+
+    /// Makes the scenes of the sources, laid out once.
+    private static func sceneRound(sources: [String], typography: DiagramTypography) -> () -> Void {
+        let laidOut = sources.compactMap { source in
+            (try? MermaidDiagramReader.read(source, limits: .standard)).flatMap { diagram in DiagramSceneBenchmark.laidOut(diagram, typography: typography) }
+        }
+        return { for diagram in laidOut { _ = diagram.scene() } }
     }
 
     /// Paints the scenes of the sources, laid out once, each in a bitmap of its own.
