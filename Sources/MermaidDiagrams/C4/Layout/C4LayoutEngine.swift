@@ -96,6 +96,7 @@ extension C4DrawingPass {
             let left = frame.minX + group.headingLeft
             var top = frame.minY + C4Metrics.headingTop
             var lines: [[DiagramTextBlock]] = []
+            lines.reserveCapacity(group.texts.count)
             for text in group.texts {
                 lines.append(text?.placedLines(left: left, top: top) ?? [])
                 top += text.measuredHeight
@@ -118,6 +119,7 @@ extension C4DrawingPass {
             let shiftY = box.form == .person ? C4Metrics.personHead / 2 : box.form == .cylinder ? C4Metrics.cylinderCapDepth(width: box.width) / 2 : 0
             var top = frame.midY + shiftY - placed.textHeight / 2
             var texts: [DiagramTextBlock?] = []
+            texts.reserveCapacity(placed.texts.count)
             for (index, text) in placed.texts.enumerated() {
                 texts.append(text.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: frame.midX + shiftX, y: top + block.size.height / 2)) })
                 top += text.measuredHeight + (index == 2 ? C4Metrics.descriptionGap : 0)

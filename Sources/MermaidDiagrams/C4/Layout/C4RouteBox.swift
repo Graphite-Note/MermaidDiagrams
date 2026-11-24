@@ -132,7 +132,8 @@ enum C4RouteGeometry {
     }
 
     /// Whether the line through `points` (x, y pairs) crosses the rectangle.
-    static func crosses(_ points: [CGFloat], left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat) -> Bool {
+    static func crosses<Points: RandomAccessCollection<CGFloat>>(_ points: Points, left: CGFloat, top: CGFloat, right: CGFloat,
+                                                                 bottom: CGFloat) -> Bool where Points.Index == Int {
         var index = 2
         while index < points.count {
             let startX = points[index - 2]

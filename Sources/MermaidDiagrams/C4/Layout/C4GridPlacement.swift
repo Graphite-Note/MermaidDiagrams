@@ -62,19 +62,28 @@ struct C4GridPlacement<Measurer: DiagramTextMeasuring> {
     /// The boundaries drawn, parents before children, the first the unnamed top level, and the shapes they hold.
     func placed(measuring texts: inout C4GridTexts) -> (groups: [C4PlacedBoundary], shapes: [C4PlacedShape]) {
         var groups: [C4PlacedBoundary] = []
+        groups.reserveCapacity(diagram.boundaryRecords.count)
         var groupIndexByBoundary = [Int](repeating: -1, count: diagram.boundaryRecords.count)
         groupIndexByBoundary[0] = 0
         var depths: [Int] = [0]
+        depths.reserveCapacity(diagram.boundaryRecords.count)
         groups.append(group(for: 0, measuring: &texts))
         // A boundary that ends up inside itself is not reachable from the top, as in Mermaid.
         let childBoundaries = childBoundaryIndices()
+        // Each boundary's shapes counted first, so that each boundary's list is made once at its size.
+        var shapeCounts = [Int](repeating: 0, count: diagram.boundaryRecords.count)
+        for shape in diagram.shapeRecords { shapeCounts[max(Int(shape.element.parentBoundaryIndex), 0)] += 1 }
+        groups[0].shapes.reserveCapacity(shapeCounts[0])
         var visited = 0
         while visited < groups.count {
+            groups[visited].childGroups.reserveCapacity(childBoundaries[groups[visited].boundaryIndex].count)
             for child in childBoundaries[groups[visited].boundaryIndex] {
                 groupIndexByBoundary[child] = groups.count
                 groups[visited].childGroups.append(groups.count)
                 depths.append(depths[visited] + 1)
-                groups.append(group(for: child, measuring: &texts))
+                var childGroup = group(for: child, measuring: &texts)
+                childGroup.shapes.reserveCapacity(shapeCounts[child])
+                groups.append(childGroup)
             }
             visited += 1
         }
