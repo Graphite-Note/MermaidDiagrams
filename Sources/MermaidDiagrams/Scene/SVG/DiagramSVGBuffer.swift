@@ -8,7 +8,7 @@
  *              elements written by a writer handed the cursor.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 24/11/2026
  */
 
@@ -157,6 +157,13 @@ struct DiagramSVGBuffer: ~Copyable {
         count &+= bytes.count
     }
 
+    /// `part`'s class (`pele-node`), its entry copied whole: room for `DiagramSVGClassNames.entryByteCount` is reserved.
+    @inline(__always)
+    mutating func write(classOf part: DiagramScenePart) {
+        assertReserved(DiagramSVGClassNames.entryByteCount)
+        count &+= DiagramSVGClassNames.shared.write(part, to: cursor)
+    }
+
     /// The first `byteCount` bytes of `packed`, from its lowest, stored as one word: room for all eight is reserved.
     @inline(__always)
     mutating func write(packedBytes packed: UInt64, count byteCount: Int) {
@@ -269,8 +276,27 @@ struct DiagramSVGBuffer: ~Copyable {
         copy.withUTF8 { textBytes in appendEscaped(textBytes) }
     }
 
+    /// Copies `textBytes` and looks at each byte on the way, in one pass without a branch per byte; only text with a
+    /// byte that is, or may start, something escaped or left out is then written again, byte by byte.
     mutating func appendEscaped(_ textBytes: UnsafeBufferPointer<UInt8>) {
-        guard textBytes.contains(where: Self.mayNeedEscaping) else { return append(textBytes) }
+        guard let source = textBytes.baseAddress else { return }
+        let byteCount = textBytes.count
+        reserve(byteCount)
+        let destination = cursor
+        var flags: UInt8 = 0
+        for index in 0..<byteCount {
+            let byte = source[index]
+            destination[index] = byte
+            flags |= Self.escapingFlag(of: byte)
+        }
+        guard flags != 0 else {
+            count &+= byteCount
+            return
+        }
+        appendEscapedByteByByte(textBytes)
+    }
+
+    private mutating func appendEscapedByteByByte(_ textBytes: UnsafeBufferPointer<UInt8>) {
         var index = 0
         while index < textBytes.count {
             let byte = textBytes[index]
@@ -299,11 +325,18 @@ struct DiagramSVGBuffer: ~Copyable {
     /// `<` and `>`, one bit each.
     private static let lowBytesThatMayNeedEscaping: UInt64 = 0x0000_0000_FFFF_FFFF
         | 1 << 0x22 | 1 << 0x26 | 1 << 0x27 | 1 << 0x3C | 1 << 0x3E
+    /// The bytes from 64 to 127 that are left out, one bit each from 64: DEL.
+    private static let highBytesThatMayNeedEscaping: UInt64 = 1 << (0x7F - 64)
 
-    /// A byte that is, or may start, something escaped or left out; any other byte is copied.
+    /// 1 for a byte that is, or may start, something escaped or left out, else 0: worked out without a branch, so that a
+    /// loop over bytes asks it of many at once.
     @inline(__always)
-    private static func mayNeedEscaping(_ byte: UInt8) -> Bool {
-        byte < 64 ? lowBytesThatMayNeedEscaping >> byte & 1 != 0 : byte == 0x7F || byte == firstByteOfNoncharacter
+    private static func escapingFlag(of byte: UInt8) -> UInt8 {
+        let shift = UInt64(byte & 63)
+        let low = UInt8(truncatingIfNeeded: lowBytesThatMayNeedEscaping >> shift) & 1
+        let high = UInt8(truncatingIfNeeded: highBytesThatMayNeedEscaping >> shift) & 1
+        let beyondASCII: UInt8 = byte == firstByteOfNoncharacter ? 1 : 0
+        return byte < 64 ? low : (byte < 128 ? high : beyondASCII)
     }
 
     /// Whether the bytes at `index` are U+FFFE or U+FFFF.
