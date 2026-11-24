@@ -1,16 +1,14 @@
 /**
- * File: MermaidDiagramGridPreparation.swift
- * -----------------------------------------
+ * File: MermaidDiagramBlockPreparation.swift
+ * ------------------------------------------
  * Layer: Core
- * Description: The preparation of the types laid out on grids, block diagrams and architecture diagrams: their scenes,
- *              their tight scenes for a narrow column, and what a screen reader says of them.
+ * Description: Prepares a block diagram, with the diagram laid out within a narrow column or tight, and says what a
+ *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.1
  * Date: 24/11/2026
  */
-
-import CoreGraphics
 
 extension MermaidDiagramPreparationContext {
     /// A block diagram, and for a narrow column the diagram as Pele's `tighten` draws it for a host too narrow: laid out
@@ -32,29 +30,7 @@ extension MermaidDiagramPreparationContext {
     }
 }
 
-extension MermaidDiagramPreparationContext {
-    /// An architecture diagram, and for a narrow column the diagram drawn tight, as Pele's `tighten` draws it.
-    func prepared(_ diagram: ArchitectureDiagram) -> PreparedMermaidDiagram {
-        let layout = ArchitectureLayoutEngine.layout(diagram, typography: typography)
-        let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
-            ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-                ArchitectureLayoutEngine.layout(diagram, typography: typography, availableWidth: width, isTight: true)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .architecture, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
-                                      accessibility: MermaidDiagramAccessibility(architecture: diagram))
-    }
-}
-
 extension MermaidDiagramAccessibility {
-    /// Each service by its title (its identifier without one), each group by its title, in the order written.
-    init(architecture diagram: ArchitectureDiagram) {
-        self.init(kind: .architecture, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let services = diagram.nodes.filter { node in node.kind == .service }.map { node in node.title ?? node.identifier }
-            let groups = diagram.groups.map { group in group.title ?? group.identifier }
-            return groups + services
-        }
-    }
-
     /// Each block drawn by its text, breadth first as it is laid out, a composite by its title when it has one.
     init(block diagram: BlockDiagram) {
         self.init(kind: .block, title: diagram.title, description: nil) {

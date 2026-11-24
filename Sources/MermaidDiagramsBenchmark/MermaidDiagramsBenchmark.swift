@@ -8,8 +8,8 @@
  *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.11
- * Date: 23/11/2026
+ * Version: 0.12
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -40,7 +40,8 @@ struct MermaidDiagramsBenchmark {
     /// `--output-digest [folder]` prints a digest of every corpus input's output to compare two builds (`OutputDigest`);
     /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
     /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`); `--readme-pictures` paints
-    /// the README's pictures of every type (`ReadmePictures`).
+    /// the README's pictures of every type (`ReadmePictures`); `--flat-text` times the flat text measuring against the text
+    /// block (`FlatTextMeasuringBenchmark`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
@@ -48,6 +49,9 @@ struct MermaidDiagramsBenchmark {
         }
         if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
             return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
+        }
+        if let flatTextIndex = CommandLine.arguments.firstIndex(of: "--flat-text") {
+            return try FlatTextMeasuringBenchmark.run(arguments: Array(CommandLine.arguments[(flatTextIndex + 1)...]))
         }
         if let picturesIndex = CommandLine.arguments.firstIndex(of: "--readme-pictures") {
             return try ReadmePictures.run(arguments: Array(CommandLine.arguments[(picturesIndex + 1)...]), typography: typography)
