@@ -2,169 +2,165 @@
  * File: FlowchartLinkSyntax.swift
  * -------------------------------
  * Layer: Core
- * Description: Reads a flowchart's link: its stroke, its marks, its length, its text and the identifier before it.
+ * Description: Reads a link between two nodes on bytes: its stroke, its marks, how many ranks it spans, its text in
+ *              bars or inside it, and the identifier written before it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import Foundation
 
 /// What a link between two nodes says: its stroke, its marks, how many ranks it spans and its text.
-struct FlowchartLink: Equatable {
+struct FlowchartLink {
     var stroke: FlowchartEdgeStroke
     var sourceArrowhead: FlowchartArrowhead
     var targetArrowhead: FlowchartArrowhead
     var minimumRankSpan: Int
-    var label: DiagramLabel?
-    /// The identifier written before the link (`e1@-->`), or nil.
-    var identifier: String?
+    var label = FlowchartLabelReference.none
+    /// The identifier written before the link (`e1@-->`), empty when there is none.
+    var identifier = MermaidTextRange.empty
 }
 
 /// Reads a link: `-->`, `---`, `-.->`, `==>`, `~~~` and their longer forms, a mark at either end (`<`, `>`, `o`, `x`),
 /// the text in bars after it (`-->|text|`) or inside it (`-- text -->`, `-. text .->`, `== text ==>`), and an
 /// identifier before it (`e1@-->`), which is read and left.
-enum FlowchartLinkSyntax {
-    /// Reads a link at the cursor, or returns nil and leaves the cursor where it was when none starts there; `text` is
-    /// the cursor's text as the lexer tests it.
-    static func readLink(_ cursor: inout MermaidTextCursor, in text: FlowchartLexerText) throws(MermaidDiagramReadError) -> FlowchartLink? {
-        var lookahead = cursor
-        var identifier: String?
+extension FlowchartParser {
+    /// Reads a link at the position, or returns nil and moves nothing when none starts there.
+    mutating func readLink() throws(MermaidDiagramReadError) -> FlowchartLink? {
+        var lookahead = position
+        var identifier = MermaidTextRange.empty
         // Pele's `LINK_ID`: the characters up to the last `@` of the run, which neither `{` nor `"` follows; spaces may
         // stand between it and the link, as Pele's link pattern starts with any.
-        if let end = text.endOfLinkIdentifier(at: cursor.position) {
-            identifier = cursor.text(from: cursor.position, to: end - 1)
-            lookahead.advance(by: end - cursor.position)
-            lookahead.skipSpaces()
+        if let end = bytes.endOfLinkIdentifier(at: position) {
+            identifier = MermaidTextRange(start: position, end: end - 1)
+            lookahead = end
+            while MermaidByte.isSpace(bytes[lookahead]) { lookahead += 1 }
         }
-        guard var link = try readOperator(&lookahead) else { return nil }
+        guard var link = try readOperator(at: &lookahead) else { return nil }
         link.identifier = identifier
-        cursor = lookahead
-        cursor.skipSpaces()
-        if cursor.peek() == MermaidByte.verticalBar {
-            let openingLine = cursor.line
-            cursor.advance()
-            link.label = try readBarredLabel(&cursor, openingLine: openingLine)
+        position = lookahead
+        skipSpaces()
+        if bytes[position] == MermaidByte.verticalBar {
+            let opening = position
+            position += 1
+            do {
+                link.label = try readText(closedBy: FlowchartClosings("|"), openedAt: opening).0
+            } catch .invalidSyntax(let line, .unclosedShape) {
+                throw .invalidSyntax(line: line, problem: .unclosedEdgeLabel)
+            }
         }
         return link
     }
 
     /// The operator itself, with any text written inside it.
-    private static func readOperator(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartLink? {
-        let tildeCount = runLength(of: MermaidByte.tilde, in: cursor)
+    private mutating func readOperator(at lookahead: inout Int) throws(MermaidDiagramReadError) -> FlowchartLink? {
+        let tildeCount = bytes.run(of: MermaidByte.tilde, at: lookahead)
         if tildeCount >= 3 {
-            cursor.advance(by: tildeCount)
+            lookahead += tildeCount
             return FlowchartLink(stroke: .invisible, sourceArrowhead: .none, targetArrowhead: .none, minimumRankSpan: tildeCount - 2)
         }
-        var lookahead = cursor
-        let sourceArrowhead = readSourceArrowhead(&lookahead)
+        var end = lookahead
+        var sourceArrowhead = FlowchartArrowhead.none
+        // `<`, `o` or `x` right before the first `-` or `=`.
+        let next = bytes[end + 1]
+        if next == MermaidByte.hyphen || next == MermaidByte.equals, let arrowhead = Self.arrowhead(forMark: bytes[end], isSourceEnd: true) {
+            sourceArrowhead = arrowhead
+            end += 1
+        }
         let link: FlowchartLink?
-        switch lookahead.peek() {
-        case MermaidByte.equals: link = try readRun(of: MermaidByte.equals, stroke: .thick, sourceArrowhead: sourceArrowhead, &lookahead)
-        case MermaidByte.hyphen where lookahead.peek(1) == MermaidByte.period:
-            link = try readDotted(sourceArrowhead: sourceArrowhead, &lookahead)
-        case MermaidByte.hyphen: link = try readRun(of: MermaidByte.hyphen, stroke: .solid, sourceArrowhead: sourceArrowhead, &lookahead)
+        switch bytes[end] {
+        case MermaidByte.equals: link = try readRun(of: MermaidByte.equals, stroke: .thick, sourceArrowhead: sourceArrowhead, at: &end)
+        case MermaidByte.hyphen where bytes[end + 1] == MermaidByte.period: link = try readDotted(sourceArrowhead: sourceArrowhead, at: &end)
+        case MermaidByte.hyphen: link = try readRun(of: MermaidByte.hyphen, stroke: .solid, sourceArrowhead: sourceArrowhead, at: &end)
         default: link = nil
         }
-        if link != nil { cursor = lookahead }
+        if link != nil { lookahead = end }
         return link
     }
 
-    /// `<`, `o` or `x` right before the line's first `-` or `=`.
-    private static func readSourceArrowhead(_ cursor: inout MermaidTextCursor) -> FlowchartArrowhead {
-        guard let mark = cursor.peek(), let next = cursor.peek(1), next == MermaidByte.hyphen || next == MermaidByte.equals,
-              let arrowhead = arrowhead(forMark: mark, isSourceEnd: true) else { return .none }
-        cursor.advance()
-        return arrowhead
-    }
-
-    /// `-->`, `---`, `==>`, `===` and their longer forms; two signs followed by a space start text inside the link.
-    private static func readRun(of sign: UInt8, stroke: FlowchartEdgeStroke, sourceArrowhead: FlowchartArrowhead,
-                                _ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartLink? {
-        let count = runLength(of: sign, in: cursor)
+    /// `-->`, `---`, `==>`, `===` and their longer forms; two signs followed by no mark start text inside the link.
+    private mutating func readRun(of sign: UInt8, stroke: FlowchartEdgeStroke, sourceArrowhead: FlowchartArrowhead,
+                                  at end: inout Int) throws(MermaidDiagramReadError) -> FlowchartLink? {
+        let count = bytes.run(of: sign, at: end)
         guard count >= 2 else { return nil }
-        let openingLine = cursor.line
-        cursor.advance(by: count)
-        if let mark = cursor.peek(), let arrowhead = arrowhead(forMark: mark, isSourceEnd: false) {
-            cursor.advance()
+        let opening = end
+        end += count
+        if let arrowhead = Self.arrowhead(forMark: bytes[end], isSourceEnd: false) {
+            end += 1
             return FlowchartLink(stroke: stroke, sourceArrowhead: sourceArrowhead, targetArrowhead: arrowhead, minimumRankSpan: count - 1)
         }
-        if count >= 3 {
-            return FlowchartLink(stroke: stroke, sourceArrowhead: sourceArrowhead, targetArrowhead: .none, minimumRankSpan: count - 2)
-        }
-        return try readTextInside(&cursor, closing: { lookahead in closingRun(of: sign, at: lookahead) }, stroke: stroke,
-                                  sourceArrowhead: sourceArrowhead, openingLine: openingLine)
+        if count >= 3 { return FlowchartLink(stroke: stroke, sourceArrowhead: sourceArrowhead, targetArrowhead: .none, minimumRankSpan: count - 2) }
+        return try readTextInside(at: &end, closingSign: sign, stroke: stroke, sourceArrowhead: sourceArrowhead, openedAt: opening)
     }
 
     /// `-.->`, `-.-`, `-..->` and their text form `-. text .->`.
-    private static func readDotted(sourceArrowhead: FlowchartArrowhead, _ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> FlowchartLink? {
-        let openingLine = cursor.line
-        cursor.advance()
-        let periodCount = runLength(of: MermaidByte.period, in: cursor)
-        cursor.advance(by: periodCount)
-        guard cursor.peek() == MermaidByte.hyphen else {
-            return try readTextInside(&cursor, closing: closingDotted(at:), stroke: .dotted, sourceArrowhead: sourceArrowhead,
-                                      openingLine: openingLine)
+    private mutating func readDotted(sourceArrowhead: FlowchartArrowhead, at end: inout Int) throws(MermaidDiagramReadError) -> FlowchartLink? {
+        let opening = end
+        end += 1
+        let periodCount = bytes.run(of: MermaidByte.period, at: end)
+        end += periodCount
+        guard bytes[end] == MermaidByte.hyphen else {
+            return try readTextInside(at: &end, closingSign: MermaidByte.period, stroke: .dotted, sourceArrowhead: sourceArrowhead, openedAt: opening)
         }
-        cursor.advance()
+        end += 1
         var targetArrowhead = FlowchartArrowhead.none
-        if let mark = cursor.peek(), let arrowhead = arrowhead(forMark: mark, isSourceEnd: false) {
+        if let arrowhead = Self.arrowhead(forMark: bytes[end], isSourceEnd: false) {
             targetArrowhead = arrowhead
-            cursor.advance()
+            end += 1
         }
         return FlowchartLink(stroke: .dotted, sourceArrowhead: sourceArrowhead, targetArrowhead: targetArrowhead, minimumRankSpan: periodCount)
     }
 
     /// Text inside a link, up to the first closing operator on the same line, which gives the target's mark and the span.
-    private static func readTextInside(_ cursor: inout MermaidTextCursor,
-                                       closing: (MermaidTextCursor) -> (length: Int, arrowhead: FlowchartArrowhead, span: Int)?,
-                                       stroke: FlowchartEdgeStroke, sourceArrowhead: FlowchartArrowhead,
-                                       openingLine: Int) throws(MermaidDiagramReadError) -> FlowchartLink {
-        let textStart = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.newline {
-            if let (length, targetArrowhead, span) = closing(cursor) {
-                let written = FlowchartTextSyntax.unquoted(cursor.trimmedText(from: textStart, to: cursor.position))
-                cursor.advance(by: length)
-                return FlowchartLink(stroke: stroke, sourceArrowhead: sourceArrowhead, targetArrowhead: targetArrowhead, minimumRankSpan: span,
-                                     label: DiagramLabelDecoder.label(from: written.text, form: written.form))
+    /// A run of periods that closes nothing is passed whole: no period inside it closes either.
+    private mutating func readTextInside(at end: inout Int, closingSign: UInt8, stroke: FlowchartEdgeStroke, sourceArrowhead: FlowchartArrowhead,
+                                         openedAt opening: Int) throws(MermaidDiagramReadError) -> FlowchartLink {
+        let textStart = end
+        while end < bytes.count, bytes.base[end] != MermaidByte.newline {
+            let closing = closingSign == MermaidByte.period ? closingDotted(at: end) : closingRun(of: closingSign, at: end)
+            if let (length, targetArrowhead, span) = closing {
+                let label = edgeTextLabel(textStart..<end)
+                end += length
+                return FlowchartLink(stroke: stroke, sourceArrowhead: sourceArrowhead, targetArrowhead: targetArrowhead, minimumRankSpan: span, label: label)
             }
-            cursor.advance()
+            end += closingSign == MermaidByte.period ? max(bytes.run(of: MermaidByte.period, at: end), 1) : 1
         }
-        throw .invalidSyntax(line: openingLine, problem: .unclosedEdgeLabel)
+        throw .invalidSyntax(line: bytes.line(at: opening), problem: .unclosedEdgeLabel)
+    }
+
+    /// The text inside a link as 0.7.0 made it: trimmed of spaces, tabs and line breaks, unquoted, then decoded. ASCII
+    /// text is unquoted on its bytes, whose characters they are; other text through its characters.
+    private mutating func edgeTextLabel(_ written: Range<Int>) -> FlowchartLabelReference {
+        let trimmed = trimmedRange(from: written.lowerBound, to: written.upperBound)
+        guard isASCII(trimmed) else {
+            let unquoted = FlowchartTextSyntax.unquoted(bytes.string(from: trimmed.lowerBound, to: trimmed.upperBound))
+            return decoded(DiagramLabelDecoder.label(from: unquoted.text, form: unquoted.form))
+        }
+        let unquoted = unquotedRange(trimmed)
+        return writtenLabel(unquoted.range, form: unquoted.form)
     }
 
     /// The operator that closes text inside a solid or thick link: two or more signs and a mark, or three or more.
-    private static func closingRun(of sign: UInt8, at cursor: MermaidTextCursor) -> (length: Int, arrowhead: FlowchartArrowhead, span: Int)? {
-        let count = runLength(of: sign, in: cursor)
+    private func closingRun(of sign: UInt8, at position: Int) -> (length: Int, arrowhead: FlowchartArrowhead, span: Int)? {
+        let count = bytes.run(of: sign, at: position)
         guard count >= 2 else { return nil }
-        if let mark = cursor.peek(count), let arrowhead = arrowhead(forMark: mark, isSourceEnd: false) {
-            return (count + 1, arrowhead, count - 1)
-        }
+        if let arrowhead = Self.arrowhead(forMark: bytes[position + count], isSourceEnd: false) { return (count + 1, arrowhead, count - 1) }
         return count >= 3 ? (count, .none, count - 2) : nil
     }
 
     /// The operator that closes text inside a dotted link: `.-` or `.->` (and `..->` for a longer one).
-    private static func closingDotted(at cursor: MermaidTextCursor) -> (length: Int, arrowhead: FlowchartArrowhead, span: Int)? {
-        let periodCount = runLength(of: MermaidByte.period, in: cursor)
-        guard periodCount >= 1, cursor.peek(periodCount) == MermaidByte.hyphen else { return nil }
-        if let mark = cursor.peek(periodCount + 1), let arrowhead = arrowhead(forMark: mark, isSourceEnd: false) {
+    private func closingDotted(at position: Int) -> (length: Int, arrowhead: FlowchartArrowhead, span: Int)? {
+        let periodCount = bytes.run(of: MermaidByte.period, at: position)
+        guard periodCount >= 1, bytes[position + periodCount] == MermaidByte.hyphen else { return nil }
+        if let arrowhead = Self.arrowhead(forMark: bytes[position + periodCount + 1], isSourceEnd: false) {
             return (periodCount + 2, arrowhead, periodCount)
         }
         return (periodCount + 1, .none, periodCount)
     }
 
-    /// Text between bars after a link, `|text|` or `|"text"|`, read as the text in a node's brackets is (Pele's lexer
-    /// reads both in its `text` state): a string, plain text without brackets or quotation marks, or both.
-    private static func readBarredLabel(_ cursor: inout MermaidTextCursor, openingLine: Int) throws(MermaidDiagramReadError) -> DiagramLabel {
-        do {
-            return try FlowchartTextSyntax.readText(&cursor, closedByAnyOf: [[MermaidByte.verticalBar]], openingLine: openingLine).0
-        } catch .invalidSyntax(let line, .unclosedShape) {
-            throw .invalidSyntax(line: line, problem: .unclosedEdgeLabel)
-        }
-    }
-
-    private static func arrowhead(forMark mark: UInt8, isSourceEnd: Bool) -> FlowchartArrowhead? {
+    @inline(__always) private static func arrowhead(forMark mark: UInt8, isSourceEnd: Bool) -> FlowchartArrowhead? {
         switch mark {
         case MermaidByte.greaterThan: isSourceEnd ? nil : .arrow
         case MermaidByte.lessThan: isSourceEnd ? .arrow : nil
@@ -172,11 +168,5 @@ enum FlowchartLinkSyntax {
         case MermaidByte.letterX: .cross
         default: nil
         }
-    }
-
-    private static func runLength(of sign: UInt8, in cursor: MermaidTextCursor) -> Int {
-        var count = 0
-        while cursor.peek(count) == sign { count += 1 }
-        return count
     }
 }

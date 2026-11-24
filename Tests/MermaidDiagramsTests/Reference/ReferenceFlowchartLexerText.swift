@@ -1,25 +1,27 @@
 /**
- * File: FlowchartLexerText.swift
- * ------------------------------
- * Layer: Core
- * Description: The tests Pele's flowchart lexer makes at the start of a token, over a flowchart's UTF-8 bytes: its
- *              keywords, its direction statement, a link's identifier, the start of a link and its node strings.
+ * File: ReferenceFlowchartLexerText.swift
+ * ---------------------------------------
+ * Layer: Tests
+ * Description: MermaidDiagrams 0.7.0's FlowchartLexerText, frozen as the reference the flat reader is proven against
+ *              (FlowchartModelEquivalenceTests): the tests Pele's flowchart lexer makes at the start of a token, over a flowchart's UTF-8 bytes: its keywords, its direction statement, a link's identifier, the start of a link and its node strings.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.1
+ * Date: 24/11/2026
  */
+
+@testable import MermaidDiagrams
 
 /// A flowchart's text as Pele's lexer (flowchart/lexer.ts) tests it where a token starts in its initial state. Past
 /// the end it reads as the line break Pele appends to the text it parses. Made once per flowchart: its look-ahead index
 /// is built over the whole text.
-struct FlowchartLexerText {
+struct ReferenceFlowchartLexerText {
     let bytes: [UInt8]
-    private let lookAhead: FlowchartLookAheadIndex
+    private let lookAhead: ReferenceFlowchartLookAheadIndex
 
     init(bytes: [UInt8]) {
         self.bytes = bytes
-        lookAhead = FlowchartLookAheadIndex(bytes: bytes)
+        lookAhead = ReferenceFlowchartLookAheadIndex(bytes: bytes)
     }
 
     func byte(at position: Int) -> UInt8? {

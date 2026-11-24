@@ -41,9 +41,7 @@ public enum AgentFlowLayoutEngine {
         var clustered = AgentFlowClusterGraph(graph: diagram.graph, direction: isTurnedToRunDown ? .topToBottom : diagram.direction)
         clustered.flowchart.title = diagram.title
         let measurement = AgentFlowMeasurement(graph: diagram.graph, clustered: clustered, measurers: measurers, options: diagram.options)
-        for (subgraph, group) in clustered.subgraphGraphIndices.enumerated() {
-            clustered.flowchart.subgraphs[subgraph].title = measurement.groupTitles[group]
-        }
+        clustered.flowchart = clustered.flowchart.retitlingSubgraphs(clustered.subgraphGraphIndices.map { group in measurement.groupTitles[group] })
         let spacing = LayeredSpacing(nodeSeparation: CGFloat(diagram.options.nodeSpacing), edgeSeparation: edgeSeparation,
                                      rankSeparation: CGFloat(diagram.options.rankSpacing), borderSeparation: borderSeparation)
         let laidOut = try FlowchartLayoutEngine.layout(clustered.flowchart, measured: measurement.flowchartMeasurement, nodeText: measurers.nodeText,
@@ -76,7 +74,7 @@ struct AgentFlowMeasurement {
         let appearances = graph.nodes.map { node in BlockAppearance(classNames: nil, styles: node.compiledStyles + node.styles, classes: [:]) }
         textLooks = appearances.map { appearance in (appearance.isBold, appearance.isItalic) }
         var restyled = BlockMeasurerCache(measurers: measurers)
-        let count = clustered.flowchart.nodes.count
+        let count = clustered.flowchart.nodeCount
         var texts = [DiagramTextBlock](repeating: DiagramTextBlock(label: DiagramLabel(lines: []), measurer: nodeText, maximumWidth: 0), count: count)
         var sizes = [CGSize](repeating: .zero, count: count)
         var offsets = [CGFloat](repeating: 0, count: count)
@@ -97,7 +95,7 @@ struct AgentFlowMeasurement {
         for held in clustered.heldEdges { heldEdgeTexts[held.edgeIndex] = measuredText(of: held.edgeIndex) }
         self.heldEdgeTexts = heldEdgeTexts
         var loops = [[Int]](repeating: [], count: count)
-        for (edgeIndex, edge) in clustered.flowchart.edges.enumerated() where edge.sourceIndex == edge.targetIndex {
+        for (edgeIndex, edge) in clustered.flowchart.edgeDrawings.enumerated() where edge.sourceIndex == edge.targetIndex {
             loops[edge.sourceIndex].append(edgeIndex)
         }
         var flowchartMeasurement = FlowchartMeasurement(nodeTexts: texts, shapeSizes: sizes, textOffsets: offsets, edgeTexts: edgeTexts,

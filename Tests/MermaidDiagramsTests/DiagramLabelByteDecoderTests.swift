@@ -8,7 +8,7 @@
  *              in all three forms; and that long and hostile labels decode in time that grows with their length.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -91,7 +91,11 @@ final class DiagramLabelByteDecoderTests: XCTestCase {
         XCTAssertGreaterThan(unmarkedCount, 5_000)
     }
 
-    /// Every label the preparation of every corpus decodes, decoded again by 0.7.0's code.
+    /// Every label the preparation of every corpus decodes, decoded again by 0.7.0's code. A flowchart's reading keeps its
+    /// labels as ranges and decodes them only when they are read, a line without markup without the decoder
+    /// (`FlowchartLabelReference.lineLabel`, which shows it to the observer too); each flowchart is also read by 0.7.0's
+    /// frozen reader (`ReferenceMermaidReader`), which decodes every label it reads, as 0.7.0's preparation did, and whose
+    /// model the reader's matches (`FlowchartModelEquivalenceTests`).
     func testEveryLabelOfEveryCorpusIsTheScalarDecodersLabel() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         let observed = ObservedLabels()
@@ -100,6 +104,7 @@ final class DiagramLabelByteDecoderTests: XCTestCase {
         for (_, sources) in try OutputDigest.corpora() {
             for source in sources {
                 _ = OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: [])
+                _ = try? ReferenceMermaidReader.read(source, limits: .standard)
             }
         }
         XCTAssertGreaterThan(observed.labelCount, 10_000, "labels checked")

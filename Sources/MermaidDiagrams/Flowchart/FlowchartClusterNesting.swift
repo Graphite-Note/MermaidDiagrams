@@ -5,8 +5,8 @@
  * Description: Where each node and group of a flowchart sits among its groups, and which way each runs.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Where each node and group of a flowchart sits among its groups, and which way each runs.
@@ -29,21 +29,22 @@ struct FlowchartClusterNesting {
     let subgraphOrder: [Int]
 
     init(diagram: FlowchartDiagram) {
-        var nodeSubgraphs = [Int?](repeating: nil, count: diagram.nodes.count)
-        var representedSubgraphs = [Int?](repeating: nil, count: diagram.nodes.count)
-        var subgraphParents = [Int?](repeating: nil, count: diagram.subgraphs.count)
-        for (index, subgraph) in diagram.subgraphs.enumerated() {
+        let subgraphs = diagram.subgraphs
+        var nodeSubgraphs = [Int?](repeating: nil, count: diagram.nodeCount)
+        var representedSubgraphs = [Int?](repeating: nil, count: diagram.nodeCount)
+        var subgraphParents = [Int?](repeating: nil, count: subgraphs.count)
+        for (index, subgraph) in subgraphs.enumerated() {
             for node in subgraph.nodeIndices { nodeSubgraphs[node] = index }
             for child in subgraph.childSubgraphIndices { subgraphParents[child] = index }
             if let node = subgraph.representingNodeIndex { representedSubgraphs[node] = index }
         }
         let crossed = Self.crossedSubgraphs(of: diagram, nodeSubgraphs: nodeSubgraphs, representedSubgraphs: representedSubgraphs,
                                             subgraphParents: subgraphParents)
-        let kept = diagram.subgraphs.indices.map { index in crossed.contains(index) ? nil : diagram.subgraphs[index].direction }
+        let kept = subgraphs.indices.map { index in crossed.contains(index) ? nil : subgraphs[index].direction }
         // `FlowchartDiagram.subgraphs` lists each group before the groups inside it.
-        var depths = [Int](repeating: 0, count: diagram.subgraphs.count)
-        var directions = [FlowchartDirection](repeating: diagram.direction, count: diagram.subgraphs.count)
-        for index in diagram.subgraphs.indices {
+        var depths = [Int](repeating: 0, count: subgraphs.count)
+        var directions = [FlowchartDirection](repeating: diagram.direction, count: subgraphs.count)
+        for index in subgraphs.indices {
             let parent = subgraphParents[index]
             depths[index] = parent.map { depths[$0] + 1 } ?? 0
             directions[index] = kept[index] ?? parent.map { directions[$0] } ?? diagram.direction
@@ -54,8 +55,8 @@ struct FlowchartClusterNesting {
         subgraphDepths = depths
         subgraphDirections = kept
         nodeDirections = nodeSubgraphs.map { subgraph in subgraph.map { directions[$0] } ?? diagram.direction }
-        var order = Array(diagram.subgraphs.indices)
-        for (place, subgraph) in Self.closingOrder(of: diagram, subgraphParents: subgraphParents).reversed().enumerated() { order[subgraph] = place }
+        var order = Array(subgraphs.indices)
+        for (place, subgraph) in Self.closingOrder(of: subgraphs, subgraphParents: subgraphParents).reversed().enumerated() { order[subgraph] = place }
         subgraphOrder = order
     }
 
@@ -72,19 +73,21 @@ struct FlowchartClusterNesting {
             return groups
         }
         var crossed = Set<Int>()
-        for edge in diagram.edges where edge.sourceIndex != edge.targetIndex {
-            let sourceGroups = around(edge.sourceIndex)
-            let targetGroups = around(edge.targetIndex)
+        for edgeIndex in 0..<diagram.edgeCount {
+            let (source, target) = diagram.edgeEnds(at: edgeIndex)
+            guard source != target else { continue }
+            let sourceGroups = around(source)
+            let targetGroups = around(target)
             crossed.formUnion(sourceGroups.symmetricDifference(targetGroups))
         }
         return crossed
     }
 
     /// The groups in the order their ends are written: each group's inner groups, in order, before it.
-    private static func closingOrder(of diagram: FlowchartDiagram, subgraphParents: [Int?]) -> [Int] {
+    private static func closingOrder(of subgraphs: [FlowchartSubgraph], subgraphParents: [Int?]) -> [Int] {
         var order: [Int] = []
-        var isListed = [Bool](repeating: false, count: diagram.subgraphs.count)
-        for root in diagram.subgraphs.indices where subgraphParents[root] == nil {
+        var isListed = [Bool](repeating: false, count: subgraphs.count)
+        for root in subgraphs.indices where subgraphParents[root] == nil {
             var stack: [(subgraph: Int, isClosing: Bool)] = [(root, false)]
             while let (subgraph, isClosing) = stack.popLast() {
                 if isClosing {
@@ -94,7 +97,7 @@ struct FlowchartClusterNesting {
                 if isListed[subgraph] { continue }
                 isListed[subgraph] = true
                 stack.append((subgraph, true))
-                for child in diagram.subgraphs[subgraph].childSubgraphIndices.reversed() where !isListed[child] { stack.append((child, false)) }
+                for child in subgraphs[subgraph].childSubgraphIndices.reversed() where !isListed[child] { stack.append((child, false)) }
             }
         }
         return order

@@ -6,8 +6,8 @@
  *              and for a narrow container turned to run down and tightened as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -78,24 +78,24 @@ public enum FlowchartLayoutEngine {
                                                        groupPadding: CGFloat = FlowchartClusterGraph.clusterPadding,
                                                        titleWidth: CGFloat = .greatestFiniteMagnitude) throws(FlowchartLayoutError) -> FlowchartLayout {
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nodeText, maximumWidth: titleWidth) }
-        guard diagram.subgraphs.isEmpty else {
+        guard diagram.subgraphCount == 0 else {
             return try layoutInBoxes(diagram, measured: measured, nodeText: nodeText, font: font, limits: limits, spacing: spacing,
                                      groupPadding: groupPadding, title: title)
         }
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let layeredEdgeIndices = diagram.edges.indices.filter { edgeIndex in diagram.edges[edgeIndex].sourceIndex != diagram.edges[edgeIndex].targetIndex }
+        let layeredEdgeIndices = (0..<diagram.edgeCount).filter { edgeIndex in diagram.edgeEnds(at: edgeIndex).source != diagram.edgeEnds(at: edgeIndex).target }
         let spanSide: DiagramSide = diagram.direction.layeredDirection.runsVertically ? .top : .left
         let graph = LayeredGraph(nodeSizes: measured.layoutSizes(loopSide: flowAxes.loopSide).map(flowAxes.flowSize(of:)),
                                  edges: layeredEdgeIndices.map { edgeIndex in
-                                     let edge = diagram.edges[edgeIndex]
+                                     let (source, target) = diagram.edgeEnds(at: edgeIndex)
                                      let labelSize = measured.edgeTexts[edgeIndex].map { text in
                                          flowAxes.flowSize(of: CGSize(width: text.size.width + edgeTextRoom.width,
                                                                       height: text.size.height + edgeTextRoom.height))
                                      }
-                                     return LayeredEdge(source: edge.sourceIndex, target: edge.targetIndex, minimumRankSpan: edge.minimumRankSpan,
+                                     return LayeredEdge(source: source, target: target, minimumRankSpan: diagram.edgeMinimumRankSpan(at: edgeIndex),
                                                         labelSize: labelSize)
                                  },
-                                 nodeSideSpans: diagram.nodes.indices.map { node in measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: spanSide) })
+                                 nodeSideSpans: (0..<diagram.nodeCount).map { node in measured.sideSpan(of: node, shape: diagram.nodeShape(at: node), side: spanSide) })
         guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

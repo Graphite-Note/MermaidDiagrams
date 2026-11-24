@@ -61,10 +61,11 @@ extension MermaidDiagramAccessibility {
         let flowchart = MermaidDiagramAccessibility(flowchart: diagram)
         self.init(kind: .swimlane, title: flowchart.title, description: flowchart.description) {
             let nesting = FlowchartClusterNesting(diagram: diagram)
-            let laneTitles = diagram.subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
-                .map { subgraph in diagram.subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
-            let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
-            let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
+            let subgraphs = diagram.subgraphs
+            let laneTitles = subgraphs.indices.filter { subgraph in nesting.subgraphParents[subgraph] == nil }
+                .map { subgraph in subgraphs[subgraph].title.spokenText }.filter { title in !title.isEmpty }
+            let groupNodes = Set(subgraphs.compactMap(\.representingNodeIndex))
+            let nodeTexts = (0..<diagram.nodeCount).filter { node in !groupNodes.contains(node) }.map { node in diagram.nodeLabel(at: node).spokenText }
             return laneTitles + nodeTexts
         }
     }

@@ -6,8 +6,8 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -31,7 +31,7 @@ struct SwimlanePageAssembly {
         self.measured = measured
         self.graph = graph
         self.placement = placement
-        edges = Array(repeating: nil, count: diagram.edges.count)
+        edges = Array(repeating: nil, count: diagram.edgeCount)
         placeEdges()
         placeSelfLoops()
     }
@@ -43,7 +43,7 @@ struct SwimlanePageAssembly {
 
     private mutating func placeEdges() {
         let reaches = sideReaches()
-        for (edgeIndex, edge) in diagram.edges.enumerated() {
+        for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() {
             guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
             var points = route.points
             let startReach = reach(at: points[0], box: graph.nodeBoxes[edge.sourceIndex], in: reaches)
@@ -68,7 +68,7 @@ struct SwimlanePageAssembly {
     /// crosses it. Keyed by box and side; an edge to itself or one not drawn counts for none.
     private func sideReaches() -> [Int: CGFloat] {
         var reaches: [Int: CGFloat] = [:]
-        for (edgeIndex, edge) in diagram.edges.enumerated() where edge.stroke != .invisible {
+        for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() where edge.stroke != .invisible {
             guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
             let ends = [(route.points[0], graph.nodeBoxes[edge.sourceIndex], edge.sourceArrowhead),
                         (route.points[route.points.count - 1], graph.nodeBoxes[edge.targetIndex], edge.targetArrowhead)]
@@ -112,7 +112,7 @@ struct SwimlanePageAssembly {
         guard graph.nesting.representedSubgraphs[node] == nil else { return point }
         let frame = placement.frames[graph.nodeBoxes[node]]
         guard let side = Self.side(of: point, on: frame) else { return point }
-        let shape = measured.assetNodes.contains(node) ? .rectangle : diagram.nodes[node].shape
+        let shape = measured.assetNodes.contains(node) ? .rectangle : diagram.nodeShape(at: node)
         return FlowchartEdgePorts.outlinePoint(center: CGPoint(x: frame.midX, y: frame.midY), shape: shape,
                                                size: measured.shapeSizes[node], side: side,
                                                offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
@@ -126,7 +126,7 @@ struct SwimlanePageAssembly {
             let isGroup = graph.nesting.representedSubgraphs[node] != nil
             var loopIndex = 0
             for edgeIndex in loopEdgeIndices {
-                let edge = diagram.edges[edgeIndex]
+                let edge = diagram.edgeDrawing(at: edgeIndex)
                 defer { if edge.stroke != .invisible { loopIndex += 1 } }
                 let text = measured.edgeTexts[edgeIndex]
                 let loop = FlowchartSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
@@ -163,7 +163,7 @@ extension SwimlanePageAssembly {
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (placement.size.height + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        let nodes = diagram.nodes.indices.filter { node in graph.nesting.representedSubgraphs[node] == nil }.map { node in placedNode(node).translated(by: offset) }
+        let nodes = (0..<diagram.nodeCount).filter { node in graph.nesting.representedSubgraphs[node] == nil }.map { node in placedNode(node).translated(by: offset) }
         let flowchart = FlowchartLayout(size: size, font: font, nodes: nodes, edges: edges.compactMap { edge in edge?.translated(by: offset) },
                                         title: placedTitle, clusters: groupsInsideLanes().map { cluster in cluster.translated(by: offset) })
         return SwimlaneLayout(flowchart: flowchart, lanes: lanes().map { lane in lane.translated(by: offset) })
@@ -174,16 +174,16 @@ extension SwimlanePageAssembly {
         var text = measured.nodeTexts[node]
         text.center = CGPoint(x: center.x, y: center.y + measured.textOffsets[node])
         let size = measured.shapeSizes[node]
-        return FlowchartLayoutNode(shape: diagram.nodes[node].shape,
+        return FlowchartLayoutNode(shape: diagram.nodeShape(at: node),
                                    frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height),
-                                   text: text, style: diagram.nodes[node].style, asset: diagram.nodes[node].asset)
+                                   text: text, style: diagram.nodeStyle(at: node), asset: diagram.nodeAsset(at: node))
     }
 
     /// The groups inside lanes, each title along its box's top, clear of the edges where it can be, their depths counted from
     /// the lane they are in.
     private func groupsInsideLanes() -> [FlowchartLayoutCluster] {
         let crossings = FlowchartRoutePointIndex(edgePoints)
-        return diagram.subgraphs.indices.compactMap { subgraph in
+        return (0..<diagram.subgraphCount).compactMap { subgraph in
             guard graph.nesting.subgraphParents[subgraph] != nil else { return nil }
             let frame = placement.frames[graph.subgraphBoxes[subgraph]]
             let title = graph.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }

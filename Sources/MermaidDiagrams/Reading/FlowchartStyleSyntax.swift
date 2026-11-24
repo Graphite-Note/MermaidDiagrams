@@ -2,11 +2,12 @@
  * File: FlowchartStyleSyntax.swift
  * --------------------------------
  * Layer: Core
- * Description: Reads the statements that style a flowchart.
+ * Description: Reads the statements that style a flowchart: on bytes when they are ASCII, through their characters
+ *              otherwise.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 01/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// A statement that styles a flowchart.
@@ -56,5 +57,63 @@ enum FlowchartStyleSyntax {
 
     private static func commaSeparated(_ text: String) -> [String] {
         text.split(separator: ",").map { part in part.trimmingCharacters(in: .whitespaces) }.filter { part in !part.isEmpty }
+    }
+}
+
+extension FlowchartStyleSyntax {
+    /// The statement the trimmed `range` of `bytes` writes after `keyword`, as `statement(keyword:text:)` reads its text:
+    /// on the bytes when they are ASCII, whose characters they are, else through that text.
+    static func statement(keyword: FlowchartStyleKeyword, in bytes: FlowchartBytes, range: Range<Int>) -> FlowchartStyleStatement? {
+        guard !range.contains(where: { index in bytes.base[index] >= 0x80 }) else {
+            return statement(keyword: keyword.text, text: bytes.string(from: range.lowerBound, to: range.upperBound))
+        }
+        let (head, rest) = split(range, in: bytes)
+        guard !head.isEmpty else { return nil }
+        func text(_ part: Range<Int>) -> String { bytes.string(from: part.lowerBound, to: part.upperBound) }
+        let declarations = text(rest)
+        switch keyword {
+        case .classDefinition:
+            let names = commaSeparated(head, in: bytes).map(text)
+            return names.isEmpty ? nil : .classDefinition(names: names, declarations: declarations)
+        case .classAssignment:
+            let identifiers = commaSeparated(head, in: bytes).map(text)
+            let className = split(rest, in: bytes).head
+            return identifiers.isEmpty || className.isEmpty ? nil : .classAssignment(identifiers: identifiers, className: text(className))
+        case .style:
+            return .nodeStyle(identifier: text(head), declarations: declarations)
+        case .linkStyle:
+            if head.count == 7, bytes.hasText("default", at: head.lowerBound) { return .linkStyle(indices: nil, declarations: declarations) }
+            let parts = commaSeparated(head, in: bytes)
+            let indices = parts.compactMap { part in Int(text(part)) }
+            return indices.count == parts.count ? .linkStyle(indices: indices, declarations: declarations) : nil
+        }
+    }
+
+    /// The first word of ASCII `range` (up to a space or a tab), and what follows it without spaces and tabs at its ends.
+    private static func split(_ range: Range<Int>, in bytes: FlowchartBytes) -> (head: Range<Int>, rest: Range<Int>) {
+        let trimmed = trimmedOfSpaces(range, in: bytes)
+        guard let space = trimmed.first(where: { index in MermaidByte.isSpace(bytes.base[index]) }) else { return (trimmed, trimmed.upperBound..<trimmed.upperBound) }
+        return (trimmed.lowerBound..<space, trimmedOfSpaces(space..<trimmed.upperBound, in: bytes))
+    }
+
+    /// The non-empty pieces of ASCII `range` between its commas, each without spaces and tabs at its ends.
+    private static func commaSeparated(_ range: Range<Int>, in bytes: FlowchartBytes) -> [Range<Int>] {
+        var pieces: [Range<Int>] = []
+        var start = range.lowerBound
+        for index in range.lowerBound...range.upperBound where index == range.upperBound || bytes.base[index] == MermaidByte.comma {
+            let piece = trimmedOfSpaces(start..<index, in: bytes)
+            if !piece.isEmpty { pieces.append(piece) }
+            start = index + 1
+        }
+        return pieces
+    }
+
+    /// ASCII `range` without the spaces and tabs at its ends: Foundation's `whitespaces` there.
+    private static func trimmedOfSpaces(_ range: Range<Int>, in bytes: FlowchartBytes) -> Range<Int> {
+        var start = range.lowerBound
+        var end = range.upperBound
+        while start < end, MermaidByte.isSpace(bytes.base[start]) { start += 1 }
+        while end > start, MermaidByte.isSpace(bytes.base[end - 1]) { end -= 1 }
+        return start..<end
     }
 }

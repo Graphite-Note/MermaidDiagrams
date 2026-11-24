@@ -5,8 +5,8 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.25
- * Date: 23/11/2026
+ * Version: 0.26
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -57,12 +57,14 @@ public enum MermaidDiagram: Equatable, Sendable {
 public enum MermaidDiagramReader {
     public static func read(_ source: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> MermaidDiagram {
         guard source.utf8.count <= limits.maximumSourceBytes else { throw .sourceTooLarge(limitBytes: limits.maximumSourceBytes) }
-        var (title, cursor) = try preprocessed(source)
-        skipCommentsAndBlankLines(&cursor)
-        guard let keyword = readTypeKeyword(&cursor) else {
-            throw cursor.isAtEnd ? .noDiagram : .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
+        let frontEnd = try MermaidFrontEnd.read(source)
+        let title = frontEnd.frontMatterTitle
+        switch frontEnd.typeKeyword {
+        // A flowchart has no title statement of its own: its title is the front matter's.
+        case .flowchart: return .flowchart(try FlowchartParser.parse(frontEnd, limits: limits))
+        case .swimlane: return .swimlane(try FlowchartParser.parse(frontEnd, limits: limits))
+        case .other: return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: title)
         }
-        return try diagram(named: keyword, at: cursor, limits: limits, frontMatterTitle: title)
     }
 
     /// The diagram of the type `keyword` names, read from `cursor`: one of the fourteen types this package read first, or
@@ -70,7 +72,6 @@ public enum MermaidDiagramReader {
     private static func diagram(named keyword: String, at cursor: MermaidTextCursor, limits: MermaidDiagramLimits,
                                 frontMatterTitle title: String?) throws(MermaidDiagramReadError) -> MermaidDiagram {
         switch keyword {
-        case "flowchart", "graph", "flowchart-elk": return .flowchart(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "stateDiagram", "stateDiagram-v2": return .stateDiagram(titled(try StateDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "classDiagram", "classDiagram-v2": return .classDiagram(titled(try ClassDiagramParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "sequenceDiagram": return .sequence(titled(try SequenceParser.parse(cursor, limits: limits), frontMatterTitle: title))
@@ -123,7 +124,6 @@ public enum MermaidDiagramReader {
         // Pele detects any text that starts with `requirement` as a requirement diagram; its lexer then reads the keyword.
         case _ where keyword.hasPrefix("requirement"):
             return .requirement(titled(try RequirementParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
-        case "swimlane-beta": return .swimlane(titled(try FlowchartParser.parse(cursor, limits: limits), frontMatterTitle: title))
         case "usecase-beta": return .useCase(titled(try UseCaseParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         case "agentflow-beta": return .agentFlow(titled(try AgentFlowParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)
@@ -177,24 +177,6 @@ public enum MermaidDiagramReader {
         return (MermaidFrontMatter.title(in: value), frontMatter.end)
     }
 
-    /// Skips what comes before the diagram's keyword: blank space, and comments, each to the end of its line.
-    private static func skipCommentsAndBlankLines(_ cursor: inout MermaidTextCursor) {
-        while true {
-            cursor.skipWhitespace()
-            guard cursor.hasPrefix(commentStart) else { return }
-            cursor.skipToEndOfLine()
-        }
-    }
-
-    /// The keyword that names the type: a letter, then letters, digits and `-` (`stateDiagram-v2`).
-    private static func readTypeKeyword(_ cursor: inout MermaidTextCursor) -> String? {
-        guard let first = cursor.peek(), MermaidByte.isLetter(first) else { return nil }
-        let start = cursor.position
-        while let byte = cursor.peek(), MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.hyphen { cursor.advance() }
-        return cursor.position > start ? cursor.text(from: start, to: cursor.position) : nil
-    }
-
     private static let byteOrderMark: [UInt8] = [0xEF, 0xBB, 0xBF]
-    private static let commentStart = Array("%%".utf8)
     private static let fence = Array("---".utf8)
 }

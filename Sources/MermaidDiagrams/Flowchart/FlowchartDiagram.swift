@@ -2,21 +2,23 @@
  * File: FlowchartDiagram.swift
  * ----------------------------
  * Layer: Core
- * Description: A Mermaid flowchart as its text describes it.
+ * Description: A Mermaid flowchart as its text describes it, over the flat model its reading made, its nodes, edges and
+ *              groups made from the model when they are read.
  *
- * Authors: Félix Chevalier
- * Version: 0.3
- * Date: 01/11/2026
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// A Mermaid flowchart (`flowchart` or `graph`) as its text describes it: the nodes in the order they first
 /// appear, the edges between them in the order they are written, and the groups and statements read but not drawn.
+///
+/// The flowchart keeps the flat model its reading made (`FlowchartModel`): `nodes`, `edges` and `subgraphs` are made from
+/// it each time they are read, so a loop over a flowchart's nodes reads `nodeCount` and `node(at:)` instead.
 public struct FlowchartDiagram: Equatable, Sendable {
     public internal(set) var direction: FlowchartDirection
-    public internal(set) var nodes: [FlowchartNode]
-    public internal(set) var edges: [FlowchartEdge]
-    /// The `subgraph … end` groups, each before the groups inside it, groups side by side in the order they are written.
-    public internal(set) var subgraphs: [FlowchartSubgraph]
+    /// The nodes, edges and groups, as the reading made them.
+    private(set) var model: FlowchartModel
     /// The diagram's title, from `title:` in the front matter, or nil.
     public internal(set) var title: String?
     /// `accTitle: …`, the short name a screen reader gives the diagram, or nil.
@@ -31,14 +33,71 @@ public struct FlowchartDiagram: Equatable, Sendable {
     init(direction: FlowchartDirection = .topToBottom, nodes: [FlowchartNode] = [], edges: [FlowchartEdge] = [],
          subgraphs: [FlowchartSubgraph] = [], title: String? = nil, accessibilityTitle: String? = nil,
          accessibilityDescription: String? = nil, unappliedStatementCount: Int = 0) {
+        self.init(direction: direction, model: FlowchartModel(nodes: nodes, edges: edges, subgraphs: subgraphs), title: title,
+                  accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
+    }
+
+    init(direction: FlowchartDirection, model: FlowchartModel, title: String? = nil, accessibilityTitle: String?, accessibilityDescription: String?,
+         unappliedStatementCount: Int) {
         self.direction = direction
-        self.nodes = nodes
-        self.edges = edges
-        self.subgraphs = subgraphs
+        self.model = model
         self.title = title
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
         self.unappliedStatementCount = unappliedStatementCount
+    }
+
+    /// The nodes in the order they first appear, made from the model on each read.
+    public internal(set) var nodes: [FlowchartNode] {
+        get { model.materializedNodes }
+        set { model = FlowchartModel(nodes: newValue, edges: edges, subgraphs: subgraphs) }
+    }
+
+    /// The edges in the order they are written, made from the model on each read.
+    public internal(set) var edges: [FlowchartEdge] {
+        get { model.materializedEdges }
+        set { model = FlowchartModel(nodes: nodes, edges: newValue, subgraphs: subgraphs) }
+    }
+
+    /// The `subgraph … end` groups, each before the groups inside it, groups side by side in the order they are written;
+    /// made from the model on each read.
+    public internal(set) var subgraphs: [FlowchartSubgraph] {
+        get { model.materializedSubgraphs }
+        set { model = FlowchartModel(nodes: nodes, edges: edges, subgraphs: newValue) }
+    }
+
+    public var nodeCount: Int { model.nodes.count }
+    public var edgeCount: Int { model.edges.count }
+    public var subgraphCount: Int { model.groupCount }
+
+    /// The node at `index`, made from the model.
+    public func node(at index: Int) -> FlowchartNode { model.node(at: index) }
+    /// The edge at `index`, made from the model.
+    public func edge(at index: Int) -> FlowchartEdge { model.edge(at: index) }
+    /// The group at `index`, made from the model.
+    public func subgraph(at index: Int) -> FlowchartSubgraph { model.subgraph(at: index) }
+
+    /// Flowcharts are equal when they read the same: the same nodes, edges, groups, titles and statements not applied,
+    /// whatever text their models index.
+    public static func == (left: FlowchartDiagram, right: FlowchartDiagram) -> Bool {
+        left.direction == right.direction && left.title == right.title && left.accessibilityTitle == right.accessibilityTitle
+            && left.accessibilityDescription == right.accessibilityDescription && left.unappliedStatementCount == right.unappliedStatementCount
+            && left.nodeCount == right.nodeCount && left.edgeCount == right.edgeCount && left.subgraphCount == right.subgraphCount
+            && left.nodes == right.nodes && left.edges == right.edges && left.subgraphs == right.subgraphs
+    }
+
+    /// The flowchart with its groups titled `titles`, in their order.
+    func retitlingSubgraphs(_ titles: [DiagramLabel]) -> FlowchartDiagram {
+        var retitled = self
+        retitled.model = model.retitlingGroups(titles)
+        return retitled
+    }
+
+    /// The flowchart with each group's direction changed by `turn`.
+    func turningGroupDirections(_ turn: (FlowchartDirection?) -> FlowchartDirection?) -> FlowchartDiagram {
+        var turned = self
+        turned.model = model.turningGroupDirections(turn)
+        return turned
     }
 }
 

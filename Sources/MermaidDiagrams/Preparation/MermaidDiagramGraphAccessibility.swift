@@ -14,9 +14,10 @@ extension MermaidDiagramAccessibility {
     /// The text of each node drawn, in the order the diagram names them, then each group's title.
     init(flowchart diagram: FlowchartDiagram) {
         self.init(kind: .flowchart, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let groupNodes = Set(diagram.subgraphs.compactMap(\.representingNodeIndex))
-            let nodeTexts = diagram.nodes.indices.filter { node in !groupNodes.contains(node) }.map { node in diagram.nodes[node].label.spokenText }
-            return nodeTexts + diagram.subgraphs.map(\.title.spokenText).filter { title in !title.isEmpty }
+            let subgraphs = diagram.subgraphs
+            let groupNodes = Set(subgraphs.compactMap(\.representingNodeIndex))
+            let nodeTexts = (0..<diagram.nodeCount).filter { node in !groupNodes.contains(node) }.map { node in diagram.nodeLabel(at: node).spokenText }
+            return nodeTexts + subgraphs.map(\.title.spokenText).filter { title in !title.isEmpty }
         }
     }
 

@@ -6,8 +6,8 @@
  *              that an identifier takes; and finds those tokens, and the ones a style takes, where Pele's lexer would.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// The tokens of Pele's flowchart lexer (flowchart/tokens.ts) that make identifiers (`ID`) and styles (`STYLE_PART`).
@@ -49,79 +49,62 @@ enum FlowchartPieceToken {
 /// `#node`, `:node`, `&`, `odd-` (before `>`) and `default.node` are identifiers; a keyword, a link (`-->`), a link's
 /// identifier (`e1@`), a bracket, `:::`, a space or a character that is neither ASCII nor a letter ends one.
 enum FlowchartIdentifierSyntax {
-    /// Reads an identifier at the cursor and moves past it, or returns nil and leaves the cursor when none starts there;
-    /// `text` is the cursor's text as the lexer tests it.
-    static func readIdentifier(_ cursor: inout MermaidTextCursor, in text: FlowchartLexerText) -> String? {
-        let start = cursor.position
-        let end = endOfIdentifier(in: text, from: start)
-        guard end > start else { return nil }
-        cursor.advance(by: end - start)
-        return cursor.text(from: start, to: end)
-    }
-
     /// Where the identifier from `start` ends; `start` when none starts there.
-    static func endOfIdentifier(in text: FlowchartLexerText, from start: Int) -> Int {
+    static func endOfIdentifier(in bytes: FlowchartBytes, from start: Int) -> Int {
         var end = start
-        while let (token, tokenEnd) = token(in: text, at: end), token.isIdentifierPiece { end = tokenEnd }
+        while let (token, tokenEnd) = token(in: bytes, at: end), token.isIdentifierPiece { end = tokenEnd }
         return end
     }
 
     /// The token Pele's lexer reads at `position` in its initial state and where it ends, when it is one an identifier
     /// or a style takes; nil for any other token, or none.
-    static func token(in text: FlowchartLexerText, at position: Int) -> (FlowchartPieceToken, Int)? {
-        let bytes = text.bytes
+    static func token(in bytes: FlowchartBytes, at position: Int) -> (FlowchartPieceToken, Int)? {
         guard position < bytes.count else { return nil }
-        let byte = bytes[position]
+        let byte = bytes.base[position]
         // In the lexer's order: a quotation mark opens a string, `default` and `style` are tokens of their own before any
         // other check, then keywords, a direction statement anywhere on the line and a link's identifier.
         if byte == MermaidByte.quotationMark { return nil }
-        if byte == UInt8(ascii: "d"), text.isKeyword(defaultWord, at: position) { return (.defaultKeyword, position + defaultWord.count) }
-        if byte == UInt8(ascii: "s"), text.isKeyword(styleWord, at: position) { return (.styleKeyword, position + styleWord.count) }
-        if text.startsKeywordOrAccessibility(at: position) || text.startsDirectionStatement(at: position)
-            || text.startsLinkIdentifier(at: position) { return nil }
+        if byte == UInt8(ascii: "d"), bytes.isKeyword("default", at: position) { return (.defaultKeyword, position + 7) }
+        if byte == UInt8(ascii: "s"), bytes.isKeyword("style", at: position) { return (.styleKeyword, position + 5) }
+        if bytes.startsKeywordOrAccessibility(at: position) || bytes.startsDirectionStatement(at: position)
+            || bytes.endOfLinkIdentifier(at: position) != nil { return nil }
         if MermaidByte.isDigit(byte) {
             var end = position + 1
-            while end < bytes.count, MermaidByte.isDigit(bytes[end]) { end += 1 }
+            while end < bytes.count, MermaidByte.isDigit(bytes.base[end]) { end += 1 }
             return (.number, end)
         }
-        if let single = singleCharacterTokens[byte] {
-            if byte == MermaidByte.colon, text.byte(at: position + 1) == MermaidByte.colon, text.byte(at: position + 2) == MermaidByte.colon { return nil }
-            return (single, position + 1)
-        }
         switch byte {
+        case UInt8(ascii: "#"): return (.numberSign, position + 1)
+        case MermaidByte.ampersand: return (.ampersand, position + 1)
+        case MermaidByte.comma: return (.comma, position + 1)
+        case UInt8(ascii: "*"): return (.asterisk, position + 1)
+        case MermaidByte.colon:
+            return bytes[position + 1] == MermaidByte.colon && bytes[position + 2] == MermaidByte.colon ? nil : (.colon, position + 1)
         case MermaidByte.letterX, MermaidByte.letterO, MermaidByte.period:
-            return text.startsLink(at: position) ? nil : text.endOfNodeString(at: position).map { end in (.nodeString, end) }
+            return bytes.startsLink(at: position) ? nil : bytes.endOfNodeString(at: position).map { end in (.nodeString, end) }
         case MermaidByte.hyphen:
-            if text.startsLink(at: position) { return nil }
-            return text.endOfNodeString(at: position).map { end in (.nodeString, end) } ?? (.minus, position + 1)
+            if bytes.startsLink(at: position) { return nil }
+            return bytes.endOfNodeString(at: position).map { end in (.nodeString, end) } ?? (.minus, position + 1)
         case UInt8(ascii: "\\"):
-            return text.byte(at: position + 1) == MermaidByte.verticalBar ? nil : text.endOfNodeString(at: position).map { end in (.nodeString, end) }
-        case UInt8(ascii: "v") where !FlowchartLexerText.isWord(text.byte(at: position + 1)): return (.down, position + 1)
+            return bytes[position + 1] == MermaidByte.verticalBar ? nil : bytes.endOfNodeString(at: position).map { end in (.nodeString, end) }
+        case UInt8(ascii: "v") where !FlowchartBytes.isWord(bytes[position + 1]): return (.down, position + 1)
         default: break
         }
-        if JavaScriptWhitespace.length(in: bytes, at: position) > 0 { return space(in: text, at: position) }
-        if byte < 0x80 { return text.endOfNodeString(at: position).map { end in (.nodeString, end) } }
+        if bytes.whitespaceLength(at: position) > 0 { return space(in: bytes, at: position) }
+        if byte < 0x80 { return bytes.endOfNodeString(at: position).map { end in (.nodeString, end) } }
         // Beyond ASCII: one letter of the lexer's table is `UNICODE_TEXT`; anything else is no token Pele reads.
-        guard let (scalar, length) = text.scalar(at: position), scalar.value <= 0xFFFF,
+        guard let (scalar, length) = bytes.scalar(at: position), scalar.value <= 0xFFFF,
               AgentFlowCharacter.isUnicodeLetter(Int(scalar.value)) else { return nil }
         return (.unicodeText, position + length)
     }
 
     /// `SPACE` (`[^\S\n\r]+`), unless a link starts after the white space or it is a line break.
-    private static func space(in text: FlowchartLexerText, at position: Int) -> (FlowchartPieceToken, Int)? {
-        let afterSpaces = text.endOfSpaces(from: position)
-        if afterSpaces < text.bytes.count, text.startsLink(at: afterSpaces) || text.hasText(invisibleLink, at: afterSpaces) { return nil }
+    private static func space(in bytes: FlowchartBytes, at position: Int) -> (FlowchartPieceToken, Int)? {
+        let afterSpaces = bytes.endOfSpaces(from: position)
+        if afterSpaces < bytes.count, bytes.startsLink(at: afterSpaces) || bytes.hasText("~~~", at: afterSpaces) { return nil }
         var end = position
-        while end < text.bytes.count, text.bytes[end] != MermaidByte.newline, text.bytes[end] != MermaidByte.carriageReturn,
-              case let length = JavaScriptWhitespace.length(in: text.bytes, at: end), length > 0 { end += length }
+        while end < bytes.count, bytes.base[end] != MermaidByte.newline, bytes.base[end] != MermaidByte.carriageReturn,
+              case let length = bytes.whitespaceLength(at: end), length > 0 { end += length }
         return end > position ? (.space, end) : nil
     }
-
-    private static let singleCharacterTokens: [UInt8: FlowchartPieceToken] = [
-        UInt8(ascii: "#"): .numberSign, MermaidByte.ampersand: .ampersand, MermaidByte.comma: .comma, UInt8(ascii: "*"): .asterisk,
-        MermaidByte.colon: .colon,
-    ]
-    private static let defaultWord = Array("default".utf8)
-    private static let styleWord = Array("style".utf8)
-    private static let invisibleLink = Array("~~~".utf8)
 }

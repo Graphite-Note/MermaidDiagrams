@@ -5,8 +5,8 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 extension MermaidDiagram {
@@ -16,7 +16,7 @@ extension MermaidDiagram {
     /// draw something; a mindmap, an XY chart and a Sankey diagram with nothing in them are refused while read or laid out.
     public var hasNothingToDraw: Bool {
         switch self {
-        case .flowchart(let diagram): diagram.nodes.isEmpty
+        case .flowchart(let diagram): diagram.nodeCount == 0
         case .stateDiagram(let diagram): diagram.states.isEmpty
         case .classDiagram(let diagram): diagram.classes.isEmpty && diagram.notes.isEmpty
         case .sequence(let diagram): diagram.participants.isEmpty
@@ -40,7 +40,7 @@ extension MermaidDiagram {
         case .block(let diagram): diagram.drawsNoBlock
         case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
         case .requirement(let diagram): diagram.requirements.isEmpty && diagram.elements.isEmpty
-        case .swimlane(let diagram): diagram.nodes.isEmpty && diagram.subgraphs.isEmpty
+        case .swimlane(let diagram): diagram.nodeCount == 0 && diagram.subgraphCount == 0
         case .useCase(let diagram): diagram.actors.isEmpty && diagram.useCases.isEmpty && diagram.jsonNodes.isEmpty && diagram.systemBoundaries.isEmpty
         case .agentFlow(let diagram): diagram.graph.nodes.isEmpty
         case .cynefin, .wardleyMap, .gitGraph, .quadrantChart, .xyChart, .info: false

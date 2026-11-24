@@ -1,19 +1,22 @@
 /**
- * File: FlowchartDiagramBuilder.swift
- * -----------------------------------
- * Layer: Core
- * Description: Collects a flowchart as its statements are read.
+ * File: ReferenceFlowchartDiagramBuilder.swift
+ * --------------------------------------------
+ * Layer: Tests
+ * Description: MermaidDiagrams 0.7.0's FlowchartDiagramBuilder, frozen as the reference the flat reader is proven against
+ *              (FlowchartModelEquivalenceTests): collects a flowchart as its statements are read.
  *
- * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 23/11/2026
+ * Authors: Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
  */
+
+@testable import MermaidDiagrams
 
 /// Collects a flowchart as its statements are read: nodes by identifier, edges within the limits, and the groups open
 /// at each point, which take the names written inside them. A group's members are settled when it ends, and the
 /// groups' nesting once the whole text is read (`finishedDiagram()`).
-struct FlowchartDiagramBuilder {
-    private var diagram = FlowchartDiagram()
+struct ReferenceFlowchartDiagramBuilder {
+    private var diagram = ReferenceFlowchartDiagram()
     private let limits: MermaidDiagramLimits
     private var nodeIndexByIdentifier: [String: Int] = [:]
     /// Identifiers given to edges (`e1@-->`), whose `e1@{ … }` sets an edge's attributes rather than a node's.
@@ -21,7 +24,7 @@ struct FlowchartDiagramBuilder {
     /// The groups open now, outermost first.
     private var openSubgraphs: [OpenSubgraph] = []
     /// The groups ended so far, in the order they ended; a group ended again under the same identifier is merged.
-    private var endedSubgraphs: [EndedFlowchartSubgraph] = []
+    private var endedSubgraphs: [ReferenceEndedFlowchartSubgraph] = []
     private var endedSubgraphIndexByIdentifier: [String: Int] = [:]
     /// Names a group took as it ended: a node or group belongs to the first group that ends with it named inside.
     private var takenMemberNames: Set<String> = []
@@ -77,7 +80,7 @@ struct FlowchartDiagramBuilder {
     }
 
     /// A later definition of a node replaces what an earlier one set, as in Mermaid.
-    mutating func define(nodeAt index: Int, as definition: FlowchartNodeDefinition) {
+    mutating func define(nodeAt index: Int, as definition: ReferenceFlowchartNodeDefinition) {
         if let shape = definition.shape { diagram.nodes[index].shape = shape }
         if let label = definition.label { diagram.nodes[index].label = label }
         if definition.asksForCollapsedView { collapsedIdentifiers.insert(diagram.nodes[index].identifier) }
@@ -86,7 +89,7 @@ struct FlowchartDiagramBuilder {
 
     /// The icon or picture attributes written replace the node's, and a node made an icon or a picture without a label
     /// of its own shows none rather than its identifier (Pele's `addVertex`).
-    private mutating func defineAsset(nodeAt index: Int, as definition: FlowchartNodeDefinition) {
+    private mutating func defineAsset(nodeAt index: Int, as definition: ReferenceFlowchartNodeDefinition) {
         let written = definition.assetAttributes
         // Most nodes are written without these attributes, and copying the node out and back costs more than reading it.
         guard written != FlowchartNodeAssetAttributes() else { return }
@@ -105,7 +108,7 @@ struct FlowchartDiagramBuilder {
     }
 
     /// One edge from each source to each target, as `A & B --> C & D` asks.
-    mutating func addEdges(from sourceIndices: [Int], to targetIndices: [Int], link: FlowchartLink) throws(MermaidDiagramReadError) {
+    mutating func addEdges(from sourceIndices: [Int], to targetIndices: [Int], link: ReferenceFlowchartLink) throws(MermaidDiagramReadError) {
         guard diagram.edges.count + sourceIndices.count * targetIndices.count <= limits.maximumEdgeCount else {
             throw .tooManyEdges(limit: limits.maximumEdgeCount)
         }
@@ -144,7 +147,7 @@ struct FlowchartDiagramBuilder {
             endedSubgraphs[existing].memberNames.append(contentsOf: members)
         } else {
             endedSubgraphIndexByIdentifier[identifier] = endedSubgraphs.count
-            endedSubgraphs.append(EndedFlowchartSubgraph(identifier: identifier, title: group.title, direction: group.direction,
+            endedSubgraphs.append(ReferenceEndedFlowchartSubgraph(identifier: identifier, title: group.title, direction: group.direction,
                                                          openingOrder: group.openingOrder, memberNames: members))
         }
         if !openSubgraphs.isEmpty { openSubgraphs[openSubgraphs.count - 1].add(memberName: identifier) }
@@ -164,10 +167,10 @@ struct FlowchartDiagramBuilder {
         openSubgraphs[openSubgraphs.count - 1].direction = direction
     }
 
-    /// The flowchart read, its groups nested and ordered (`FlowchartSubgraphNesting`), its nodes and edges styled.
-    func finishedDiagram() -> FlowchartDiagram {
+    /// The flowchart read, its groups nested and ordered (`ReferenceFlowchartSubgraphNesting`), its nodes and edges styled.
+    func finishedDiagram() -> ReferenceFlowchartDiagram {
         var finished = diagram
-        finished.subgraphs = FlowchartSubgraphNesting.subgraphs(endedSubgraphs, nodeIndexByIdentifier: nodeIndexByIdentifier,
+        finished.subgraphs = ReferenceFlowchartSubgraphNesting.subgraphs(endedSubgraphs, nodeIndexByIdentifier: nodeIndexByIdentifier,
                                                                 collapsedIdentifiers: collapsedIdentifiers)
         finished.unappliedStatementCount += applyStyles(to: &finished)
         return finished
@@ -175,13 +178,13 @@ struct FlowchartDiagramBuilder {
 
     /// Gives `diagram`'s nodes and edges the styles the statements set, and returns how many statements named a node or a
     /// link that is not there.
-    private func applyStyles(to diagram: inout FlowchartDiagram) -> Int {
+    private func applyStyles(to diagram: inout ReferenceFlowchartDiagram) -> Int {
         styleNodes(of: &diagram) + styleEdges(of: &diagram)
     }
 
     /// A node takes the `default` class, then its classes in the order they were given, then its own `style`. Returns how
     /// many `class` and `style` statements named no node (a group's, whose box is not styled yet, or none at all).
-    private func styleNodes(of diagram: inout FlowchartDiagram) -> Int {
+    private func styleNodes(of diagram: inout ReferenceFlowchartDiagram) -> Int {
         var unappliedCount = 0
         var classNamesByNode: [Int: [String]] = [:]
         for assignment in classAssignments {
@@ -210,7 +213,7 @@ struct FlowchartDiagramBuilder {
     }
 
     /// An edge takes `linkStyle default`, then the `linkStyle` of its index. Returns how many indexes named no edge.
-    private func styleEdges(of diagram: inout FlowchartDiagram) -> Int {
+    private func styleEdges(of diagram: inout ReferenceFlowchartDiagram) -> Int {
         var unappliedCount = 0
         var defaultEdgeStyle = DiagramElementStyle()
         var edgeStyles: [Int: DiagramElementStyle] = [:]
@@ -235,7 +238,7 @@ struct FlowchartDiagramBuilder {
     }
 
     /// Records what a statement that styles the diagram sets; a statement that could not be read is counted as not applied.
-    mutating func apply(_ statement: FlowchartStyleStatement?) {
+    mutating func apply(_ statement: ReferenceFlowchartStyleStatement?) {
         guard let statement else {
             countUnappliedStatement()
             return

@@ -5,8 +5,8 @@
  * Description: Diagrams that run across turned to run down, for a column too narrow for them, as Pele turns them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 /// How tightly a flowchart is laid out: Pele's gaps, or the tighter ones it takes when the diagram does not fit its
@@ -33,11 +33,10 @@ extension FlowchartDirection {
 extension FlowchartDiagram {
     /// The flowchart with its direction and every group's turned to run down, or nil when nothing in it runs across.
     public var turnedToRunDown: FlowchartDiagram? {
-        let runsAcrossSomewhere = direction.runsAcross || subgraphs.contains { subgraph in subgraph.direction?.runsAcross ?? false }
+        let runsAcrossSomewhere = direction.runsAcross || (0..<subgraphCount).contains { subgraph in model.subgraphDirection(at: subgraph)?.runsAcross ?? false }
         guard runsAcrossSomewhere else { return nil }
-        var turned = self
+        var turned = turningGroupDirections { direction in direction?.turnedToRunDown }
         turned.direction = direction.turnedToRunDown
-        for index in turned.subgraphs.indices { turned.subgraphs[index].direction = subgraphs[index].direction?.turnedToRunDown }
         return turned
     }
 }

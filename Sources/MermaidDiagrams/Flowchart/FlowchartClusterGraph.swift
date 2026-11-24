@@ -45,6 +45,7 @@ struct FlowchartClusterGraph {
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, measured: FlowchartMeasurement, titleText: Measurer,
                                          edgeTextRoom: CGSize, groupPadding: CGFloat = clusterPadding) {
         let nesting = FlowchartClusterNesting(diagram: diagram)
+        let subgraphCount = diagram.subgraphCount
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
             return title.lineCount == 0 ? nil : title
@@ -58,7 +59,7 @@ struct FlowchartClusterGraph {
         var nodeSizes: [CGSize] = []
         var nodeClusters: [Int?] = []
         var nodeSideSpans: [CGFloat] = []
-        for node in diagram.nodes.indices {
+        for node in 0..<diagram.nodeCount {
             guard nesting.representedSubgraphs[node] == nil else {
                 layoutNodeIndices.append(nil)
                 continue
@@ -67,15 +68,15 @@ struct FlowchartClusterGraph {
             nodeSizes.append(measured.layoutSize(of: node, loopSide: nodeLoopSides[node]))
             nodeClusters.append(nesting.nodeSubgraphs[node])
             // A node whose loops go out below runs across, and spreads its edges along its height.
-            nodeSideSpans.append(measured.sideSpan(of: node, shape: diagram.nodes[node].shape, side: nodeLoopSides[node] == .bottom ? .left : .top))
+            nodeSideSpans.append(measured.sideSpan(of: node, shape: diagram.nodeShape(at: node), side: nodeLoopSides[node] == .bottom ? .left : .top))
         }
         self.layoutNodeIndices = layoutNodeIndices
         // Pele lists the groups before the nodes, an outer group before those inside it (flowchart/graph.ts), so an
         // empty group comes before the nodes of its box; a group an edge crosses runs as the box around it.
-        let clusters = diagram.subgraphs.indices.map { subgraph in
+        let clusters = (0..<subgraphCount).map { subgraph in
             var cluster = Self.cluster(parent: nesting.subgraphParents[subgraph], direction: nesting.subgraphDirections[subgraph],
                                        title: measuredTitles[subgraph], spreadsEdgeEnds: measured.spreadsEdgeEnds, padding: groupPadding)
-            cluster.sequence = CGFloat(nesting.subgraphOrder[subgraph] - diagram.subgraphs.count)
+            cluster.sequence = CGFloat(nesting.subgraphOrder[subgraph] - subgraphCount)
             return cluster
         }
         let edges = Self.edges(of: diagram, measured: measured, edgeTextRoom: edgeTextRoom, layoutNodeIndices: layoutNodeIndices,
@@ -107,14 +108,15 @@ struct FlowchartClusterGraph {
         }
         var layout: [LayeredClusterEdge] = []
         var diagramIndices: [Int] = []
-        for (edgeIndex, edge) in diagram.edges.enumerated() {
-            let source = end(of: edge.sourceIndex)
-            let target = end(of: edge.targetIndex)
+        for edgeIndex in 0..<diagram.edgeCount {
+            let ends = diagram.edgeEnds(at: edgeIndex)
+            let source = end(of: ends.source)
+            let target = end(of: ends.target)
             guard source != target else { continue }
             let labelSize = measured.edgeTexts[edgeIndex].map { text in
                 CGSize(width: text.size.width + edgeTextRoom.width, height: text.size.height + edgeTextRoom.height)
             }
-            layout.append(LayeredClusterEdge(source: source, target: target, minimumRankSpan: edge.minimumRankSpan, labelSize: labelSize))
+            layout.append(LayeredClusterEdge(source: source, target: target, minimumRankSpan: diagram.edgeMinimumRankSpan(at: edgeIndex), labelSize: labelSize))
             diagramIndices.append(edgeIndex)
         }
         return (layout, diagramIndices)
