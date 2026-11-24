@@ -5,7 +5,7 @@
  * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -40,9 +40,15 @@ struct StateDiagramClusterGraph {
     let depths: [Int]
     /// For each composite whose states sit in several regions, its regions' boxes in `graph.clusters`, in region order.
     let regionClusterIndices: [[Int]]
-    /// The transitions between a composite and a state inside it, by transition index, with the node in `graph` of the
-    /// point inside the composite they run from or to.
-    let anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)]
+    /// By transition index, for a transition between a composite and a state inside it, its anchor with the node in
+    /// `graph` of the point inside the composite it runs from or to; nil for the other transitions.
+    let anchors: [PlacedAnchor?]
+
+    /// A transition's anchor and the node of its point inside the composite.
+    struct PlacedAnchor {
+        let anchor: StateDiagramCompositeAnchor
+        let layoutNodeIndex: Int
+    }
     /// The direction each composite's box runs in.
     let compositeDirections: [FlowchartDirection]
     /// The notes beside composites and the unseen boxes around composites with notes or loops.
@@ -135,14 +141,16 @@ struct StateDiagramClusterGraph {
     /// those leaving a composite after the starts and before the other states, those arriving after them all.
     private static func nodes(of diagram: StateDiagram, compositeOfState: [Int?], surroundings: StateDiagramSurroundings, flowIsVertical: Bool,
                               regions: RegionClusters, anchors: [StateDiagramCompositeAnchor])
-        -> (layoutNodeIndices: [Int?], sizes: [CGSize], clusters: [Int?], anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)]) {
+        -> (layoutNodeIndices: [Int?], sizes: [CGSize], clusters: [Int?], anchors: [PlacedAnchor?]) {
         var layoutNodeIndices = [Int?](repeating: nil, count: diagram.states.count)
         var sizes: [CGSize] = []
         var clusters: [Int?] = []
-        var placedAnchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)] = [:]
-        func place(_ anchors: [StateDiagramCompositeAnchor]) {
-            for anchor in anchors {
-                placedAnchors[anchor.transitionIndex] = (anchor, sizes.count)
+        sizes.reserveCapacity(diagram.states.count + anchors.count)
+        clusters.reserveCapacity(diagram.states.count + anchors.count)
+        var placedAnchors = [PlacedAnchor?](repeating: nil, count: anchors.isEmpty ? 0 : diagram.transitions.count)
+        func place(inward: Bool) {
+            for anchor in anchors where anchor.isInward == inward {
+                placedAnchors[anchor.transitionIndex] = PlacedAnchor(anchor: anchor, layoutNodeIndex: sizes.count)
                 sizes.append(.zero)
                 clusters.append(anchor.compositeIndex)
             }
@@ -150,7 +158,7 @@ struct StateDiagramClusterGraph {
         var inwardPlaced = false
         for state in StateDiagramLayoutEngine.flowOrder(of: diagram) where compositeOfState[state] == nil {
             if !inwardPlaced, !diagram.states[state].kind.isStart {
-                place(anchors.filter(\.isInward))
+                place(inward: true)
                 inwardPlaced = true
             }
             layoutNodeIndices[state] = sizes.count
@@ -158,8 +166,8 @@ struct StateDiagramClusterGraph {
             sizes.append(flowIsVertical ? CGSize(width: place.across, height: place.along) : CGSize(width: place.along, height: place.across))
             clusters.append(regions.container(of: state, in: diagram))
         }
-        if !inwardPlaced { place(anchors.filter(\.isInward)) }
-        place(anchors.filter { anchor in !anchor.isInward })
+        if !inwardPlaced { place(inward: true) }
+        place(inward: false)
         return (layoutNodeIndices, sizes, clusters, placedAnchors)
     }
 
@@ -176,38 +184,70 @@ struct StateDiagramClusterGraph {
     /// The regions' boxes: for each composite whose states (composite ones included) sit in more than one region, one box per
     /// region that holds a state, numbered from `firstClusterIndex` in region order. A body with one region has none.
     private static func regionClusters(of diagram: StateDiagram, startingAt firstClusterIndex: Int) -> RegionClusters {
-        var usedRegions = [Set<Int>](repeating: [], count: diagram.composites.count)
+        // Each region named, once, in the order of its composite then its index.
+        var regions: [RegionKey] = []
         for state in diagram.states {
             guard let compositeIndex = state.compositeIndex, compositeIndex < diagram.composites.count else { continue }
-            usedRegions[compositeIndex].insert(state.regionIndex)
+            regions.append(RegionKey(compositeIndex: compositeIndex, regionIndex: state.regionIndex))
         }
+        regions.sort()
+        var uniqueCount = 0
+        for region in regions where uniqueCount == 0 || regions[uniqueCount - 1] != region {
+            regions[uniqueCount] = region
+            uniqueCount += 1
+        }
+        regions.removeLast(regions.count - uniqueCount)
         var nextClusterIndex = firstClusterIndex
-        var clusterByRegion: [RegionKey: Int] = [:]
-        let indicesByComposite = usedRegions.enumerated().map { compositeIndex, regions -> [Int] in
-            guard regions.count > 1 else { return [] }
-            return regions.sorted().map { region in
-                defer { nextClusterIndex += 1 }
-                clusterByRegion[RegionKey(compositeIndex: compositeIndex, regionIndex: region)] = nextClusterIndex
-                return nextClusterIndex
+        var clusterOfRegion = [Int?](repeating: nil, count: regions.count)
+        var indicesByComposite = [[Int]](repeating: [], count: diagram.composites.count)
+        var first = 0
+        while first < regions.count {
+            var end = first + 1
+            while end < regions.count, regions[end].compositeIndex == regions[first].compositeIndex { end += 1 }
+            if end - first > 1 {
+                var indices: [Int] = []
+                indices.reserveCapacity(end - first)
+                for region in first..<end {
+                    clusterOfRegion[region] = nextClusterIndex
+                    indices.append(nextClusterIndex)
+                    nextClusterIndex += 1
+                }
+                indicesByComposite[regions[first].compositeIndex] = indices
             }
+            first = end
         }
-        return RegionClusters(indicesByComposite: indicesByComposite, clusterByRegion: clusterByRegion)
+        return RegionClusters(indicesByComposite: indicesByComposite, regions: regions, clusterOfRegion: clusterOfRegion)
     }
 
-    private struct RegionKey: Hashable {
+    private struct RegionKey: Comparable {
         let compositeIndex: Int
         let regionIndex: Int
+
+        static func < (first: RegionKey, second: RegionKey) -> Bool {
+            (first.compositeIndex, first.regionIndex) < (second.compositeIndex, second.regionIndex)
+        }
     }
 
     private struct RegionClusters {
         let indicesByComposite: [[Int]]
-        let clusterByRegion: [RegionKey: Int]
+        /// Every region a state is named in, sorted, each once.
+        let regions: [RegionKey]
+        /// For each of `regions`, its box, or nil when its composite's body has one region.
+        let clusterOfRegion: [Int?]
 
         /// The box a state sits directly in: its region's, when its composite's body has several, else its composite's;
         /// nil at the top level.
         func container(of state: Int, in diagram: StateDiagram) -> Int? {
             guard let compositeIndex = diagram.states[state].compositeIndex else { return nil }
-            return clusterByRegion[RegionKey(compositeIndex: compositeIndex, regionIndex: diagram.states[state].regionIndex)] ?? compositeIndex
+            let key = RegionKey(compositeIndex: compositeIndex, regionIndex: diagram.states[state].regionIndex)
+            var low = 0
+            var high = regions.count
+            while low < high {
+                let middle = (low + high) / 2
+                if regions[middle] < key { low = middle + 1 } else { high = middle }
+            }
+            guard low < regions.count, regions[low] == key else { return compositeIndex }
+            return clusterOfRegion[low] ?? compositeIndex
         }
     }
 
@@ -229,7 +269,7 @@ struct StateDiagramClusterGraph {
     /// The transitions between two different ends, with their texts' room; a transition from a composite state to
     /// itself fails, and one from another state to itself loops beside it.
     private static func edges(of diagram: StateDiagram, measured: StateDiagramMeasurement, layoutNodeIndices: [Int?], compositeOfState: [Int?],
-                              anchors: [Int: (anchor: StateDiagramCompositeAnchor, layoutNodeIndex: Int)])
+                              anchors: [PlacedAnchor?])
         throws(StateDiagramLayoutError) -> (layout: [LayeredClusterEdge], transitionIndices: [Int]) {
         func end(of state: Int) -> LayeredClusterEnd {
             if let compositeIndex = compositeOfState[state] { return .cluster(compositeIndex) }
@@ -238,10 +278,12 @@ struct StateDiagramClusterGraph {
         let room = StateDiagramLayoutEngine.transitionTextRoom
         var layout: [LayeredClusterEdge] = []
         var transitionIndices: [Int] = []
+        layout.reserveCapacity(diagram.transitions.count)
+        transitionIndices.reserveCapacity(diagram.transitions.count)
         for (transitionIndex, transition) in diagram.transitions.enumerated() {
             var source = end(of: transition.sourceIndex)
             var target = end(of: transition.targetIndex)
-            if let anchored = anchors[transitionIndex] {
+            if transitionIndex < anchors.count, let anchored = anchors[transitionIndex] {
                 if anchored.anchor.isInward { source = .node(anchored.layoutNodeIndex) } else { target = .node(anchored.layoutNodeIndex) }
             }
             // A loop on a state or a composite hangs beside it and is not laid out.
