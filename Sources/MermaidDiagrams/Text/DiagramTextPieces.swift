@@ -7,7 +7,7 @@
  *              ranges of the text's UTF-8 bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 23/11/2026
  */
 
@@ -48,12 +48,18 @@ enum DiagramTextPieces {
         return end
     }
 
-    /// The pieces of any text, read scalar by scalar.
+    /// The pieces of any text, read scalar by scalar and each made from its scalars, without the byte positions that
+    /// `appendPieces` finds: what the tests check those positions and `endOfASCIIPiece` against.
     static func pieces(ofScalars text: String) -> [String] {
-        let bytes = Array(text.utf8)
-        var ranges: [Range<Int>] = []
-        appendPieces(ofScalarsIn: bytes, to: &ranges)
-        return ranges.map { range in String(decoding: bytes[range], as: UTF8.self) }
+        let scalars = Array(text.unicodeScalars)
+        var pieces: [String] = []
+        var start = 0
+        while start < scalars.count {
+            let end = pieceEnd(in: scalars, from: start)
+            pieces.append(UnicodeScalarText.string(scalars[start..<end]))
+            start = end
+        }
+        return pieces
     }
 
     /// The pieces of an ASCII text, cut at its bytes; nil for text beyond ASCII.
