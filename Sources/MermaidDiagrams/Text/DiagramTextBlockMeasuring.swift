@@ -7,7 +7,7 @@
  *              own bytes, with nothing written.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -104,9 +104,11 @@ extension DiagramTextMeasuringScratch {
         wrapLine(of: storage, measuring: &measuring, maximumWidth: maximumWidth)
     }
 
-    /// Wraps the spans of `lineSpans`, ranges of `storage`'s bytes.
+    /// Wraps the spans of `lineSpans`, ranges of `storage`'s bytes: exactly, reading each byte once, where every width is
+    /// an exact sum (`wrapsExactly`), else measuring joined text as `DiagramTextLineWrapping` does.
     private mutating func wrapLine<Measurer>(of storage: DiagramTextStorage, measuring: inout DiagramStyledByteMeasuring<Measurer>,
                                              maximumWidth: CGFloat) {
+        if wrapsExactly(storage.bytePointer, measuring: &measuring) { return wrapExactly(storage.bytePointer, measuring: &measuring, maximumWidth: maximumWidth) }
         let end = Int(lineSpans[lineSpans.count - 1].end)
         var wrapping = DiagramTextLineWrapping(measuring: measuring, maximumWidth: maximumWidth,
                                                bytes: UnsafeBufferPointer(start: storage.bytePointer, count: end))

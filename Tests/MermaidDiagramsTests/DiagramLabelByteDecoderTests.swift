@@ -8,7 +8,7 @@
  *              in all three forms; and that long and hostile labels decode in time that grows with their length.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -62,6 +62,33 @@ final class DiagramLabelByteDecoderTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(markedCount, 20_000, "most random texts have markup")
+    }
+
+    /// The test on bytes in memory, which skips sixteen at a time, answers as the test that reads each byte, wherever a
+    /// byte looked for falls against the sixteen-byte steps.
+    func testTheSixteenByteMarkupTestAnswersAsTheByteByByteTest() {
+        var generator = Generator(state: 0x5EED_D011)
+        let fillers = ["a", "word ", "数", "é", "\u{1F600}", "fa", "f", ";", "#a", "x:y", "\u{EF}", "\u{FF01}"]
+        let triggers = ["<", "\\", "\n", "*", "_", "&", "#x1;", "#;", "ﬂ", ":fa-", "fa:fa-", "fab:fa-", "fax:fa-", ":", "#"]
+        var unmarkedCount = 0
+        for _ in 0..<20_000 {
+            var text = (0..<generator.next(below: 40)).map { _ in fillers[generator.next(below: fillers.count)] }.joined()
+            if generator.next(below: 3) > 0 {
+                let trigger = triggers[generator.next(below: triggers.count)]
+                let offset = text.unicodeScalars.count == 0 ? 0 : generator.next(below: text.unicodeScalars.count + 1)
+                var scalars = Array(text.unicodeScalars)
+                scalars.insert(contentsOf: trigger.unicodeScalars, at: offset)
+                text = String(String.UnicodeScalarView(scalars))
+            }
+            for isLiteral in [false, true] {
+                let bytes = Array(text.utf8)
+                let expected = DiagramLabelLineBreaks.isUnmarked(bytes, isLiteral: isLiteral)
+                XCTAssertEqual(bytes.withUnsafeBufferPointer { bytes in DiagramLabelLineBreaks.isUnmarked(bytes, isLiteral: isLiteral) }, expected,
+                               "\(text.debugDescription) \(isLiteral)")
+                if expected { unmarkedCount += 1 }
+            }
+        }
+        XCTAssertGreaterThan(unmarkedCount, 5_000)
     }
 
     /// Every label the preparation of every corpus decodes, decoded again by 0.7.0's code.
