@@ -60,8 +60,8 @@ public enum MermaidDiagramReader {
         let frontEnd = try MermaidFrontEnd.read(source)
         let title = frontEnd.frontMatterTitle
         switch frontEnd.typeKeyword {
-        case .flowchart: return .flowchart(titled(try FlowchartParser.parse(MermaidTextCursor(frontEnd), limits: limits), frontMatterTitle: title))
-        case .swimlane: return .swimlane(titled(try FlowchartParser.parse(MermaidTextCursor(frontEnd), limits: limits), frontMatterTitle: title))
+        case .flowchart: return .flowchart(titled(FlowchartDiagram(reading: try FlowchartParser.parse(frontEnd, limits: limits)), frontMatterTitle: title))
+        case .swimlane: return .swimlane(titled(FlowchartDiagram(reading: try FlowchartParser.parse(frontEnd, limits: limits)), frontMatterTitle: title))
         case .other: return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: title)
         }
     }

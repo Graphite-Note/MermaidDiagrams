@@ -2,256 +2,241 @@
  * File: FlowchartParser.swift
  * ---------------------------
  * Layer: Core
- * Description: Reads a flowchart's statements after its keyword.
+ * Description: Reads a flowchart's statements after its keyword into the flat model, on a pointer to the text's bytes:
+ *              names interned by their bytes, texts kept as ranges, no String made for a name or a one-line text.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 /// Reads a flowchart's statements after its `flowchart` or `graph` keyword: the direction, then chains of nodes and
 /// links (`A & B --> C -->|yes| D`), groups (`subgraph … end`), accessibility text, and the statements that style the
 /// diagram (`FlowchartStyleSyntax`); a `click` is counted and left. Statements end at a line break or a semicolon; `%%`
-/// starts a comment.
+/// starts a comment. Errors name the line of the position they are found at, as `MermaidTextCursor` counts lines.
 struct FlowchartParser {
-    private var cursor: MermaidTextCursor
-    private var builder: FlowchartDiagramBuilder
-    /// The cursor's text as Pele's lexer tests it, made once.
-    private let lexerText: FlowchartLexerText
+    let bytes: FlowchartBytes
+    var position: Int
+    let limits: MermaidDiagramLimits
+    /// The thread's working lists, moved here for the reading and back after it.
+    var lists = FlowchartReadingLists()
+    var parts = FlowchartModelParts()
+    var direction = FlowchartDirection.topToBottom
+    var accessibilityTitle: String?
+    var accessibilityDescription: String?
+    var unappliedStatementCount = 0
+    /// What the statements that style the diagram set, made when the first one is read.
+    var styling: FlowchartStyling?
+    var openedGroupCount: Int32 = 0
+    var endedGroupCount = 0
 
-    /// Reads the flowchart whose keyword ends at the cursor.
-    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartDiagram {
-        var parser = FlowchartParser(cursor: cursor, builder: FlowchartDiagramBuilder(limits: limits), lexerText: FlowchartLexerText(bytes: cursor.bytes))
-        try parser.readDirection()
-        try parser.readStatements()
-        return parser.builder.finishedDiagram()
+    init(bytes: FlowchartBytes, position: Int, limits: MermaidDiagramLimits) {
+        self.bytes = bytes
+        self.position = position
+        self.limits = limits
+        let room = min(max(bytes.count / 24, 4), 1_024)
+        parts.nodes.reserveCapacity(room)
+    }
+
+    /// Reads the flowchart whose keyword the front end found.
+    static func parse(_ frontEnd: MermaidFrontEndResult, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartReading {
+        let read: Result<FlowchartReading, MermaidDiagramReadError> = frontEnd.text.withBytes { buffer in
+            FlowchartReadingScratch.withLists { lists in
+                var lookAhead = FlowchartLookAheadLists()
+                swap(&lookAhead, &lists.lookAhead)
+                defer { swap(&lookAhead, &lists.lookAhead) }
+                lookAhead.build(over: buffer)
+                return lookAhead.withIndex { index in
+                    guard let base = buffer.baseAddress else { return .failure(.noDiagram) }
+                    var parser = FlowchartParser(bytes: FlowchartBytes(base: base, count: buffer.count, lookAhead: index),
+                                                 position: frontEnd.keyword.upperBound, limits: limits)
+                    swap(&parser.lists, &lists)
+                    defer { swap(&parser.lists, &lists) }
+                    return Result { () throws(MermaidDiagramReadError) in try parser.read(text: frontEnd.text) }
+                }
+            }
+        }
+        return try read.get()
+    }
+
+    private mutating func read(text: MermaidSourceText) throws(MermaidDiagramReadError) -> FlowchartReading {
+        try readDirection()
+        try readStatements()
+        nestGroups()
+        applyStyles()
+        return FlowchartReading(model: parts.model(text: text), direction: direction, accessibilityTitle: accessibilityTitle,
+                                accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
     }
 
     private mutating func readDirection() throws(MermaidDiagramReadError) {
-        cursor.skipSpaces()
-        guard let byte = cursor.peek(), !MermaidByte.endsStatement(byte), !cursor.hasPrefix(Self.commentStart) else { return }
-        let start = cursor.position
-        if MermaidByte.isLetter(byte) { _ = cursor.readWord() } else { cursor.advance() }
-        let keyword = cursor.text(from: start, to: cursor.position)
-        guard let direction = FlowchartDirection(keyword: keyword) else {
-            throw .invalidSyntax(line: cursor.line, problem: .unknownDirection(keyword))
+        skipSpaces()
+        guard position < bytes.count, case let byte = bytes.base[position], !MermaidByte.endsStatement(byte), !isAtComment else { return }
+        let start = position
+        if MermaidByte.isLetter(byte) {
+            while MermaidByte.isLetter(bytes[position]) { position += 1 }
+        } else {
+            position += 1
         }
-        builder.setDirection(direction)
+        guard let written = Self.direction(in: bytes, from: start, to: position) else {
+            throw .invalidSyntax(line: bytes.line(at: position), problem: .unknownDirection(bytes.string(from: start, to: position)))
+        }
+        direction = written
         try expectStatementEnd()
+    }
+
+    /// `FlowchartDirection(keyword:)` on bytes: `TB`, `TD`, `V`, `BT`, `^`, `LR`, `>`, `RL`, `<` in any case.
+    private static func direction(in bytes: FlowchartBytes, from start: Int, to end: Int) -> FlowchartDirection? {
+        let first = MermaidByte.lowercased(bytes[start])
+        switch end - start {
+        case 1:
+            switch first {
+            case UInt8(ascii: "v"): return .topToBottom
+            case UInt8(ascii: "^"): return .bottomToTop
+            case MermaidByte.greaterThan: return .leftToRight
+            case MermaidByte.lessThan: return .rightToLeft
+            default: return nil
+            }
+        case 2:
+            switch (first, MermaidByte.lowercased(bytes[start + 1])) {
+            case (UInt8(ascii: "t"), UInt8(ascii: "b")), (UInt8(ascii: "t"), UInt8(ascii: "d")): return .topToBottom
+            case (UInt8(ascii: "b"), UInt8(ascii: "t")): return .bottomToTop
+            case (UInt8(ascii: "l"), UInt8(ascii: "r")): return .leftToRight
+            case (UInt8(ascii: "r"), UInt8(ascii: "l")): return .rightToLeft
+            default: return nil
+            }
+        default: return nil
+        }
     }
 
     private mutating func readStatements() throws(MermaidDiagramReadError) {
         while true {
-            cursor.skipWhitespace()
-            while cursor.peek() == MermaidByte.semicolon {
-                cursor.advance()
-                cursor.skipWhitespace()
+            skipWhitespace()
+            while position < bytes.count, bytes.base[position] == MermaidByte.semicolon {
+                position += 1
+                skipWhitespace()
             }
-            if cursor.isAtEnd { break }
-            if cursor.hasPrefix(Self.commentStart) {
-                cursor.skipToEndOfLine()
+            if position >= bytes.count { break }
+            if isAtComment {
+                skipToEndOfLine()
                 continue
             }
             if try readKeywordStatement() { continue }
             try readChain()
             try expectStatementEnd()
         }
-        if let identifier = builder.innermostOpenSubgraphIdentifier {
-            throw .invalidSyntax(line: cursor.line, problem: .unclosedSubgraph(identifier: identifier))
+        if let group = lists.openGroups.last {
+            let identifier = group.writtenName >= 0 ? lists.names.string(Int(group.writtenName), in: bytes) : "subGraph\(endedGroupCount)"
+            throw .invalidSyntax(line: bytes.line(at: position), problem: .unclosedSubgraph(identifier: identifier))
         }
-    }
-
-    /// Reads a statement that starts with a keyword, and returns whether there was one. A word is a keyword only when
-    /// a space, a colon, a brace or the statement's end follows it, so that `classes --> B` is a chain.
-    private mutating func readKeywordStatement() throws(MermaidDiagramReadError) -> Bool {
-        var lookahead = cursor
-        guard let word = lookahead.readWord(), Self.keywords.contains(word) else { return false }
-        if let next = lookahead.peek(), !MermaidByte.isSpace(next), !MermaidByte.endsStatement(next),
-           next != MermaidByte.colon, next != MermaidByte.openingBrace { return false }
-        let statementLine = cursor.line
-        cursor = lookahead
-        switch word {
-        case "subgraph": readSubgraphOpening()
-        case "end":
-            guard builder.closeSubgraph() else { throw .invalidSyntax(line: statementLine, problem: .endWithoutSubgraph) }
-            try expectStatementEnd()
-        case "accTitle": builder.setAccessibilityTitle(readAccessibilityLine())
-        case "accDescr": builder.setAccessibilityDescription(try readAccessibilityDescription())
-        case "direction": readDirectionStatement()
-        case "classDef", "class", "style", "linkStyle":
-            let statementStart = cursor.position
-            skipStatement()
-            guard FlowchartStyleGrammar.isReadByPele(keyword: word, in: lexerText, from: statementStart, to: cursor.position) else {
-                throw .invalidSyntax(line: statementLine, problem: .unexpectedText(cursor.trimmedText(from: statementStart, to: cursor.position)))
-            }
-            builder.apply(FlowchartStyleSyntax.statement(keyword: word, text: cursor.trimmedText(from: statementStart, to: cursor.position)))
-        default:
-            // `click`.
-            skipStatement()
-            builder.countUnappliedStatement()
-        }
-        return true
     }
 
     /// `A & B --> C -->|text| D`: node groups joined by links, each link making an edge from every node before it to
     /// every node after it.
     private mutating func readChain() throws(MermaidDiagramReadError) {
-        guard let firstGroup = try readNodeGroup() else { return }
-        var previousGroup = firstGroup
+        lists.chainNodes.removeAll(keepingCapacity: true)
+        guard try readNodeGroup() else { return }
+        var previousStart = 0
         while true {
-            cursor.skipSpaces()
-            guard let link = try FlowchartLinkSyntax.readLink(&cursor, in: lexerText) else { return }
-            if let identifier = link.identifier { builder.recordEdgeIdentifier(identifier) }
-            cursor.skipSpaces()
-            guard let nextGroup = try readNodeGroup() else { throw .invalidSyntax(line: cursor.line, problem: .expectedNode) }
-            try builder.addEdges(from: previousGroup, to: nextGroup, link: link)
-            previousGroup = nextGroup
+            skipSpaces()
+            guard let link = try readLink() else { return }
+            if link.identifier.end > link.identifier.start {
+                let name = lists.names.intern(link.identifier, in: bytes)
+                lists.names.names[name].isEdgeIdentifier = true
+            }
+            skipSpaces()
+            let nextStart = lists.chainNodes.count
+            guard try readNodeGroup() else { throw .invalidSyntax(line: bytes.line(at: position), problem: .expectedNode) }
+            try addEdges(from: previousStart..<nextStart, to: nextStart..<lists.chainNodes.count, link: link)
+            previousStart = nextStart
         }
     }
 
-    /// `A & B & C`: the indexes of the nodes, or nil for an edge's attributes (`e1@{ … }`), which name no node. As in
-    /// Pele's `node`, the `&` has spaces on both sides: written against a node it is part of the identifier, and
-    /// after a shape (`A[x]&B`) or before a node (`A &B`) the statement is refused.
-    private mutating func readNodeGroup() throws(MermaidDiagramReadError) -> [Int]? {
-        var indices: [Int] = []
-        while true {
-            guard let index = try readNode() else { return indices.isEmpty ? nil : indices }
-            indices.append(index)
-            var lookahead = cursor
-            lookahead.skipSpaces()
-            guard lookahead.position > cursor.position, lookahead.peek() == MermaidByte.ampersand else { return indices }
-            lookahead.advance()
-            guard let next = lookahead.peek(), MermaidByte.isSpace(next) else {
-                throw .invalidSyntax(line: lookahead.line, problem: .unexpectedText(lookahead.excerpt()))
+    /// One edge from each source to each target, as `A & B --> C & D` asks.
+    private mutating func addEdges(from sources: Range<Int>, to targets: Range<Int>, link: FlowchartLink) throws(MermaidDiagramReadError) {
+        let product = sources.count * targets.count
+        guard parts.edges.count + product <= limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+        if parts.edges.capacity == 0 { parts.edges.reserveCapacity(max(product, parts.nodes.capacity)) }
+        for source in sources {
+            for target in targets {
+                parts.edges.append(FlowchartEdgeRecord(sourceIndex: lists.chainNodes[source], targetIndex: lists.chainNodes[target],
+                                                       minimumRankSpan: Int32(link.minimumRankSpan), stroke: link.stroke,
+                                                       sourceArrowhead: link.sourceArrowhead, targetArrowhead: link.targetArrowhead, label: link.label))
             }
-            lookahead.skipSpaces()
-            cursor = lookahead
+        }
+    }
+
+    /// `A & B & C`, appended to the chain's nodes; false for an edge's attributes (`e1@{ … }`), which name no node. As
+    /// in Pele's `node`, the `&` has spaces on both sides: written against a node it is part of the identifier, and
+    /// after a shape (`A[x]&B`) or before a node (`A &B`) the statement is refused.
+    private mutating func readNodeGroup() throws(MermaidDiagramReadError) -> Bool {
+        let start = lists.chainNodes.count
+        while true {
+            guard let index = try readNode() else { return lists.chainNodes.count > start }
+            lists.chainNodes.append(index)
+            var lookahead = position
+            while MermaidByte.isSpace(bytes[lookahead]) { lookahead += 1 }
+            guard lookahead > position, bytes[lookahead] == MermaidByte.ampersand, lookahead < bytes.count else { return true }
+            lookahead += 1
+            guard MermaidByte.isSpace(bytes[lookahead]) else {
+                throw .invalidSyntax(line: bytes.line(at: lookahead), problem: .unexpectedText(bytes.excerpt(at: lookahead)))
+            }
+            while MermaidByte.isSpace(bytes[lookahead]) { lookahead += 1 }
+            position = lookahead
         }
     }
 
     /// A node: its identifier, then its shape and text or its attributes, then any `:::class`, then any attributes.
-    private mutating func readNode() throws(MermaidDiagramReadError) -> Int? {
-        let line = cursor.line
-        guard let identifier = FlowchartIdentifierSyntax.readIdentifier(&cursor, in: lexerText) else {
-            throw .invalidSyntax(line: line, problem: cursor.isAtEnd ? .expectedNode : .unexpectedText(cursor.excerpt()))
+    private mutating func readNode() throws(MermaidDiagramReadError) -> Int32? {
+        let start = position
+        let end = FlowchartIdentifierSyntax.endOfIdentifier(in: bytes, from: start)
+        guard end > start else {
+            throw .invalidSyntax(line: bytes.line(at: start), problem: start >= bytes.count ? .expectedNode : .unexpectedText(bytes.excerpt(at: start)))
         }
-        if FlowchartNodeSyntax.isAtAttributes(cursor), builder.isEdgeIdentifier(identifier) {
-            _ = try FlowchartNodeSyntax.readAttributes(&cursor)
-            builder.countUnappliedStatement()
+        position = end
+        let range = MermaidTextRange(start: start, end: end)
+        let name = lists.names.intern(range, in: bytes)
+        if isAtAttributes, lists.names.names[name].isEdgeIdentifier {
+            _ = try readAttributes()
+            unappliedStatementCount += 1
             return nil
         }
-        let index = try builder.nodeIndex(for: identifier)
-        if FlowchartNodeSyntax.isAtAttributes(cursor) {
-            builder.define(nodeAt: index, as: try FlowchartNodeSyntax.readAttributes(&cursor))
-        } else if let definition = try FlowchartNodeSyntax.readShape(&cursor) {
-            builder.define(nodeAt: index, as: definition)
+        let index = try nodeIndex(name: name, range: range)
+        if isAtAttributes {
+            try define(nodeAt: index, name: name, as: readAttributes())
+        } else if let definition = try readShape() {
+            try define(nodeAt: index, name: name, as: definition)
         }
-        while cursor.hasPrefix(Self.classMarker) {
-            cursor.advance(by: Self.classMarker.count)
-            if let className = FlowchartIdentifierSyntax.readIdentifier(&cursor, in: lexerText) { builder.assignClass(className, toNodeAt: index) } else { builder.countUnappliedStatement() }
+        while bytes[position] == MermaidByte.colon, bytes[position + 1] == MermaidByte.colon, bytes[position + 2] == MermaidByte.colon {
+            position += 3
+            let classEnd = FlowchartIdentifierSyntax.endOfIdentifier(in: bytes, from: position)
+            if classEnd > position {
+                assignClass(toNodeNamed: name, className: bytes.string(from: position, to: classEnd))
+                position = classEnd
+            } else {
+                unappliedStatementCount += 1
+            }
         }
         // Attributes may also follow a shape in brackets and its classes (`C[Hello]@{ shape: circle }`), as Pele reads them.
-        if FlowchartNodeSyntax.isAtAttributes(cursor) { builder.define(nodeAt: index, as: try FlowchartNodeSyntax.readAttributes(&cursor)) }
+        if isAtAttributes { try define(nodeAt: index, name: name, as: readAttributes()) }
         return index
     }
 
-    /// `subgraph id[title]`, `subgraph id ["title"]`, `subgraph "title"` or `subgraph title words`; words end at the
-    /// line's end or a semicolon outside quotation marks, as statements do.
-    private mutating func readSubgraphOpening() {
-        cursor.skipSpaces()
-        var lookahead = cursor
-        if let identifier = lookahead.readIdentifier() {
-            lookahead.skipSpaces()
-            if lookahead.peek() == MermaidByte.openingBracket, let title = Self.bracketedTitle(&lookahead) {
-                cursor = lookahead
-                builder.openSubgraph(identifier: identifier, title: title)
-                return
-            }
-        }
-        let wordsStart = cursor.position
-        skipStatement()
-        let written = FlowchartTextSyntax.unquoted(cursor.trimmedText(from: wordsStart, to: cursor.position))
-        let title = DiagramLabelDecoder.label(from: written.text, form: written.form)
-        // Pele's header text runs to the statement's end, spaces included, and names no group when it holds a space
-        // (flowchart/db.ts `addSubGraph`): `subgraph myTitle   ` is titled `myTitle` and named `subGraph0`.
-        var wordsEnd = cursor.position
-        if wordsEnd > wordsStart, cursor.bytes[wordsEnd - 1] == MermaidByte.carriageReturn { wordsEnd -= 1 }
-        let endsWithSpace = wordsEnd > wordsStart && MermaidByte.isWhitespace(cursor.bytes[wordsEnd - 1])
-        let isOneWord = !written.text.isEmpty && !written.text.contains(where: \.isWhitespace) && !endsWithSpace
-        builder.openSubgraph(identifier: isOneWord ? written.text : nil, title: title)
+    /// Whether `@{` follows, which opens a node's (or an edge's) attributes.
+    var isAtAttributes: Bool {
+        bytes[position] == MermaidByte.atSign && bytes[position + 1] == MermaidByte.openingBrace
     }
 
-    /// `direction TB` (or `TD`, `BT`, `LR`, `RL`) inside a group sets the group's direction, and the rest of the line
-    /// is not read, as in Mermaid. Outside a group, or naming no direction, the statement is counted and left.
-    private mutating func readDirectionStatement() {
-        var lookahead = cursor
-        lookahead.skipSpaces()
-        if builder.hasOpenSubgraph, let word = lookahead.readWord(), let direction = Self.subgraphDirections[word] {
-            builder.setInnermostSubgraphDirection(direction)
-            cursor = lookahead
-            cursor.skipToEndOfLine()
-            return
-        }
-        skipStatement()
-        builder.countUnappliedStatement()
+    /// Whether `%%` follows, which starts a comment.
+    var isAtComment: Bool {
+        bytes[position] == MermaidByte.percent && bytes[position + 1] == MermaidByte.percent
     }
+}
 
-    /// `[title]` after a group's identifier, or nil when the brackets do not close: the line is then read as words.
-    private static func bracketedTitle(_ cursor: inout MermaidTextCursor) -> DiagramLabel? {
-        cursor.advance()
-        let closings = [[MermaidByte.closingBracket]]
-        let title = try? FlowchartTextSyntax.readText(&cursor, closedByAnyOf: closings, openingLine: cursor.line) // Unclosed: read as words.
-        return title?.0
-    }
-
-    /// `accTitle: text`, to the end of the line.
-    private mutating func readAccessibilityLine() -> String {
-        cursor.skipSpaces()
-        if cursor.peek() == MermaidByte.colon { cursor.advance() }
-        cursor.skipSpaces()
-        return DiagramLabelDecoder.decodingEntities(cursor.readRestOfLine())
-    }
-
-    /// `accDescr: text` or `accDescr { lines }`.
-    private mutating func readAccessibilityDescription() throws(MermaidDiagramReadError) -> String {
-        cursor.skipSpaces()
-        guard cursor.peek() == MermaidByte.openingBrace else { return readAccessibilityLine() }
-        let openingLine = cursor.line
-        cursor.advance()
-        let start = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.closingBrace { cursor.advance() }
-        guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedAccessibilityDescription) }
-        let description = cursor.text(from: start, to: cursor.position)
-        cursor.advance()
-        return DiagramLabelDecoder.label(from: description, form: .plain).lines.filter { line in !line.isEmpty }.joined(separator: " ")
-    }
-
-    /// Moves to the end of a statement that is not read: the next line break, or semicolon outside quotation marks.
-    private mutating func skipStatement() {
-        var isInsideQuotation = false
-        while let byte = cursor.peek(), byte != MermaidByte.newline {
-            if byte == MermaidByte.quotationMark { isInsideQuotation.toggle() }
-            if byte == MermaidByte.semicolon, !isInsideQuotation { return }
-            cursor.advance()
-        }
-    }
-
-    /// A statement ends at a line break, a semicolon, a comment or the end of the text; anything else is an error.
-    private mutating func expectStatementEnd() throws(MermaidDiagramReadError) {
-        cursor.skipSpaces()
-        guard let byte = cursor.peek(), !MermaidByte.endsStatement(byte) else { return }
-        if cursor.hasPrefix(Self.commentStart) {
-            cursor.skipToEndOfLine()
-            return
-        }
-        throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
-    }
-
-    private static let keywords: Set<String> = ["subgraph", "end", "direction", "classDef", "class", "style", "linkStyle", "click",
-                                                "accTitle", "accDescr"]
-    private static let commentStart = Array("%%".utf8)
-    private static let classMarker = Array(":::".utf8)
-    /// The words `direction` takes inside a group: Mermaid's, upper case only.
-    private static let subgraphDirections: [String: FlowchartDirection] = ["TB": .topToBottom, "TD": .topToBottom, "BT": .bottomToTop,
-                                                                           "LR": .leftToRight, "RL": .rightToLeft]
+/// What a flowchart's reading gives: its model and what the statements say of the whole diagram.
+struct FlowchartReading {
+    let model: FlowchartModel
+    let direction: FlowchartDirection
+    let accessibilityTitle: String?
+    let accessibilityDescription: String?
+    let unappliedStatementCount: Int
 }

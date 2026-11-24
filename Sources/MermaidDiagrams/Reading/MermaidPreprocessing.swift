@@ -114,12 +114,12 @@ enum MermaidPreprocessing {
         var positions: [Int] = []
         var index = 0
         while index < lastClose {
-            guard bytes[index] == MermaidByte.lessThan, FlowchartLexerText.isWord(bytes[index + 1]) else {
+            guard bytes[index] == MermaidByte.lessThan, FlowchartBytes.isWord(bytes[index + 1]) else {
                 index += 1
                 continue
             }
             var attributesStart = index + 1
-            while FlowchartLexerText.isWord(bytes[attributesStart]) { attributesStart += 1 }
+            while FlowchartBytes.isWord(bytes[attributesStart]) { attributesStart += 1 }
             // A `>` is at `lastClose` at the latest, so the tag closes.
             var tagEnd = attributesStart
             while bytes[tagEnd] != MermaidByte.greaterThan { tagEnd += 1 }

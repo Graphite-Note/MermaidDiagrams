@@ -63,6 +63,18 @@ final class FlowchartModelEquivalenceTests: XCTestCase {
         XCTAssertEqual(differences(in: sources), [])
     }
 
+    /// Ten thousand flowcharts written at random from a pool of names and statements: names in a group and the group
+    /// around it, groups ended again under one identifier or named as nodes, styles before and after their nodes.
+    func testRandomFlowchartsReadAsTheReferenceReadsThem() {
+        var texts = FlowchartRandomTexts(seed: 0x6A0_0F_6A0)
+        var sources: [String] = []
+        for _ in 0..<10_000 { sources.append(texts.text(statementCount: 14)) }
+        var readCount = 0
+        for source in sources where (try? MermaidDiagramReader.read(source, limits: .standard)) != nil { readCount += 1 }
+        XCTAssertGreaterThan(readCount, 3_000, "most random texts should read, so that their models are compared")
+        XCTAssertEqual(differences(in: sources), [])
+    }
+
     /// Small limits make the readers stop at the same node or edge.
     func testLimitsStopBothReadersAtTheSamePlace() throws {
         var limits = MermaidDiagramLimits.standard
