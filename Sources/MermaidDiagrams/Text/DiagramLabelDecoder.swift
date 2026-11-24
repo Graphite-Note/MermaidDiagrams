@@ -6,8 +6,8 @@
  *              it: line breaks, HTML's and Markdown's emphasis as spans, other tags dropped, icons left out, codes read.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 23/11/2026
+ * Version: 0.7
+ * Date: 24/11/2026
  */
 
 /// Turns the text written for a node, an edge or a group into the lines that are drawn, as Pele's `layoutLabel` reads
@@ -27,13 +27,12 @@ enum DiagramLabelDecoder {
     }
 
     static func label(from rawText: String, form: Form) -> DiagramLabel {
-        guard !rawText.isEmpty else { return DiagramLabel(lines: [rawText]) }
-        // Most text is one line without markup, which a pass over its bytes finds without reading its characters; the
-        // text is then kept as it is, trimmed.
+        // Most text is one line without markup, which a pass over its bytes finds without reading its characters; its
+        // bytes are then kept as they are, trimmed, in the thread's text storage.
         let isLiteral = form == .literal
-        let isUnmarked = rawText.utf8.withContiguousStorageIfAvailable { bytes in DiagramLabelLineBreaks.isUnmarked(bytes, isLiteral: isLiteral) }
-            ?? DiagramLabelLineBreaks.isUnmarked(Array(rawText.utf8), isLiteral: isLiteral)
-        if isUnmarked { return DiagramLabel(lines: [JavaScriptStringTrimming.trimmed(rawText)]) }
+        let unmarked = rawText.utf8.withContiguousStorageIfAvailable { bytes in unmarkedLabel(bytes, isLiteral: isLiteral) }
+            ?? Array(rawText.utf8).withUnsafeBufferPointer { bytes in unmarkedLabel(bytes, isLiteral: isLiteral) }
+        if let unmarked { return unmarked }
         var scalars = Array(rawText.unicodeScalars)
         if isLiteral { scalars = DiagramLabelLineBreaks.literalText(scalars) }
         let isMarkdown = form == .markdown
@@ -43,6 +42,16 @@ enum DiagramLabelDecoder {
             DiagramLabelInlineMarkup.spans(of: JavaScriptStringTrimming.trimmed(line), isMarkdown: isMarkdown, open: &open)
         }
         return DiagramLabel(spans: lines)
+    }
+
+    /// The label of text Pele reads without markup, one line of its bytes trimmed of JavaScript's white space (empty text
+    /// included); nil for text with markup.
+    private static func unmarkedLabel(_ bytes: UnsafeBufferPointer<UInt8>, isLiteral: Bool) -> DiagramLabel? {
+        guard bytes.isEmpty || DiagramLabelLineBreaks.isUnmarked(bytes, isLiteral: isLiteral) else { return nil }
+        let start = JavaScriptWhitespace.endOfRun(in: bytes, from: 0)
+        var end = bytes.count
+        while end > start, case let length = JavaScriptWhitespace.lengthOfLast(in: bytes[start..<end]), length > 0 { end -= length }
+        return DiagramLabelWriting.oneLine(UnsafeBufferPointer(rebasing: bytes[start..<end]), flags: .isReadWithoutMarkup)
     }
 
     /// The text with each entity code read as Pele reads it (`DiagramLabelEntities`): Mermaid's `#name;` and `#123;`,

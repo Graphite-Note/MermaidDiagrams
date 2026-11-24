@@ -5,8 +5,8 @@
  * Description: An entity relationship diagram's text measured and its boxes sized.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -31,7 +31,7 @@ struct EntityRelationshipMeasurement {
         self.loopsLeaveBelow = loopsLeaveBelow
         labels = diagram.relationships.map { relationship in
             let label = DiagramTextBlock(label: relationship.label, measurer: measurers.row, maximumWidth: Self.labelWrappingWidth)
-            return label.lines.isEmpty ? nil : label
+            return label.lineCount == 0 ? nil : label
         }
         var selfRelationshipIndices = [[Int]](repeating: [], count: diagram.entities.count)
         for (index, relationship) in diagram.relationships.enumerated() where relationship.firstEntityIndex == relationship.secondEntityIndex {

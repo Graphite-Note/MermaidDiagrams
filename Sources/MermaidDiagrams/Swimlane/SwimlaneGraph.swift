@@ -6,8 +6,8 @@
  *              graph: the groups, the nodes, and a lane for the nodes outside every group.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -44,7 +44,7 @@ struct SwimlaneGraph {
         let padding = isTight ? Self.tightGroupPadding : Self.groupPadding
         let titles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: titleWidth)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
         self.titles = titles
         var boxes: [LaneLayoutBox] = []

@@ -5,8 +5,8 @@
  * Description: Where an XY chart's series go in its plot: bars, lines, point labels and bar values.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -161,7 +161,7 @@ struct XYChartSeriesPlacement {
     }
 
     private mutating func placePointLabel(_ label: DiagramTextBlock, at dot: CGPoint) {
-        guard !label.lines.isEmpty else { return }
+        guard label.lineCount > 0 else { return }
         var placed = label
         if frame.isHorizontal {
             placed.center = CGPoint(x: dot.x + Self.pointLabelSideOffset + label.size.width / 2, y: dot.y)

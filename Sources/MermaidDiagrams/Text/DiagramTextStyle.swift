@@ -6,8 +6,8 @@
  *              line in one emphasis with its measured width.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -15,7 +15,7 @@ import CoreGraphics
 /// The emphasis of a piece of text beyond the font its whole text is drawn in: Markdown's `**bold**` and `*italic*`,
 /// HTML's `<b>`, `<strong>`, `<i>`, `<em>`, `<cite>`, `<dfn>`, `<var>`, and `<code>`, `<kbd>`, `<samp>`, `<tt>` in the
 /// system's monospaced font, as Pele's `Style` bits mark a span (text/measurer.ts).
-public struct DiagramTextStyle: OptionSet, Hashable, Sendable {
+public struct DiagramTextStyle: OptionSet, Hashable, Sendable, BitwiseCopyable {
     public let rawValue: UInt8
 
     public init(rawValue: UInt8) {

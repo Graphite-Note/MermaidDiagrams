@@ -6,8 +6,8 @@
  *              padded, and widened for its title, as Pele places them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -44,7 +44,7 @@ struct SequenceBoxRuns {
             let title = box.title.map { label in measurers.messageBlock(label, wraps: box.wrapsTitle) }
             runs.append(SequenceBoxRun(boxIndex: boxIndex, firstParticipantIndex: index, lastParticipantIndex: index, title: title))
         }
-        titleHeight = runs.compactMap { run in run.title.map { title in title.lines.isEmpty ? 0 : title.size.height } }.max() ?? 0
+        titleHeight = runs.compactMap { run in run.title.map { title in title.lineCount == 0 ? 0 : title.size.height } }.max() ?? 0
     }
 
     /// The room above the participants' boxes: the padding and the tallest title with its gap, or nothing without boxes.

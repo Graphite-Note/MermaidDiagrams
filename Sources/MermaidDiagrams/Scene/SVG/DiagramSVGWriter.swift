@@ -6,8 +6,8 @@
  *              no external reference, written as UTF-8 into one buffer reserved from the scene, front to back.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -140,9 +140,9 @@ public struct DiagramSVGWriter: Sendable {
         if let lineRuns = text.block.lineRuns {
             for runs in lineRuns { for run in runs { textByteCount += run.text.utf8.count + lineByteAllowance } }
         } else {
-            for line in text.block.lines { textByteCount += line.utf8.count }
+            for index in 0..<text.block.lineCount { textByteCount += text.block.withUTF8(ofLine: index) { bytes in bytes.count } }
         }
-        textByteCount += text.block.lines.count * lineByteAllowance
+        textByteCount += text.block.lineCount * lineByteAllowance
         let copies = text.outline == nil ? 1 : 2
         return copies * (textByteAllowance + textByteCount)
     }

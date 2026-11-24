@@ -5,8 +5,8 @@
  * Description: An entity relationship diagram with groups as a graph of nested boxes to lay out, as Pele's renderer makes it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -49,7 +49,7 @@ struct EntityRelationshipClusterGraph {
         }
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
         titles = measuredTitles
         var layoutNodeIndices: [Int?] = []

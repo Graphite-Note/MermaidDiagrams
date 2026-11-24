@@ -6,8 +6,8 @@
  *              and an icon's text cut down to its square with an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -36,15 +36,15 @@ enum ArchitectureIcons {
     /// Pele's `fit`: `block` cut to `maximumWidth` and `maximumLines`, each line too wide (and the last kept, when lines
     /// were left out) ended by an ellipsis after the longest start that fits with it.
     static func fitted(_ block: DiagramTextBlock, maximumWidth: CGFloat, maximumLines: Int, measurer: some DiagramTextMeasuring) -> DiagramTextBlock {
-        let isCut = block.lines.count > maximumLines
+        let isCut = block.lineCount > maximumLines
         guard isCut || block.size.width > maximumWidth else { return block }
         let ellipsis = "…"
         let ellipsisWidth = measurer.width(of: ellipsis)
         var lines: [String] = []
         var widths: [CGFloat] = []
-        for index in 0..<min(maximumLines, block.lines.count) {
-            var line = block.lines[index]
-            var width = block.lineWidths[index]
+        for index in 0..<min(maximumLines, block.lineCount) {
+            var line = block.line(at: index)
+            var width = block.lineWidth(at: index)
             if width > maximumWidth || (isCut && index == maximumLines - 1) {
                 if ellipsisWidth < maximumWidth {
                     let characters = Array(line)

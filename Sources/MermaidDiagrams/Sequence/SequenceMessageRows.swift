@@ -7,8 +7,8 @@
  *              lifelines it ends.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -49,7 +49,7 @@ extension SequenceRows {
     private mutating func placeLine(_ message: SequenceMessage, at eventIndex: Int,
                                     startingActivationCount: Int) -> (message: SequenceLayoutMessage, bottom: CGFloat, lineY: CGFloat) {
         let text = extents.eventTexts[eventIndex]
-        let textHeight = text.map { block in block.lines.isEmpty ? 0 : block.size.height } ?? 0
+        let textHeight = text.map { block in block.lineCount == 0 ? 0 : block.size.height } ?? 0
         let target = message.targetIndex
         let createdHalfHeight = message.createsTarget ? columns.participantSizes[target].height / 2 : 0
         let lineY = y + SequenceSpacing.messageGap + max(textHeight > 0 ? textHeight + SequenceSpacing.textRoom : SequenceSpacing.messageWithoutTextHeight,

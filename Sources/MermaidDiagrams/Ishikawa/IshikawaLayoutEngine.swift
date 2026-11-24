@@ -6,8 +6,8 @@
  *              the spine, or for a narrow column an indented list down the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -45,7 +45,7 @@ public enum IshikawaLayoutEngine {
     static func fishbone<Measurer: DiagramTextMeasuring>(_ diagram: IshikawaDiagram, measurers: DiagramTextMeasurerSet<Measurer>,
                                                          font: DiagramFont) -> IshikawaLayout {
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.bold, maximumWidth: 4_000) }
-        let titleHeight = title.map { title in title.lines.isEmpty ? 0 : title.size.height + titleGap } ?? 0
+        let titleHeight = title.map { title in title.lineCount == 0 ? 0 : title.size.height + titleGap } ?? 0
         var fish = IshikawaFishbone()
         if let root = diagram.nodes.first { fish.lay(diagram, root: root, measurers: measurers) }
         let bounds = fish.bounds

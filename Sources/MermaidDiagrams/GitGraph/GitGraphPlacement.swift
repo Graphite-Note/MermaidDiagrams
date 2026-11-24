@@ -5,8 +5,8 @@
  * Description: Places a Git graph's lanes, commits, ids and tags in diagram space as Pele does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -46,7 +46,7 @@ struct GitGraphPlacement {
         let lineEnd = geometry.point(along: lastAlong + GitGraphGeometry.laneTail, across: across)
         include(CGRect(origin: lineStart, size: .zero))
         include(CGRect(origin: lineEnd, size: .zero))
-        guard !name.lines.isEmpty else {
+        guard name.lineCount > 0 else {
             lanes.append(GitGraphLayoutLane(lineStart: lineStart, lineEnd: lineEnd, nameFrame: nil, name: nil))
             return
         }

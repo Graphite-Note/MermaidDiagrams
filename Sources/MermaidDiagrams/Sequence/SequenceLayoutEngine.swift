@@ -6,8 +6,8 @@
  *              their lifelines, rows of events, the title and the padding.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -98,7 +98,7 @@ public enum SequenceLayoutEngine {
         let boxPadding = columns.boxRuns.runs.isEmpty ? 0 : columns.boxRuns.padding
         if rows.extents.minimumX > rows.extents.maximumX { rows.extend(from: 0, to: max(title?.size.width ?? 0, emptyDiagramWidth)) }
         var topOfPage: CGFloat = 0
-        var placedTitle = title.flatMap { block in block.lines.isEmpty ? nil : block }
+        var placedTitle = title.flatMap { block in block.lineCount == 0 ? nil : block }
         if let size = placedTitle?.size {
             let centerX = (rows.extents.minimumX + rows.extents.maximumX) / 2
             rows.extend(from: centerX - size.width / 2, to: centerX + size.width / 2)
@@ -147,7 +147,7 @@ public enum SequenceLayoutEngine {
         let columns = rows.columns
         return columns.boxRuns.runs.map { run in
             let edges = columns.boxRuns.edges(of: run, centers: columns.centers, sizes: columns.participantSizes)
-            var title = run.title.flatMap { block in block.lines.isEmpty ? nil : block }
+            var title = run.title.flatMap { block in block.lineCount == 0 ? nil : block }
             if let height = title?.size.height {
                 title?.center = CGPoint(x: (edges.left + edges.right) / 2, y: columns.boxRuns.padding / 2 + SequenceSpacing.boxTitleDepth + height / 2)
             }

@@ -6,8 +6,8 @@
  *              for it, as Pele fits one to its width.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -70,7 +70,7 @@ public enum PieChartLayoutEngine {
             : chart.slices.map { slice in legendText(for: slice, showsValue: chart.showsValues, measurer: smallText) }
         let title = chart.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: text, maximumWidth: titleRoom)
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let besideMovedBelow = isTight && (options.legendPosition == .left || options.legendPosition == .right)
         let arrangement = Arrangement(pieDiameter: 2 * (radius + slices.outsideLabelRoom), legendSize: legendSize(of: legendTexts),
                                       legendPosition: besideMovedBelow ? .bottom : options.legendPosition, title: title)

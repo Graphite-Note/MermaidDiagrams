@@ -8,7 +8,7 @@
  *              bytes decide whether it is read for markup as its scalars did; and C4's spoken kind names.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -35,12 +35,12 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
         }
     }
 
-    private func randomLine(_ generator: inout Generator, asciiOnly: Bool) -> [DiagramMeasuredSpan] {
+    private func randomLine(_ generator: inout Generator, asciiOnly: Bool) -> [ReferenceMeasuredSpan] {
         let parts = asciiOnly ? Self.parts.filter { part in part.unicodeScalars.allSatisfy { scalar in scalar.value >= 0x20 && scalar.value < 0x7F } }
             : Self.parts
         return (0..<(1 + generator.next(below: 4))).map { _ in
             let text = (0..<generator.next(below: 14)).map { _ in parts[generator.next(below: parts.count)] }.joined()
-            return DiagramMeasuredSpan(text: text, style: Self.styles[generator.next(below: Self.styles.count)], width: 0)
+            return ReferenceMeasuredSpan(text: text, style: Self.styles[generator.next(below: Self.styles.count)], width: 0)
         }
     }
 
@@ -51,13 +51,13 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
         for _ in 0..<lineCount {
             let spans = randomLine(&generator, asciiOnly: asciiOnly)
             for maximumWidth in Self.widths {
-                var wrapping = DiagramTextWrapping(measuring: DiagramStyledMeasuring(measurer), lines: DiagramMeasuredLines(keepsRuns: true),
+                var wrapping = ReferenceTextWrapping(measuring: DiagramStyledMeasuring(measurer), lines: ReferenceMeasuredLines(keepsRuns: true),
                                                    maximumWidth: maximumWidth)
                 wrapping.wrap(spans)
                 let wrapped = wrapping.finishedLines
                 var reference = StringPieceTextWrapping(measuring: DiagramStyledMeasuring(measurer), maximumWidth: maximumWidth)
                 reference.wrap(spans)
-                var expected = DiagramMeasuredLines(keepsRuns: true)
+                var expected = ReferenceMeasuredLines(keepsRuns: true)
                 for line in reference.lines { expected.add(line.spans, width: line.width) }
                 let description = "\(spans.map(\.text).debugDescription) at \(maximumWidth)"
                 XCTAssertEqual(wrapped.lines, expected.lines, description, file: file, line: line)
@@ -120,8 +120,8 @@ final class DiagramTextWrappingEquivalenceTests: XCTestCase {
 struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
     private var measuring: DiagramStyledMeasuring<Measurer>
     private let maximumWidth: CGFloat
-    private(set) var lines: [(spans: [DiagramMeasuredSpan], width: CGFloat)] = []
-    private var current: [DiagramMeasuredSpan] = []
+    private(set) var lines: [(spans: [ReferenceMeasuredSpan], width: CGFloat)] = []
+    private var current: [ReferenceMeasuredSpan] = []
     private var width: CGFloat = 0
 
     init(measuring: DiagramStyledMeasuring<Measurer>, maximumWidth: CGFloat) {
@@ -133,14 +133,14 @@ struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
     var finishedMeasuring: DiagramStyledMeasuring<Measurer> { measuring }
 
     /// Lays `line` into lines; every span of a line is wrapped together, the last one ending the line.
-    mutating func wrap(_ line: [DiagramMeasuredSpan]) {
+    mutating func wrap(_ line: [ReferenceMeasuredSpan]) {
         for (index, span) in line.enumerated() {
             wrap(span, isLastOfLine: index == line.count - 1)
         }
         if !current.isEmpty || lines.isEmpty { commit() }
     }
 
-    private mutating func wrap(_ span: DiagramMeasuredSpan, isLastOfLine: Bool) {
+    private mutating func wrap(_ span: ReferenceMeasuredSpan, isLastOfLine: Bool) {
         let pieces = DiagramTextPieces.pieces(ofScalars: span.text)
         let softHyphenWidths = span.text.unicodeScalars.contains(DiagramTextPieces.softHyphen)
             ? StringPieceSoftHyphenWidths(pieces: pieces, style: span.style, isLastOfLine: isLastOfLine, measuring: &measuring) : nil
@@ -180,7 +180,7 @@ struct StringPieceTextWrapping<Measurer: DiagramTextMeasuring> {
             current.append(last)
         }
         let pieceFullWidth = measuring.width(of: piece, style: style)
-        current.append(DiagramMeasuredSpan(text: piece, style: style, width: pieceFullWidth))
+        current.append(ReferenceMeasuredSpan(text: piece, style: style, width: pieceFullWidth))
         width += pieceFullWidth
     }
 

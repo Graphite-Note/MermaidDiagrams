@@ -3,23 +3,23 @@
  * -------------------------------
  * Layer: Core
  * Description: A line of spans wrapped at a width as Pele's wrap wraps it: between pieces, each line's trailing spaces
- *              dropped, a soft hyphen shown as a hyphen where a line breaks after it; worked on the line's UTF-8 bytes,
- *              each line's text made once.
+ *              dropped, a soft hyphen shown as a hyphen where a line breaks after it; worked on the line's UTF-8 bytes
+ *              in its text storage, each line's runs written as byte ranges, no String made.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
 import CoreGraphics
 
-/// A piece of a line being measured: its text, its emphasis and its width in it.
-struct DiagramMeasuredSpan {
-    var text: String
+/// A span of the line being filled: its bytes, its emphasis, its width, and whether every byte is printable ASCII.
+struct DiagramWrappedSpan {
+    var start: Int
+    var end: Int
     let style: DiagramTextStyle
     var width: CGFloat
-
-    var run: DiagramTextRun { DiagramTextRun(text: text, style: style, width: width) }
+    var isPrintableASCII: Bool
 }
 
 /// Pele's `wrap` (text/label.ts): the spans of a line laid into lines no wider than `maximumWidth` where they can be,
@@ -27,26 +27,23 @@ struct DiagramMeasuredSpan {
 /// new line, its leading spaces dropped; a line's trailing spaces are dropped when it is ended; a piece wider than the
 /// width stays whole on its own line. Where a line ends after a soft hyphen that a word was broken at, the hyphen shows.
 ///
-/// The line's spans are read as one run of UTF-8 bytes, and the spans of the line being filled are ranges of it, so that
-/// pieces are joined and trimmed by moving ends; a line's texts are made when it is ended. Where the measurer adds up
-/// the advances of printable ASCII (`DiagramFontAdvances`), a span of it that a piece of it joins has its width
-/// continued over the piece's bytes, which is the width of the joined text to the bit; other text is measured joined.
-struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
-    private var measuring: DiagramStyledMeasuring<Measurer>
-    private let maximumWidth: CGFloat
-    /// The lines made so far, after the lines handed in.
-    private var lines: DiagramMeasuredLines
+/// The line's spans are ranges of `bytes`, which follow one another, and the spans of the line being filled are ranges
+/// of them, so that pieces are joined and trimmed by moving ends; each line made is written into the scratch as runs.
+/// Where the measurer adds up the advances of printable ASCII (`DiagramFontAdvances`), a span of it that a piece of it
+/// joins has its width continued over the piece's bytes, which is the width of the joined text to the bit; other text is
+/// measured joined, from its bytes.
+struct DiagramTextLineWrapping<Measurer: DiagramTextMeasuring> {
+    var measuring: DiagramStyledByteMeasuring<Measurer>
+    let maximumWidth: CGFloat
+    /// The bytes the spans are ranges of: the text storage's, from its start.
+    let bytes: UnsafeBufferPointer<UInt8>
     private var madeLineCount = 0
-    private var current: [WrappedSpan] = []
     private var width: CGFloat = 0
 
-    /// A span of the line being filled: its bytes, its emphasis, its width, and whether every byte is printable ASCII.
-    private struct WrappedSpan {
-        var start: Int
-        var end: Int
-        let style: DiagramTextStyle
-        var width: CGFloat
-        var isPrintableASCII: Bool
+    init(measuring: DiagramStyledByteMeasuring<Measurer>, maximumWidth: CGFloat, bytes: UnsafeBufferPointer<UInt8>) {
+        self.measuring = measuring
+        self.maximumWidth = maximumWidth
+        self.bytes = bytes
     }
 
     /// A span of the line being wrapped: its emphasis and the advances its measurer adds up, if it does.
@@ -55,167 +52,157 @@ struct DiagramTextWrapping<Measurer: DiagramTextMeasuring> {
         let advances: DiagramFontAdvances?
     }
 
-    /// Wraps into `lines`, after the lines they hold.
-    init(measuring: DiagramStyledMeasuring<Measurer>, lines: DiagramMeasuredLines, maximumWidth: CGFloat) {
-        self.measuring = measuring
-        self.lines = lines
-        self.maximumWidth = maximumWidth
+    /// Lays the line whose spans are `scratch.lineSpans` into lines of the scratch; every span of a line is wrapped
+    /// together, the last one ending the line.
+    mutating func wrapLine(into scratch: inout DiagramTextMeasuringScratch) {
+        madeLineCount = 0
+        width = 0
+        scratch.filled.removeAll()
+        let spanCount = scratch.lineSpans.count
+        for index in 0..<spanCount {
+            let span = scratch.lineSpans[index]
+            let font = SpanFont(style: span.style, advances: measuring.advances(of: span.style))
+            wrap(Int(span.start)..<Int(span.end), font: font, isLastOfLine: index == spanCount - 1, into: &scratch)
+        }
+        if !scratch.filled.isEmpty || madeLineCount == 0 { commit(into: &scratch) }
     }
 
-    /// The measurer, with the fonts it made for emphasis, to measure the next line with.
-    var finishedMeasuring: DiagramStyledMeasuring<Measurer> { measuring }
-
-    /// The lines handed in, then the lines made.
-    var finishedLines: DiagramMeasuredLines { lines }
-
-    /// Lays `line` into lines; every span of a line is wrapped together, the last one ending the line.
-    mutating func wrap(_ line: [DiagramMeasuredSpan]) {
-        var text = line.count == 1 ? line[0].text : line.map(\.text).joined()
-        let totalWidth = line.reduce(0) { total, span in total + span.width }
-        if maximumWidth > 0, totalWidth.isFinite, case let estimate = (totalWidth / maximumWidth).rounded(.up) + 1, estimate < CGFloat(text.utf8.count) {
-            lines.reserveCapacity(Int(estimate))
-        }
-        text.withUTF8 { bytes in
-            var start = 0
-            for (index, span) in line.enumerated() {
-                let end = start + span.text.utf8.count
-                let font = SpanFont(style: span.style, advances: measuring.printableASCIIAdvances(of: span.style))
-                wrap(bytes, span: start..<end, font: font, isLastOfLine: index == line.count - 1)
-                start = end
-            }
-            if !current.isEmpty || madeLineCount == 0 { commit(bytes) }
-        }
-    }
-
-    private mutating func wrap(_ bytes: UnsafeBufferPointer<UInt8>, span: Range<Int>, font: SpanFont, isLastOfLine: Bool) {
+    private mutating func wrap(_ span: Range<Int>, font: SpanFont, isLastOfLine: Bool, into scratch: inout DiagramTextMeasuringScratch) {
         let text = bytes[span]
         guard !text.allSatisfy({ byte in byte < 0x80 }) else {
             var start = span.lowerBound
             while start < span.upperBound {
                 let end = DiagramTextPieces.endOfASCIIPiece(in: text, from: start)
-                place(start..<end, of: bytes, font: font, softHyphenWidths: nil, index: 0)
+                place(start..<end, font: font, softHyphenWidths: nil, index: 0, into: &scratch)
                 start = end
             }
             return
         }
-        var pieces: [Range<Int>] = []
+        var pieces = scratch.pieces
+        scratch.pieces = []
+        pieces.removeAll(keepingCapacity: true)
         DiagramTextPieces.appendPieces(ofScalarsIn: text, to: &pieces)
-        var softHyphenWidths: SoftHyphenWidths?
-        if WrappedTextBytes.containsSoftHyphen(text) {
-            let endsWithHyphen = pieces.map { piece in WrappedTextBytes.endsWithSoftHyphen(bytes[piece]) }
+        var softHyphenWidths: DiagramSoftHyphenWidths?
+        if DiagramWrappedTextBytes.containsSoftHyphen(text) {
+            let endsWithHyphen = pieces.map { piece in DiagramWrappedTextBytes.endsWithSoftHyphen(bytes[piece]) }
             // A soft hyphen is not white space: a piece that ends with one has nothing to trim.
             let own = zip(pieces, endsWithHyphen).map { piece, endsWithHyphen in
-                width(of: piece.lowerBound..<(endsWithHyphen ? piece.upperBound - 2 : WrappedTextBytes.endTrimmed(bytes[piece])), in: bytes, font: font)
+                width(of: piece.lowerBound..<(endsWithHyphen ? piece.upperBound - 2 : DiagramWrappedTextBytes.endTrimmed(bytes[piece])), font: font)
             }
-            softHyphenWidths = SoftHyphenWidths(own: own, endsWithHyphen: endsWithHyphen, isLastOfLine: isLastOfLine)
+            softHyphenWidths = DiagramSoftHyphenWidths(own: own, endsWithHyphen: endsWithHyphen, isLastOfLine: isLastOfLine)
         }
         for (index, piece) in pieces.enumerated() {
-            place(piece, of: bytes, font: font, softHyphenWidths: softHyphenWidths, index: index)
+            place(piece, font: font, softHyphenWidths: softHyphenWidths, index: index, into: &scratch)
         }
+        scratch.pieces = pieces
     }
 
     /// Places piece `index` of its span on the line, or on a new line where it does not fit.
-    private mutating func place(_ written: Range<Int>, of bytes: UnsafeBufferPointer<UInt8>, font: SpanFont, softHyphenWidths: SoftHyphenWidths?,
-                                index: Int) {
+    private mutating func place(_ written: Range<Int>, font: SpanFont, softHyphenWidths: DiagramSoftHyphenWidths?, index: Int,
+                                into scratch: inout DiagramTextMeasuringScratch) {
         var piece = written
         let isPrintableASCII = bytes[piece].allSatisfy(DiagramFontAdvances.isPrintable)
         let pieceWidth = softHyphenWidths?.own[index]
-            ?? width(of: piece.lowerBound..<WrappedTextBytes.endTrimmed(bytes[piece]), in: bytes, font: font, isPrintableASCII: isPrintableASCII)
-        if width > 0, !fits(piece, of: bytes, index: index, pieceWidth: pieceWidth, style: font.style, softHyphenWidths: softHyphenWidths) {
+            ?? width(of: piece.lowerBound..<DiagramWrappedTextBytes.endTrimmed(bytes[piece]), font: font, isPrintableASCII: isPrintableASCII)
+        if width > 0, !fits(piece, index: index, pieceWidth: pieceWidth, style: font.style, softHyphenWidths: softHyphenWidths, scratch: &scratch) {
             // Breaking at a space leaves a soft hyphen before it hidden.
             let start = JavaScriptWhitespace.endOfRun(in: bytes[piece], from: piece.lowerBound)
-            commit(bytes, showingHyphen: start == piece.lowerBound)
+            commit(showingHyphen: start == piece.lowerBound, into: &scratch)
             piece = start..<piece.upperBound
         }
-        append(piece, of: bytes, isPrintableASCII: isPrintableASCII, pieceWidth: pieceWidth, font: font)
+        append(piece, isPrintableASCII: isPrintableASCII, pieceWidth: pieceWidth, font: font, into: &scratch)
     }
 
-    private mutating func fits(_ piece: Range<Int>, of bytes: UnsafeBufferPointer<UInt8>, index: Int, pieceWidth: CGFloat, style: DiagramTextStyle,
-                               softHyphenWidths: SoftHyphenWidths?) -> Bool {
-        guard let softHyphenWidths, WrappedTextBytes.endsWithSoftHyphen(bytes[piece]) else { return width + pieceWidth <= maximumWidth }
-        return width + measuring.width(of: WrappedTextBytes.hyphenShown(bytes[piece]), style: style) <= maximumWidth
+    private mutating func fits(_ piece: Range<Int>, index: Int, pieceWidth: CGFloat, style: DiagramTextStyle,
+                               softHyphenWidths: DiagramSoftHyphenWidths?, scratch: inout DiagramTextMeasuringScratch) -> Bool {
+        guard let softHyphenWidths, DiagramWrappedTextBytes.endsWithSoftHyphen(bytes[piece]) else { return width + pieceWidth <= maximumWidth }
+        scratch.probe.removeAll()
+        scratch.probe.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[piece].dropLast(2)))
+        scratch.probe.append(UInt8(ascii: "-"))
+        return width + measuring.width(of: scratch.probe.buffer, style: style) <= maximumWidth
             || width + softHyphenWidths.rest[index] <= maximumWidth
     }
 
-    private mutating func append(_ piece: Range<Int>, of bytes: UnsafeBufferPointer<UInt8>, isPrintableASCII: Bool, pieceWidth: CGFloat, font: SpanFont) {
-        if let lastIndex = current.indices.last, current[lastIndex].style == font.style {
-            var last = current[lastIndex]
+    private mutating func append(_ piece: Range<Int>, isPrintableASCII: Bool, pieceWidth: CGFloat, font: SpanFont,
+                                 into scratch: inout DiagramTextMeasuringScratch) {
+        if let last = scratch.filled.last, last.style == font.style {
+            var joined = last
             // The pieces of a line follow one another in its bytes, so the span takes the piece by moving its end.
-            last.end = piece.upperBound
+            joined.end = piece.upperBound
             // Measured again only when the piece adds width, so that zero-width pieces take no time.
             if pieceWidth > 0 || JavaScriptWhitespace.lengthOfLast(in: bytes[piece]) > 0 {
-                let before = last.width
-                if last.isPrintableASCII, isPrintableASCII, let advances = font.advances {
-                    last.width = advances.width(continuing: last.width, over: bytes[piece])
+                let before = joined.width
+                if joined.isPrintableASCII, isPrintableASCII, let advances = font.advances {
+                    joined.width = advances.width(continuing: joined.width, over: bytes[piece])
                 } else {
-                    last.width = width(of: last.start..<last.end, in: bytes, font: font, isPrintableASCII: last.isPrintableASCII && isPrintableASCII)
+                    joined.width = width(of: joined.start..<joined.end, font: font, isPrintableASCII: joined.isPrintableASCII && isPrintableASCII)
                 }
-                width += last.width - before
+                width += joined.width - before
             }
-            last.isPrintableASCII = last.isPrintableASCII && isPrintableASCII
-            current[lastIndex] = last
+            joined.isPrintableASCII = joined.isPrintableASCII && isPrintableASCII
+            scratch.filled[scratch.filled.count - 1] = joined
             return
         }
-        let pieceFullWidth = width(of: piece, in: bytes, font: font, isPrintableASCII: isPrintableASCII)
-        current.append(WrappedSpan(start: piece.lowerBound, end: piece.upperBound, style: font.style, width: pieceFullWidth, isPrintableASCII: isPrintableASCII))
+        let pieceFullWidth = width(of: piece, font: font, isPrintableASCII: isPrintableASCII)
+        scratch.filled.append(DiagramWrappedSpan(start: piece.lowerBound, end: piece.upperBound, style: font.style, width: pieceFullWidth,
+                                                 isPrintableASCII: isPrintableASCII))
         width += pieceFullWidth
     }
 
     /// Ends the line: its last span's trailing spaces dropped and, when `showingHyphen`, a soft hyphen it ends with
-    /// shown as `-`; each span's text made from its bytes.
-    private mutating func commit(_ bytes: UnsafeBufferPointer<UInt8>, showingHyphen: Bool = false) {
+    /// shown as `-`; each span written as a run.
+    private mutating func commit(showingHyphen: Bool = false, into scratch: inout DiagramTextMeasuringScratch) {
         defer {
             madeLineCount += 1
-            current.removeAll(keepingCapacity: true)
+            scratch.filled.removeAll()
             width = 0
         }
-        guard let last = current.last else { return lines.add([], width: width) }
-        let lastSpan = committed(last, of: bytes, showingHyphen: showingHyphen)
-        width += lastSpan.width - last.width
-        guard current.count > 1 else { return lines.add(lastSpan, width: width) }
-        var spans: [DiagramMeasuredSpan] = []
-        spans.reserveCapacity(current.count)
-        for span in current.dropLast() {
-            spans.append(DiagramMeasuredSpan(text: Self.text(bytes, span.start..<span.end), style: span.style, width: span.width))
+        guard let last = scratch.filled.last else { return scratch.addEmptyLine(width: width) }
+        let lastRun = committed(last, showingHyphen: showingHyphen, into: &scratch)
+        width += lastRun.width - last.width
+        let firstRun = Int32(scratch.runs.count)
+        for index in 0..<(scratch.filled.count - 1) {
+            let span = scratch.filled[index]
+            scratch.runs.append(DiagramTextRunRecord(start: Int32(span.start), end: Int32(span.end), width: span.width, style: span.style))
+            if !span.style.isEmpty { scratch.hasEmphasis = true }
         }
-        spans.append(lastSpan)
-        lines.add(spans, width: width)
+        scratch.runs.append(lastRun)
+        if !lastRun.style.isEmpty { scratch.hasEmphasis = true }
+        scratch.lines.append(DiagramTextMeasuringScratch.Line(firstRun: firstRun, runCount: Int32(scratch.filled.count), width: width))
     }
 
-    /// The line's last span as it ends the line: its trailing spaces dropped, or a soft hyphen it ends with shown as `-`,
-    /// and measured again when that changed it.
-    private mutating func committed(_ last: WrappedSpan, of bytes: UnsafeBufferPointer<UInt8>, showingHyphen: Bool) -> DiagramMeasuredSpan {
+    /// The line's last span as it ends the line: its trailing spaces dropped, or a soft hyphen it ends with shown as `-`
+    /// (written as synthetic text), and measured again when that changed it.
+    private mutating func committed(_ last: DiagramWrappedSpan, showingHyphen: Bool, into scratch: inout DiagramTextMeasuringScratch)
+        -> DiagramTextRunRecord {
         let written = bytes[last.start..<last.end]
-        if showingHyphen, WrappedTextBytes.endsWithSoftHyphen(written) {
+        if showingHyphen, DiagramWrappedTextBytes.endsWithSoftHyphen(written) {
             // A soft hyphen is not white space, so nothing was trimmed before it.
-            let text = WrappedTextBytes.hyphenShown(written)
-            return DiagramMeasuredSpan(text: text, style: last.style, width: measuring.width(of: text, style: last.style))
+            let shown = scratch.appendSynthetic(UnsafeBufferPointer(rebasing: written.dropLast(2)), suffix: UInt8(ascii: "-"))
+            let shownWidth = measuring.width(of: scratch.bytes(shown.start, shown.end, source: bytes.baseAddress!), style: last.style)
+            return DiagramTextRunRecord(start: shown.start, end: shown.end, width: shownWidth, style: last.style)
         }
-        let trimmedEnd = WrappedTextBytes.endTrimmed(written)
-        var span = DiagramMeasuredSpan(text: Self.text(bytes, last.start..<trimmedEnd), style: last.style, width: last.width)
+        let trimmedEnd = DiagramWrappedTextBytes.endTrimmed(written)
+        var run = DiagramTextRunRecord(start: Int32(last.start), end: Int32(trimmedEnd), width: last.width, style: last.style)
         if trimmedEnd != last.end {
-            let advances = last.isPrintableASCII ? measuring.printableASCIIAdvances(of: last.style) : nil
-            span.width = width(of: last.start..<trimmedEnd, in: bytes, font: SpanFont(style: last.style, advances: advances), isPrintableASCII: last.isPrintableASCII)
+            let advances = last.isPrintableASCII ? measuring.advances(of: last.style) : nil
+            run.width = width(of: last.start..<trimmedEnd, font: SpanFont(style: last.style, advances: advances), isPrintableASCII: last.isPrintableASCII)
         }
-        return span
+        return run
     }
 
-    /// The width of `range` of `bytes` in the span's font: added up from its advances where every byte is printable ASCII
-    /// and the measurer adds them up, else measured as text. Either way it is the measurer's width of that text.
-    private mutating func width(of range: Range<Int>, in bytes: UnsafeBufferPointer<UInt8>, font: SpanFont, isPrintableASCII: Bool? = nil) -> CGFloat {
+    /// The width of `range` of the bytes in the span's font: added up from its advances where every byte is printable
+    /// ASCII and the measurer adds them up, else measured as text. Either way it is the measurer's width of that text.
+    private mutating func width(of range: Range<Int>, font: SpanFont, isPrintableASCII: Bool? = nil) -> CGFloat {
         if let advances = font.advances, isPrintableASCII ?? bytes[range].allSatisfy(DiagramFontAdvances.isPrintable) {
             return advances.width(continuing: 0, over: bytes[range])
         }
-        return measuring.width(of: Self.text(bytes, range), style: font.style)
-    }
-
-    private static func text(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> String {
-        String(decoding: UnsafeBufferPointer(rebasing: bytes[range]), as: UTF8.self)
+        return measuring.width(of: UnsafeBufferPointer(rebasing: bytes[range]), style: font.style)
     }
 }
 
 /// A line's UTF-8 bytes as wrapping reads them: trailing white space and soft hyphens.
-private enum WrappedTextBytes {
+enum DiagramWrappedTextBytes {
     /// The end of `text` without its trailing JavaScript white space, a character beyond ASCII taken whole.
     static func endTrimmed(_ text: Slice<UnsafeBufferPointer<UInt8>>) -> Int {
         var end = text.endIndex
@@ -238,17 +225,12 @@ private enum WrappedTextBytes {
     static func endsWithSoftHyphen(_ text: Slice<UnsafeBufferPointer<UInt8>>) -> Bool {
         text.count >= 2 && text[text.endIndex - 2] == softHyphenBytes.0 && text[text.endIndex - 1] == softHyphenBytes.1
     }
-
-    /// `text`, which ends with a soft hyphen, with the hyphen shown as `-`.
-    static func hyphenShown(_ text: Slice<UnsafeBufferPointer<UInt8>>) -> String {
-        String(decoding: UnsafeBufferPointer(rebasing: text.dropLast(2)), as: UTF8.self) + "-"
-    }
 }
 
 /// The widths Pele works out for the pieces of a span with a soft hyphen: each piece without its trailing spaces and
 /// its final soft hyphen (`own`), and the width of the rest of its word from each piece on (`rest`), unknown past the
 /// span unless the span ends the line.
-private struct SoftHyphenWidths {
+struct DiagramSoftHyphenWidths {
     let own: [CGFloat]
     let rest: [CGFloat]
 

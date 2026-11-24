@@ -5,8 +5,8 @@
  * Description: A class diagram with namespaces as a graph of nested boxes to lay out, as Pele's class renderer makes it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -46,7 +46,7 @@ struct ClassDiagramClusterGraph {
                                          direction: FlowchartDirection, titleText: Measurer, edgeTextRoom: CGSize, isTight: Bool = false) {
         let measuredTitles = tree.namespaces.map { namespace in
             let title = DiagramTextBlock(label: namespace.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
-            return title.lines.isEmpty ? nil : title
+            return title.lineCount == 0 ? nil : title
         }
         titles = measuredTitles
         let nodeClusters = Self.nodeClusters(tree: tree, measured: measured)

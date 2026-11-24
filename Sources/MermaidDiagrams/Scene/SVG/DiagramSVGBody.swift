@@ -6,8 +6,8 @@
  *              its stroke), a text per placed text, and before them the definitions of the gradients they name.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
- * Date: 23/11/2026
+ * Version: 0.8
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -223,10 +223,10 @@ struct DiagramSVGBody: ~Copyable {
             addLines(of: block, runs: lineRuns, top: top)
             return
         }
-        if block.lines.count == 1 {
+        if block.lineCount == 1 {
             appendPosition(ofLine: 0, in: block, top: top)
             content.append(" text-anchor=\"middle\">")
-            content.appendEscaped(block.lines[0])
+            content.appendEscaped(block.line(at: 0))
             content.append("</text>")
             return
         }
@@ -244,7 +244,7 @@ struct DiagramSVGBody: ~Copyable {
     /// The lines of a text whose lines have runs: each run a `tspan`, the first of a line at the line's middle.
     private mutating func addLines(of block: DiagramTextBlock, runs lineRuns: [[DiagramTextRun]], top: CGFloat) {
         content.append(" text-anchor=\"middle\">")
-        for lineIndex in block.lines.indices {
+        for lineIndex in 0..<block.lineCount {
             let runs = lineRuns[lineIndex]
             guard !runs.isEmpty else {
                 content.append("<tspan")

@@ -6,8 +6,8 @@
  *              stacked, folded into rows when the board is wider than the width it is given.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -46,7 +46,7 @@ public enum KanbanLayoutEngine {
         let title = board.title.map { title in
             DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.bold, maximumWidth: room.map { room in max(80, room) } ?? 4_000)
         }
-        let titleHeight = title.map { title in title.lines.isEmpty ? 0 : title.size.height + titleGap } ?? 0
+        let titleHeight = title.map { title in title.lineCount == 0 ? 0 : title.size.height + titleGap } ?? 0
         let boardWidth = max(CGFloat(min(board.columns.count, rows.perRow)) * (rows.columnWidth + columnGap) - columnGap, 0)
         let width = max(boardWidth, title?.size.width ?? 0)
         let left = padding + (width - boardWidth) / 2

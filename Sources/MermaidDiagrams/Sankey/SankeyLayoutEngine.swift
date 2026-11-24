@@ -5,8 +5,8 @@
  * Description: Lays a Sankey diagram out as Pele does, with its options and for a narrow column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -83,7 +83,7 @@ public enum SankeyLayoutEngine {
         let title = diagram.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: titleText,
                              maximumWidth: DiagramWidthFitting.titleRoom(availableWidth: availableWidth))
-        }.flatMap { block in block.lines.isEmpty ? nil : block }
+        }.flatMap { block in block.lineCount == 0 ? nil : block }
         let page = SankeyPage(labels: labels, title: title, nodeWidth: nodeWidth)
         return SankeyLayout(size: page.size, font: font, title: page.placedTitle,
                             nodes: placement.nodes.enumerated().map { index, node in

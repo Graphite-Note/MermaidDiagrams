@@ -7,8 +7,8 @@
  *              layout, and the edges between a node and a flow around it drawn to the flow's border.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -90,7 +90,7 @@ struct AgentFlowMeasurement {
         func measuredText(of edgeIndex: Int) -> DiagramTextBlock? {
             let edge = graph.edges[edgeIndex]
             let text = PlaneMapLabel.block(Self.label(edge.label, type: edge.labelType), measurer: edgeText, maximumWidth: wrappingWidth)
-            return text.lines.isEmpty ? nil : text
+            return text.lineCount == 0 ? nil : text
         }
         let edgeTexts = clustered.laidOutEdgeIndices.map(measuredText(of:))
         var heldEdgeTexts: [Int: DiagramTextBlock] = [:]
