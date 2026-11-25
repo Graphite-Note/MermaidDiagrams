@@ -6,8 +6,8 @@
  *              accessibility statements, then rules to the end of the text in the notation its keyword names.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Reads a railroad diagram over the tokens of its notation's lexer (`RailroadLexers`): titles and accessibility
@@ -114,6 +114,7 @@ enum RailroadParser {
     /// The text inside a string's quotation marks with Mermaid's three escapes read (`\n`, `\r`, `\t`); any other
     /// escaped character stands for itself.
     static func unescaped(_ quoted: String) -> String {
+        if let inside = quoted.utf8.withContiguousStorageIfAvailable(insideWithoutEscapes), let inside { return inside }
         let scalars = Array(quoted.unicodeScalars)
         guard scalars.count >= 2 else { return "" }
         var text = String.UnicodeScalarView()
@@ -133,5 +134,13 @@ enum RailroadParser {
             index += 1
         }
         return String(text)
+    }
+
+    /// The text inside quotation marks that holds no backslash, so no escape: the bytes between its first and its last,
+    /// when both are ASCII, each one scalar of its own. Nil for any other text, which `unescaped(_:)` reads scalar by
+    /// scalar.
+    private static func insideWithoutEscapes(_ bytes: UnsafeBufferPointer<UInt8>) -> String? {
+        guard bytes.count >= 2, bytes[0] < 0x80, bytes[bytes.count - 1] < 0x80, !bytes.contains(UInt8(ascii: "\\")) else { return nil }
+        return String(decoding: UnsafeBufferPointer(rebasing: bytes[1..<(bytes.count - 1)]), as: UTF8.self)
     }
 }

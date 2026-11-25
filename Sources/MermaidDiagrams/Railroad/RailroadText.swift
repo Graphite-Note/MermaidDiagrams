@@ -6,8 +6,8 @@
  *              escapes written out, and a repetition's count.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// How a railroad diagram's text is shown.
@@ -16,6 +16,10 @@ enum RailroadText {
     /// characters (`#35;` for `#`, `#quot;` for `"`; an unknown name is shown as `&name;`, as Mermaid restores it), and a
     /// line break, a carriage return or a tab is written out (`\n`, `\r`, `\t`).
     static func shown(_ text: String) -> String {
+        // A text without a `#`, a line break, a carriage return or a tab is shown as it is written: those are ASCII, whose
+        // bytes are no part of another character's.
+        guard text.utf8.contains(where: { byte in byte == numberSign || byte == MermaidByte.newline || byte == MermaidByte.carriageReturn
+            || byte == MermaidByte.tab }) else { return text }
         var shown = ""
         var scalars = Substring(text).unicodeScalars[...]
         while let scalar = scalars.first {
@@ -34,6 +38,8 @@ enum RailroadText {
         }
         return shown
     }
+
+    private static let numberSign = UInt8(ascii: "#")
 
     /// A repetition's count, as Pele writes it: none for “once or more” and “any number of times”, `3×` for exactly
     /// three, `≥2×`, `≤4×`, `2–4×`; an infinite count is `∞`.
