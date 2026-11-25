@@ -6,7 +6,7 @@
  *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -34,7 +34,7 @@ extension MermaidDiagramAccessibility {
         let placedTasks = layout.tasks
         self.init(kind: .userJourney, title: diagram.accessibilityTitle ?? diagram.title,
                   description: diagram.accessibilityDescription, summarySeparator: "; ") {
-            let taskTexts = zip(diagram.tasks, placedTasks).map { task, placed in
+            let taskTexts = zip(diagram.taskRecords, placedTasks).map { task, placed in
                 let text = task.score != nil ? Self.joined(task.label.spokenText, ": ", Self.written(task.level)) : task.label.spokenText
                 let actors = placed.actorDots.compactMap { dot in
                     legend.indices.contains(dot.seriesIndex) ? legend[dot.seriesIndex].text.lines.joined(separator: " ") : nil

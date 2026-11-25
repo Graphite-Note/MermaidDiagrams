@@ -5,7 +5,7 @@
  * Description: The runs of a user journey's tasks under sections of one name, which Pele draws under one band.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -22,7 +22,7 @@ struct UserJourneySectionRun: Equatable {
     static func runs(of diagram: UserJourneyDiagram) -> [UserJourneySectionRun] {
         var runs: [UserJourneySectionRun] = []
         var lastSectionIndex: Int??
-        for (index, task) in diagram.tasks.enumerated() {
+        for (index, task) in diagram.taskRecords.enumerated() {
             let heading = task.sectionIndex.map { section in diagram.sections[section] }
             defer { lastSectionIndex = task.sectionIndex }
             if let last = runs.last, lastSectionIndex == task.sectionIndex || last.heading == heading {
