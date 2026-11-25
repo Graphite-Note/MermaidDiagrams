@@ -5,8 +5,8 @@
  * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -45,7 +45,7 @@ public enum EntityRelationshipLayoutEngine {
         let page = DiagramScratchArena.withCurrentThread { arena in
             rankedPage(diagram, measured: measured, flowAxes: flowAxes, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
         }
-        guard let page else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        guard var page else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
     }

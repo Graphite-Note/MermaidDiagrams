@@ -6,8 +6,8 @@
  *              as its tallest cell, every cell's lines starting at its column's left edge.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -103,7 +103,8 @@ struct EntityRelationshipAttributeTable {
 
     /// Each column's left edge: the spare width beyond the filled columns is shared between them.
     private func columnLefts(width: CGFloat, inset: CGFloat) -> [CGFloat] {
-        let filledCount = columnWidths.filter { columnWidth in columnWidth > 0 }.count
+        var filledCount = 0
+        for columnWidth in columnWidths where columnWidth > 0 { filledCount += 1 }
         let spare = filledCount > 0 ? (width - filledWidth - 2 * inset) / CGFloat(filledCount) : 0
         var left = inset
         return columnWidths.map { columnWidth in
