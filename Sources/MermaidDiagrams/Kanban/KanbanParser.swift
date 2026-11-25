@@ -5,8 +5,8 @@
  * Description: Reads a kanban board's outline into its columns and cards, as Mermaid's kanban database builds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Reads a kanban board's lines after its `kanban` keyword as the outline Mermaid's mindmap and kanban grammars share
@@ -49,16 +49,16 @@ struct KanbanBoardBuilder: MermaidOutlineBuilding {
         if let misplacedText { throw .invalidSyntax(line: line, problem: .kanbanCardWithoutColumn(text: misplacedText)) }
         guard itemCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         itemCount += 1
-        let label = fields["label"].map(MindmapNodeSyntax.label) ?? definition.label
-        if fields["icon"] != nil { board.unappliedDecorationCount += 1 }
+        let label = fields?.label.map(MindmapNodeSyntax.label) ?? definition.label
+        if fields?.icon != nil { board.unappliedDecorationCount += 1 }
         if board.columns.isEmpty { columnIndentation = indentation }
         if indentation == columnIndentation {
             board.columns.append(KanbanColumn(identifier: definition.identifier, label: label))
             return
         }
-        board.columns[board.columns.count - 1].cards.append(KanbanCard(identifier: definition.identifier, label: label, ticket: fields["ticket"],
-                                                                       assignee: fields["assigned"],
-                                                                       priority: fields["priority"].flatMap(KanbanPriority.init(written:))))
+        board.columns[board.columns.count - 1].cards.append(KanbanCard(identifier: definition.identifier, label: label, ticket: fields?.ticket,
+                                                                       assignee: fields?.assigned,
+                                                                       priority: fields?.priority.flatMap(KanbanPriority.init(written:))))
         if indentation < columnIndentation { misplacedText = label.spokenText }
     }
 
@@ -70,16 +70,17 @@ struct KanbanBoardBuilder: MermaidOutlineBuilding {
     /// Mermaid's kanban grammar has no accessibility text.
     mutating func apply(_ statement: MermaidAccessibilityStatement) {}
 
-    /// The metadata's fields, or none. A shape named with a capital or an underscore is refused, as Mermaid refuses it.
-    private static func fields(of metadata: String?, identifier: String, line: Int) throws(MermaidDiagramReadError) -> [String: String] {
-        guard let metadata else { return [:] }
-        let fields: [String: String]
+    /// The metadata's fields, or nil without metadata. A shape named with a capital or an underscore is refused, as
+    /// Mermaid refuses it.
+    private static func fields(of metadata: String?, identifier: String, line: Int) throws(MermaidDiagramReadError) -> KanbanCardFields? {
+        guard let metadata else { return nil }
+        let fields: KanbanCardFields
         do {
-            fields = try KanbanCardMetadata(text: metadata).fields
+            fields = try KanbanCardFields(metadata: metadata)
         } catch {
             throw .invalidSyntax(line: line, problem: .kanbanMetadataNotYAML(identifier: identifier))
         }
-        if let shape = fields["shape"], shape != shape.lowercased() || FoundationTextOnBytes.contains(shape, character: MermaidByte.underscore) {
+        if let shape = fields.shape, shape != shape.lowercased() || FoundationTextOnBytes.contains(shape, character: MermaidByte.underscore) {
             throw .invalidSyntax(line: line, problem: .kanbanShapeNameNotLowercase(shape))
         }
         return fields
