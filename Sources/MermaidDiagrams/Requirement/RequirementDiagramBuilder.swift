@@ -7,8 +7,8 @@
  *              and classes copied onto the nodes, every count bounded.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// Builds a requirement diagram as Mermaid's `requirementDb` does. The grammar reports a body's fields before the
@@ -172,6 +172,28 @@ extension RequirementDiagramBuilder {
         }
     }
 
+    /// Whether `declaration` holds `color`, as Foundation's search by characters finds it: never without its bytes,
+    /// always with them in a text of ASCII bytes, where the slow search is skipped.
+    static func holdsColor(_ declaration: String) -> Bool {
+        let utf8 = declaration.utf8
+        let color = Array("color".utf8)
+        var hasBytes = false
+        var isASCII = true
+        var index = utf8.startIndex
+        var matched = 0
+        while index != utf8.endIndex {
+            let byte = utf8[index]
+            if byte >= 0x80 { isASCII = false }
+            matched = byte == color[matched] ? matched + 1 : (byte == color[0] ? 1 : 0)
+            if matched == color.count {
+                hasBytes = true
+                matched = 0
+            }
+            index = utf8.index(after: index)
+        }
+        return hasBytes && (isASCII || declaration.contains("color"))
+    }
+
     /// `classDef a,b declarations`: each class defined or extended, and its declarations copied onto every node that has
     /// it already; a declaration that sets a color is also kept for text, its first `fill` written `bgFill`.
     mutating func defineClasses(names: [String], declarations: [String]) throws(Refusal) {
@@ -183,7 +205,7 @@ extension RequirementDiagramBuilder {
                 diagram.styleClasses.append(RequirementDiagramStyleClass(name: name, styleDeclarations: [], textStyleDeclarations: []))
             }
             for declaration in declarations {
-                if declaration.contains("color") {
+                if Self.holdsColor(declaration) {
                     let text = declaration.range(of: "fill").map { range in declaration.replacingCharacters(in: range, with: "bgFill") } ?? declaration
                     diagram.styleClasses[classIndex].textStyleDeclarations.append(text)
                 }

@@ -5,8 +5,8 @@
  * Description: Reads an entity relationship diagram's statements after its keyword.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Reads an entity relationship diagram's statements after its `erDiagram` keyword, as Mermaid's grammar does:
@@ -126,7 +126,7 @@ struct EntityRelationshipParser {
         let secondIndex = try builder.entityIndex(for: second)
         try builder.addRelationship(EntityRelationship(firstEntityIndex: firstIndex, secondEntityIndex: secondIndex, firstEntityCardinality: firstCardinality,
                                                        secondEntityCardinality: secondCardinality, identification: identification, label: label))
-        builder.noteNamesInOpenSubgraph([first.text, second.text])
+        builder.noteNamesInOpenSubgraph(first.text, second.text)
     }
 
     /// A word, a quoted name or other quoted text; a number is no label in Mermaid's grammar.
