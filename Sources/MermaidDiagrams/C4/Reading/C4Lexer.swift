@@ -7,8 +7,8 @@
  *              text runs out in each of them, on the text's UTF-8 bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Reads a C4 diagram's tokens from its keyword on, on the text's UTF-8 bytes. Pele reads UTF-16 code units, but every
@@ -22,8 +22,9 @@ struct C4Lexer {
         case initial, macro, arguments, string, namedKey, namedKeyEnd, namedValue, accessibilityValue, multilineDescription
     }
 
-    private let bytes: [UInt8]
-    private var tokens = C4Tokens()
+    /// The text, borrowed for the lexer's run.
+    private let bytes: UnsafeBufferPointer<UInt8>
+    private var tokens: C4Tokens
     private var condition = StartCondition.initial
     private var accessibilityValueKind = C4TokenKind.accessibilityTitleValue
     private var position = 0
@@ -34,19 +35,19 @@ struct C4Lexer {
     private var lineEnd = -1
     private var directionFailedBefore = 0
 
-    static func tokens(of bytes: [UInt8]) -> C4Tokens {
-        var lexer = C4Lexer(bytes: bytes)
-        lexer.run()
-        return lexer.tokens
+    /// The tokens of `bytes`, in a list on `arena`.
+    static func tokens(of bytes: [UInt8], arena: DiagramScratchArena) -> C4Tokens {
+        bytes.withUnsafeBufferPointer { text in
+            var lexer = C4Lexer(bytes: text, arena: arena)
+            lexer.run()
+            return lexer.tokens
+        }
     }
 
-    private init(bytes: [UInt8]) {
+    private init(bytes: UnsafeBufferPointer<UInt8>, arena: DiagramScratchArena) {
         self.bytes = bytes
         // About one token for every four bytes: room for them is made once.
-        let expectedTokenCount = bytes.count / 4 + 16
-        tokens.kinds.reserveCapacity(expectedTokenCount)
-        tokens.starts.reserveCapacity(expectedTokenCount)
-        tokens.ends.reserveCapacity(expectedTokenCount)
+        tokens = C4Tokens(capacity: bytes.count / 4 + 16, arena: arena)
     }
 
     private var count: Int { bytes.count }
@@ -219,7 +220,7 @@ struct C4Lexer {
         var end = position + 1
         while end < count, C4Characters.isWord(UInt16(bytes[end])) { end += 1 }
         guard end - position <= C4TokenKind.longestKeywordLength,
-              let kind = bytes.withUnsafeBufferPointer({ text in C4Keywords.kind(of: UnsafeBufferPointer(rebasing: text[position..<end])) }) else {
+              let kind = C4Keywords.kind(of: UnsafeBufferPointer(rebasing: bytes[position..<end])) else {
             return false
         }
         if kind > .deployment { condition = .macro }
@@ -305,9 +306,7 @@ struct C4Lexer {
     // MARK: - Helpers
 
     private mutating func emit(_ kind: C4TokenKind, from start: Int, to end: Int) {
-        tokens.kinds.append(kind)
-        tokens.starts.append(start)
-        tokens.ends.append(end)
+        tokens.append(kind, from: start, to: end)
         position = end
     }
 

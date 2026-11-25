@@ -6,8 +6,8 @@
  *              are read from, and the characters JavaScript's string functions test on UTF-16 code units.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 /// A token of a C4 diagram, in the order of Pele's `tokens.ts`, by Jison's name (`PERSON`, `STR_KEY`). The order
@@ -90,12 +90,42 @@ enum C4Keywords {
     }
 }
 
-/// The tokens of a text: each one's kind and where its text starts and ends, in UTF-8 bytes (Pele keeps UTF-16 code
-/// units, which cover the same characters).
+/// A token: its kind and where its text starts and ends, in UTF-8 bytes (Pele keeps UTF-16 code units, which cover the
+/// same characters).
+struct C4Token {
+    var kind: C4TokenKind
+    var start: Int32
+    var end: Int32
+}
+
+/// The tokens of a text, in a list on the thread's scratch arena: read while the arena's scope lasts, never kept.
 struct C4Tokens {
-    var kinds: [C4TokenKind] = []
-    var starts: [Int] = []
-    var ends: [Int] = []
+    private var list: ScratchList<C4Token>
+
+    init(capacity: Int, arena: DiagramScratchArena) {
+        list = arena.list(capacity: capacity)
+    }
+
+    var count: Int { list.count }
+
+    @inline(__always) func kind(_ index: Int) -> C4TokenKind { list[index].kind }
+    @inline(__always) func start(_ index: Int) -> Int { Int(list[index].start) }
+    @inline(__always) func end(_ index: Int) -> Int { Int(list[index].end) }
+
+    @inline(__always) mutating func append(_ kind: C4TokenKind, from start: Int, to end: Int) {
+        list.append(C4Token(kind: kind, start: Int32(truncatingIfNeeded: start), end: Int32(truncatingIfNeeded: end)))
+    }
+
+    /// How many tokens of each family there are: shapes, boundaries and relations.
+    var macroCounts: (shapes: Int, boundaries: Int, relations: Int) {
+        var counts = (shapes: 0, boundaries: 0, relations: 0)
+        for token in list {
+            if token.kind >= .person, token.kind <= .externalComponentQueue { counts.shapes += 1 }
+            if token.kind >= .enterpriseBoundary, token.kind <= .rightNode { counts.boundaries += 1 }
+            if token.kind >= .relation, token.kind <= .relationIndex { counts.relations += 1 }
+        }
+        return counts
+    }
 }
 
 /// The characters Pele's `util/chars.ts` tests, on UTF-16 code units as its `charCodeAt` reads them: what the agent flow's
