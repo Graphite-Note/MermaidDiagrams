@@ -3,11 +3,12 @@
  * --------------------------------
  * Layer: Core
  * Description: Where a drawn line lies among the boxes a style fills, as Pele's fillUnder finds it: on none, across a
- *              border, or inside the innermost box that holds it and its marks' tips whole.
+ *              border, or inside the innermost box that holds it and its marks' tips whole; the tips and frames arrays
+ *              or spans of a scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -20,10 +21,12 @@ enum DiagramFillPlacement: Equatable {
     /// Inside the box of this place among the frames.
     case inside(Int)
 
-    static func placement(of path: DiagramPath, tips: [CGPoint], among frames: [CGRect]) -> DiagramFillPlacement {
+    /// The tips and the frames are any lists of them (arrays, or spans of a layout's scratch arena).
+    static func placement<Tips: Collection<CGPoint>, Frames: Collection<CGRect>>(of path: DiagramPath, tips: Tips, among frames: Frames)
+        -> DiagramFillPlacement {
         guard !frames.isEmpty else { return .onNone }
         let points = sampled(path)
-        let all = points + tips
+        let all = points + Array(tips)
         let minimumX = all.map(\.x).min() ?? 0
         let maximumX = all.map(\.x).max() ?? 0
         let minimumY = all.map(\.y).min() ?? 0
