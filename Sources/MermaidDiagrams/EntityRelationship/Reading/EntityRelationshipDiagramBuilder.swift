@@ -5,8 +5,8 @@
  * Description: Collects an entity relationship diagram as its statements are read, its groups and what they hold.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Collects an entity relationship diagram as its statements are read: entities by name, added when the statement
@@ -73,6 +73,13 @@ struct EntityRelationshipDiagramBuilder {
     }
 
     /// Records that the innermost open group's statements write `names`.
+    /// The two names a relationship writes, noted without a list made for them when no group is open, as most are.
+    mutating func noteNamesInOpenSubgraph(_ first: String, _ second: String) {
+        guard !openSubgraphs.isEmpty else { return }
+        openSubgraphs[openSubgraphs.count - 1].names.append(first)
+        openSubgraphs[openSubgraphs.count - 1].names.append(second)
+    }
+
     mutating func noteNamesInOpenSubgraph(_ names: [String]) {
         guard !openSubgraphs.isEmpty else { return }
         openSubgraphs[openSubgraphs.count - 1].names.append(contentsOf: names)
