@@ -6,8 +6,8 @@
  *              its text in bold, italic or at its own size, and the text color Pele picks on a fill it sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -41,10 +41,76 @@ public struct BlockAppearance: Equatable, Sendable {
         return style.fill.flatMap(SequenceTextInk.ink(onColor:))
     }
 
-    /// Each declaration of a style entry, which a semicolon may hold several of.
+    /// Each declaration of a style entry, which a semicolon may hold several of: an ASCII entry read on its bytes
+    /// (`applyDeclaration(bytes:)`), any other through its characters.
     private mutating func apply(_ entry: String) {
+        var text = entry
+        let isApplied = text.withUTF8 { bytes -> Bool in
+            guard !bytes.contains(where: { byte in byte >= 0x80 }) else { return false }
+            var start = 0
+            for index in 0...bytes.count where index == bytes.count || bytes[index] == UInt8(ascii: ";") {
+                applyDeclaration(bytes: UnsafeBufferPointer(rebasing: bytes[start..<index]))
+                start = index + 1
+            }
+            return true
+        }
+        guard !isApplied else { return }
         for declaration in entry.split(separator: ";", omittingEmptySubsequences: false) { applyDeclaration(String(declaration)) }
     }
+
+    /// `applyDeclaration(_:)` of an ASCII declaration, on its bytes: the property before the first colon (not the first
+    /// byte), trimmed and lowered; the value after it without every `!important` in any case, trimmed, kept unless
+    /// empty or unsafe.
+    private mutating func applyDeclaration(bytes declaration: UnsafeBufferPointer<UInt8>) {
+        guard let colon = declaration.firstIndex(of: UInt8(ascii: ":")), colon > 0 else { return }
+        let propertyRange = Self.trimmedRange(declaration, 0..<colon)
+        var property: [UInt8] = declaration[propertyRange].map(MermaidByte.lowercased)
+        var value = Array(declaration[(colon + 1)...])
+        while value.contains(MermaidByte.exclamationMark), let important = Self.firstIndexIgnoringCase(of: Self.important, in: value) {
+            value.removeSubrange(important..<(important + Self.important.count))
+        }
+        let valueRange = value.withUnsafeBufferPointer { buffer in Self.trimmedRange(buffer, 0..<buffer.count) }
+        value = Array(value[valueRange])
+        guard !value.isEmpty, !Self.isUnsafe(asciiBytes: value) else { return }
+        switch property {
+        case Self.fontWeight:
+            isBold = value == Self.bold || value == Self.bolder || (Double(String(decoding: value, as: UTF8.self)).map { weight in weight >= 600 } ?? false)
+        case Self.fontStyle: isItalic = value == Self.italic
+        case Self.fontSizeProperty: fontSize = Self.fontSize(String(decoding: value, as: UTF8.self))
+        default:
+            let propertyText = String(decoding: property, as: UTF8.self)
+            property.append(UInt8(ascii: ":"))
+            property.append(contentsOf: value)
+            let read = property.withUnsafeBufferPointer { bytes in DiagramElementStyle.reading(bytes: bytes).style }
+            setShapeProperty(propertyText, to: read)
+        }
+    }
+
+    /// The part of `range` of `bytes` without ASCII white space and line breaks at either end.
+    private static func trimmedRange(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Range<Int> {
+        var start = range.lowerBound
+        var end = range.upperBound
+        while start < end, isSpace(bytes[start]) { start += 1 }
+        while end > start, isSpace(bytes[end - 1]) { end -= 1 }
+        return start..<end
+    }
+
+    private static func isSpace(_ byte: UInt8) -> Bool { byte == 0x20 || (byte >= 0x09 && byte <= 0x0D) }
+
+    private static func firstIndexIgnoringCase(of word: [UInt8], in bytes: [UInt8]) -> Int? {
+        guard word.count <= bytes.count else { return nil }
+        return (0...(bytes.count - word.count)).first { start in
+            (0..<word.count).allSatisfy { offset in MermaidByte.lowercased(bytes[start + offset]) == word[offset] }
+        }
+    }
+
+    private static let important = Array("!important".utf8)
+    private static let fontWeight = Array("font-weight".utf8)
+    private static let fontStyle = Array("font-style".utf8)
+    private static let fontSizeProperty = Array("font-size".utf8)
+    private static let bold = Array("bold".utf8)
+    private static let bolder = Array("bolder".utf8)
+    private static let italic = Array("italic".utf8)
 
     private mutating func applyDeclaration(_ declaration: String) {
         guard let colon = declaration.firstIndex(of: ":"), colon > declaration.startIndex else { return }
@@ -103,12 +169,13 @@ public struct BlockAppearance: Equatable, Sendable {
     /// `isUnsafe` read from the bytes of an ASCII value, whose lowercasing and searches are those of its bytes; nil for a
     /// value beyond ASCII.
     static func isUnsafe(ascii value: String) -> Bool? {
-        var lowered: [UInt8] = []
-        lowered.reserveCapacity(value.utf8.count)
-        for byte in value.utf8 {
-            guard byte < 0x80 else { return nil }
-            lowered.append(MermaidByte.lowercased(byte))
-        }
+        guard !value.utf8.contains(where: { byte in byte >= 0x80 }) else { return nil }
+        return isUnsafe(asciiBytes: Array(value.utf8))
+    }
+
+    /// `isUnsafe` of an ASCII value's bytes.
+    static func isUnsafe(asciiBytes value: [UInt8]) -> Bool {
+        let lowered = value.map(MermaidByte.lowercased)
         for word in unsafeWords where firstIndex(of: word, in: lowered) != nil { return true }
         if lowered.contains(where: { byte in unsafeBytes.contains(byte) }) { return true }
         // Only the first `url` and the first `expression` count, as the search for them stops at the first.

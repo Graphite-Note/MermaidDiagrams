@@ -5,8 +5,8 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 /// Reads an XY chart's statements after its `xychart` or `xychart-beta` keyword, as Mermaid's grammar and Pele's
@@ -158,7 +158,9 @@ struct XYChartParser {
     /// A number as JavaScript's `Number` reads its text: a sign, digits and a fraction; digits past what a double
     /// holds give infinity.
     private mutating func readNumber(orElse problem: MermaidSyntaxProblem) throws(MermaidDiagramReadError) -> Double {
-        guard kind == .number, let number = Double(text(of: tokens[index])) else { throw failure(problem) }
+        guard kind == .number, let number = XYChartNumberReading.number(in: bytes, from: tokens[index].start, to: tokens[index].end) else {
+            throw failure(problem)
+        }
         index += 1
         return number
     }

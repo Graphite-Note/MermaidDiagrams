@@ -1,7 +1,19 @@
+/**
+ * File: MindmapShapeDrawing.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: The outline of each mindmap node, Pele's, made as a Core Graphics path or a scene's lane: the
+ *              flowchart's shapes, a pill, a cloud and a bang.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
-/// The outline of each mindmap node, Pele's, as a Core Graphics path in a frame: the flowchart's shapes, a pill,
+/// The outline of each mindmap node, Pele's, as a Core Graphics path or a lane in a frame: the flowchart's shapes, a pill,
 /// a cloud of four arcs over a flat base, and a bang of fourteen spikes.
 enum MindmapShapeDrawing {
     /// How many spikes a bang has.
@@ -11,19 +23,24 @@ enum MindmapShapeDrawing {
 
     /// The outline to fill and stroke, or nil for a node drawn as its text alone.
     static func outline(of outline: MindmapNodeOutline, in frame: CGRect) -> CGPath? {
-        if let shape = outline.flowchartShape { return FlowchartShapeDrawing.outline(of: shape, in: frame) }
+        self.outline(of: outline, in: frame, making: DiagramCoreGraphicsPaths())?.path
+    }
+
+    /// The outline made by `maker`: a Core Graphics path or a lane.
+    static func outline<Maker: DiagramPathMaking>(of outline: MindmapNodeOutline, in frame: CGRect, making maker: Maker) -> Maker.Path? {
+        if let shape = outline.flowchartShape { return FlowchartShapeDrawing.outline(of: shape, in: frame, making: maker) }
         switch outline {
         case .pill:
-            return CGPath(roundedRect: frame, cornerWidth: min(frame.width, frame.height) / 2, cornerHeight: frame.height / 2, transform: nil)
-        case .cloud: return cloud(in: frame)
-        case .bang: return bang(in: frame)
+            return maker.roundedRectangle(frame, cornerWidth: min(frame.width, frame.height) / 2, cornerHeight: frame.height / 2)
+        case .cloud: return cloud(in: frame, making: maker)
+        case .bang: return bang(in: frame, making: maker)
         case .text, .stadium, .rectangle, .roundedRectangle, .circle, .hexagon: return nil
         }
     }
 
     /// Pele's cloud: from the bottom left, a round lobe up the left side, two wide lobes over the top and a round lobe
     /// down the right side, then straight back along the bottom.
-    private static func cloud(in frame: CGRect) -> CGPath {
+    private static func cloud<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
         let halfWidth = frame.width / 2
         let halfHeight = frame.height / 2
         let lobeRadius = halfHeight * 0.55
@@ -32,7 +49,7 @@ enum MindmapShapeDrawing {
                        point(-halfWidth * 0.1, -halfHeight * 0.72), point(halfWidth * 0.62, -halfHeight * 0.42), point(halfWidth - lobeRadius, halfHeight)]
         let radii = [CGSize(width: lobeRadius, height: lobeRadius), CGSize(width: halfWidth * 0.42, height: halfHeight * 0.7),
                      CGSize(width: halfWidth * 0.4, height: halfHeight * 0.62), CGSize(width: lobeRadius * 1.05, height: lobeRadius * 1.05)]
-        let path = CGMutablePath()
+        let path = maker.makePath()
         path.move(to: corners[0])
         for (index, radius) in radii.enumerated() {
             DiagramEllipticalArc.addArc(to: path, from: corners[index], to: corners[index + 1], radii: radius)
@@ -42,14 +59,14 @@ enum MindmapShapeDrawing {
     }
 
     /// Pele's bang: points around the frame's ellipse, alternately on it and `bangNotchRatio` of the way in, from the top.
-    private static func bang(in frame: CGRect) -> CGPath {
+    private static func bang<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
         let pointCount = 2 * bangSpikeCount
         let points = (0..<pointCount).map { index in
             let angle = CGFloat.pi * CGFloat(index) / CGFloat(bangSpikeCount) - CGFloat.pi / 2
             let reach: CGFloat = index.isMultiple(of: 2) ? 1 : bangNotchRatio
             return CGPoint(x: frame.midX + cos(angle) * frame.width / 2 * reach, y: frame.midY + sin(angle) * frame.height / 2 * reach)
         }
-        let path = CGMutablePath()
+        let path = maker.makePath()
         path.addLines(between: points)
         path.closeSubpath()
         return path

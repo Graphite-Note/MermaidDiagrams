@@ -5,8 +5,8 @@
  * Description: Collects an XY chart as its statements are read, as Mermaid's chart database does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -81,7 +81,7 @@ struct XYChartBuilder {
         case .categories(let categories): values = categories.indices.map { index in index < points.count ? points[index].value : nil }
         case .range: values = points.map(\.value)
         }
-        let labels = points.map { point in point.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let labels = points.map { point in point.label.isEmpty ? point.label : point.label.trimmingCharacters(in: .whitespacesAndNewlines) }
         let pointLabels = kind == .line && labels.contains { label in !label.isEmpty } ? labels.map(Self.label) : []
         chart.series.append(XYChartSeries(kind: kind, title: Self.label(title), values: values, pointLabels: pointLabels))
     }

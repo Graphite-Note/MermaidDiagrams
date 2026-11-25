@@ -9,8 +9,8 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -180,6 +180,13 @@ final class TypeReaderSpeedTests: XCTestCase {
 
     /// A description of a value that does not depend on the order a dictionary or a set holds its entries in.
     static func canonicalDescription(of value: Any) -> String {
+        // A block diagram is a view over its flat model: it is described by the values it gives, field by field in the
+        // order 0.7.0 stored them, so that its digest is the one of the values 0.7.0's reader made.
+        if let block = value as? BlockDiagram {
+            let fields: [(String, Any)] = [("title", block.title as Any), ("blocks", block.blocks), ("edges", block.edges), ("classes", block.classes),
+                                           ("padding", block.padding as Any)]
+            return "BlockDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
+        }
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {
         case .dictionary:

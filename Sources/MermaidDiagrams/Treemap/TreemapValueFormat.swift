@@ -5,8 +5,8 @@
  * Description: Writes a treemap's values by a d3-format specifier, the part of it Mermaid's treemap uses.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -72,16 +72,19 @@ struct TreemapValueFormat: Equatable, Sendable {
         case "e": body = TreemapNumberText.exponential(magnitude, digits: precision ?? 6)
         default: body = TreemapNumberText.shortest(TreemapNumberText.significant(magnitude, digits: max(1, precision ?? 12)))
         }
-        if dropsTrailingZeros, body.contains("."), !body.contains("e") { body = Self.withoutTrailingZeros(body) }
-        if groupsThousands, !body.contains("e") { body = Self.grouped(body) }
+        // A number's text is ASCII (digits, a point, `e`, a sign, `Infinity`, `NaN`): its characters are looked for in its bytes.
+        let hasExponent = body.utf8.contains(UInt8(ascii: "e"))
+        if dropsTrailingZeros, body.utf8.contains(UInt8(ascii: ".")), !hasExponent { body = Self.withoutTrailingZeros(body) }
+        if groupsThousands, !hasExponent { body = Self.grouped(body) }
         return (value < 0 ? "-" : (signsPositive ? "+" : "")) + prefix + body + suffix
     }
 
     /// `1,234,567.5` from `1234567.5`: commas between the groups of three digits of the whole part. `Infinity` and `NaN` are
     /// left whole, where Pele would write them with commas.
     private static func grouped(_ body: String) -> String {
+        let wholeCount = body.utf8.prefix { byte in byte != UInt8(ascii: ".") }.count
+        guard wholeCount > 3, body.utf8.prefix(wholeCount).allSatisfy({ byte in byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9") }) else { return body }
         let whole = body.prefix { character in character != "." }
-        guard whole.count > 3, whole.allSatisfy({ digit in digit.isASCII && digit.isNumber }) else { return body }
         var grouped = ""
         for (index, digit) in whole.enumerated() {
             if index > 0, (whole.count - index) % 3 == 0 { grouped.append(",") }

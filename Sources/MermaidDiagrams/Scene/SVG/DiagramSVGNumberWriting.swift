@@ -3,10 +3,11 @@
  * -----------------------------------
  * Layer: Core
  * Description: Writes numbers to two decimals and path elements as bytes at a destination with room for them, by exactly
- *              the rule of 0.6.1: a number under 10,000 in size with no branch on its digits, larger ones digit by digit.
+ *              the rule of 0.6.1: a number under 10,000 in size with no branch on its digits, its whole part and its
+ *              decimals read from tables made once, larger ones digit by digit.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -17,43 +18,50 @@ import CoreGraphics
 /// zero; a value that is not finite or is 1e12 or more in size is written `0`, as 0.6.1 wrote it.
 enum DiagramSVGNumberWriting {
     /// The most bytes `writeNumber` takes at its destination: a sign, twelve digits, a point and two decimals; the
-    /// writer of small numbers stores two whole 32-bit words, at most nine bytes from the destination.
+    /// writer of small numbers stores one whole 64-bit word, at most nine bytes from the destination.
     static let largestNumberByteCount = 16
 
     /// The most bytes one path element takes: its letter, three points of two numbers and the spaces between them.
     static let largestPathElementByteCount = 1 + 6 * largestNumberByteCount + 5
 
     /// Writes `value` at `destination`, which has room for `largestNumberByteCount` bytes, and returns how many bytes
-    /// the number is. A number under 9,999 in size (nearly every coordinate) is written without a branch on its digits:
-    /// its whole part from two lookups of two digits each, packed into one 32-bit word and shifted by its length, and its
-    /// point and decimals in a second word, both stored whole and the length worked out from the digits; the bytes
-    /// stored past the number are left for what follows to overwrite.
+    /// the number is, its digits read from the thread-safe tables made once (`DiagramSVGDigitTables.shared`).
     @inline(__always)
     static func writeNumber(_ value: CGFloat, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        guard abs(value) < 9_999 else { return writeNumberByDigits(value, to: destination) }
-        let hundredths = Int((value * 100).rounded())
-        let isNegative = hundredths < 0
-        let magnitude = UInt(bitPattern: isNegative ? 0 &- hundredths : hundredths)
-        let whole = magnitude / 100
-        let fraction = magnitude &- whole &* 100
-        let high = whole / 100
-        let low = whole &- high &* 100
-        let pairs = UnsafeRawPointer(digitPairs.utf8Start)
-        var word = UInt32(pairs.loadUnaligned(fromByteOffset: Int(high) &* 2, as: UInt16.self))
-            | UInt32(pairs.loadUnaligned(fromByteOffset: Int(low) &* 2, as: UInt16.self)) << 16
-        let wholeLength = 1 &+ (whole >= 10 ? 1 : 0) &+ (whole >= 100 ? 1 : 0) &+ (whole >= 1_000 ? 1 : 0)
-        word >>= UInt32(truncatingIfNeeded: (4 &- wholeLength) &* 8)
-        destination[0] = UInt8(ascii: "-")
-        let digits = UnsafeMutableRawPointer(destination + (isNegative ? 1 : 0))
-        digits.storeBytes(of: word, as: UInt32.self)
-        let tens = fraction / 10
-        let ones = fraction &- tens &* 10
-        let decimals = UInt32(UInt8(ascii: ".")) | UInt32(UInt8(ascii: "0") &+ UInt8(truncatingIfNeeded: tens)) << 8
-            | UInt32(UInt8(ascii: "0") &+ UInt8(truncatingIfNeeded: ones)) << 16
-        digits.storeBytes(of: decimals, toByteOffset: wholeLength, as: UInt32.self)
-        let decimalsLength = fraction == 0 ? 0 : (ones == 0 ? 2 : 3)
-        return (isNegative ? 1 : 0) &+ wholeLength &+ decimalsLength
+        writeNumber(value, to: destination, digits: DiagramSVGDigitTables.shared)
     }
+
+    /// Writes `value` as `writeNumber(_:to:)` does, with `digits`, which a writer of many numbers reads once. A number
+    /// under 9,999 in size (nearly every coordinate) is written without a branch on its digits and without a check the
+    /// compiler would add: its hundredths are made an integer by the exact sum with 1.5 × 2⁵² (the hundredths, rounded,
+    /// are far below 2⁵¹), split into the whole part and the fraction by a multiplication that divides by 100 exactly
+    /// below 2³², and each part's characters are read from a table: the whole part's digits without leading zeros, and
+    /// the fraction's point and two decimals with how many of them are written (none for `.00`, two for `.50`). The
+    /// whole part's length is the count of its word's characters; both words are joined into one 64-bit word and stored
+    /// whole, and the bytes stored past the number are left for what follows to overwrite.
+    @inline(__always)
+    static func writeNumber(_ value: CGFloat, to destination: UnsafeMutablePointer<UInt8>, digits: DiagramSVGDigitTables) -> Int {
+        guard abs(value) < 9_999 else { return writeNumberByDigits(value, to: destination) }
+        let scaled = (value * 100).rounded()
+        let hundredths = Int64(truncatingIfNeeded: Int(bitPattern: (scaled + exactIntegerShift).bitPattern)) &- exactIntegerShiftBits
+        let signMask = hundredths >> 63
+        let magnitude = UInt64(bitPattern: (hundredths ^ signMask) &- signMask)
+        let whole = (magnitude &* 0x51EB_851F) >> 37
+        let fraction = magnitude &- whole &* 100
+        let wholeWord = UInt64(digits.wholeParts[Int(truncatingIfNeeded: whole)])
+        let fractionWord = UInt64(digits.fractions[Int(truncatingIfNeeded: fraction)])
+        // Eight times the whole part's length: its word's characters are its low bytes, each of them nonzero.
+        let wholeBitCount = (39 &- UInt64(truncatingIfNeeded: wholeWord.leadingZeroBitCount &- 32)) & ~7
+        let sign = Int(truncatingIfNeeded: UInt64(bitPattern: signMask) >> 63)
+        destination[0] = UInt8(ascii: "-")
+        UnsafeMutableRawPointer(destination + sign).storeBytes(of: (wholeWord | fractionWord << wholeBitCount).littleEndian, as: UInt64.self)
+        return sign &+ Int(truncatingIfNeeded: wholeBitCount >> 3) &+ Int(truncatingIfNeeded: fractionWord >> DiagramSVGDigitTables.fractionLengthShift)
+    }
+
+    /// 1.5 × 2⁵²: added to an integer of less than 2⁵¹ in size, it leaves the integer in the low bits of the sum's
+    /// significand, exactly, which `exactIntegerShiftBits` then takes away.
+    private static let exactIntegerShift: CGFloat = 0x1.8p52
+    private static let exactIntegerShiftBits: Int64 = 0x4338_0000_0000_0000
 
     /// The general rule, for numbers of 9,999 or more in size and those that are not finite.
     @inline(never)
@@ -126,39 +134,42 @@ enum DiagramSVGNumberWriting {
     // MARK: Path elements
 
     /// Writes one element at `destination`, which has room for `largestPathElementByteCount` bytes, and returns how many
-    /// bytes it wrote: `M`, `L`, `Q`, `C` or `Z` and its points' absolute coordinates, separated by spaces.
+    /// bytes it wrote: `M`, `L`, `Q`, `C` or `Z` and its points' absolute coordinates, separated by spaces. Each kind is
+    /// written in a straight line, without a loop over its points.
     @inline(__always)
-    static func writePathElement(_ verb: DiagramPathVerb, _ points: UnsafePointer<CGPoint>, to destination: UnsafeMutablePointer<UInt8>) -> Int {
-        let pointCount: Int
+    static func writePathElement(_ verb: DiagramPathVerb, _ points: UnsafePointer<CGPoint>, to destination: UnsafeMutablePointer<UInt8>,
+                                 digits: DiagramSVGDigitTables = .shared) -> Int {
         switch verb {
         case .move:
             destination[0] = UInt8(ascii: "M")
-            pointCount = 1
+            return 1 &+ writePoint(points[0], to: destination + 1, digits: digits)
         case .line:
             destination[0] = UInt8(ascii: "L")
-            pointCount = 1
+            return 1 &+ writePoint(points[0], to: destination + 1, digits: digits)
         case .quadraticCurve:
             destination[0] = UInt8(ascii: "Q")
-            pointCount = 2
+            let cursor = destination + 1 + writePoint(points[0], to: destination + 1, digits: digits)
+            cursor[0] = UInt8(ascii: " ")
+            return cursor + 1 - destination + writePoint(points[1], to: cursor + 1, digits: digits)
         case .cubicCurve:
             destination[0] = UInt8(ascii: "C")
-            pointCount = 3
+            var cursor = destination + 1 + writePoint(points[0], to: destination + 1, digits: digits)
+            cursor[0] = UInt8(ascii: " ")
+            cursor += 1 + writePoint(points[1], to: cursor + 1, digits: digits)
+            cursor[0] = UInt8(ascii: " ")
+            return cursor + 1 - destination + writePoint(points[2], to: cursor + 1, digits: digits)
         case .close:
             destination[0] = UInt8(ascii: "Z")
             return 1
         }
-        var cursor = destination + 1
-        for index in 0..<pointCount {
-            if index > 0 {
-                cursor[0] = UInt8(ascii: " ")
-                cursor += 1
-            }
-            cursor += writeNumber(points[index].x, to: cursor)
-            cursor[0] = UInt8(ascii: " ")
-            cursor += 1
-            cursor += writeNumber(points[index].y, to: cursor)
-        }
-        return cursor - destination
+    }
+
+    /// A point's coordinates and the space between them.
+    @inline(__always)
+    private static func writePoint(_ point: CGPoint, to destination: UnsafeMutablePointer<UInt8>, digits: DiagramSVGDigitTables) -> Int {
+        let xLength = writeNumber(point.x, to: destination, digits: digits)
+        destination[xLength] = UInt8(ascii: " ")
+        return xLength &+ 1 &+ writeNumber(point.y, to: destination + xLength + 1, digits: digits)
     }
 
     /// Writes one element of a Core Graphics path as `writePathElement(_:_:to:)` writes it; nothing for a kind Core

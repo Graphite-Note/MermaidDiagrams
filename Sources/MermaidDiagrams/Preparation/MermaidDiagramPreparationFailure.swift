@@ -3,11 +3,11 @@
  * --------------------------------------------
  * Layer: Core
  * Description: Why a diagram text was not prepared for drawing: its reading or its layout refused it, it draws nothing,
- *              or it is too large to draw, with the kind of refusal.
+ *              it is too large to draw, or a path of its scene went past its element limit, with the kind of refusal.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 19/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -20,6 +20,9 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
     case nothingToDraw
     /// Its layout is longer than `maximumSideLength` points on a side (`MermaidDiagramLimits.maximumDrawingSideLength`).
     case tooLargeToDraw(maximumSideLength: CGFloat)
+    /// A path of its scene would hold more than `limit` elements (`DiagramSceneWorkspace.elementLimit(for:)`), past
+    /// which the scene would be drawn with shapes missing.
+    case tooManyPathElements(limit: Int)
     case flowchartLayout(FlowchartLayoutError)
     case sequenceLayout(SequenceLayoutError)
     case stateDiagramLayout(StateDiagramLayoutError)
@@ -53,7 +56,7 @@ public enum MermaidDiagramPreparationFailure: Error, Equatable, Sendable {
         switch self {
         case .reading(let error): Self.category(of: error)
         case .nothingToDraw: .notDrawnYet
-        case .tooLargeToDraw: .beyondLimits
+        case .tooLargeToDraw, .tooManyPathElements: .beyondLimits
         case .flowchartLayout(.subgraphsNotLaidOut), .stateDiagramLayout(.compositeStatesNotLaidOut), .classDiagramLayout(.namespacesNotLaidOut),
              .entityRelationshipLayout(.subgraphsNotLaidOut), .sequenceLayout(.statementsNotLaidOut), .ganttLayout(.statementNotDrawn),
              .gitGraphLayout(.optionsNotApplied), .sankeyLayout(.optionsNotDrawn): .notDrawnYet

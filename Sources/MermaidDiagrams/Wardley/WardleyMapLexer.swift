@@ -6,8 +6,8 @@
  *              terminals tried in order, the first that matches taken, `-` giving way to a longer arrow or front matter.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// The kinds of a Wardley map's tokens.
@@ -67,7 +67,7 @@ enum WardleyMapLexer {
     /// The token at `start` and its end, nil for a hidden one; nil altogether where no terminal matches.
     private static func match(at start: Int, terminals: inout PlaneMapTerminals) -> (WardleyMapTokenKind?, Int)? {
         guard let current = terminals.byte(start) else { return nil }
-        if let kind = punctuation[current] { return (kind, start + 1) }
+        if let kind = punctuation(current) { return (kind, start + 1) }
         switch current {
         case PlaneMapByte.hyphen: return matchHyphen(at: start, terminals: &terminals)
         case PlaneMapByte.space, PlaneMapByte.tab: return (nil, WardleyMapWords.endOfBlanks(in: terminals, from: start))
@@ -95,9 +95,19 @@ enum WardleyMapLexer {
         return (.minus, start + 1)
     }
 
-    private static let punctuation: [UInt8: WardleyMapTokenKind] = [
-        PlaneMapByte.openingBracket: .openingBracket, PlaneMapByte.comma: .comma, PlaneMapByte.closingBracket: .closingBracket, PlaneMapByte.atSign: .atSign,
-        PlaneMapByte.slash: .slash, PlaneMapByte.openingParenthesis: .openingParenthesis, PlaneMapByte.closingParenthesis: .closingParenthesis,
-        PlaneMapByte.openingBrace: .openingBrace, PlaneMapByte.closingBrace: .closingBrace,
-    ]
+    /// The token of a punctuation mark the lexer takes alone, else nil.
+    private static func punctuation(_ byte: UInt8) -> WardleyMapTokenKind? {
+        switch byte {
+        case PlaneMapByte.openingBracket: .openingBracket
+        case PlaneMapByte.comma: .comma
+        case PlaneMapByte.closingBracket: .closingBracket
+        case PlaneMapByte.atSign: .atSign
+        case PlaneMapByte.slash: .slash
+        case PlaneMapByte.openingParenthesis: .openingParenthesis
+        case PlaneMapByte.closingParenthesis: .closingParenthesis
+        case PlaneMapByte.openingBrace: .openingBrace
+        case PlaneMapByte.closingBrace: .closingBrace
+        default: nil
+        }
+    }
 }

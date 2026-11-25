@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -15,10 +15,13 @@ import CoreGraphics
 extension DiagramScene {
     /// The Gantt chart's painting: the section bands, the excluded days, the grid and the axis' line, today's line, the
     /// tasks' shapes by fill and then by outline, then the tasks' text, the sections' names, the axis' dates and the title.
+    /// The paths are recorded into lanes of the thread's scene workspace.
     public init(layout: GanttLayout) {
-        var builder = DiagramSceneBuilder()
-        GanttDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            GanttDrawingParts.addScene(of: layout, paths: GanttDrawingPaths(layout: layout, making: workspace), to: &builder)
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }
 
@@ -29,36 +32,38 @@ extension GanttDrawingParts {
     static let labelColorOrder: [GanttLabelColor] = [.background, .foreground, .muted]
 
     /// Lines have butt caps and round joins.
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke(lineWidth: Self.lineWidth, lineJoin: .round)
-        builder.fill(sectionBands, .surface, part: .cluster)
-        builder.fill(excludedDays, .alternateSurface, part: .axis)
-        builder.stroke(gridLines, .border, DiagramStroke(lineWidth: Self.lineWidth, dashLengths: Self.gridDashLengths, lineJoin: .round), part: .axis)
-        builder.stroke(axisLines, .border, line, part: .axis)
-        builder.stroke(verticalMarkerLines, .line, DiagramStroke(lineWidth: Self.verticalMarkerLineWidth, dashLengths: Self.verticalMarkerDashLengths),
+    static func addScene(of layout: GanttLayout, paths: GanttDrawingPaths<DiagramPathLane>, to builder: inout DiagramSceneBuilder) {
+        let line = DiagramStroke(lineWidth: lineWidth, lineJoin: .round)
+        builder.fill(paths.sectionBands, .surface, part: .cluster)
+        builder.fill(paths.excludedDays, .alternateSurface, part: .axis)
+        builder.stroke(paths.gridLines, .border, DiagramStroke(lineWidth: lineWidth, dashLengths: gridDashLengths, lineJoin: .round), part: .axis)
+        builder.stroke(paths.axisLines, .border, line, part: .axis)
+        builder.stroke(paths.verticalMarkerLines, .line, DiagramStroke(lineWidth: verticalMarkerLineWidth, dashLengths: verticalMarkerDashLengths),
                        part: .marker)
-        builder.stroke(todayLine, todayLinePaint, todayLineStroke, part: .marker)
-        builder.fill(todayMark, .accent, part: .marker)
-        for taskFill in Self.taskFillOrder { if let path = taskFills[taskFill] { builder.fill(path, Self.paint(of: taskFill), part: .node) } }
-        for taskStroke in Self.taskStrokeOrder {
-            if let path = taskOutlines[taskStroke] { builder.stroke(path, Self.paint(of: taskStroke), line, part: .node) }
+        let todayStyle = layout.plot?.todayStyle
+        builder.stroke(paths.todayLine, todayLinePaint(todayStyle), todayLineStroke(todayStyle), part: .marker)
+        builder.fill(paths.todayMark, .accent, part: .marker)
+        for (index, taskFill) in taskFillOrder.enumerated() { builder.fill(paths.taskFills[index], paint(of: taskFill), part: .node) }
+        for (index, taskStroke) in taskStrokeOrder.enumerated() { builder.stroke(paths.taskOutlines[index], paint(of: taskStroke), line, part: .node) }
+        let tasks = layout.plot?.tasks ?? []
+        for labelColor in labelColorOrder {
+            for task in tasks where task.labelColor == labelColor { builder.text(task.label, paint(of: labelColor), part: .label) }
         }
-        for labelColor in Self.labelColorOrder { builder.texts(taskTexts[labelColor] ?? [], Self.paint(of: labelColor), part: .label) }
-        builder.texts(sectionNames, .foreground, part: .clusterLabel)
-        builder.texts(axisDates, .muted, part: .axisLabel)
-        builder.texts(verticalMarkerTexts, .foreground, part: .label)
-        builder.title(title)
+        builder.texts(layout.plot?.sectionNames ?? [], .foreground, part: .clusterLabel)
+        builder.texts(layout.plot?.axisDates ?? [], .muted, part: .axisLabel)
+        for marker in layout.plot?.verticalMarkers ?? [] { builder.text(marker.label, .foreground, part: .label) }
+        builder.title(layout.title)
     }
 
     /// Today's line in the accent color, or the color and opacity `todayMarker` writes.
-    var todayLinePaint: DiagramPaint {
+    static func todayLinePaint(_ todayLineStyle: GanttTodayLineStyle?) -> DiagramPaint {
         let paint = todayLineStyle?.color.map(DiagramPaint.color) ?? .accent
         return todayLineStyle?.opacity.map { opacity in paint.atOpacity(opacity) } ?? paint
     }
 
     /// Two points wide with round joins, or as `todayMarker` writes it.
-    var todayLineStroke: DiagramStroke {
-        DiagramStroke(lineWidth: todayLineStyle?.lineWidth ?? Self.todayLineWidth, dashLengths: todayLineStyle?.dashLengths ?? [],
+    static func todayLineStroke(_ todayLineStyle: GanttTodayLineStyle?) -> DiagramStroke {
+        DiagramStroke(lineWidth: todayLineStyle?.lineWidth ?? todayLineWidth, dashLengths: todayLineStyle?.dashLengths ?? [],
                       lineCap: todayLineStyle?.lineCap ?? .butt, lineJoin: todayLineStyle?.lineJoin ?? .round)
     }
 

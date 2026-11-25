@@ -3,11 +3,12 @@
  * -----------------------------
  * Layer: Core
  * Description: The outline of the region several circles of a Venn diagram share, as Pele's regionPath traces it: the
- *              corners where two outlines cross inside the others, joined by arcs of the circles between them.
+ *              corners where two outlines cross inside the others, joined by arcs of the circles between them, as a Core
+ *              Graphics path or recorded into a lane of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -157,5 +158,23 @@ extension VennRegionOutline {
             path.closeSubpath()
         }
         return path
+    }
+
+    /// The outline recorded into `lane`, element for element as `path` records it.
+    func record(into lane: DiagramPathLane) {
+        switch self {
+        case .circle(let center, let radius):
+            lane.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
+        case .corners(let start, let sides):
+            lane.move(to: start)
+            for side in sides {
+                switch side {
+                case .line(let end): lane.addLine(to: end)
+                case .arc(let center, let radius, let startAngle, let endAngle, _):
+                    lane.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: false)
+                }
+            }
+            lane.closeSubpath()
+        }
     }
 }

@@ -3,11 +3,11 @@
  * -------------------------------
  * Layer: Core
  * Description: A prepared diagram's scene for a narrow column, laid out the first time it is read and kept, behind a lock
- *              so that a prepared diagram read from several threads lays it out once.
+ *              so that a prepared diagram read from several threads lays it out once; none where it lost a path.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -23,9 +23,9 @@ final class PreparedNarrowScene: @unchecked Sendable {
     private var layingOut: (@Sendable () -> DiagramScene?)?
     private var made: DiagramScene?
 
-    /// A scene made already (nil for none).
+    /// A scene made already (nil for none, or for one that lost a path past its element limit).
     init(made scene: DiagramScene?) {
-        made = scene
+        made = Self.whole(scene)
     }
 
     /// A scene `layingOut` makes on the first read.
@@ -39,10 +39,16 @@ final class PreparedNarrowScene: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if let layingOut {
-            made = layingOut()
+            made = Self.whole(layingOut())
             self.layingOut = nil
         }
         return made
+    }
+
+    /// `scene`, or nil when a lane of its recording went past its element limit: a reader then shows the regular scene,
+    /// whole, rather than a narrow one with shapes missing.
+    private static func whole(_ scene: DiagramScene?) -> DiagramScene? {
+        scene?.exceededPathElementLimit == nil ? scene : nil
     }
 
     /// Whether the scene is still to be laid out: what a test reads to see that a read was not needed.

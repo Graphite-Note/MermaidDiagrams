@@ -5,8 +5,8 @@
  * Description: A laid-out sequence diagram's geometry grouped by how it is painted, back to front as Pele draws it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -96,106 +96,55 @@ public struct SequenceDrawingParts {
     static let stickHalfHeadDepth: CGFloat = 5
 
     public init(layout: SequenceLayout) {
-        boxes = layout.boxes.map { box in
-            SequenceDrawingBox(path: Self.roundedRectangle(box.frame), color: box.color, title: box.title, titleInk: SequenceTextInk.ink(on: box.color))
+        let paths = SequenceDrawingPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        boxes = zip(layout.boxes, paths.boxes).map { box, path in
+            SequenceDrawingBox(path: path.path, color: box.color, title: box.title, titleInk: SequenceTextInk.ink(on: box.color))
         }
-        highlights = layout.highlights.map { highlight in SequenceDrawingHighlight(path: Self.roundedRectangle(highlight.frame), color: highlight.color) }
-        lifelines = Self.lifelinePath(layout.lifelines)
-        activations = layout.activations.map { activation in
-            CGPath(roundedRect: activation, cornerWidth: Self.activationCornerRadius, cornerHeight: Self.activationCornerRadius, transform: nil)
-        }
-        let blocks = BlockPaths(blocks: layout.blocks)
-        blockOutlines = blocks.outlines
-        blockSectionLines = blocks.sectionLines
-        blockTextPatches = blocks.textPatches
-        blockTexts = blocks.texts
-        blockTextInks = blocks.textInks
-        blockTabs = blocks.tabs
+        highlights = zip(layout.highlights, paths.highlights).map { highlight, path in SequenceDrawingHighlight(path: path.path, color: highlight.color) }
+        lifelines = paths.lifelines.path
+        activations = paths.activations.map(\.path)
+        blockOutlines = paths.blockOutlines.path
+        blockSectionLines = paths.blockSectionLines.path
+        blockTextPatches = paths.blockTextPatches.path
+        (blockTexts, blockTextInks) = Self.blockTextsAndInks(of: layout.blocks)
+        blockTabs = paths.blockTabs.path
         blockKeywords = layout.blocks.map(\.keyword)
-        let messages = SequenceMessagePaths(messages: layout.messages)
-        solidMessageLines = messages.lines.solidLines
-        dottedMessageLines = messages.lines.dottedLines
-        filledHeads = messages.lines.filledHeads
-        strokedHeads = messages.lines.strokedHeads
-        centralConnections = messages.lines.centralConnections
-        inkedMessageLines = messages.inkedLines
-        destructions = Self.crosses(at: layout.destructions)
-        numberBadges = messages.numberBadges
+        solidMessageLines = paths.messages.lines.solidLines.path
+        dottedMessageLines = paths.messages.lines.dottedLines.path
+        filledHeads = paths.messages.lines.filledHeads.path
+        strokedHeads = paths.messages.lines.strokedHeads.path
+        centralConnections = paths.messages.lines.centralConnections.path
+        inkedMessageLines = paths.messages.inkedLines.map(SequenceDrawingMessageLines.init)
+        destructions = paths.destructions.path
+        numberBadges = paths.messages.numberBadges.path
         numberTexts = layout.messages.compactMap { message in message.number?.text }
-        messageTextPatches = messages.textPatches
+        messageTextPatches = paths.messages.textPatches.path
         messageTexts = layout.messages.compactMap(\.text)
         messageTextInks = layout.messages.compactMap { message in message.text.map { _ in SequenceTextInk.ink(on: message.textBackground) } }
-        notes = Self.roundedRectangles(layout.notes.map(\.frame))
+        notes = paths.notes.path
         noteTexts = layout.notes.map(\.text)
-        let participants = SequenceParticipantShapeDrawing(participants: layout.participants)
-        participantShapes = participants.shapes
-        participantFigureLines = participants.lines
-        participantFrontShapes = participants.frontShapes
+        participantShapes = paths.participants.shapes.path
+        participantFigureLines = paths.participants.lines.path
+        participantFrontShapes = paths.participants.frontShapes.path
         participantTexts = layout.participants.map(\.text)
-        participantTextInks = layout.participants.map { participant in participant.kind.isFigure ? SequenceTextInk.ink(on: participant.boxColor) : nil }
+        participantTextInks = layout.participants.map(SequenceDrawingParts.participantTextInk)
         title = layout.title
     }
 
-    static func roundedRectangle(_ frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-    }
-
-    private static func roundedRectangles(_ frames: [CGRect]) -> CGPath {
-        let path = CGMutablePath()
-        for frame in frames { path.addPath(roundedRectangle(frame)) }
-        return path
-    }
-
-    /// Each lifeline that runs down at all, as a vertical line.
-    private static func lifelinePath(_ lifelines: [SequenceLayoutLifeline]) -> CGPath {
-        let path = CGMutablePath()
-        for lifeline in lifelines where lifeline.bottom > lifeline.top {
-            path.move(to: CGPoint(x: lifeline.x, y: lifeline.top))
-            path.addLine(to: CGPoint(x: lifeline.x, y: lifeline.bottom))
+    /// The blocks' titles and section texts, block by block, with the color each takes on its background.
+    private static func blockTextsAndInks(of blocks: [SequenceLayoutBlock]) -> ([DiagramTextBlock], [DiagramColor?]) {
+        var texts: [DiagramTextBlock] = []
+        var inks: [DiagramColor?] = []
+        SequenceDrawingPaths<DiagramCoreGraphicsPath>.forEachBlockText(of: blocks) { text, ink in
+            texts.append(text)
+            inks.append(ink)
         }
-        return path
+        return (texts, inks)
     }
 
-    /// A cross of two diagonals at each center, `SequenceSpacing.destructionHalfSize` from it each way.
-    private static func crosses(at centers: [CGPoint]) -> CGPath {
-        let path = CGMutablePath()
-        let halfSize = SequenceSpacing.destructionHalfSize
-        for center in centers {
-            path.addLines(between: [CGPoint(x: center.x - halfSize, y: center.y - halfSize), CGPoint(x: center.x + halfSize, y: center.y + halfSize)])
-            path.addLines(between: [CGPoint(x: center.x + halfSize, y: center.y - halfSize), CGPoint(x: center.x - halfSize, y: center.y + halfSize)])
-        }
-        return path
-    }
-
-    /// The blocks' frames, section lines, text patches and tabs, and their titles and section texts with their colors.
-    private struct BlockPaths {
-        let outlines = CGMutablePath()
-        let sectionLines = CGMutablePath()
-        let textPatches = CGMutablePath()
-        let tabs = CGMutablePath()
-        private(set) var texts: [DiagramTextBlock] = []
-        private(set) var textInks: [DiagramColor?] = []
-
-        init(blocks: [SequenceLayoutBlock]) {
-            for block in blocks {
-                if let title = block.title {
-                    texts.append(title)
-                    textInks.append(SequenceTextInk.ink(on: block.titleBackground))
-                }
-                for section in block.sections {
-                    guard let text = section.text else { continue }
-                    texts.append(text)
-                    textInks.append(SequenceTextInk.ink(on: section.textBackground))
-                }
-                outlines.addPath(SequenceDrawingParts.roundedRectangle(block.frame))
-                for section in block.sections {
-                    sectionLines.move(to: CGPoint(x: block.frame.minX, y: section.lineY))
-                    sectionLines.addLine(to: CGPoint(x: block.frame.maxX, y: section.lineY))
-                }
-                for patch in block.textPatches { textPatches.addPath(SequenceDrawingParts.roundedRectangle(patch)) }
-                tabs.addPath(SequenceDrawingParts.roundedRectangle(block.tab))
-            }
-        }
+    /// The color a figure's text takes on its box's color, or nil for the text color.
+    static func participantTextInk(_ participant: SequenceLayoutParticipant) -> DiagramColor? {
+        participant.kind.isFigure ? SequenceTextInk.ink(on: participant.boxColor) : nil
     }
 }
 
