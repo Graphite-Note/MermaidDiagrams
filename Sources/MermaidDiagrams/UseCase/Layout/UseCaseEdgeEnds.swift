@@ -6,8 +6,8 @@
  *              a node spread along it in the order they fan out, each on the node's outline, an actor's at its figure.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -17,39 +17,69 @@ import CoreGraphics
 enum UseCaseEdgeEnds {
     static let portGap: CGFloat = 14
 
-    /// A route's end: which route, its first or last point, the node and side it meets, and where the route goes next
-    /// across that side.
+    /// A route's end: which route, its first or last point, where the route goes next across the side it meets, and
+    /// its place among the ends of that side in the order they were found.
     private struct End {
-        let route: Int
+        /// The node's place times 4 and the side's number.
+        let key: Int32
+        let route: Int32
         let isFirst: Bool
         let toward: CGFloat
+        var place: Int32
     }
 
     /// Each route's first and last points moved onto the outlines of `sources[route]` and `targets[route]`.
     static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [UseCaseNodeView]) {
-        var sides: [Int: [End]] = [:]
-        var order: [Int] = []
+        DiagramScratchArena.withCurrentThread { arena in attach(&routes, sources: sources, targets: targets, centers: centers, views: views, arena: arena) }
+    }
+
+    /// `attach` with its lists in `arena`: the ends grouped by node and side, the groups in the order their first end was
+    /// found, each group's ends in the order found, then each group sorted as a list of its ends would be.
+    private static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [UseCaseNodeView],
+                               arena: DiagramScratchArena) {
+        let groupOfKey = arena.span(count: 4 * views.count, repeating: Int32(-1))
+        var groupKeys = arena.list(capacity: 2 * routes.count, of: Int32.self)
+        var groupCounts = arena.list(capacity: 2 * routes.count, of: Int32.self)
+        var found = arena.list(capacity: 2 * routes.count, of: End.self)
         for (route, path) in routes.enumerated() where path.points.count >= 2 {
-            for isFirst in [true, false] {
+            for endNumber in 0..<2 {
+                let isFirst = endNumber == 0
                 let (side, toward) = Self.side(of: path, isFirst: isFirst)
                 let key = (isFirst ? sources[route] : targets[route]) * 4 + Self.number(of: side)
-                if sides[key] == nil { order.append(key) }
-                sides[key, default: []].append(End(route: route, isFirst: isFirst, toward: toward))
+                var group = groupOfKey[key]
+                if group < 0 {
+                    group = Int32(groupKeys.count)
+                    groupOfKey[key] = group
+                    groupKeys.append(Int32(key))
+                    groupCounts.append(0)
+                }
+                found.append(End(key: Int32(key), route: Int32(route), isFirst: isFirst, toward: toward, place: groupCounts[Int(group)]))
+                groupCounts[Int(group)] += 1
             }
         }
-        for key in order {
-            guard var ends = sides[key] else { continue }
+        // Each group's ends together, in the order found.
+        let groupStarts: ScratchSpan<Int> = arena.uninitializedSpan(count: groupKeys.count + 1)
+        groupStarts[0] = 0
+        for group in 0..<groupKeys.count { groupStarts[group + 1] = groupStarts[group] + Int(groupCounts[group]) }
+        let grouped: ScratchSpan<End> = arena.uninitializedSpan(count: found.count)
+        for index in 0..<found.count {
+            let end = found[index]
+            grouped[groupStarts[Int(groupOfKey[Int(end.key)])] + Int(end.place)] = end
+        }
+        for group in 0..<groupKeys.count {
+            let key = Int(groupKeys[group])
+            var ends = UnsafeMutableBufferPointer(rebasing: grouped.buffer[groupStarts[group]..<groupStarts[group + 1]])
             let node = key / 4
             let side = DiagramSide.allCases[key % 4]
             let step = ends.count > 1 ? min(portGap, sideLength(of: views[node], side: side) / CGFloat(ends.count - 1)) : 0
-            ends = ends.enumerated().sorted { first, second in
-                first.element.toward != second.element.toward ? first.element.toward < second.element.toward : first.offset < second.offset
-            }.map(\.element)
+            // The same comparison, on the same ends in the same order, as a list of them sorted.
+            ends.sort { first, second in first.toward != second.toward ? first.toward < second.toward : first.place < second.place }
             for (place, end) in ends.enumerated() {
                 let along = (CGFloat(place) - CGFloat(ends.count - 1) / 2) * step
                 let point = anchor(of: views[node], center: centers[node], side: side, along: along)
-                let index = end.isFirst ? 0 : routes[end.route].points.count - 1
-                routes[end.route].points[index] = point
+                let route = Int(end.route)
+                let index = end.isFirst ? 0 : routes[route].points.count - 1
+                routes[route].points[index] = point
             }
         }
     }

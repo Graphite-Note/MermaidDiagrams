@@ -7,19 +7,20 @@
  *              closer once there are several; and the measurers of the sizes and styles they are drawn in.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
 
 /// The measurers of a use case diagram's text: the diagram's font at any size, bold and italic or not, each made once.
+/// A diagram asks for a handful, so they are kept in a short list searched from its start, with no hashing.
 struct UseCaseTextMeasurers<Measurer: DiagramTextMeasuring> {
     let font: DiagramFont
     private let make: (CGFloat, Bool, Bool) -> Measurer
-    private var made: [UseCaseMeasurerKey: Measurer] = [:]
+    private var made: [(key: UseCaseMeasurerKey, measurer: Measurer)] = []
 
-    private struct UseCaseMeasurerKey: Hashable {
+    private struct UseCaseMeasurerKey: Equatable {
         let size: CGFloat
         let isBold: Bool
         let isItalic: Bool
@@ -33,9 +34,9 @@ struct UseCaseTextMeasurers<Measurer: DiagramTextMeasuring> {
     /// The font at `size`, bold or italic.
     mutating func measurer(size: CGFloat, isBold: Bool = false, isItalic: Bool = false) -> Measurer {
         let key = UseCaseMeasurerKey(size: size, isBold: isBold, isItalic: isItalic)
-        if let measurer = made[key] { return measurer }
+        for entry in made where entry.key == key { return entry.measurer }
         let measurer = make(size, isBold, isItalic)
-        made[key] = measurer
+        made.append((key, measurer))
         return measurer
     }
 }
