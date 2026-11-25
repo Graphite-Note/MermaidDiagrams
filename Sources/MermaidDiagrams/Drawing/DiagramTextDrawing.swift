@@ -4,10 +4,10 @@
  * Layer: Core
  * Description: Draws a diagram's text blocks with Core Text, regular, bold, italic or monospaced, each run of a line in
  *              its emphasis, into a context whose y runs down: each line's or run's Core Foundation string is made straight
- *              from the bytes its block's storage keeps, its attributes once per font and color of the drawing.
+ *              from the bytes its block's storage keeps (a leading U+FEFF kept), its attributes once per font and color.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 24/11/2026
  */
 
@@ -83,15 +83,28 @@ struct DiagramTextDrawing {
         }
     }
 
-    /// Draws the text of `bytes`, UTF-8, with its baseline starting at `baselineStart`. Bytes Core Foundation does not
-    /// take as UTF-8 are drawn as a String repairs them, as 0.7.0 drew them.
+    /// Draws the text of `bytes`, UTF-8, with its baseline starting at `baselineStart`.
     private func draw(_ bytes: UnsafeBufferPointer<UInt8>, attributes: CFDictionary, at baselineStart: CGPoint, in context: CGContext) {
-        let text = bytes.baseAddress.flatMap { start in
-            CFStringCreateWithBytes(kCFAllocatorDefault, start, bytes.count, CFStringBuiltInEncodings.UTF8.rawValue, false)
-        } ?? (String(decoding: bytes, as: UTF8.self) as CFString)
-        guard let attributed = CFAttributedStringCreate(kCFAllocatorDefault, text, attributes) else { return }
+        guard let attributed = CFAttributedStringCreate(kCFAllocatorDefault, Self.coreFoundationString(of: bytes), attributes) else { return }
         context.textPosition = baselineStart
         CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+    }
+
+    /// The characters of `bytes`, UTF-8, as a Core Foundation string, made straight from the bytes. `CFStringCreateWithBytes`
+    /// takes a leading U+FEFF for a byte order mark and leaves it out, so a text that starts with one, and bytes it does
+    /// not take as UTF-8, are made as a String makes them: every character 0.7.0 drew is kept.
+    static func coreFoundationString(of bytes: UnsafeBufferPointer<UInt8>) -> CFString {
+        if let start = bytes.baseAddress, !startsWithByteOrderMark(bytes),
+           let made = CFStringCreateWithBytes(kCFAllocatorDefault, start, bytes.count, CFStringBuiltInEncodings.UTF8.rawValue, false) {
+            return made
+        }
+        return String(decoding: bytes, as: UTF8.self) as CFString
+    }
+
+    /// Whether `bytes` start with U+FEFF in UTF-8 (`EF BB BF`).
+    @inline(__always)
+    private static func startsWithByteOrderMark(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        bytes.count >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF
     }
 
     /// The attributes of text in `font` and `color`, made the first time they are drawn; past `largestKeptAttributeCount`

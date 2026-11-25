@@ -3,12 +3,13 @@
  * --------------------------------------
  * Layer: Tests
  * Description: Text read from the bytes its storage keeps is what 0.7.0 made Strings of: every corpus's texts are painted
- *              to the pixel as the frozen String drawing painted them, at one pixel a point and a quarter at two; runs read
- *              as bytes are its runs; text escaped in one pass is what the frozen writer escaped byte by byte; and every
- *              part's ordinal is its place among all parts.
+ *              to the pixel as the frozen String drawing painted them, at one pixel a point and a quarter at two; a line's
+ *              Core Foundation string keeps every character, a leading U+FEFF too; runs read as bytes are its runs; text
+ *              escaped in one pass is what the frozen writer escaped byte by byte; and every part's ordinal is its place
+ *              among all parts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -110,6 +111,31 @@ final class DiagramSceneTextBytesTests: XCTestCase {
             })
             XCTAssertEqual(now.differingPixelCount(from: before), 0, "round \(round)")
         }
+    }
+
+    /// The Core Foundation string the painter makes of a line's or a run's bytes has every one of their characters: a
+    /// leading U+FEFF too, which `CFStringCreateWithBytes` alone takes for a byte order mark and leaves out, as the run
+    /// of a label in bold that starts with one gives it.
+    func testALinesCoreFoundationStringKeepsEveryCharacterOfItsBytes() throws {
+        var texts = ["", "A", "\u{FEFF}", "\u{FEFF}A", "\u{FEFF}\u{FEFF}x", "a\u{FEFF}b", "\u{FFFE}x", "\u{EF}x", "é\u{FEFF}", "\u{FEFF}**b**"]
+        for (_, scene) in try Self.corpusScenes() {
+            for text in scene.texts {
+                texts += (0..<text.block.lineCount).map { line in text.block.line(at: line) }
+            }
+        }
+        XCTAssertGreaterThan(texts.count, 5_000)
+        for text in texts {
+            var bytes = text
+            let made = bytes.withUTF8 { utf8 in DiagramTextDrawing.coreFoundationString(of: utf8) as String }
+            XCTAssertEqual(Array(made.utf16), Array(text.utf16), text.debugDescription)
+        }
+        // Leading and trailing U+FEFF are trimmed from a label, as JavaScript trims them, but a run may start with one.
+        let prepared = try MermaidDiagramPreparation.prepare(source: "flowchart LR\n  A[\"a <b>\u{FEFF}b</b>\"]", typography: DiagramSceneSamples.typography,
+                                                             narrowestColumnWidth: nil)
+        let label = try XCTUnwrap(prepared.scene.texts.first { text in text.block.record.hasEmphasis })
+        var runTexts: [String] = []
+        label.block.forEachRun(ofLine: 0) { bytes, _, _ in runTexts.append(DiagramTextDrawing.coreFoundationString(of: bytes) as String) }
+        XCTAssertEqual(runTexts, ["a ", "\u{FEFF}b"])
     }
 
     /// Each block's runs read as bytes are its runs as Strings: the same text, emphasis and width, in order.
