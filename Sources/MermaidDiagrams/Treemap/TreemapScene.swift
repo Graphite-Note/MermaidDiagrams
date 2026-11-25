@@ -6,8 +6,8 @@
  *              to front in the colors' roles with their texts, as Pele paints them, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,13 @@ extension DiagramScene {
     /// The treemap's painting: the title, the sections as tints of their series colors with their names and totals, then the
     /// leaves in their series colors with their names and values.
     public init(layout: TreemapLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: TreemapLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             TreemapSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)

@@ -7,8 +7,8 @@
  *              recorded into lanes of the thread's scene workspace without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -21,7 +21,13 @@ extension DiagramScene {
     /// for `.-`, with its marks; each block's shape or arrow in the surface color outlined in the border color, its
     /// colors as its style sets, and its text; each edge's text on a patch of the page's color.
     public init(layout: BlockLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: BlockLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             for composite in layout.composites { BlockScenePaths.add(composite, to: &builder, workspace: workspace) }

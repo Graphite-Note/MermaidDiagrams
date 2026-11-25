@@ -6,8 +6,8 @@
  *              workspace and added back to front in the colors' roles, as Pele paints them, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,13 @@ extension DiagramScene {
     /// The pie chart's painting: the slices and the legend's swatches in their series colors, the slices' edges, the
     /// percentages, the legend, the title.
     public init(layout: PieChartLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: PieChartLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             PieChartSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
