@@ -1,9 +1,29 @@
+/**
+ * File: EntityRelationshipGenericType.swift
+ * -----------------------------------------
+ * Layer: Core
+ * Description: An entity relationship attribute's generic type, its `~` written as angle brackets as Mermaid writes
+ *              them, with text that holds no `~` left without searching it by characters.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// Mermaid writes a generic type's angle brackets as `~` (`List~int~`, `Map~K,V~`): each pair is read as `<` and `>`,
 /// from the outside in. Where commas separate parts, two parts that each hold a single `~` form one pair across
 /// the comma, as Mermaid's reading does; a `~` left without a pair stays.
 enum EntityRelationshipGenericType {
     static func angleBracketed(_ text: String) -> String {
-        guard text.contains("~") else { return text }
+        // A text with no `~` byte holds no `~` character, and in a text of ASCII bytes a `~` byte is one: Foundation's
+        // search by characters, which is slow, is left for a text beyond ASCII that holds the byte.
+        var hasTilde = false
+        var isASCII = true
+        for byte in text.utf8 {
+            if byte == UInt8(ascii: "~") { hasTilde = true }
+            if byte >= 0x80 { isASCII = false }
+        }
+        guard hasTilde, isASCII || text.contains("~") else { return text }
         var parts: [String] = []
         var pendingSingleTilde: String?
         for part in text.split(separator: ",", omittingEmptySubsequences: false).map(String.init) {

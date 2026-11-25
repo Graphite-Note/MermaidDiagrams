@@ -7,8 +7,8 @@
  *              paths recorded into lanes of the thread's scene workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -22,7 +22,13 @@ extension DiagramScene {
     /// that one filled flow holds whole is drawn in that fill's ink, and one that crosses a filled flow's border runs
     /// over a casing of the page's color, painted after the flows (Pele's `overFills` and `edgeCasing`).
     public init(layout: AgentFlowLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene recorded into lanes of at most `DiagramSceneWorkspace.elementLimit(for: limits)` elements: one past
+    /// it marks the scene (`exceededPathElementLimit`), which the preparation refuses.
+    init(layout: AgentFlowLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             let line = DiagramStroke.rounded(lineWidth: FlowchartDrawingParts.lineWidth)

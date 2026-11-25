@@ -7,8 +7,8 @@
  *              loops beside their nodes, and each node's texts placed.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -31,7 +31,8 @@ extension UseCaseLayoutPass {
         var routes = placement.edgeRoutes.map { route in
             LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
         }
-        let crossings = UseCaseBoundaryTitles.crossings(of: routes)
+        // Where lines cross the page's rows matters only to the titles of boundaries.
+        let crossings = frames.isEmpty ? [:] : UseCaseBoundaryTitles.crossings(of: routes)
         UseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
         let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
         var boundaries: [UseCaseLayoutBoundary] = []
@@ -50,6 +51,8 @@ extension UseCaseLayoutPass {
     private func placedEdges(routes: [LayeredClusterRoute], labelCenters: [CGPoint?], centers: [CGPoint],
                              boundaries: [UseCaseLayoutBoundary]) -> [UseCaseLayoutEdge] {
         let fills = boundaries.filter { boundary in boundary.look.paintsFill }
+        let fillFrames = fills.map(\.frame)
+        var looks = self.looks
         var routeIndex = 0
         var loopsSeen: [Int: Int] = [:]
         var edges: [UseCaseLayoutEdge] = []
@@ -78,7 +81,7 @@ extension UseCaseLayoutPass {
                                        endTip: last, endDirection: path.endDirection,
                                        labelCenter: labelCenter ?? CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2))
             }
-            edges.append(line.edge(edge, label: drawn.label, fills: fills))
+            edges.append(line.edge(edge, label: drawn.label, fills: fills, fillFrames: fillFrames, look: UseCaseLook.of(edge.styles, made: &looks)))
         }
         return edges
     }

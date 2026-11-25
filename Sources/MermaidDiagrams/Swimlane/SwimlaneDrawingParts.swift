@@ -6,8 +6,8 @@
  *              recorded into lanes of the thread's scene workspace, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -47,7 +47,13 @@ public struct SwimlaneDrawingParts {
 extension DiagramScene {
     /// The swimlane diagram's painting: the lanes behind the flowchart's painting (`DiagramScene(layout:)` of a flowchart).
     public init(layout: SwimlaneLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene recorded into lanes of at most `DiagramSceneWorkspace.elementLimit(for: limits)` elements: one past
+    /// it marks the scene (`exceededPathElementLimit`), which the preparation refuses.
+    init(layout: SwimlaneLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             let line = DiagramStroke(lineWidth: FlowchartDrawingParts.lineWidth)
             let outlines = workspace.makeLane()

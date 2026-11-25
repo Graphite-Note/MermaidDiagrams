@@ -1,3 +1,16 @@
+/**
+ * File: ClassDiagramMemberSyntax.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: A class member's text split as Mermaid splits it into its visibility, name, parameters, return type
+ *              and classifier, its tildes written as angle brackets; text of ASCII bytes is read on its bytes
+ *              (ClassDiagramMemberBytes).
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// Reads a class member's text the way Mermaid splits it (`ClassMember` in Mermaid 12.1.0, as Pele reads it in one
 /// pass): a method is the text with an opening parenthesis after its first character and a closing one later, its
 /// visibility mark first, its classifier (`$` static, `*` abstract) right after the closing parenthesis or at the
@@ -6,6 +19,12 @@
 enum ClassDiagramMemberSyntax {
     /// The member `text` (trimmed, not empty) describes, and whether it is a method.
     static func member(from text: String) -> (member: ClassDiagramMember, isMethod: Bool) {
+        // Text of ASCII bytes, as most is, is read on its bytes without a String for each piece.
+        if let member = text.utf8.withContiguousStorageIfAvailable({ bytes in
+            GraphDiagramNameTable.isASCII(bytes) ? ClassDiagramMemberBytes.member(from: bytes) : nil
+        }) ?? nil {
+            return member
+        }
         let bytes = Array(text.utf8)
         if let method = method(from: bytes) { return (method, true) }
         return (attribute(from: bytes), false)
