@@ -5,8 +5,8 @@
  * Description: Lays a Gantt chart out in Pele's style, with its options and for a narrow column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -67,11 +67,13 @@ public enum GanttLayoutEngine {
         let rowText = chart.options.fontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? typography.rowText
         let sectionText = chart.options.sectionFontSize.map { size in typography.measurer(ofSize: CGFloat(size)) } ?? rowText
         let measurers = GanttMeasurers(title: typography.boldNodeText, row: rowText, axis: typography.axisText, section: sectionText)
-        return layout(chart, schedule: schedule.entries, now: wallClockNow, zone: zone, measurers: measurers, font: typography.font, availableWidth: availableWidth)
+        return layout(chart, schedule: schedule.entries, now: wallClockNow, zone: zone, measurers: measurers, font: typography.font, availableWidth: availableWidth,
+                      excludedDays: schedule.excludedDays)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ chart: GanttChart, schedule: [GanttSchedule.Entry], now: GanttTime, zone: GanttTimeZone,
-                                                       measurers: GanttMeasurers<Measurer>, font: DiagramFont, availableWidth: CGFloat? = nil) -> GanttLayout {
+                                                       measurers: GanttMeasurers<Measurer>, font: DiagramFont, availableWidth: CGFloat? = nil,
+                                                       excludedDays: GanttExcludedDays? = nil) -> GanttLayout {
         let title = chart.title.map { title in
             DiagramTextBlock(label: DiagramLabelDecoder.label(from: title, form: .plain), measurer: measurers.title, maximumWidth: wrappingWidth)
         }.flatMap { block in block.lineCount == 0 ? nil : block }
@@ -82,7 +84,7 @@ public enum GanttLayoutEngine {
             return GanttLayout(size: size, font: font, title: title.map { title in centered(title, pageWidth: size.width) }, plot: nil)
         }
         var plot = GanttPlotBuilder(chart: chart, schedule: schedule, span: span, zone: zone, measurers: measurers, top: padding + titleHeight,
-                                    availableWidth: availableWidth)
+                                    availableWidth: availableWidth, excludedDays: excludedDays ?? GanttExcludedDays(chart: chart, zone: zone))
         plot.placeTasks()
         plot.placeAxis()
         plot.placeVerticalMarkers()

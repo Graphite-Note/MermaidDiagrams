@@ -5,8 +5,8 @@
  * Description: Places a Gantt chart's rows, axis and vertical markers once the chart is scheduled.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -36,21 +36,27 @@ struct GanttPlotBuilder<Measurer: DiagramTextMeasuring> {
     private let measurers: GanttMeasurers<Measurer>
     private let sections: GanttSectionRows
     private let rows: GanttRowAssignment
+    /// The axis' format, read once for every date the axis writes.
+    private let compiledAxisFormat: GanttCompiledAxisFormat
+    /// The chart's excluded days, as its schedule read them.
+    private let excludedDays: GanttExcludedDays
 
     /// `titleBottom` is where the title ends; `availableWidth` the container's, which narrows the plot (`capWidth`, not under 280).
     init(chart: GanttChart, schedule: [GanttSchedule.Entry], span: GanttTimeSpan, zone: GanttTimeZone, measurers: GanttMeasurers<Measurer>,
-         top titleBottom: CGFloat, availableWidth: CGFloat? = nil) {
+         top titleBottom: CGFloat, availableWidth: CGFloat? = nil, excludedDays: GanttExcludedDays) {
         self.chart = chart
         self.schedule = schedule
         self.span = span
         self.zone = zone
         self.measurers = measurers
+        self.excludedDays = excludedDays
         let options = chart.options
         metrics = GanttMetrics(rowFontSize: measurers.row.fontSize, axisFontSize: measurers.axis.fontSize, options: options)
         rows = GanttRowAssignment(tasks: chart.tasks, schedule: schedule, isCompact: chart.isCompact)
         sections = GanttSectionRows(rowSections: rows.rowSections, measurer: measurers.section, styleCount: options.sectionStyleCount)
         let axisFormat = chart.axisFormat.isEmpty ? (chart.dateFormat == "D" ? "%d" : options.axisFormat ?? "%Y-%m-%d") : chart.axisFormat
-        let sampleWidth = [span.start, span.stop].map { time in measurers.axis.width(of: GanttAxisFormat.format(axisFormat, time, zone: zone)) }.max() ?? 0
+        compiledAxisFormat = GanttCompiledAxisFormat(axisFormat)
+        let sampleWidth = [span.start, span.stop].map { [compiledAxisFormat] time in measurers.axis.width(of: compiledAxisFormat.format(time, zone: zone)) }.max() ?? 0
         let left = GanttLayoutEngine.padding + (options.leftPadding.map { padding in CGFloat(padding) }
             ?? max(sections.widestName > 0 ? sections.widestName + GanttLayoutEngine.sectionGap : 0, sampleWidth / 2))
         let rightPadding = options.rightPadding.map { padding in CGFloat(padding) } ?? max(GanttLayoutEngine.minimumRightPadding, sampleWidth / 2)
@@ -130,7 +136,7 @@ struct GanttPlotBuilder<Measurer: DiagramTextMeasuring> {
         for tick in ticks {
             let offset = scale.offset(of: tick)
             gridLineOffsets.append(offset)
-            let text = GanttAxisFormat.format(scale.axisFormat, tick, zone: zone)
+            let text = compiledAxisFormat.format(tick, zone: zone)
             let width = measurers.axis.width(of: text)
             guard offset - width / 2 >= lastRight + GanttLayoutEngine.labelGap, text != lastText else { continue }
             lastRight = offset + width / 2
@@ -161,7 +167,6 @@ struct GanttPlotBuilder<Measurer: DiagramTextMeasuring> {
     /// The runs of excluded days from the chart's start to its end, each from its first day's midnight to its last
     /// day's end, within the plot; none when the chart spans six years or more.
     private func excludedDayRuns() -> [CGRect] {
-        let excludedDays = GanttExcludedDays(chart: chart, zone: zone)
         guard !excludedDays.isEmpty, let shadedSpanEnd = span.start.addingMonths(GanttLayoutEngine.excludedDaySpanMonths),
               shadedSpanEnd > span.stop else { return [] }
         var runs: [CGRect] = []

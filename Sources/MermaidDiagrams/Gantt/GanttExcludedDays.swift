@@ -1,3 +1,14 @@
+/**
+ * File: GanttExcludedDays.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Which days a Gantt chart's excludes leave out, by weekday, weekend or date, and the dates its includes keep.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// Which days a Gantt chart's `excludes` leaves out, as Mermaid decides it: a day is excluded by its weekday's name,
 /// by `weekends` (Saturday and Sunday, or Friday and Saturday after `weekend friday`), or by its date written as
 /// `YYYY-MM-DD` or in the chart's `dateFormat`; a date `includes` names is never excluded.
@@ -16,6 +27,11 @@ struct GanttExcludedDays {
     private static let isoDateFormat = "YYYY-MM-DD"
 
     init(chart: GanttChart, zone: GanttTimeZone) {
+        self.init(chart: chart, zone: zone, dateFormat: GanttDateFormat(chart.dateFormat))
+    }
+
+    /// The chart's excluded days, its `dateFormat` already read into `dateFormat`.
+    init(chart: GanttChart, zone: GanttTimeZone, dateFormat: GanttDateFormat) {
         excludedWords = Set(chart.excludedDays)
         includedWords = Set(chart.includedDays)
         let weekend: Set<Int64> = chart.weekendStart == .friday ? [5, 6] : [6, 0]
@@ -23,7 +39,7 @@ struct GanttExcludedDays {
         excludedWeekdays = Self.dayWords.enumerated().map { weekday, word in
             (excludesWeekends && weekend.contains(Int64(weekday))) || chart.excludedDays.contains(word)
         }
-        dateFormat = GanttDateFormat(chart.dateFormat)
+        self.dateFormat = dateFormat
         writesDatesAsISO = chart.dateFormat == Self.isoDateFormat
         self.zone = zone
         namesDates = !chart.includedDays.isEmpty || chart.excludedDays.contains { word in word != Self.weekendWord && !Self.dayWords.contains(word) }
@@ -47,6 +63,12 @@ struct GanttExcludedDays {
 
     /// Whether a format writes only digits and separators, so that a date written with it is never a day's name.
     private static func isNumericFormat(_ format: String) -> Bool {
-        format.allSatisfy { character in "YMDHhmsSZXx-/.:, T".contains(character) }
+        if let isNumeric = format.utf8.withContiguousStorageIfAvailable({ bytes in bytes.allSatisfy { byte in numericFormatBytes.contains(byte) } }) {
+            // Bytes of those ASCII characters alone are those characters alone; any other byte is part of another character.
+            return isNumeric
+        }
+        return format.allSatisfy { character in "YMDHhmsSZXx-/.:, T".contains(character) }
     }
+
+    private static let numericFormatBytes = Set("YMDHhmsSZXx-/.:, T".utf8)
 }

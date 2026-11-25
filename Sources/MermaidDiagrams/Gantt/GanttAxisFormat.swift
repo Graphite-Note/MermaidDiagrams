@@ -1,3 +1,15 @@
+/**
+ * File: GanttAxisFormat.swift
+ * ---------------------------
+ * Layer: Core
+ * Description: Writes a Gantt chart's axis dates with d3's time format specifiers, in English, the specifier read once
+ *              into its pieces for every date of an axis.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// Writes the axis' dates with `axisFormat`'s d3 time format specifiers (`%Y-%m-%d`, `%b %e`), in English, as
 /// d3-time-format writes them for Mermaid: `%` then an optional padding (`-` none, `_` spaces, `0` zeros) and a
 /// letter; any other character is written as it is.
@@ -6,11 +18,18 @@ enum GanttAxisFormat {
     private static let paddings: [Character: String] = ["-": "", "_": " ", "0": "0"]
 
     static func format(_ specifier: String, _ time: GanttTime, zone: GanttTimeZone) -> String {
-        var written = ""
+        GanttCompiledAxisFormat(specifier).format(time, zone: zone)
+    }
+
+    /// `specifier` read into its pieces, as `format(_:_:zone:)` reads it character by character: the text between the
+    /// directives, and each directive's letter and padding.
+    static func pieces(of specifier: String) -> [GanttCompiledAxisFormat.Piece] {
+        var pieces: [GanttCompiledAxisFormat.Piece] = []
+        var literal = ""
         var characters = Substring(specifier)
         while let character = characters.popFirst() {
             guard character == percent else {
-                written.append(character)
+                literal.append(character)
                 continue
             }
             // A `%` that ends the specifier writes nothing.
@@ -20,12 +39,17 @@ enum GanttAxisFormat {
                 padding = chosen
                 directive = next
             }
-            written += self.directive(directive, time, padding: padding, zone: zone)
+            if !literal.isEmpty {
+                pieces.append(.literal(literal))
+                literal = ""
+            }
+            pieces.append(.directive(directive, padding: padding))
         }
-        return written
+        if !literal.isEmpty { pieces.append(.literal(literal)) }
+        return pieces
     }
 
-    private static func directive(_ letter: Character, _ time: GanttTime, padding: String, zone: GanttTimeZone) -> String {
+    static func directive(_ letter: Character, _ time: GanttTime, padding: String, zone: GanttTimeZone) -> String {
         if let calendarText = calendarDirective(letter, time, padding: padding) { return calendarText }
         if let clockText = clockDirective(letter, time, padding: padding, zone: zone) { return clockText }
         return String(letter)
@@ -33,13 +57,11 @@ enum GanttAxisFormat {
 
     /// The year, month, week and day directives.
     private static func calendarDirective(_ letter: Character, _ time: GanttTime, padding: String) -> String? {
-        let weekdayName = GanttCalendarToken.weekdayNames[Int(time.weekday)]
-        let monthName = GanttCalendarToken.monthNames[Int(time.month - 1)]
         switch letter {
-        case "a": return String(weekdayName.prefix(3))
-        case "A": return weekdayName
-        case "b": return String(monthName.prefix(3))
-        case "B": return monthName
+        case "a": return String(GanttCalendarToken.weekdayNames[Int(time.weekday)].prefix(3))
+        case "A": return GanttCalendarToken.weekdayNames[Int(time.weekday)]
+        case "b": return String(GanttCalendarToken.monthNames[Int(time.month - 1)].prefix(3))
+        case "B": return GanttCalendarToken.monthNames[Int(time.month - 1)]
         case "d", "e": return padded(time.day, padding, 2)
         case "g": return padded(GanttIsoWeek.thursday(of: time).year % 100, padding, 2)
         case "G": return padded(GanttIsoWeek.thursday(of: time).year % 10_000, padding, 4)
@@ -94,5 +116,31 @@ enum GanttAxisFormat {
         let digits = String(abs(number))
         let filled = digits.count < width ? String(repeating: padding, count: width - digits.count) + digits : digits
         return (number < 0 ? "-" : "") + filled
+    }
+}
+
+/// An axis format read once into its pieces, so that each date the axis writes is its pieces written in turn.
+struct GanttCompiledAxisFormat {
+    enum Piece {
+        case literal(String)
+        case directive(Character, padding: String)
+    }
+
+    let pieces: [Piece]
+
+    init(_ specifier: String) {
+        pieces = GanttAxisFormat.pieces(of: specifier)
+    }
+
+    /// `time` written in the format, as `GanttAxisFormat.format(_:_:zone:)` writes it.
+    func format(_ time: GanttTime, zone: GanttTimeZone) -> String {
+        var written = ""
+        for piece in pieces {
+            switch piece {
+            case .literal(let literal): written += literal
+            case .directive(let letter, let padding): written += GanttAxisFormat.directive(letter, time, padding: padding, zone: zone)
+            }
+        }
+        return written
     }
 }
