@@ -6,8 +6,8 @@
  *              (tests/render/architecture.test.ts) and numbers worked out by hand from layout.ts and render.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import XCTest
@@ -95,8 +95,8 @@ final class ArchitectureLayoutEngineTests: XCTestCase {
         XCTAssertEqual(radius, 3)
         let iconParts = DiagramScene(layout: layout).shapes.filter { shape in shape.part == .icon }
         XCTAssertEqual(iconParts.count, 1)
-        XCTAssertNotNil(ArchitectureIcons.outline(named: "cloud", in: CGRect(x: 0, y: 0, width: 24, height: 24)))
-        XCTAssertNil(ArchitectureIcons.outline(named: "logos:aws-ec2", in: CGRect(x: 0, y: 0, width: 24, height: 24)))
+        XCTAssertNotNil(ArchitectureIcons.glyph(named: "cloud")?.path(in: CGRect(x: 0, y: 0, width: 24, height: 24)))
+        XCTAssertNil(ArchitectureIcons.glyph(named: "logos:aws-ec2"))
     }
 
     func testAServicesTextIsCutToItsSquare() throws {

@@ -6,8 +6,8 @@
  *              longer name, frame numbers, data in braces or quotes, data blocks, titles, comments.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// A token of an event model's text.
@@ -53,14 +53,14 @@ enum EventModelLexer {
         rules += [
             sign("->>", .arrow), word("gwt"), word("ui"), word("md"), word("tf"), sign("[[", .openingReference),
             sign("]]", .closingReference), word("rf"), sign("`", .graveAccent), sign(".", .period),
-            Rule(nameRule, kind: .name, match: Patterns.name(first: isNameStart, rest: Patterns.isWordByte)),
-            Rule("EM_FID", kind: .frameNumber, match: frameNumber),
-            Rule("EM_DATA_INLINE", kind: .inlineData, match: inlineData),
-            Rule("EM_DATA_BLOCK", kind: .dataBlock, match: dataBlock),
-            Rule("EM_ACC_DESCR", kind: .accessibilityDescription, firstBytes: bytes("\t a"), match: accessibilityDescription),
+            Rule(nameRule, kind: .name, match: Patterns.name(first: .letterOrUnderscore, rest: .word)),
+            Rule("EM_FID", kind: .frameNumber, match: .custom(frameNumber)),
+            Rule("EM_DATA_INLINE", kind: .inlineData, match: .custom(inlineData)),
+            Rule("EM_DATA_BLOCK", kind: .dataBlock, match: .custom(dataBlock)),
+            Rule("EM_ACC_DESCR", kind: .accessibilityDescription, firstBytes: bytes("\t a"), match: .custom(accessibilityDescription)),
             Rule("EM_ACC_TITLE", kind: .accessibilityTitle, firstBytes: bytes("\t a"), match: Patterns.accessibilityTitle(leadingBlanks: true)),
             Rule("EM_TITLE", kind: .title, firstBytes: bytes("\t t"),
-                 match: Patterns.lineStatement("title", leadingBlanks: true, continuesName: Patterns.isWordByte)),
+                 match: Patterns.lineStatement("title", leadingBlanks: true, continuesName: .word)),
             Rule("EM_WS", kind: nil, match: Patterns.whitespace(isJavaScriptWhitespace: true)),
             Rule("EM_YAML", kind: nil, firstBytes: bytes("-"), match: Patterns.frontMatterFence),
             Rule("EM_DIRECTIVE", kind: nil, firstBytes: bytes("\t %"), match: Patterns.directive),
@@ -83,10 +83,6 @@ enum EventModelLexer {
 
     private static func bytes(_ text: String) -> [UInt8] {
         Array(text.utf8)
-    }
-
-    @Sendable private static func isNameStart(_ byte: UInt8) -> Bool {
-        MermaidByte.isLetter(byte) || byte == MermaidByte.underscore
     }
 
     /// `\d{1,3}`.
@@ -128,7 +124,7 @@ enum EventModelLexer {
             if lineStart < bytes.count, bytes[lineStart] == MermaidByte.closingBrace, let end = Patterns.endAfterClosingFence(bytes, lineStart + 1) {
                 return .matched(end: end)
             }
-            guard let lineBreak = text.firstOccurrence(of: [MermaidByte.newline], from: lineStart) else { return .noneFurtherOn }
+            guard let lineBreak = text.firstOccurrence(of: newlineNeedle, from: lineStart) else { return .noneFurtherOn }
             lineStart = lineBreak + 1
         }
     }
@@ -143,9 +139,11 @@ enum EventModelLexer {
         if colon < bytes.count, bytes[colon] == MermaidByte.colon { return .matched(end: Patterns.endBeforeComment(bytes, from: colon + 1)) }
         let brace = JavaScriptWhitespace.endOfRun(in: bytes, from: afterKeyword)
         guard brace < bytes.count, bytes[brace] == MermaidByte.openingBrace,
-              let closing = text.firstOccurrence(of: [MermaidByte.closingBrace], from: brace + 1) else { return .none }
+              let closing = text.firstOccurrence(of: closingBraceNeedle, from: brace + 1) else { return .none }
         return .matched(end: closing + 1)
     }
 
     private static let descriptionKeyword = Array("accDescr".utf8)
+    private static let newlineNeedle = [MermaidByte.newline]
+    private static let closingBraceNeedle = [MermaidByte.closingBrace]
 }

@@ -6,8 +6,8 @@
  *              preprocessor does, and drops the comment lines Mermaid removes before parsing.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
- * Date: 23/11/2026
+ * Version: 0.8
+ * Date: 24/11/2026
  */
 
 /// A line of a tree view's text after its keyword, as its grammar reads it, with the line it was written on.
@@ -69,18 +69,21 @@ enum TreeViewBoxDrawingReader {
         var kept: [TreeViewSourceLine] = []
         kept.reserveCapacity(lines.count)
         for line in lines {
-            if let first = firstScalarAfterBlanks(line.text), isOwnCharacter(first), first != "%" {
-                kept.append(line)
-                continue
-            }
-            let content = line.text.drop { character in character.isWhitespace }
-            guard content.hasPrefix("%%"), !content.hasPrefix("%%{"), content.count > 2, kept.count > 0 else {
+            guard isCommentLine(line.text), kept.count > 0 else {
                 kept.append(line)
                 continue
             }
             while let last = kept.last, kept.count > 1, last.text.allSatisfy(\.isWhitespace) { kept.removeLast() }
         }
         return kept
+    }
+
+    /// Whether a line is a comment line Mermaid's preprocessing removes (with the blank lines before it, unless it is the
+    /// first): `%%` and a character more after white space, not a directive's `%%{`.
+    static func isCommentLine(_ line: String) -> Bool {
+        if let first = firstScalarAfterBlanks(line), isOwnCharacter(first), first != "%" { return false }
+        let content = line.drop { character in character.isWhitespace }
+        return content.hasPrefix("%%") && !content.hasPrefix("%%{") && content.count > 2
     }
 
     static func passesUnchanged(_ line: String) -> Bool {
@@ -116,16 +119,21 @@ enum TreeViewBoxDrawingReader {
     }
 
     /// A line of blanks and vertical bars only, which carries no entry.
-    private static func isDecorationOnly(_ line: String) -> Bool {
+    static func isDecorationOnly(_ line: String) -> Bool {
         !line.isEmpty && line.utf16.allSatisfy { unit in isWhitespace(unit) || unit == lightVertical || unit == heavyVertical }
     }
 
     /// Whether the text holds a dash, a branch or a vertical bar, light or heavy: read on its bytes, as each of them is
     /// written `E2 94` and a last byte in UTF-8.
     private static func containsBoxCharacter(_ text: String) -> Bool {
+        containsBoxCharacter(text.utf8)
+    }
+
+    /// `containsBoxCharacter(_:)` on a text's bytes.
+    static func containsBoxCharacter(_ bytes: some Sequence<UInt8>) -> Bool {
         var beforePrevious: UInt8 = 0
         var previous: UInt8 = 0
-        for byte in text.utf8 {
+        for byte in bytes {
             if beforePrevious == 0xE2, previous == 0x94, boxCharacterLastBytes.contains(byte) { return true }
             beforePrevious = previous
             previous = byte
@@ -137,7 +145,7 @@ enum TreeViewBoxDrawingReader {
     private static let boxCharacterLastBytes: [UInt8] = [0x80, 0x81, 0x82, 0x83, 0x94, 0x97, 0x9C, 0xA3]
 
     /// The column of the line's first branch character, `├`, `└` or their heavy forms, in UTF-16 units as JavaScript counts.
-    private static func branchColumn(in units: [UInt16]) -> Int? {
+    static func branchColumn(in units: [UInt16]) -> Int? {
         units.firstIndex(where: isBranch)
     }
 
@@ -152,27 +160,27 @@ enum TreeViewBoxDrawingReader {
         return line.replacing("\t", with: "    ")
     }
 
-    private static func isWhitespace(_ unit: UInt16) -> Bool {
+    static func isWhitespace(_ unit: UInt16) -> Bool {
         unit == space || unit == 0x09 || unit == 0x0A || unit == 0x0D || unit == 0x0B || unit == 0x0C || unit == 0xA0 || unit == 0xFEFF
             || unit == 0x1680 || (0x2000...0x200A).contains(unit) || unit == 0x2028 || unit == 0x2029 || unit == 0x202F || unit == 0x205F
             || unit == 0x3000
     }
 
-    private static let space: UInt16 = 0x20
-    private static let lightVertical: UInt16 = 0x2502
-    private static let heavyVertical: UInt16 = 0x2503
+    static let space: UInt16 = 0x20
+    static let lightVertical: UInt16 = 0x2502
+    static let heavyVertical: UInt16 = 0x2503
     /// `─` and `━`.
-    private static func isDash(_ unit: UInt16) -> Bool {
+    static func isDash(_ unit: UInt16) -> Bool {
         unit == 0x2500 || unit == 0x2501
     }
 
     /// `└`, `┗`, `├` and `┣`.
-    private static func isBranch(_ unit: UInt16) -> Bool {
+    static func isBranch(_ unit: UInt16) -> Bool {
         unit == 0x2514 || unit == 0x2517 || unit == 0x251C || unit == 0x2523
     }
 
     /// The dashes, the branches and the vertical bars, light and heavy.
-    private static func isBoxCharacter(_ unit: UInt16) -> Bool {
+    static func isBoxCharacter(_ unit: UInt16) -> Bool {
         isDash(unit) || isBranch(unit) || unit == lightVertical || unit == heavyVertical
     }
 }

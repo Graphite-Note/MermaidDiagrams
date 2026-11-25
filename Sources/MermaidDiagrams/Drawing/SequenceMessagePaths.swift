@@ -6,8 +6,8 @@
  *              grouped by the color Pele paints them in, and the number badges and text patches.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -17,22 +17,46 @@ import CoreGraphics
 public struct SequenceDrawingMessageLines {
     public let ink: DiagramColor?
     /// Stroked one point wide with round caps; dotted ones dashed.
-    public let solidLines = CGMutablePath()
-    public let dottedLines = CGMutablePath()
+    public let solidLines: CGPath
+    public let dottedLines: CGPath
     /// Arrowheads and solid half heads, filled; crosses, open heads and stick half heads, stroked.
-    public let filledHeads = CGMutablePath()
-    public let strokedHeads = CGMutablePath()
+    public let filledHeads: CGPath
+    public let strokedHeads: CGPath
     /// Filled.
-    public let centralConnections = CGMutablePath()
+    public let centralConnections: CGPath
 
-    init(ink: DiagramColor?) {
+    init(_ lines: SequenceMessageLinePaths<DiagramCoreGraphicsPath>) {
+        ink = lines.ink
+        solidLines = lines.solidLines.path
+        dottedLines = lines.dottedLines.path
+        filledHeads = lines.filledHeads.path
+        strokedHeads = lines.strokedHeads.path
+        centralConnections = lines.centralConnections.path
+    }
+}
+
+/// The paths of `SequenceDrawingMessageLines`, recorded into the paths a maker makes.
+struct SequenceMessageLinePaths<Path: DiagramPathRecording> {
+    let ink: DiagramColor?
+    let solidLines: Path
+    let dottedLines: Path
+    let filledHeads: Path
+    let strokedHeads: Path
+    let centralConnections: Path
+
+    init<Maker: DiagramPathMaking>(ink: DiagramColor?, making maker: Maker) where Maker.Path == Path {
         self.ink = ink
+        solidLines = maker.makePath()
+        dottedLines = maker.makePath()
+        filledHeads = maker.makePath()
+        strokedHeads = maker.makePath()
+        centralConnections = maker.makePath()
     }
 
-    func add(_ message: SequenceLayoutMessage) {
+    func add<Maker: DiagramPathMaking>(_ message: SequenceLayoutMessage, making maker: Maker) where Maker.Path == Path {
         switch message.stroke {
-        case .solid: solidLines.addPath(DiagramEdgeDrawing.path(message.path))
-        case .dotted: dottedLines.addPath(DiagramEdgeDrawing.path(message.path))
+        case .solid: maker.addEdgeLine(message.path, to: solidLines)
+        case .dotted: maker.addEdgeLine(message.path, to: dottedLines)
         }
         for head in message.heads { addHead(head) }
         let radius = SequenceSpacing.centralConnectionRadius
@@ -70,30 +94,34 @@ public struct SequenceDrawingMessageLines {
 
 /// Every message's paths: those in the line color, those over colored backgrounds by color in the order they appear,
 /// and the number badges and text patches, which keep their colors on any background.
-struct SequenceMessagePaths {
-    let lines = SequenceDrawingMessageLines(ink: nil)
-    private(set) var inkedLines: [SequenceDrawingMessageLines] = []
-    let numberBadges = CGMutablePath()
-    let textPatches = CGMutablePath()
+struct SequenceMessagePaths<Path: DiagramPathRecording> {
+    let lines: SequenceMessageLinePaths<Path>
+    private(set) var inkedLines: [SequenceMessageLinePaths<Path>] = []
+    let numberBadges: Path
+    let textPatches: Path
 
-    init(messages: [SequenceLayoutMessage]) {
+    init<Maker: DiagramPathMaking>(messages: [SequenceLayoutMessage], making maker: Maker) where Maker.Path == Path {
+        lines = SequenceMessageLinePaths(ink: nil, making: maker)
+        numberBadges = maker.makePath()
+        textPatches = maker.makePath()
+        let radius = SequenceDrawingParts.cornerRadius
         for message in messages {
             if let ink = SequenceTextInk.ink(on: message.lineBackground) {
                 if let group = inkedLines.first(where: { group in group.ink == ink }) {
-                    group.add(message)
+                    group.add(message, making: maker)
                 } else {
-                    let group = SequenceDrawingMessageLines(ink: ink)
-                    group.add(message)
+                    let group = SequenceMessageLinePaths(ink: ink, making: maker)
+                    group.add(message, making: maker)
                     inkedLines.append(group)
                 }
             } else {
-                lines.add(message)
+                lines.add(message, making: maker)
             }
             if let number = message.number {
-                let radius = number.frame.height / 2
-                numberBadges.addPath(CGPath(roundedRect: number.frame, cornerWidth: radius, cornerHeight: radius, transform: nil))
+                let badgeRadius = number.frame.height / 2
+                maker.addMadeRoundedRectangle(number.frame, cornerWidth: badgeRadius, cornerHeight: badgeRadius, to: numberBadges)
             }
-            if let patch = message.textPatch { textPatches.addPath(SequenceDrawingParts.roundedRectangle(patch)) }
+            if let patch = message.textPatch { maker.addMadeRoundedRectangle(patch, cornerWidth: radius, cornerHeight: radius, to: textPatches) }
         }
     }
 }

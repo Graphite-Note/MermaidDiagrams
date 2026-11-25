@@ -6,8 +6,8 @@
  *              from their indentation, as Mermaid's tree view grammar and database do.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -23,9 +23,13 @@ enum TreeViewParser {
         if let byte = cursor.peek(), byte != MermaidByte.newline, !(byte == MermaidByte.carriageReturn && cursor.peek(1) == MermaidByte.newline) {
             throw .invalidSyntax(line: cursor.line, problem: .treeViewExpectedName(cursor.excerpt()))
         }
-        let text = cursor.text(from: cursor.position, to: cursor.bytes.count)
-        let lines = try TreeViewBoxDrawingReader.lines(after: cursor.line, in: text).dropFirst()
-        let source = TreeViewTokenSource(lines: Array(lines))
+        let source: TreeViewTokenSource
+        if let read = try TreeViewByteLines.tokenSource(after: cursor.line, in: cursor.bytes, from: cursor.position) {
+            source = read
+        } else {
+            let text = cursor.text(from: cursor.position, to: cursor.bytes.count)
+            source = TreeViewTokenSource(lines: Array(try TreeViewBoxDrawingReader.lines(after: cursor.line, in: text).dropFirst()))
+        }
         var tokenizer = TreeViewTokenizer(bytes: source.bytes)
         let tokens: [TreeViewToken]
         switch tokenizer.tokens() {

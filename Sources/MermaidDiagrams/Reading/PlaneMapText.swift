@@ -3,11 +3,11 @@
  * ------------------------
  * Layer: Core
  * Description: The string operations of JavaScript the readers of Venn diagrams, Cynefin frameworks and Wardley maps
- *              repeat: `trim`, the order of `sort`, and the replacement of runs of blanks.
+ *              repeat: `trim`, the order of `sort`, the replacement of runs of blanks, and a search for an ASCII text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// JavaScript's string operations as Pele's readers of the diagrams drawn on a fixed plane use them.
@@ -16,6 +16,21 @@ enum PlaneMapText {
     static func trimmed(_ text: String) -> String {
         let bytes = Array(text.utf8)
         return String(decoding: JavaScriptWhitespace.trimmed(bytes[...]), as: UTF8.self)
+    }
+
+    /// Whether `text` holds `literal`, printable ASCII, as Foundation's `contains` finds it: on the bytes when `text` is
+    /// ASCII, whose characters are then its bytes, else by Foundation, which compares characters.
+    static func contains(_ text: String, _ literal: StaticString) -> Bool {
+        let needle = UnsafeBufferPointer(start: literal.utf8Start, count: literal.utf8CodeUnitCount)
+        guard text.utf8.allSatisfy({ byte in byte < 0x80 }) else { return text.contains(String(decoding: needle, as: UTF8.self)) }
+        let bytes = text.utf8
+        guard bytes.count >= needle.count else { return false }
+        var start = bytes.startIndex
+        while let end = bytes.index(start, offsetBy: needle.count, limitedBy: bytes.endIndex) {
+            if bytes[start..<end].elementsEqual(needle) { return true }
+            start = bytes.index(after: start)
+        }
+        return false
     }
 
     /// Whether `first` sorts before `second` in JavaScript's default order: by UTF-16 code units.
