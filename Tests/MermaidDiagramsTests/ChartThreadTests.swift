@@ -5,10 +5,11 @@
  * Description: Charts, block diagrams, Ishikawa diagrams and Wardley maps prepared on many threads at once are those
  *              prepared alone: each thread reads a block diagram in its own scratch arena, keeps each Ishikawa diagram's
  *              and quadrant chart's ranges of its own text, finds each Sankey diagram's names in its own table, makes
- *              its own radar entry lists and Git commit ids, and records every scene into its own lanes.
+ *              its own radar entry lists and Git commit ids, keeps each architecture grid's cells and slides in its own
+ *              flat tables, reads each treemap's value format and classes, and records every scene into its own lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -19,7 +20,7 @@ import XCTest
 
 final class ChartThreadTests: XCTestCase {
     private static let corpusNames = ["block-docs", "pie-docs", "radar-docs", "quadrant-docs", "xychart-docs", "sankey-docs", "treemap-docs",
-                                      "packet-docs", "venn-docs", "ishikawa-docs", "wardley-docs", "git-docs"]
+                                      "packet-docs", "venn-docs", "ishikawa-docs", "wardley-docs", "git-docs", "architecture-docs"]
 
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow widths:
     /// every SVG, narrow SVG and spoken text is the one prepared alone, before the threads start.
@@ -36,6 +37,13 @@ final class ChartThreadTests: XCTestCase {
         sources.append("radar-beta\naxis " + (0..<20).map { index in "a\(index)" }.joined(separator: ", ") + "\ncurve c{"
             + (0..<20).map { index in "a\(19 - index): \(index % 7).5" }.joined(separator: ", ") + "}")
         sources.append("gitGraph\n" + (0..<30).map { index in "branch b\(index)\ncommit\ncommit tag: \"t\(index)\"\n" }.joined())
+        // An architecture diagram whose grid tables grow past their first slots, and treemaps with their own value formats and classes.
+        sources.append("architecture-beta\n" + (0..<90).map { index in "service s\(index)[S\(index)]\n" }.joined()
+            + (0..<160).map { index in "s\(index % 90):\(["L", "R", "T", "B"][index % 4]) -- \(["R", "L", "B", "T"][index % 4]):s\((index * 37 + 11) % 90)\n" }.joined())
+        for format in ["$,.2f", "^>+$010,.3~f", ".1%", "é,"] {
+            sources.append("---\nconfig:\n  treemap:\n    valueFormat: '\(format)'\n---\ntreemap-beta\n\"A\"\n  \"a\": 1234.5:::hot\n  \"b\": 0.25\n"
+                + "classDef hot fill:#f96,stroke:#333\\,x,font-weight:bold")
+        }
         XCTAssertGreaterThan(sources.count, 70)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }

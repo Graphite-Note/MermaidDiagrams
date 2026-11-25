@@ -7,8 +7,8 @@
  *              block, unconnected parts side by side.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// The cells of an architecture diagram: each node's, and each group's rectangle of cells (one cell for an empty one).
@@ -41,9 +41,11 @@ struct ArchitectureGridPlacement {
     /// The items placed in the current container, in the order placed, and where the current part starts in it.
     var order: [Int] = []
     var partStart = 0
-    var cells: [Int: Int] = [:]
+    /// The item in each cell of the small items placed in the current part.
+    var cells = ArchitectureFlatTable(emptyKey: ArchitectureCellKey(column: 0, row: 0))
     var largeItems: [Int] = []
-    var reaches: [ArchitectureSlideKey: Int] = [:]
+    /// How far a slide from a place, of a size, along a step was found to reach in the current part.
+    var reaches = ArchitectureFlatTable(emptyKey: ArchitectureSlideKey(column: 0, row: 0, width: 0, height: 0, stepX: 0, stepY: 0))
 
     /// Blocks up to this many cells are found through the map of cells; larger ones are compared one by one.
     static let smallBlockCells = 64
