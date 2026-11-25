@@ -6,8 +6,8 @@
  *              column, and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -23,8 +23,8 @@ extension MermaidDiagramPreparationContext {
             ? narrowScene(of: chart, regularSize: layout.size, laidOut: { chart in
                 try GanttLayoutEngine.layout(chart, typography: typography, now: now, timeZone: timeZone, limits: limits,
                                              availableWidth: narrowestColumnWidth)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .ganttChart, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
+            }, scene: { [limits] layout in DiagramScene(layout: layout, limits: limits) }) : nil
+        return PreparedMermaidDiagram(kind: .ganttChart, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(ganttChart: chart))
     }
 }

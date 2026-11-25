@@ -3,199 +3,173 @@
  * ------------------------------------
  * Layer: Core
  * Description: Builds an event model from its statements as Mermaid's database does: one lane per group of kinds and
- *              namespace, each frame's data, and the relations its sources name or the frame before it implies.
+ *              namespace, each frame's data, and the relations its sources name or the frame before it implies; each
+ *              frame made once, in its sorted lane, its frame number looked up in a short list or a table.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Builds an `EventModelDiagram` from what `EventModelParser` read, as Pele's `buildEventModel` does after Mermaid's
 /// database: a frame number used twice refuses the diagram; a frame that names its sources is fed by those of them
 /// written before it, in their order; any other frame but the first and reset frames is fed by the nearest earlier
-/// frame in another lane.
+/// frame in another lane. The lanes are met first, so that each frame is made once in its sorted lane; which frame
+/// feeds which depends only on whether two lanes are one, which the order lanes were met in tells as well.
 enum EventModelDiagramBuilder {
     static func diagram(of statements: EventModelStatements, bytes: [UInt8], limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> EventModelDiagram {
-        var frameIndexByIdentifier: [String: Int] = [:]
-        for (index, frame) in statements.frames.enumerated() {
-            guard frameIndexByIdentifier[frame.identifier] == nil else {
-                let line = FirstMatchTokenReader<EventModelTokenKind>.line(of: frame.position, in: bytes)
-                throw .invalidSyntax(line: line, problem: .eventModeling(.duplicateFrame(identifier: frame.identifier)))
-            }
-            frameIndexByIdentifier[frame.identifier] = index
+        let written = statements.frames
+        var frameNumbers = EventModelFrameNumbers(capacity: written.count)
+        for index in written.indices where !frameNumbers.insert(written[index].identifier, at: index) {
+            let line = FirstMatchTokenReader<EventModelTokenKind>.line(of: written[index].position, in: bytes)
+            throw .invalidSyntax(line: line, problem: .eventModeling(.duplicateFrame(identifier: written[index].identifier)))
         }
+        var lanes = EventModelLaneAssignment()
+        var entities: [EventModelEntityName] = []
+        entities.reserveCapacity(written.count)
+        var laneIndices: [Int] = []
+        laneIndices.reserveCapacity(written.count)
+        for index in written.indices {
+            let entity = EventModelEntityName(written[index].entity, kindKeyword: written[index].kindKeyword)
+            entities.append(entity)
+            laneIndices.append(lanes.laneIndex(of: entity.kind, namespace: entity.namespace))
+        }
+        let relations = try relations(of: written, laneIndices: laneIndices, frameNumbers: frameNumbers, limits: limits)
         var dataByName: [String: String] = [:]
         for dataBlock in statements.dataBlocks where dataByName[dataBlock.name] == nil { dataByName[dataBlock.name] = dataBlock.block }
-        var lanes = EventModelLaneAssignment()
-        var frames: [EventModelFrame] = []
-        var relations: [EventModelRelation] = []
-        for (index, written) in statements.frames.enumerated() {
-            let frame = frame(written, laneIndex: { kind, namespace in lanes.laneIndex(of: kind, namespace: namespace) }, dataByName: dataByName)
-            frames.append(frame)
-            for source in sources(of: written, at: index, frames: frames, frameIndexByIdentifier: frameIndexByIdentifier) {
-                guard relations.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-                relations.append(EventModelRelation(sourceFrameIndex: source, targetFrameIndex: index))
-            }
-        }
         let sorted = lanes.sortedLanes()
+        var frames: [EventModelFrame] = []
+        frames.reserveCapacity(written.count)
+        for index in written.indices {
+            let entity = entities[index]
+            frames.append(EventModelFrame(identifier: written[index].identifier, kind: entity.kind, entity: written[index].entity, name: entity.name,
+                                          namespace: entity.namespace, isReset: written[index].isReset,
+                                          laneIndex: sorted.newIndexByAssignedIndex[laneIndices[index]],
+                                          data: data(of: written[index], dataByName: dataByName), dataType: written[index].dataType))
+        }
         return EventModelDiagram(
             title: statements.title.map(FirstMatchStatementValues.title).flatMap { title in title.isEmpty ? nil : title },
             accessibilityTitle: statements.accessibilityTitle.map(FirstMatchStatementValues.accessibilityTitle),
             accessibilityDescription: statements.accessibilityDescription.map(FirstMatchStatementValues.accessibilityDescription),
-            frames: frames.map { frame in frame.withLane(sorted.newIndexByAssignedIndex[frame.laneIndex]) }, lanes: sorted.lanes,
-            relations: relations, notes: statements.notes, specifications: statements.specifications, entities: statements.entities)
+            frames: frames, lanes: sorted.lanes, relations: relations, notes: statements.notes, specifications: statements.specifications,
+            entities: statements.entities)
     }
 
-    private static func frame(_ written: EventModelWrittenFrame, laneIndex: (EventModelEntityKind, String?) -> Int,
-                              dataByName: [String: String]) -> EventModelFrame {
-        // Only a name of two parts has a namespace.
-        let parts = written.entity.split(separator: ".", omittingEmptySubsequences: false)
-        let namespace = parts.count == 2 ? String(parts[0]) : nil
-        let kind = EventModelEntityKind(keyword: written.kindKeyword)
-        var data = written.inlineData.map(blockText)
-        if let reference = written.dataReference, let block = dataByName[reference] { data = blockText(block) }
-        return EventModelFrame(identifier: written.identifier, kind: kind, entity: written.entity, name: parts.count == 2 ? String(parts[1]) : written.entity,
-                               namespace: namespace, isReset: written.isReset, laneIndex: laneIndex(kind, namespace), data: data,
-                               dataType: written.dataType)
-    }
-
-    /// The frames that feed the frame at `index`, in frame order: the sources it names that are written before it (or
-    /// itself), else the nearest earlier frame in another lane unless it is the first or a reset frame.
-    private static func sources(of written: EventModelWrittenFrame, at index: Int, frames: [EventModelFrame],
-                                frameIndexByIdentifier: [String: Int]) -> [Int] {
-        guard written.sourceIdentifiers.isEmpty else {
-            let named = Set(written.sourceIdentifiers.compactMap { identifier in frameIndexByIdentifier[identifier] }.filter { source in source <= index })
-            return named.sorted()
+    /// Which frame feeds which, for each frame in turn, the frames that feed it in frame order; past the edge limit, an error.
+    private static func relations(of written: [EventModelWrittenFrame], laneIndices: [Int], frameNumbers: EventModelFrameNumbers,
+                                  limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> [EventModelRelation] {
+        var relations: [EventModelRelation] = []
+        relations.reserveCapacity(written.count)
+        var sources: [Int] = []
+        for index in written.indices {
+            Self.sources(of: written[index], at: index, laneIndices: laneIndices, frameNumbers: frameNumbers, into: &sources)
+            for source in sources {
+                guard relations.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+                relations.append(EventModelRelation(sourceFrameIndex: source, targetFrameIndex: index))
+            }
         }
-        guard index > 0, !written.isReset else { return [] }
-        let lane = frames[index].laneIndex
-        guard let nearest = frames[..<index].lastIndex(where: { frame in frame.laneIndex != lane }) else { return [] }
-        return [nearest]
+        return relations
     }
 
-    /// The text between the outer braces (or, without a brace, inside the quotation marks), without carriage returns,
-    /// the blank lines at either end and the indentation its lines share, each line without its trailing whitespace.
-    static func blockText(_ raw: String) -> String {
-        if let ascii = raw.utf8.withContiguousStorageIfAvailable(asciiBlockText), let text = ascii { return text }
-        return blockTextOfScalars(raw)
+    /// The frame's data: of the data block it names, when one of that name was written, else its own written data.
+    private static func data(of frame: EventModelWrittenFrame, dataByName: [String: String]) -> String? {
+        if let reference = frame.dataReference, let block = dataByName[reference] { return blockText(block) }
+        return frame.inlineData.map(blockText)
     }
 
-    /// `blockText` of a text of ASCII alone, read on its bytes; nil for a text with a byte beyond ASCII. JavaScript's
-    /// whitespace within ASCII is the tab to the carriage return and the space.
-    private static func asciiBlockText(_ bytes: UnsafeBufferPointer<UInt8>) -> String? {
-        guard bytes.allSatisfy({ byte in byte < 0x80 }) else { return nil }
-        func isBlank(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
-        let opening = bytes.firstIndex(of: UInt8(ascii: "{"))
-        let closing = bytes.lastIndex(of: UInt8(ascii: "}"))
-        var inner = 0..<0
-        if let opening, let closing, closing > opening {
-            inner = (opening + 1)..<closing
-        } else if opening == nil, bytes.count >= 2 {
-            inner = 1..<(bytes.count - 1)
+    /// The frames that feed the frame at `index`, in frame order, into `sources`: the sources it names that are written
+    /// before it (or itself), each once, else the nearest earlier frame in another lane unless it is the first or a
+    /// reset frame.
+    private static func sources(of frame: EventModelWrittenFrame, at index: Int, laneIndices: [Int], frameNumbers: EventModelFrameNumbers,
+                                into sources: inout [Int]) {
+        sources.removeAll(keepingCapacity: true)
+        guard frame.sourceIdentifiers.isEmpty else {
+            for identifier in frame.sourceIdentifiers {
+                if let source = frameNumbers.index(of: identifier), source <= index { sources.append(source) }
+            }
+            guard sources.count > 1 else { return }
+            sources.sort()
+            var kept = 1
+            for position in 1..<sources.count where sources[position] != sources[kept - 1] {
+                sources[kept] = sources[position]
+                kept += 1
+            }
+            sources.removeSubrange(kept...)
+            return
         }
-        let kept = bytes[inner].filter { byte in byte != MermaidByte.carriageReturn }
-        var lines = kept.split(separator: MermaidByte.newline, omittingEmptySubsequences: false)
-        while let first = lines.first, first.allSatisfy(isBlank) { lines.removeFirst() }
-        while let last = lines.last, last.allSatisfy(isBlank) { lines.removeLast() }
-        let indent = lines.filter { line in !line.allSatisfy(isBlank) }.map { line in line.prefix(while: isBlank).count }.min() ?? 0
-        var text: [UInt8] = []
-        text.reserveCapacity(kept.count)
-        for (index, line) in lines.enumerated() {
-            if index > 0 { text.append(MermaidByte.newline) }
-            var kept = line.dropFirst(min(indent, line.count))
-            while let last = kept.last, isBlank(last) { kept = kept.dropLast() }
-            text += kept
-        }
-        return String(decoding: text, as: UTF8.self)
-    }
-
-    /// `blockText` read scalar by scalar, for any text.
-    static func blockTextOfScalars(_ raw: String) -> String {
-        let scalars = Array(raw.unicodeScalars)
-        let opening = scalars.firstIndex(of: "{")
-        let closing = scalars.lastIndex(of: "}")
-        var inner: ArraySlice<Unicode.Scalar> = []
-        if let opening, let closing, closing > opening {
-            inner = scalars[(opening + 1)..<closing]
-        } else if opening == nil, scalars.count >= 2 {
-            inner = scalars[1..<(scalars.count - 1)]
-        }
-        var lines = inner.filter { scalar in scalar != "\r" }.split(separator: "\n", omittingEmptySubsequences: false).map(Array.init)
-        while let first = lines.first, first.allSatisfy(isWhitespace) { lines.removeFirst() }
-        while let last = lines.last, last.allSatisfy(isWhitespace) { lines.removeLast() }
-        let indent = lines.filter { line in !line.allSatisfy(isWhitespace) }.map { line in line.prefix(while: isWhitespace).count }.min() ?? 0
-        return lines.map { line in
-            var kept = line.dropFirst(min(indent, line.count))
-            while let last = kept.last, isWhitespace(last) { kept = kept.dropLast() }
-            return UnicodeScalarText.string(kept)
-        }.joined(separator: "\n")
-    }
-
-    /// JavaScript's whitespace (`\s`).
-    static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.value {
-        case 0x09...0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF: true
-        default: false
-        }
+        guard index > 0, !frame.isReset else { return }
+        let lane = laneIndices[index]
+        if let nearest = laneIndices[..<index].lastIndex(where: { other in other != lane }) { sources.append(nearest) }
     }
 }
 
-/// The lanes of an event model as its frames meet them: one per group of kinds, and one more per namespace in a group,
-/// each with Mermaid's ordering key.
-struct EventModelLaneAssignment {
-    private var lanes: [EventModelLane] = []
-    private var indexByKey: [LaneKey: Int] = [:]
+/// A frame's entity as Mermaid's database reads it: only a name of two parts has a namespace, the part before its dot.
+/// A name of ASCII alone, as the grammar's names are, is cut at its dot on its bytes; any other as Swift's characters
+/// split it.
+struct EventModelEntityName {
+    let kind: EventModelEntityKind
+    let name: String
+    let namespace: String?
 
-    /// A lane's group and namespace, as Mermaid keys a lane by `group namespace` (a group's name holds no space, so the
-    /// two keys are told apart alike).
-    private struct LaneKey: Hashable {
-        let group: EventModelLaneGroup
-        let namespace: String?
-    }
-    private var nextOrderKeyByGroup: [EventModelLaneGroup: Int] = [:]
-
-    /// The index, in the order lanes were met, of the lane of a frame of `kind` in `namespace`.
-    mutating func laneIndex(of kind: EventModelEntityKind, namespace: String?) -> Int {
-        let group = kind.laneGroup
-        let key = LaneKey(group: group, namespace: namespace)
-        if let index = indexByKey[key] { return index }
-        let (firstKey, label, prefix) = Self.groupNaming(group)
-        var orderKey = firstKey
-        if namespace != nil {
-            orderKey = nextOrderKeyByGroup[group] ?? firstKey + 1
-            nextOrderKeyByGroup[group] = orderKey + 1
+    init(_ entity: String, kindKeyword: String) {
+        kind = EventModelEntityKind(keyword: kindKeyword)
+        let utf8 = entity.utf8
+        var dot: String.Index?
+        var dotCount = 0
+        var position = utf8.startIndex
+        while position != utf8.endIndex {
+            let byte = utf8[position]
+            guard byte < 0x80 else {
+                let parts = entity.split(separator: ".", omittingEmptySubsequences: false)
+                name = parts.count == 2 ? String(parts[1]) : entity
+                namespace = parts.count == 2 ? String(parts[0]) : nil
+                return
+            }
+            if byte == UInt8(ascii: ".") {
+                dot = position
+                dotCount += 1
+            }
+            utf8.formIndex(after: &position)
         }
-        lanes.append(EventModelLane(orderKey: orderKey, label: namespace.map { namespace in prefix + namespace } ?? label, group: group,
-                                    namespace: namespace))
-        indexByKey[key] = lanes.count - 1
-        return lanes.count - 1
-    }
-
-    /// The lanes sorted by their ordering key (lanes of one key in the order they were met), and the sorted index of
-    /// each lane by the index it was given.
-    func sortedLanes() -> (lanes: [EventModelLane], newIndexByAssignedIndex: [Int]) {
-        let order = lanes.indices.sorted { first, second in
-            lanes[first].orderKey != lanes[second].orderKey ? lanes[first].orderKey < lanes[second].orderKey : first < second
+        guard dotCount == 1, let dot else {
+            name = entity
+            namespace = nil
+            return
         }
-        var newIndex = [Int](repeating: 0, count: lanes.count)
-        for (sortedIndex, assignedIndex) in order.enumerated() { newIndex[assignedIndex] = sortedIndex }
-        return (order.map { index in lanes[index] }, newIndex)
-    }
-
-    /// The first ordering key, the label and the namespace's label prefix of a group's lanes.
-    private static func groupNaming(_ group: EventModelLaneGroup) -> (Int, String, String) {
-        switch group {
-        case .trigger: (0, "UI/Automation", "UI/A: ")
-        case .state: (100, "Command/Read Model", "C/RM: ")
-        case .stream: (200, "Events", "Stream: ")
-        }
+        name = String(entity[utf8.index(after: dot)...])
+        namespace = String(entity[..<dot])
     }
 }
 
-extension EventModelFrame {
-    /// The same frame in the lane at `laneIndex`.
-    func withLane(_ laneIndex: Int) -> EventModelFrame {
-        EventModelFrame(identifier: identifier, kind: kind, entity: entity, name: name, namespace: namespace, isReset: isReset, laneIndex: laneIndex,
-                        data: data, dataType: dataType)
+/// The frames' numbers as written, and each one's frame: a short list searched in turn, then a table once there are more
+/// than `mostNumbersSearched`, so that a long model's lookups do not grow with its frames.
+struct EventModelFrameNumbers {
+    private var numbers: [String] = []
+    private var indexByNumber: [String: Int] = [:]
+
+    /// The most numbers looked up by comparing them in turn.
+    private static let mostNumbersSearched = 16
+
+    init(capacity: Int) {
+        numbers.reserveCapacity(capacity)
+    }
+
+    /// Adds `number` as the frame at `index`, which follows the frames added before; false, adding nothing, when it is
+    /// there already.
+    mutating func insert(_ number: String, at index: Int) -> Bool {
+        guard self.index(of: number) == nil else { return false }
+        numbers.append(number)
+        if numbers.count > Self.mostNumbersSearched {
+            if indexByNumber.isEmpty {
+                for (earlier, written) in numbers.enumerated() { indexByNumber[written] = earlier }
+            } else {
+                indexByNumber[number] = index
+            }
+        }
+        return true
+    }
+
+    func index(of number: String) -> Int? {
+        numbers.count > Self.mostNumbersSearched ? indexByNumber[number] : numbers.firstIndex(of: number)
     }
 }

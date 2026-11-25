@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyDiagramBuilderTests.swift
+ * ------------------------------------------
+ * Layer: Tests
+ * Description: The user journey builder as Mermaid's journey database spec hands it a task's text and data: tasks,
+ *              sections, actors sorted by their UTF-16 code units, and the title.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -48,5 +60,13 @@ final class UserJourneyDiagramBuilderTests: XCTestCase {
         XCTAssertEqual(builder.diagram.title, "My day")
         builder.setTitle("   ")
         XCTAssertNil(builder.diagram.title)
+    }
+}
+
+private extension UserJourneyDiagramBuilder {
+    /// A task whose data is written as a String, handed to the builder as its UTF-8 bytes, as the parser hands it.
+    mutating func addTask(_ label: DiagramLabel, data: String) throws(MermaidDiagramReadError) {
+        let bytes = Array(data.utf8)
+        try bytes.withUnsafeBufferPointer { bytes throws(MermaidDiagramReadError) in try addTask(label, data: bytes) }
     }
 }

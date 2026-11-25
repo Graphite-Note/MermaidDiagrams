@@ -6,8 +6,8 @@
  *              their lifelines, rows of events, the title and the padding.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -60,7 +60,7 @@ public enum SequenceLayoutEngine {
             let extents = SequenceExtents(diagram: diagram, columns: columns, measurers: measurers)
             var rows = SequenceRows(diagram: diagram, columns: columns, extents: extents, measurers: measurers)
             rows.placeEvents()
-            return assemble(rows, title: title, font: font)
+            return assemble(consume rows, title: title, font: font)
         }
         let widening = SequenceGapWidening(diagram: diagram, measurers: measurers)
         var hold: CGFloat = 0
@@ -70,7 +70,7 @@ public enum SequenceLayoutEngine {
             let widened = widening.widened(columns, availableWidth: available, hold: hold, byNeed: byNeed)
             var rows = SequenceRows(diagram: diagram, columns: widened.columns, extents: widened.extents, measurers: measurers)
             rows.placeEvents()
-            let laidOut = assemble(rows, title: title, font: font)
+            let laidOut = assemble(consume rows, title: title, font: font)
             guard widened.isGrown, laidOut.size.width > available, attempt < tightAttemptLimit else { return laidOut }
             hold = widened.isUneven ? hold : hold > 0 ? .infinity : laidOut.size.width - available.rounded(.down)
             byNeed = false
@@ -89,8 +89,7 @@ public enum SequenceLayoutEngine {
 
     /// The participants above and below their lifelines, the boxes behind them, the title centered above everything,
     /// and the whole moved onto a page with Pele's padding around it.
-    private static func assemble<Measurer>(_ rows: SequenceRows<Measurer>, title: DiagramTextBlock?, font: DiagramFont) -> SequenceLayout {
-        var rows = rows
+    private static func assemble<Measurer>(_ rows: consuming SequenceRows<Measurer>, title: DiagramTextBlock?, font: DiagramFont) -> SequenceLayout {
         let columns = rows.columns
         let lastRow = rows.y
         let footerHeight = columns.participantSizes.indices.filter { index in rows.lifelineEnds[index] == nil }
@@ -108,6 +107,10 @@ public enum SequenceLayoutEngine {
         let offset = CGVector(dx: SequenceSpacing.padding - rows.extents.minimumX, dy: SequenceSpacing.padding - topOfPage)
         let size = CGSize(width: (rows.extents.maximumX - rows.extents.minimumX + 2 * SequenceSpacing.padding).rounded(.up),
                           height: (lastRow + footerHeight + boxPadding - topOfPage + 2 * SequenceSpacing.padding).rounded(.up))
+        // The messages taken out of the rows, which then hold them no more, so that each is moved in its own lists.
+        var messages = rows.messages
+        rows.messages = []
+        for index in messages.indices { messages[index].translate(by: offset) }
         return SequenceLayout(size: size, font: font, boxes: boxes(rows, bottom: lastRow + footerHeight).map { box in box.translated(by: offset) },
                               participants: participants(rows, footerTop: lastRow).map { participant in participant.translated(by: offset) },
                               lifelines: columns.centers.indices.map { index in
@@ -117,7 +120,7 @@ public enum SequenceLayoutEngine {
                               highlights: rows.highlights.reversed().map { highlight in highlight.translated(by: offset) },
                               activations: rows.activations.reversed().map { activation in activation.offsetBy(dx: offset.dx, dy: offset.dy) },
                               blocks: rows.blocks.map { block in block.translated(by: offset) },
-                              messages: rows.messages.map { message in message.translated(by: offset) },
+                              messages: messages,
                               destructions: rows.destructions.map { center in center.translated(by: offset) },
                               notes: rows.notes.map { note in note.translated(by: offset) },
                               title: placedTitle?.translated(by: offset))

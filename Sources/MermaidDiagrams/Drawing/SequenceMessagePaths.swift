@@ -6,8 +6,8 @@
  *              grouped by the color Pele paints them in, and the number badges and text patches.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -55,8 +55,8 @@ struct SequenceMessageLinePaths<Path: DiagramPathRecording> {
 
     func add<Maker: DiagramPathMaking>(_ message: SequenceLayoutMessage, making maker: Maker) where Maker.Path == Path {
         switch message.stroke {
-        case .solid: maker.addEdgeLine(message.path, to: solidLines)
-        case .dotted: maker.addEdgeLine(message.path, to: dottedLines)
+        case .solid: maker.addEdgeLineInPlace(message.path, to: solidLines)
+        case .dotted: maker.addEdgeLineInPlace(message.path, to: dottedLines)
         }
         for head in message.heads { addHead(head) }
         let radius = SequenceSpacing.centralConnectionRadius

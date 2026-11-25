@@ -5,8 +5,8 @@
  * Description: A laid-out kanban board's scene, back to front in Pele's colors, and its renderer, which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,13 @@ extension DiagramScene {
     /// The boxes and priority marks are recorded into lanes of the thread's scene workspace, each given back once the
     /// builder has copied it.
     public init(layout: KanbanLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene with each of its lanes bounded as `limits` bound them (`DiagramSceneWorkspace.elementLimit(for:)`): a
+    /// lane past its limit is emptied and the scene says so (`exceededPathElementLimit`), which the preparation refuses.
+    public init(layout: KanbanLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             for column in layout.columns {

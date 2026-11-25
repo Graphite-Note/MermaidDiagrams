@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyPlacement.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Places a user journey's body: the section bands, the cards with their text and their actors' dots, the scale,
+ *              the faces at their tasks' levels with their stems, and the line from face to face.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import CoreGraphics
 
 /// Places a user journey's body as Pele does, from the top left corner of its first card's column: the section bands
@@ -6,8 +18,6 @@ import CoreGraphics
 struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
     let diagram: UserJourneyDiagram
     let measured: UserJourneyMeasurement
-    /// Each actor's place among the journey's actors, by name.
-    let actorIndices: [String: Int]
     let taskText: Measurer
     let scaleText: Measurer
 
@@ -18,7 +28,7 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
         let headings = runs.map { run in run.heading.map { heading in headingText(heading, taskCount: run.taskCount) } }
         let bandHeight = headings.compactMap { heading in heading.map(bandHeight) }.max() ?? 0
         let cardsTop = origin.y + (bandHeight > 0 ? bandHeight + UserJourneyGeometry.bandPadding : 0)
-        let cardHeight = measured.textHeight + (actorIndices.isEmpty ? 0 : UserJourneyGeometry.dotRowHeight) + 2 * UserJourneyGeometry.cardPadding.height
+        let cardHeight = measured.textHeight + (diagram.actorNames.isEmpty ? 0 : UserJourneyGeometry.dotRowHeight) + 2 * UserJourneyGeometry.cardPadding.height
         let chartTop = cardsTop + cardHeight + UserJourneyGeometry.faceRadius + UserJourneyGeometry.chartGap
         var body = UserJourneyPlacedBody(bottom: chartTop + UserJourneyGeometry.offset(ofLevel: UserJourneyTask.lowestLevel) + UserJourneyGeometry.faceRadius)
         for (run, heading) in zip(runs, headings) {
@@ -27,6 +37,7 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
                                width: CGFloat(run.taskCount) * measured.cardPitch - UserJourneyGeometry.cardGap, height: bandHeight)
             body.sections.append(UserJourneyLayoutSection(frame: frame, text: Self.centered(heading, at: CGPoint(x: frame.midX, y: frame.midY))))
         }
+        body.tasks.reserveCapacity(diagram.tasks.count)
         body.tasks = diagram.tasks.indices.map { index in
             placedTask(index, frame: CGRect(x: origin.x + CGFloat(index) * measured.cardPitch, y: cardsTop, width: measured.cardWidth, height: cardHeight),
                        chartTop: chartTop)
@@ -57,13 +68,13 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
         let faceCenter = CGPoint(x: frame.midX, y: chartTop + UserJourneyGeometry.offset(ofLevel: task.level))
         let stem = DiagramPath(start: CGPoint(x: frame.midX, y: frame.maxY),
                                segments: [.line(to: CGPoint(x: frame.midX, y: faceCenter.y - UserJourneyGeometry.faceRadius))])
-        let named = task.actors.filter { name in !name.isEmpty }
+        let named = diagram.actorIndices(ofTask: index).filter { actorIndex in actorIndex >= 0 }
         let room = frame.width - 2 * UserJourneyGeometry.cardPadding.width - 2 * UserJourneyGeometry.dotRadius
         let spacing = min(UserJourneyGeometry.dotSpacing, room / CGFloat(max(named.count - 1, 1)))
         let dotsY = frame.maxY - UserJourneyGeometry.cardPadding.height - UserJourneyGeometry.dotRadius
-        let dots = named.enumerated().map { position, name in
+        let dots = named.enumerated().map { position, actorIndex in
             UserJourneyActorDot(center: CGPoint(x: frame.midX + (CGFloat(position) - CGFloat(named.count - 1) / 2) * spacing, y: dotsY),
-                                seriesIndex: actorIndices[name] ?? 0)
+                                seriesIndex: Int(actorIndex))
         }
         return UserJourneyLayoutTask(frame: frame, text: text, faceCenter: faceCenter, mood: task.mood, stem: stem, actorDots: dots)
     }

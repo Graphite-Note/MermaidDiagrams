@@ -2,43 +2,112 @@
  * File: UserJourneyDiagramBuilder.swift
  * -------------------------------------
  * Layer: Core
- * Description: Collects a user journey as its statements are read: sections, tasks with their scores and actors, and
- *              the title and accessibility text.
+ * Description: Collects a user journey as its statements are read: sections, tasks with their scores and actors read
+ *              on the bytes after a task's colon, the actors interned once each, and the title and accessibility text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
 
 /// Collects a user journey as its statements are read: each task under the section written last, its score and its
 /// actors read from the text after its first colon as Mermaid's database reads them. Sections and tasks count against
-/// the node limit, and each actor named on a task against the edge limit: a task joins its actors.
+/// the node limit, and each actor named on a task against the edge limit: a task joins its actors. Each actor is named
+/// once in a table as it is first met, so that the diagram's sorted names and each task's indices into them cost one
+/// sort of the distinct names.
 struct UserJourneyDiagramBuilder {
-    private(set) var diagram = UserJourneyDiagram()
     private let limits: MermaidDiagramLimits
     private var nodeCount = 0
     private var actorMentionCount = 0
+    private var title: String?
+    private var sections: [DiagramLabel] = []
+    private var tasks: [UserJourneyTask] = []
+    private var accessibilityTitle: String?
+    private var accessibilityDescription: String?
+    /// Each named actor's place in `actorNamesInFirstNamedOrder`, once there are more than `mostActorsSearched`: fewer
+    /// are found by comparing the names one by one, which costs less than hashing.
+    private var actorIndexByName: [String: Int32] = [:]
+    private var actorNamesInFirstNamedOrder: [String] = []
+    /// The actors of the tasks so far, each as its place in `actorNamesInFirstNamedOrder`, -1 for a nameless one.
+    private var actorMentions: [Int32] = []
+    private var firstActorMentions: [Int32] = [0]
+
+    /// The most distinct actors looked up by comparing their names in turn.
+    private static let mostActorsSearched = 8
+    /// The room the tasks' lists are first made with, so that a short journey's grow once.
+    private static let firstTaskCapacity = 16
 
     init(limits: MermaidDiagramLimits) {
         self.limits = limits
+        tasks.reserveCapacity(Self.firstTaskCapacity)
+        actorMentions.reserveCapacity(Self.firstTaskCapacity)
+        firstActorMentions.reserveCapacity(Self.firstTaskCapacity + 1)
+    }
+
+    /// The journey read, its actors sorted by their names' UTF-16 code units, as Mermaid sorts them, and each task's
+    /// indices made indices into that order.
+    var diagram: UserJourneyDiagram {
+        let sortedPlaces = actorNamesInFirstNamedOrder.indices.sorted { first, second in
+            actorNamesInFirstNamedOrder[first].utf16.lexicographicallyPrecedes(actorNamesInFirstNamedOrder[second].utf16)
+        }
+        var sortedIndexByPlace = [Int32](repeating: 0, count: sortedPlaces.count)
+        for (sortedIndex, place) in sortedPlaces.enumerated() { sortedIndexByPlace[place] = Int32(sortedIndex) }
+        return UserJourneyDiagram(title: title, sections: sections, tasks: tasks,
+                                  actorNames: sortedPlaces.map { place in actorNamesInFirstNamedOrder[place] },
+                                  actorMentions: actorMentions.map { place in place < 0 ? place : sortedIndexByPlace[Int(place)] },
+                                  firstActorMentions: firstActorMentions, accessibilityTitle: accessibilityTitle,
+                                  accessibilityDescription: accessibilityDescription)
     }
 
     /// A later `title` replaces an earlier one; one with nothing but spaces leaves none.
     mutating func setTitle(_ title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        diagram.title = trimmed.isEmpty ? nil : trimmed
+        self.title = trimmed.isEmpty ? nil : trimmed
     }
 
     mutating func addSection(_ label: DiagramLabel) throws(MermaidDiagramReadError) {
         try countNode()
-        diagram.sections.append(label)
+        sections.append(label)
     }
 
-    /// A task whose text is `label` and whose data is what follows its first colon, the colon included: `:score` or
-    /// `:score:actor, actor`. Text after a third colon is left, as in Mermaid.
-    mutating func addTask(_ label: DiagramLabel, data: Substring) throws(MermaidDiagramReadError) {
+    /// A task whose text is `label` and whose data, `data`, is what follows its first colon, the colon included:
+    /// `:score` or `:score:actor, actor`. Text after a third colon is left, as in Mermaid. Data of ASCII alone, as nearly
+    /// all is, is split, trimmed and read on its bytes; any other is read as Swift's characters split it
+    /// (`addTask(_:writtenData:)`), as a character past ASCII may join a colon or a comma into one.
+    mutating func addTask(_ label: DiagramLabel, data: UnsafeBufferPointer<UInt8>) throws(MermaidDiagramReadError) {
+        precondition(data.first == MermaidByte.colon, "a task's data starts at its colon")
+        guard Self.isASCII(data) else { return try addTask(label, writtenData: Substring(String(decoding: data, as: UTF8.self))) }
+        try countNode()
+        var scoreEnd = data.count
+        var actorsEnd = data.count
+        if let colon = Self.index(of: MermaidByte.colon, in: data, from: 1) {
+            scoreEnd = colon
+            actorsEnd = Self.index(of: MermaidByte.colon, in: data, from: colon + 1) ?? data.count
+        }
+        let hasActors = scoreEnd < data.count
+        let actorCount = hasActors ? Self.count(of: MermaidByte.comma, in: data, from: scoreEnd + 1, to: actorsEnd) + 1 : 0
+        guard actorMentionCount + actorCount <= limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+        actorMentionCount += actorCount
+        var actors: [String] = []
+        if hasActors {
+            actors.reserveCapacity(actorCount)
+            var start = scoreEnd + 1
+            while true {
+                let end = Self.index(of: MermaidByte.comma, in: data, from: start, to: actorsEnd) ?? actorsEnd
+                let name = Self.trimmedASCII(data, start, end)
+                actors.append(String(decoding: UnsafeBufferPointer(rebasing: data[name]), as: UTF8.self))
+                guard end < actorsEnd else { break }
+                start = end + 1
+            }
+        }
+        appendTask(UserJourneyTask(label: label, score: Self.score(UnsafeBufferPointer(rebasing: data[1..<scoreEnd])), actors: actors,
+                                   sectionIndex: sections.isEmpty ? nil : sections.count - 1))
+    }
+
+    /// `addTask(_:data:)` for data with a character past ASCII, split and trimmed on Swift's characters and scalars.
+    private mutating func addTask(_ label: DiagramLabel, writtenData data: Substring) throws(MermaidDiagramReadError) {
         try countNode()
         let pieces = data.dropFirst().split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         let writtenActors = pieces.count > 1 ? pieces[1] : nil
@@ -46,14 +115,47 @@ struct UserJourneyDiagramBuilder {
         guard actorMentionCount + actorCount <= limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
         actorMentionCount += actorCount
         let actors = writtenActors.map { actors in actors.split(separator: ",", omittingEmptySubsequences: false).map(Self.trimmed) } ?? []
-        diagram.tasks.append(UserJourneyTask(label: label, score: JavaScriptNumber.value(of: pieces[0]), actors: actors,
-                                             sectionIndex: diagram.sections.isEmpty ? nil : diagram.sections.count - 1))
+        appendTask(UserJourneyTask(label: label, score: JavaScriptNumber.value(of: pieces[0]), actors: actors,
+                                   sectionIndex: sections.isEmpty ? nil : sections.count - 1))
+    }
+
+    /// `task` added, each actor it names looked up in the table, or added to it when first named.
+    private mutating func appendTask(_ task: UserJourneyTask) {
+        for name in task.actors {
+            guard !name.isEmpty else {
+                actorMentions.append(-1)
+                continue
+            }
+            actorMentions.append(place(ofActor: name))
+        }
+        firstActorMentions.append(Int32(actorMentions.count))
+        tasks.append(task)
+    }
+
+    /// `name`'s place among the actors in the order they were first named, added when it is new: looked up by comparing
+    /// names while there are few, then in a table made of them once.
+    private mutating func place(ofActor name: String) -> Int32 {
+        if actorNamesInFirstNamedOrder.count <= Self.mostActorsSearched {
+            if let place = actorNamesInFirstNamedOrder.firstIndex(of: name) { return Int32(place) }
+        } else if let place = actorIndexByName[name] {
+            return place
+        }
+        let place = Int32(actorNamesInFirstNamedOrder.count)
+        actorNamesInFirstNamedOrder.append(name)
+        if actorNamesInFirstNamedOrder.count > Self.mostActorsSearched {
+            if actorIndexByName.isEmpty {
+                for (index, earlier) in actorNamesInFirstNamedOrder.enumerated() { actorIndexByName[earlier] = Int32(index) }
+            } else {
+                actorIndexByName[name] = place
+            }
+        }
+        return place
     }
 
     mutating func apply(_ statement: MermaidAccessibilityStatement) {
         switch statement {
-        case .title(let title): diagram.accessibilityTitle = title
-        case .description(let description): diagram.accessibilityDescription = description
+        case .title(let title): accessibilityTitle = title
+        case .description(let description): accessibilityDescription = description
         }
     }
 
@@ -62,17 +164,79 @@ struct UserJourneyDiagramBuilder {
         nodeCount += 1
     }
 
+    // MARK: Bytes
+
+    private static func isASCII(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        var combined: UInt8 = 0
+        for byte in bytes { combined |= byte }
+        return combined < 0x80
+    }
+
+    private static func index(of target: UInt8, in bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int? = nil) -> Int? {
+        var index = start
+        let end = end ?? bytes.count
+        while index < end {
+            if bytes[index] == target { return index }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func count(of target: UInt8, in bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) -> Int {
+        var count = 0
+        for index in start..<end where bytes[index] == target { count += 1 }
+        return count
+    }
+
+    /// The ASCII characters with Unicode's White_Space property, which `trimmed(_:)` trims: the tab to the carriage return
+    /// and the space. JavaScript's white space is the same within ASCII.
+    private static func isASCIIWhiteSpace(_ byte: UInt8) -> Bool {
+        (byte >= 0x09 && byte <= 0x0D) || byte == 0x20
+    }
+
+    /// `start..<end` without the ASCII white space at its ends.
+    private static func trimmedASCII(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int) -> Range<Int> {
+        var first = start
+        var last = end
+        while first < last, isASCIIWhiteSpace(bytes[first]) { first += 1 }
+        while last > first, isASCIIWhiteSpace(bytes[last - 1]) { last -= 1 }
+        return first..<last
+    }
+
+    /// The most digits a whole number may have to be read here, exactly: below 2^53, so that adding digits up gives the
+    /// value `Double(_:)` reads.
+    private static let mostExactDigits = 15
+
+    /// An ASCII score as `JavaScriptNumber.value(of:)` reads it: a whole number of at most fifteen digits, as written
+    /// nearly always, between white space, added up on its bytes; anything else through `JavaScriptNumber`.
+    private static func score(_ written: UnsafeBufferPointer<UInt8>) -> Double? {
+        let digits = trimmedASCII(written, 0, written.count)
+        if !digits.isEmpty, digits.count <= mostExactDigits {
+            var value = 0.0
+            var isWholeNumber = true
+            for index in digits {
+                let digit = written[index] &- UInt8(ascii: "0")
+                guard digit < 10 else {
+                    isWholeNumber = false
+                    break
+                }
+                value = value * 10 + Double(digit)
+            }
+            if isWholeNumber { return value }
+        }
+        return JavaScriptNumber.value(of: Substring(String(decoding: written, as: UTF8.self)))
+    }
+
     /// An actor's name without the spaces and line breaks at its ends, as JavaScript's `trim` leaves it. A name of ASCII
     /// alone is trimmed on its bytes: the ASCII characters with Unicode's White_Space property are the tab to the carriage
     /// return and the space.
     static func trimmed(_ name: Substring) -> String {
         let bytes = name.utf8
         if bytes.allSatisfy({ byte in byte < 0x80 }) {
-            func isWhiteSpace(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
             var start = bytes.startIndex
             var end = bytes.endIndex
-            while start < end, isWhiteSpace(bytes[start]) { start = bytes.index(after: start) }
-            while end > start, isWhiteSpace(bytes[bytes.index(before: end)]) { end = bytes.index(before: end) }
+            while start < end, isASCIIWhiteSpace(bytes[start]) { start = bytes.index(after: start) }
+            while end > start, isASCIIWhiteSpace(bytes[bytes.index(before: end)]) { end = bytes.index(before: end) }
             return String(name[start..<end])
         }
         return trimmedScalarByScalar(name)

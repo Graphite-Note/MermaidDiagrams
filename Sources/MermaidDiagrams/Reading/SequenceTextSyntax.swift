@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Reads the names and texts of a sequence diagram's statements, as Mermaid's sequence grammar delimits them.
@@ -78,13 +78,36 @@ enum SequenceTextSyntax {
     }
 
     /// The text without a leading `wrap:`, `:wrap:`, `nowrap:` or `:nowrap:`, and whether it wraps.
+    /// A text whose first bytes are no such prefix, or are one followed by an ASCII byte or nothing, is told on its bytes,
+    /// where Swift's characters split it alike; any other (a prefix whose last character a mark past ASCII may join) as
+    /// Swift's characters compare it.
     static func withoutWrapPrefix(_ text: String) -> WrittenText {
+        if let isPlain = text.utf8.withContiguousStorageIfAvailable(hasNoWrapPrefix), isPlain { return WrittenText(text: text, wraps: false) }
         let unprefixed = text.hasPrefix(":") ? text.dropFirst() : Substring(text)
         for (prefix, wraps) in [("wrap:", true), ("nowrap:", false)] where unprefixed.hasPrefix(prefix) {
             return WrittenText(text: unprefixed.dropFirst(prefix.count).trimmingSpaces(), wraps: wraps)
         }
         return WrittenText(text: text, wraps: false)
     }
+
+    /// Whether `bytes` start with no `wrap:`, `:wrap:`, `nowrap:` or `:nowrap:`, told on the bytes: false when they start
+    /// with one, or with `:` or a prefix's first letters followed by a byte past ASCII, which Swift's characters decide.
+    private static func hasNoWrapPrefix(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        var start = 0
+        if bytes.first == MermaidByte.colon {
+            guard bytes.count > 1, bytes[1] < 0x80 else { return bytes.count == 1 }
+            start = 1
+        }
+        for prefix in wrapPrefixes {
+            var offset = 0
+            while offset < prefix.count, start + offset < bytes.count, bytes[start + offset] == prefix[offset] { offset += 1 }
+            // A prefix matched, or matched up to a byte past ASCII that may make its last character another.
+            if offset == prefix.count || (offset > 0 && start + offset < bytes.count && bytes[start + offset] >= 0x80) { return false }
+        }
+        return true
+    }
+
+    private static let wrapPrefixes = [Array("wrap:".utf8), Array("nowrap:".utf8)]
 
     /// Whether an arrow starts at the cursor, so that a name stops before it: `-x`, `-)`, `--`, the half arrows
     /// (`-|\`, `-\\`, `/|-`, `//-`, …) and `()`.

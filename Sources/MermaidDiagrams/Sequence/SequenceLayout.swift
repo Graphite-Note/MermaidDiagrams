@@ -6,8 +6,8 @@
  *              blocks, messages, destructions, notes and title, every position measured.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -94,16 +94,16 @@ public struct SequenceLayoutBlockSection: Equatable, Sendable {
 public struct SequenceLayoutMessage: Equatable, Sendable {
     public let stroke: SequenceLineStroke
     /// The line, which stops where a head begins: straight between two lifelines, a loop back to a participant's own.
-    public let path: DiagramPath
-    public let heads: [SequenceLayoutArrowhead]
+    public internal(set) var path: DiagramPath
+    public internal(set) var heads: [SequenceLayoutArrowhead]
     /// The message's text, or nil when it has none.
-    public let text: DiagramTextBlock?
+    public internal(set) var text: DiagramTextBlock?
     /// A patch of the background behind the text where a lifeline would run through it, or nil.
-    public let textPatch: CGRect?
+    public internal(set) var textPatch: CGRect?
     /// The message's `autonumber` number, or nil.
-    public let number: SequenceLayoutNumber?
+    public internal(set) var number: SequenceLayoutNumber?
     /// The centers of its central connections' circles, on the lifelines (`SequenceSpacing.centralConnectionRadius`).
-    public let centralConnections: [CGPoint]
+    public internal(set) var centralConnections: [CGPoint]
     /// The color under the message, which Pele draws its line, heads and circles against in the text color that
     /// contrasts with it: the innermost `rect` around it, else a box that holds it across; nil when none has a color.
     public let lineBackground: SequenceHighlightColor?
@@ -114,7 +114,7 @@ public struct SequenceLayoutMessage: Equatable, Sendable {
 /// The head at an end of a message's line: its kind, the point it touches, and the unit direction it points in.
 public struct SequenceLayoutArrowhead: Equatable, Sendable {
     public let kind: SequenceArrowhead
-    public let tip: CGPoint
+    public internal(set) var tip: CGPoint
     public let direction: CGVector
     /// For a half head, the unit direction from the line to the side its barb is on; zero for the other heads.
     public let barbDirection: CGVector
@@ -182,6 +182,21 @@ extension SequenceLayoutMessage {
                               },
                               centralConnections: centralConnections.map { center in center.translated(by: offset) }, lineBackground: lineBackground,
                               textBackground: textBackground)
+    }
+}
+
+extension SequenceLayoutMessage {
+    /// Moved by `offset` where it stands, each point as `translated(by:)` moves it, in the message's own lists: a
+    /// message the layout alone holds is moved without making its lists again.
+    mutating func translate(by offset: CGVector) {
+        path.translate(by: offset)
+        for index in heads.indices { heads[index].tip = heads[index].tip.translated(by: offset) }
+        text = text?.translated(by: offset)
+        textPatch = textPatch?.offsetBy(dx: offset.dx, dy: offset.dy)
+        number = number.map { number in
+            SequenceLayoutNumber(frame: number.frame.offsetBy(dx: offset.dx, dy: offset.dy), text: number.text.translated(by: offset))
+        }
+        for index in centralConnections.indices { centralConnections[index] = centralConnections[index].translated(by: offset) }
     }
 }
 

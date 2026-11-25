@@ -6,8 +6,8 @@
  *              Graphics paths or into lanes of the thread's scene workspace.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -102,15 +102,17 @@ struct UserJourneyDrawingPaths<Path: DiagramCurvedPathRecording> {
         cardDotsBySeries = (0..<usedSeriesCount).map { _ in maker.makePath() }
         legendDotsBySeries = (0..<usedSeriesCount).map { _ in maker.makePath() }
         let radius = UserJourneyDrawingParts.cornerRadius
+        // A stem and a scale line are a move and a line each, so that recording them straight into their group adds the
+        // elements adding each through a path of its own would (`addEdgeLine`): no group ends with a move another follows.
         for task in layout.tasks {
             UserJourneyFaceShape.add(task.mood, at: task.faceCenter, circles: faces, eyes: eyes, mouths: mouths)
-            maker.addEdgeLine(task.stem, to: stems)
+            DiagramEdgeDrawing.record(task.stem, into: stems)
             maker.addMadeRoundedRectangle(task.frame, cornerWidth: radius, cornerHeight: radius, to: cards)
             for dot in task.actorDots { Self.add(dot, to: cardDotsBySeries) }
         }
         for entry in layout.legend { Self.add(entry.dot, to: legendDotsBySeries) }
         scaleLines = maker.makePath()
-        for level in layout.scaleLevels { maker.addEdgeLine(level.line, to: scaleLines) }
+        for level in layout.scaleLevels { DiagramEdgeDrawing.record(level.line, into: scaleLines) }
         sectionBands = maker.makePath()
         for section in layout.sections { maker.addMadeRoundedRectangle(section.frame, cornerWidth: radius, cornerHeight: radius, to: sectionBands) }
         scoreLine = maker.makePath()

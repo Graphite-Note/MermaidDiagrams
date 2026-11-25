@@ -6,8 +6,8 @@
  *              its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -86,11 +86,7 @@ struct EventModelDrawingPaths<Path: DiagramCurvedPathRecording> {
         arrows = maker.makePath()
         let unused = maker.makePath()
         for relation in layout.relations {
-            let madeCount = maker.madePathCount
-            let drawn = maker.makePath()
-            DiagramEdgeDrawing.record(relation.path, into: drawn)
-            relationLines.addPath(drawn)
-            maker.givePathsBack(downTo: madeCount)
+            maker.addEdgeLineInPlace(relation.path, to: relationLines)
             DiagramEdgeDrawing.addMark(relation.arrow, filled: arrows, stroked: unused)
         }
         outlinedBoxes = maker.makePath()
@@ -118,7 +114,13 @@ extension DiagramScene {
     /// The event model's painting, in Pele's order and colors, its paths recorded into lanes of the thread's scene
     /// workspace.
     public init(layout: EventModelLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene with each of its lanes bounded as `limits` bound them (`DiagramSceneWorkspace.elementLimit(for:)`): a
+    /// lane past its limit is emptied and the scene says so (`exceededPathElementLimit`), which the preparation refuses.
+    public init(layout: EventModelLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             EventModelSceneRecording.add(layout, to: &builder, paths: EventModelDrawingPaths(layout: layout, making: workspace))
             return builder.scene(size: layout.size, font: layout.font)
