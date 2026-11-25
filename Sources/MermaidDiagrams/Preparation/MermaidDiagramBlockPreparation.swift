@@ -6,8 +6,8 @@
  *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -24,8 +24,8 @@ extension MermaidDiagramPreparationContext {
         let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
             ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
                 try BlockLayoutEngine.narrowLayout(diagram, typography: typography, width: width)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .block, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
+            }, scene: { layout in DiagramScene(layout: layout, limits: limits) }) : nil
+        return PreparedMermaidDiagram(kind: .block, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(block: diagram))
     }
 }
@@ -49,8 +49,11 @@ extension MermaidDiagramAccessibility {
 }
 
 extension BlockDiagram {
-    /// Whether the root reaches no block but spaces: nothing is drawn.
+    /// Whether the root reaches no block but spaces: nothing is drawn. A block of the root's own, as most diagrams have,
+    /// answers at once; otherwise every block the root reaches is looked at.
     var drawsNoBlock: Bool {
-        !reachableBlockIndices.dropFirst().contains { index in model.blocks[index].kind != .space }
+        let root = model.blocks[Self.rootIndex]
+        for child in model.childIndices[root.children.range] where model.blocks[Int(child)].kind != .space { return false }
+        return !reachableBlockIndices.dropFirst().contains { index in model.blocks[index].kind != .space }
     }
 }

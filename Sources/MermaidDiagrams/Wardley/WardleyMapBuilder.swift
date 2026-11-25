@@ -6,8 +6,8 @@
  *              coordinates in percent, nodes merged by identifier, pipelines, links resolved by identifier or label.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Mermaid's `populateDb`: the size and the stages, then anchors, components, notes, pipelines, links, evolutions, the
@@ -31,6 +31,9 @@ struct WardleyMapBuilder {
     }
 
     private mutating func populate(_ statements: WardleyMapStatements) throws(MermaidDiagramReadError) {
+        // Every anchor, component and pipeline's component is a node: room for them is made once.
+        indexByIdentifier.reserveCapacity(statements.anchors.count + statements.components.count + statements.pipelines.count)
+        map.nodes.reserveCapacity(statements.anchors.count + statements.components.count + statements.pipelines.count)
         map.title = statements.title
         map.accessibilityTitle = statements.accessibilityTitle
         map.accessibilityDescription = statements.accessibilityDescription

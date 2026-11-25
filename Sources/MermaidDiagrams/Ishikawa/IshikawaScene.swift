@@ -6,8 +6,8 @@
  *              which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -19,7 +19,13 @@ extension DiagramScene {
     /// then each entry's box (the effect's and the categories') and its name. Every shape is recorded into a lane of the
     /// thread's scene workspace, made for a moment and given back once the builder has copied it.
     public init(layout: IshikawaLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: IshikawaLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             IshikawaScene.addFishbone(of: layout, to: &builder, workspace: workspace)
@@ -43,7 +49,7 @@ enum IshikawaScene {
         if let arrow = layout.spineArrow { builder.fill(arrowLane(arrow, workspace: workspace), .line, part: .marker) }
         for category in layout.categories {
             workspace.givePathsBack(downTo: madeCount)
-            builder.stroke(joined(category.bones, workspace: workspace), .line, line, part: .ishikawaBones)
+            builder.stroke(joined(category.boneLines, workspace: workspace), .line, line, part: .ishikawaBones)
             builder.fill(arrowLane(category.arrow, workspace: workspace), .line, part: .marker)
             let box = category.box
             let corners = (width: min(boxCornerRadius, box.width / 2), height: min(boxCornerRadius, box.height / 2))
@@ -80,6 +86,17 @@ enum IshikawaScene {
     private static func recorded(_ path: DiagramPath, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
         let lane = workspace.makeLane()
         DiagramEdgeDrawing.record(path, into: lane)
+        return lane
+    }
+
+    /// Straight lines in one lane, each a move to its start and a line to its end, as the lines' paths added one to
+    /// another give.
+    private static func joined(_ lines: [IshikawaBoneLine], workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+        let lane = workspace.makeLane()
+        for line in lines {
+            lane.move(to: line.start)
+            lane.addLine(to: line.end)
+        }
         return lane
     }
 

@@ -6,8 +6,8 @@
  *              for a narrow column, its effect, categories and causes as an indented list; and the title.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -34,19 +34,30 @@ public struct IshikawaLayout: Equatable, Sendable {
 
 /// A category with its bones and causes.
 public struct IshikawaLayoutCategory: Equatable, Sendable {
-    /// Its bone from the spine to its box, then each cause's bone.
-    public let bones: [DiagramPath]
+    /// Its bone from the spine to its box, then each cause's bone, each a straight line.
+    var boneLines: [IshikawaBoneLine]
     /// The arrow where its bone meets the spine.
-    public let arrow: DiagramEdgeMark
+    public internal(set) var arrow: DiagramEdgeMark
     /// Its box at the end of its bone, outlined, with its name.
-    public let box: CGRect
-    public let label: DiagramTextBlock
+    public internal(set) var box: CGRect
+    public internal(set) var label: DiagramTextBlock
     /// Each cause's text, at seven eighths of the size, ending where its bone starts.
-    public let causes: [IshikawaLayoutCause]
+    public internal(set) var causes: [IshikawaLayoutCause]
+
+    /// Its bone from the spine to its box, then each cause's bone, made as paths when read.
+    public var bones: [DiagramPath] {
+        boneLines.map { line in DiagramPath(start: line.start, segments: [.line(to: line.end)]) }
+    }
+}
+
+/// A bone: a straight line from `start` to `end`.
+struct IshikawaBoneLine: Equatable, Sendable {
+    var start: CGPoint
+    var end: CGPoint
 }
 
 public struct IshikawaLayoutCause: Equatable, Sendable {
-    public let text: DiagramTextBlock
+    public internal(set) var text: DiagramTextBlock
     /// A cause of a cause, drawn muted.
     public let isMuted: Bool
 }

@@ -7,8 +7,8 @@
  *              lanes of the thread's scene workspace without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,13 @@ extension DiagramScene {
     /// a fifth of its opacity and outlined in it (or in its style's colors), the overlaps a style gives a look, and each
     /// region's lines, a set's label in the text color and its texts in the muted color unless a color is given.
     public init(layout: VennLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: VennLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             for set in layout.sets {

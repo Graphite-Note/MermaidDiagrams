@@ -2,12 +2,13 @@
  * File: ChartThreadTests.swift
  * ----------------------------
  * Layer: Tests
- * Description: Charts and block diagrams prepared on many threads at once are those prepared alone: each thread reads a
- *              block diagram in its own scratch arena and records every chart's scene into its own lanes.
+ * Description: Charts, block diagrams, Ishikawa diagrams and Wardley maps prepared on many threads at once are those
+ *              prepared alone: each thread reads a block diagram in its own scratch arena, keeps each Ishikawa diagram's
+ *              and quadrant chart's ranges of its own text, and records every scene into its own lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -17,7 +18,7 @@ import XCTest
 
 final class ChartThreadTests: XCTestCase {
     private static let corpusNames = ["block-docs", "pie-docs", "radar-docs", "quadrant-docs", "xychart-docs", "sankey-docs", "treemap-docs",
-                                      "packet-docs", "venn-docs"]
+                                      "packet-docs", "venn-docs", "ishikawa-docs", "wardley-docs"]
 
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow widths:
     /// every SVG, narrow SVG and spoken text is the one prepared alone, before the threads start.

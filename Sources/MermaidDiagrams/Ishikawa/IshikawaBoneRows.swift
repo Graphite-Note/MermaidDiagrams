@@ -6,8 +6,8 @@
  *              far its bones rise from the spine and reach toward the tail, as Pele's arrange does.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -53,14 +53,14 @@ struct IshikawaCategoryArrangement {
 
     /// `categoryIndex`'s causes arranged above the spine (`isAbove`, the first cause farthest out so that they read from
     /// the top down) or below it.
-    init<Measurer: DiagramTextMeasuring>(_ diagram: IshikawaDiagram, categoryIndex: Int, isAbove: Bool, measurers: DiagramTextMeasurerSet<Measurer>) {
-        label = DiagramTextBlock(label: DiagramLabelDecoder.label(from: diagram.nodes[categoryIndex].text, form: .plain), measurer: measurers.regular,
-                                 maximumWidth: 180)
+    /// `walk` is the room the walk works in, kept from one category to the next.
+    init<Measurer: DiagramTextMeasuring>(_ diagram: IshikawaDiagram, categoryIndex: Int, isAbove: Bool, measurers: DiagramTextMeasurerSet<Measurer>,
+                                         walk: inout IshikawaCategoryWalk) {
+        label = Self.textBlock(of: categoryIndex, in: diagram, measurer: measurers.regular, maximumWidth: 180)
         boxSize = CGSize(width: label.size.width + 2 * Self.boxPaddingAcross, height: label.size.height + 2 * Self.boxPaddingDown)
-        let walked = Self.walk(diagram, categoryIndex: categoryIndex, isAbove: isAbove, measurer: measurers.small)
-        bones = walked.bones
+        bones = walk.bones(of: diagram, categoryIndex: categoryIndex, isAbove: isAbove, measurer: measurers.small)
         var nextRise = Self.firstRow
-        for index in walked.rows {
+        for index in walk.rows {
             let height = max(bones[index].text.size.height, measurers.small.lineHeight) + Self.rowGap
             bones[index].rise = nextRise + height / 2
             nextRise += height
@@ -82,36 +82,65 @@ struct IshikawaCategoryArrangement {
         }
     }
 
-    /// The category's causes as bones, in the order they are made, and the order their rows go out from the spine: a
-    /// level bone's row as it is reached, a slanted twig's after everything that hangs off it.
-    private static func walk(_ diagram: IshikawaDiagram, categoryIndex: Int, isAbove: Bool,
-                             measurer: some DiagramTextMeasuring) -> (bones: [Bone], rows: [Int]) {
-        var bones: [Bone] = []
-        var rows: [Int] = []
-        var stack: [(nodeIndex: Int, depth: Int, parentIndex: Int?, slot: Int, boneIndex: Int?)] = []
-        func push(_ children: [Int], depth: Int, parentIndex: Int?) {
-            for slot in children.indices.reversed() {
-                stack.append((children[isAbove ? children.count - 1 - slot : slot], depth, parentIndex, slot, nil))
-            }
+    /// Node `index`'s text measured, as plain text, from the diagram's bytes.
+    static func textBlock(of index: Int, in diagram: IshikawaDiagram, measurer: some DiagramTextMeasuring, maximumWidth: CGFloat) -> DiagramTextBlock {
+        diagram.withText(of: index) { text in
+            DiagramTextBlock(label: DiagramLabelDecoder.label(fromUTF8: text, form: .plain), measurer: measurer, maximumWidth: maximumWidth)
         }
-        push(diagram.nodes[categoryIndex].childIndices, depth: 2, parentIndex: nil)
+    }
+}
+
+/// The walk over a category's causes, its stack and rows kept from one category to the next.
+struct IshikawaCategoryWalk {
+    private struct Frame {
+        var nodeIndex: Int32
+        var depth: Int32
+        var parentIndex: Int32
+        var slot: Int32
+        var boneIndex: Int32
+    }
+
+    private var stack: [Frame] = []
+    /// The order the last category's rows go out from the spine: a level bone's row as it is reached, a slanted twig's
+    /// after everything that hangs off it.
+    private(set) var rows: [Int] = []
+
+    /// `categoryIndex`'s causes as bones, in the order they are made, and their rows in `rows`.
+    mutating func bones(of diagram: IshikawaDiagram, categoryIndex: Int, isAbove: Bool,
+                        measurer: some DiagramTextMeasuring) -> [IshikawaCategoryArrangement.Bone] {
+        typealias Bone = IshikawaCategoryArrangement.Bone
+        var bones: [Bone] = []
+        bones.reserveCapacity(diagram.subtreeEnd(of: categoryIndex) - categoryIndex - 1)
+        stack.removeAll(keepingCapacity: true)
+        rows.removeAll(keepingCapacity: true)
+        push(diagram.childIndices(of: categoryIndex), depth: 2, parentIndex: -1, isAbove: isAbove)
         while var frame = stack.popLast() {
-            if let boneIndex = frame.boneIndex {
-                rows.append(boneIndex)
+            if frame.boneIndex >= 0 {
+                rows.append(Int(frame.boneIndex))
                 continue
             }
-            let node = diagram.nodes[frame.nodeIndex]
+            let nodeIndex = Int(frame.nodeIndex)
             let index = bones.count
-            bones.append(Bone(text: DiagramTextBlock(label: DiagramLabelDecoder.label(from: node.text, form: .plain), measurer: measurer, maximumWidth: 200),
-                              depth: frame.depth, parentIndex: frame.parentIndex, slot: frame.slot, childCount: node.childIndices.count))
+            bones.append(Bone(text: IshikawaCategoryArrangement.textBlock(of: nodeIndex, in: diagram, measurer: measurer, maximumWidth: 200),
+                              depth: Int(frame.depth), parentIndex: frame.parentIndex < 0 ? nil : Int(frame.parentIndex), slot: Int(frame.slot),
+                              childCount: diagram.childCount(of: nodeIndex)))
             if frame.depth % 2 == 0 {
                 rows.append(index)
             } else {
-                frame.boneIndex = index
+                frame.boneIndex = Int32(index)
                 stack.append(frame)
             }
-            push(node.childIndices, depth: frame.depth + 1, parentIndex: index)
+            push(diagram.childIndices(of: nodeIndex), depth: frame.depth + 1, parentIndex: Int32(index), isAbove: isAbove)
         }
-        return (bones, rows)
+        return bones
+    }
+
+    private mutating func push(_ children: ArraySlice<Int32>, depth: Int32, parentIndex: Int32, isAbove: Bool) {
+        let first = children.startIndex
+        let count = children.count
+        for slot in (0..<count).reversed() {
+            stack.append(Frame(nodeIndex: children[first + (isAbove ? count - 1 - slot : slot)], depth: depth, parentIndex: parentIndex,
+                               slot: Int32(slot), boneIndex: -1))
+        }
     }
 }

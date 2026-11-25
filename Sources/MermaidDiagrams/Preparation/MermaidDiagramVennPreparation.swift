@@ -6,8 +6,8 @@
  *              of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -15,7 +15,7 @@ extension MermaidDiagramPreparationContext {
     func prepared(_ venn: VennDiagram) throws(MermaidDiagramPreparationFailure) -> PreparedMermaidDiagram {
         let layout: VennLayout
         do { layout = try VennLayoutEngine.layout(venn, typography: typography, limits: limits) } catch { throw .vennLayout(error) }
-        return PreparedMermaidDiagram(kind: .venn, scene: DiagramScene(layout: layout), accessibility: MermaidDiagramAccessibility(venn: venn),
+        return PreparedMermaidDiagram(kind: .venn, scene: DiagramScene(layout: layout, limits: limits), accessibility: MermaidDiagramAccessibility(venn: venn),
                                       unappliedStatementCount: venn.unappliedDeclarationCount)
     }
 }

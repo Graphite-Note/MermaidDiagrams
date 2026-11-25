@@ -6,8 +6,8 @@
  *              Ishikawa reader is compared with.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -40,7 +40,7 @@ enum ReferenceIshikawaParser {
     /// lexer takes `ishikawa-beta`, or failing that `ishikawa`, when no letter, digit or `_` follows it, and the rest of the
     /// line as text (`ishikawa-notes` is `ishikawa` then the effect `-notes`); a keyword it does not take is no Ishikawa
     /// diagram (`ishikawa_x`, `ishikawa2`).
-    static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> IshikawaDiagram {
+    static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> ReferenceIshikawaDiagram {
         let units = Array(cursor.text(from: cursor.position - keyword.utf8.count, to: cursor.bytes.count).utf16)
         guard keywordLength(in: units, at: 0) != nil else {
             let word = units.prefix { unit in isWordUnit(unit) || unit == hyphen }
@@ -155,7 +155,7 @@ enum ReferenceIshikawaParser {
 /// Nests the lines as Mermaid's Ishikawa database does: the first is the effect; each later one is a cause at its
 /// indentation less the first cause's, plus one, at least one, under the last line before it nested less deep.
 struct ReferenceIshikawaTreeBuilder {
-    private(set) var diagram = IshikawaDiagram()
+    private(set) var diagram = ReferenceIshikawaDiagram()
     private let limits: MermaidDiagramLimits
     private var firstCauseIndentation: Int?
     /// The effect and the open causes, by strictly increasing level, the effect at level 0.
@@ -182,4 +182,18 @@ struct ReferenceIshikawaTreeBuilder {
         diagram.nodes[parentIndex].childIndices.append(index)
         openNodes.append((index, level))
     }
+}
+
+/// 0.7.0's Ishikawa diagram: its nodes as values, each with its text and its children's indices.
+struct ReferenceIshikawaDiagram: Equatable {
+    var nodes: [IshikawaNode] = []
+    var title: String?
+
+    /// The values of `diagram`, which compare with the reference's.
+    init(_ diagram: IshikawaDiagram) {
+        nodes = diagram.nodes
+        title = diagram.title
+    }
+
+    init() {}
 }

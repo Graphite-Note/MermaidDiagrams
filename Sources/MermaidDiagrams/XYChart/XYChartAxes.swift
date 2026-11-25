@@ -5,8 +5,8 @@
  * Description: An XY chart's axes as Pele draws them: grid, axis lines, ticks, labels and titles.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -25,11 +25,13 @@ struct XYChartAxes {
         let valueMarks = frame.isHorizontal ? frame.bottomMarks : frame.leftMarks
         gridLines = valueMarks.map { mark in XYChartAxes.rule(at: mark.fraction, in: plot, isHorizontal: frame.isHorizontal) }
         var lines: [XYChartSegment] = []
+        lines.reserveCapacity(2 + frame.leftMarks.count + frame.bottomMarks.count)
         if frame.leftAxis.showsAxisLine { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: plot.minY), end: CGPoint(x: plot.minX, y: plot.maxY))) }
         if frame.bottomAxis.showsAxisLine { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: plot.maxY), end: CGPoint(x: plot.maxX, y: plot.maxY))) }
         let leftTick = frame.leftAxis.tickLength
         let bottomTick = frame.bottomAxis.tickLength
         var labels: [DiagramTextBlock] = []
+        labels.reserveCapacity(frame.leftMarks.count + frame.bottomMarks.count)
         for mark in frame.leftMarks {
             let markY = frame.isHorizontal ? plot.minY + CGFloat(mark.fraction) * plot.height : plot.maxY - CGFloat(mark.fraction) * plot.height
             if leftTick > 0 { lines.append(XYChartSegment(start: CGPoint(x: plot.minX, y: markY), end: CGPoint(x: plot.minX - leftTick, y: markY))) }

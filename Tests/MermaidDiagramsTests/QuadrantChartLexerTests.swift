@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartLexerTests.swift
+ * -----------------------------------
+ * Layer: Tests
+ * Description: How the quadrant chart's text is cut into tokens, as Mermaid's quadrant lexer cuts it, each token
+ *              holding the ranges of the bytes of its text.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import XCTest
 @testable import MermaidDiagrams
 
@@ -10,7 +22,12 @@ final class QuadrantChartLexerTests: XCTestCase {
     private func tokens(_ statements: String) throws -> [QuadrantChartToken] {
         var cursor = MermaidTextCursor(bytes: Array(("quadrantChart" + statements).utf8))
         cursor.advance(by: "quadrantChart".utf8.count)
-        return try QuadrantChartLexer.tokens(after: cursor)
+        return try QuadrantChartLexer.tokens(after: cursor).tokens
+    }
+
+    /// The text of `range` of `statements` after the keyword.
+    private func text(_ range: MermaidTextRange?, of statements: String) -> String? {
+        range.map { range in String(decoding: Array(("quadrantChart" + statements).utf8)[range.lowerBound..<range.upperBound], as: UTF8.self) }
     }
 
     func testKeywordsAndTheArrowTakeTheSpacesAroundThem() throws {
@@ -29,13 +46,15 @@ final class QuadrantChartLexerTests: XCTestCase {
     func testAQuadrantNeedsItsDigitAndAWordItsEnd() throws {
         XCTAssertEqual(try kinds("\nquadrant-5"), [.lineBreak, .letters, .hyphen, .digits])
         XCTAssertEqual(try kinds("\ntitles"), [.lineBreak, .letters])
-        XCTAssertEqual(try tokens("\ntitle  Hi").last?.content, .text("  Hi"))
+        XCTAssertEqual(text(try tokens("\ntitle  Hi").last?.content, of: "\ntitle  Hi"), "  Hi")
     }
 
     func testAPointHoldsItsCoordinatesAsWritten() throws {
-        let tokens = try tokens(" A \n : \n [ 0.25 ,1 ]  radius")
+        let statements = " A \n : \n [ 0.25 ,1 ]  radius"
+        let tokens = try tokens(statements)
         XCTAssertEqual(tokens.map(\.kind), [.space, .letters, .point, .letters])
-        XCTAssertEqual(tokens[2].content, .coordinates(xCoordinate: "0.25", yCoordinate: "1"))
+        XCTAssertEqual(text(tokens[2].content, of: statements), "0.25")
+        XCTAssertEqual(text(tokens[2].second, of: statements), "1")
     }
 
     func testCommentsTakeTheRestOfTheirLineAndTheCharacterBeforeThem() throws {

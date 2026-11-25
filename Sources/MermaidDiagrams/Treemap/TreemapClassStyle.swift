@@ -5,8 +5,8 @@
  * Description: Reads the declarations of a treemap's `classDef` as Mermaid's treemap and Pele read them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -19,8 +19,9 @@ enum TreemapClassStyle {
     /// not draw (an opacity, a font family) or are no declaration.
     static func reading(_ styleText: String) -> (style: DiagramElementStyle, textStyle: TreemapClassTextStyle, unappliedCount: Int) {
         let marker = "\u{0}"
-        let separated = styleText.replacingOccurrences(of: "\\,", with: marker).replacingOccurrences(of: ",", with: ";")
-            .replacingOccurrences(of: marker, with: ",")
+        // Without a comma or the marker the replacements change nothing.
+        let separated = !styleText.utf8.contains(where: { byte in byte == UInt8(ascii: ",") || byte == 0 }) ? styleText
+            : styleText.replacingOccurrences(of: "\\,", with: marker).replacingOccurrences(of: ",", with: ";").replacingOccurrences(of: marker, with: ",")
         var style = DiagramElementStyle()
         var textStyle = TreemapClassTextStyle()
         var unappliedCount = 0
