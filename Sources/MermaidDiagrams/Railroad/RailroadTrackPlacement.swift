@@ -7,8 +7,8 @@
  *              folded rows inside rails.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -129,8 +129,9 @@ struct RailroadTrackPlacement {
                 track.vertical(to: baseline + nextOffset)
                 track.horizontal(to: start)
                 let tip = CGPoint(x: start, y: baseline + nextOffset)
-                arrows.append(RailroadLayoutArrow(points: [CGPoint(x: tip.x - arrow, y: tip.y - arrow / 2), tip, CGPoint(x: tip.x - arrow, y: tip.y + arrow / 2)]
-                    .map { point in point.translated(by: displacement) }))
+                arrows.append(RailroadLayoutArrow(points: [CGPoint(x: tip.x - arrow, y: tip.y - arrow / 2).translated(by: displacement),
+                                                           tip.translated(by: displacement),
+                                                           CGPoint(x: tip.x - arrow, y: tip.y + arrow / 2).translated(by: displacement)]))
                 offset = nextOffset
             } else {
                 track.move(to: CGPoint(x: start + row.width, y: rowBaseline))
@@ -200,8 +201,8 @@ struct RailroadTrackPlacement {
         track.vertical(to: baseline + arc)
         track.turn(.northToWest, radius: arc)
         let tip = CGPoint(x: middle - arrow / 2, y: loopY)
-        arrows.append(RailroadLayoutArrow(points: [tip, CGPoint(x: tip.x + arrow, y: loopY - arrow / 2), CGPoint(x: tip.x + arrow, y: loopY + arrow / 2)]
-            .map { point in point.translated(by: displacement) }))
+        arrows.append(RailroadLayoutArrow(points: [tip.translated(by: displacement), CGPoint(x: tip.x + arrow, y: loopY - arrow / 2).translated(by: displacement),
+                                                   CGPoint(x: tip.x + arrow, y: loopY + arrow / 2).translated(by: displacement)]))
         if !box.text.isEmpty {
             let baselineOfCount = loopY + RailroadMetrics.countSize + 3
             counts.append(placed([box.text], metrics.countText,

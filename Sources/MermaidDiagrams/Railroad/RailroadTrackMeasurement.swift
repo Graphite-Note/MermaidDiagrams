@@ -7,8 +7,8 @@
  *              is bounded.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -130,14 +130,14 @@ struct RailroadTrackMeasurement {
     /// The parts side by side a gap apart; when wider than `room`, folded into rows of what fits beside the rails.
     private func sequence(_ children: [RailroadTrackBox], room: CGFloat) -> RailroadTrackBox {
         let width = children.reduce(CGFloat(max(0, children.count - 1)) * metrics.gap) { total, child in total + child.width }
-        let sequence = RailroadTrackBox(kind: .sequence, width: width, up: children.map(\.up).max() ?? 0, down: children.map(\.down).max() ?? 0,
+        let sequence = RailroadTrackBox(kind: .sequence, width: width, up: Self.highestUp(of: children), down: Self.lowestDown(of: children),
                                         children: children)
         guard width > room, children.count >= 2 else { return sequence }
         var rows: [RailroadTrackBox] = []
         var row: [RailroadTrackBox] = []
         var rowWidth: CGFloat = 0
         func finishRow() {
-            rows.append(RailroadTrackBox(kind: .sequence, width: rowWidth, up: row.map(\.up).max() ?? 0, down: row.map(\.down).max() ?? 0, children: row))
+            rows.append(RailroadTrackBox(kind: .sequence, width: rowWidth, up: Self.highestUp(of: row), down: Self.lowestDown(of: row), children: row))
             row = []
             rowWidth = 0
         }
@@ -150,8 +150,30 @@ struct RailroadTrackMeasurement {
         guard rows.count >= 2 else { return sequence }
         var offset: CGFloat = 0
         for index in 1..<rows.count { offset += rows[index - 1].down + RailroadTrackBox.rowGap(metrics) + rows[index].up }
-        return RailroadTrackBox(kind: .folded, width: (rows.map(\.width).max() ?? 0) + 6 * metrics.arc, up: rows[0].up,
+        return RailroadTrackBox(kind: .folded, width: Self.widest(of: rows) + 6 * metrics.arc, up: rows[0].up,
                                 down: offset + (rows.last?.down ?? 0), children: rows)
+    }
+
+    /// The largest reach above the baseline of `boxes`, 0 for none: the first of equal ones, as `max()` of their list
+    /// gives, without making the list.
+    private static func highestUp(of boxes: [RailroadTrackBox]) -> CGFloat {
+        guard var highest = boxes.first?.up else { return 0 }
+        for box in boxes.dropFirst() where box.up > highest { highest = box.up }
+        return highest
+    }
+
+    /// The largest reach below the baseline of `boxes`, 0 for none, as `highestUp(of:)` finds it.
+    private static func lowestDown(of boxes: [RailroadTrackBox]) -> CGFloat {
+        guard var lowest = boxes.first?.down else { return 0 }
+        for box in boxes.dropFirst() where box.down > lowest { lowest = box.down }
+        return lowest
+    }
+
+    /// The largest width of `boxes`, 0 for none, as `highestUp(of:)` finds it.
+    private static func widest(of boxes: [RailroadTrackBox]) -> CGFloat {
+        guard var widest = boxes.first?.width else { return 0 }
+        for box in boxes.dropFirst() where box.width > widest { widest = box.width }
+        return widest
     }
 
     /// The branches stacked, the first on the baseline, the next ones below.
@@ -160,7 +182,7 @@ struct RailroadTrackMeasurement {
         for index in children.indices.dropFirst() {
             offset = RailroadTrackBox.offset(below: children[index - 1], at: offset, of: children[index], metrics: metrics)
         }
-        return RailroadTrackBox(kind: .choice, width: (children.map(\.width).max() ?? 0) + 4 * metrics.arc, up: children.first?.up ?? 0,
+        return RailroadTrackBox(kind: .choice, width: Self.widest(of: children) + 4 * metrics.arc, up: children.first?.up ?? 0,
                                 down: offset + (children.last?.down ?? 0), children: children)
     }
 
