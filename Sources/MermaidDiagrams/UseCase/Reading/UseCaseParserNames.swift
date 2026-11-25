@@ -2,12 +2,13 @@
  * File: UseCaseParserNames.swift
  * ------------------------------
  * Layer: Core
- * Description: What a use case diagram's statements are made of, as Pele's parser.ts reads them: names with their
- *              labels, metadata, stereotypes, class suffixes, lists of identifiers and styles.
+ * Description: The parts of a use case diagram's statements that name things: labels, names and the shapes, metadata,
+ *              stereotypes and classes that may follow them, identifier lists and style lists, as Pele's parser.ts
+ *              reads them, each kept as a range of the text or an interned name.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -16,9 +17,11 @@ import Foundation
 struct UseCaseParsedItem {
     var name: UseCaseDraftName
     var shape: UseCaseShape?
-    var metadata: [UseCaseDraftProperty]?
-    var stereotype: String?
-    var classes: [String] = []
+    var metadata = UseCaseListSpan.empty
+    var hasMetadata = false
+    var stereotype = MermaidTextRange.empty
+    var hasStereotype = false
+    var classes = UseCaseListSpan.empty
     /// Whether this mention says something about the element, and so declares it.
     var isExplicit = false
 }
@@ -26,19 +29,17 @@ struct UseCaseParsedItem {
 extension UseCaseParser {
     /// Where a name or a string's text is: without its quotation marks, or a Markdown string's quotation marks and
     /// backticks.
-    func contentRange(of token: Int) -> Range<Int> {
+    func contentRange(of token: Int) -> MermaidTextRange {
         let trim = tokens.kinds[token] == .markdownString ? 2 : tokens.kinds[token] == .plainString ? 1 : 0
-        return (tokens.starts[token] + trim)..<max(tokens.starts[token] + trim, tokens.ends[token] - trim)
+        return MermaidTextRange(start: tokens.starts[token] + trim, end: max(tokens.starts[token] + trim, tokens.ends[token] - trim))
     }
 
-    func tokenLabel(_ token: Int) -> UseCaseDraftLabel {
-        let content = contentRange(of: token)
-        return UseCaseDraftLabel(text: text.text(from: content.lowerBound, to: content.upperBound),
-                                 type: tokens.kinds[token] == .markdownString ? .markdown : .text, start: content.lowerBound)
+    func tokenLabel(_ token: Int) -> UseCaseLabelText {
+        UseCaseLabelText(text: contentRange(of: token), type: tokens.kinds[token] == .markdownString ? .markdown : .text)
     }
 
     /// A string, or unquoted text taken from the source as written up to the next delimiter.
-    mutating func label() throws(MermaidDiagramReadError) -> UseCaseDraftLabel {
+    mutating func label() throws(MermaidDiagramReadError) -> UseCaseLabelText {
         if current == .plainString || current == .markdownString {
             index += 1
             return tokenLabel(index - 1)
@@ -46,30 +47,31 @@ extension UseCaseParser {
         guard current.isLabelText else { throw unexpected(.label) }
         let first = index
         while current.isLabelText { index += 1 }
-        return UseCaseDraftLabel(text: text.text(from: tokens.starts[first], to: tokens.ends[index - 1]), type: .text, start: tokens.starts[first])
+        return UseCaseLabelText(text: MermaidTextRange(start: tokens.starts[first], end: tokens.ends[index - 1]), type: .text)
     }
 
     /// An id with an optional label in parentheses (or, with `brackets`, brackets), or a string that stands for both.
     mutating func name(allowingBrackets brackets: Bool) throws(MermaidDiagramReadError) -> UseCaseParsedItem {
         let first = index
         let kind = current
-        let start = contentRange(of: first).lowerBound
+        let start = Int32(contentRange(of: first).lowerBound)
         switch kind {
         case .identifier:
             index += 1
             let open = current
+            let name = name(of: first)
             guard open == .leftParenthesis || (brackets && open == .leftBracket) else {
-                return UseCaseParsedItem(name: UseCaseDraftName(identifier: image(first), label: tokenLabel(first), start: start, isGenerated: false))
+                return UseCaseParsedItem(name: UseCaseDraftName(name: name, label: tokenLabel(first), start: start, isGenerated: false))
             }
             index += 1
             let label = try label()
             _ = try expect(open == .leftParenthesis ? .rightParenthesis : .rightBracket)
-            return UseCaseParsedItem(name: UseCaseDraftName(identifier: image(first), label: label, start: start, isGenerated: false),
+            return UseCaseParsedItem(name: UseCaseDraftName(name: name, label: label, start: start, isGenerated: false),
                                      shape: open == .leftParenthesis ? .ellipse : .rectangle)
         case .plainString, .markdownString:
             index += 1
             let label = tokenLabel(first)
-            return UseCaseParsedItem(name: UseCaseDraftName(identifier: Self.generatedIdentifier(label.text), label: label, start: start, isGenerated: true))
+            return UseCaseParsedItem(name: UseCaseDraftName(name: generatedName(label.text), label: label, start: start, isGenerated: true))
         default: throw unexpected(.name)
         }
     }
@@ -78,24 +80,32 @@ extension UseCaseParser {
     mutating func element(isActor: Bool) throws(MermaidDiagramReadError) -> UseCaseParsedItem {
         var item = try name(allowingBrackets: !isActor)
         if isActor { item.shape = nil }
-        if current == .metadataStart { item.metadata = try metadata() }
+        if current == .metadataStart {
+            item.metadata = try metadata()
+            item.hasMetadata = true
+        }
         if current == .stereotypeStart {
             index += 1
             let stereotype = try expect(.stereotypeText)
             _ = try expect(.stereotypeEnd)
-            item.stereotype = UseCaseCharacters.trimmed(image(stereotype))
+            let bytes = text.bytes
+            item.stereotype = bytes.withUnsafeBufferPointer { buffer in UseCaseCharacters.trimmed(range(of: stereotype), in: buffer) }
+            item.hasStereotype = true
         }
-        if current == .classSeparator { try classSuffix(&item.classes) }
-        item.isExplicit = item.shape != nil || item.metadata != nil || item.stereotype != nil
+        if current == .classSeparator { item.classes = try classSuffix() }
+        item.isExplicit = item.shape != nil || item.hasMetadata || item.hasStereotype
         return item
     }
 
-    /// `:::` and its comma-separated classes.
-    mutating func classSuffix(_ classes: inout [String]) throws(MermaidDiagramReadError) {
+    /// `:::` and its comma-separated classes, added to the drafts' name pool.
+    mutating func classSuffix() throws(MermaidDiagramReadError) -> UseCaseListSpan {
+        let start = drafts.names.count
         repeat {
             index += 1
-            classes.append(image(try expect(.identifier)))
+            let token = try expect(.identifier)
+            drafts.names.append(name(of: token))
         } while current == .comma
+        return UseCaseListSpan(start: Int32(start), count: Int32(drafts.names.count - start))
     }
 
     private func isKey(_ kind: UseCaseTokenKind) -> Bool { kind == .identifier || kind == .plainString }
@@ -110,10 +120,10 @@ extension UseCaseParser {
         guard isKey(kind) || kind == .trueKeyword || kind == .falseKeyword else { throw unexpected(.metadataValue) }
         index += 1
         let keyContent = contentRange(of: key)
-        let valueContent = contentRange(of: value)
-        let written: UseCaseMetadataValue = kind == .trueKeyword ? .boolean(true) : kind == .falseKeyword ? .boolean(false)
-            : .text(text.text(from: valueContent.lowerBound, to: valueContent.upperBound))
-        return UseCaseDraftProperty(key: text.text(from: keyContent.lowerBound, to: keyContent.upperBound), value: written, keyStart: keyContent.lowerBound)
+        let written = kind == .trueKeyword || kind == .falseKeyword
+            ? UseCaseMetadataValue(kind: .boolean, text: .empty, boolean: kind == .trueKeyword)
+            : UseCaseMetadataValue(kind: .text, text: contentRange(of: value), boolean: false)
+        return UseCaseDraftProperty(key: keyContent, value: written, keyStart: Int32(keyContent.lowerBound))
     }
 
     /// Whether another property follows. A comma or line breaks before the closing brace do not count, but Chevrotain
@@ -128,13 +138,13 @@ extension UseCaseParser {
         return second == .comma || isKey(second) || (second == .newline && (third == .newline || third == .comma || isKey(third)))
     }
 
-    /// `@{ key: value, … }`, its properties separated by commas or line breaks.
-    mutating func metadata() throws(MermaidDiagramReadError) -> [UseCaseDraftProperty] {
+    /// `@{ key: value, … }`, its properties separated by commas or line breaks, added to the drafts' property pool.
+    mutating func metadata() throws(MermaidDiagramReadError) -> UseCaseListSpan {
         _ = try expect(.metadataStart)
-        var properties: [UseCaseDraftProperty] = []
+        let start = drafts.properties.count
         skipLineBreaks()
         if isKey(current) {
-            properties.append(try property())
+            drafts.properties.append(try property())
             while separatorAhead() {
                 if current == .comma {
                     index += 1
@@ -143,20 +153,20 @@ extension UseCaseParser {
                     if current == .comma { index += 1 }
                 }
                 skipLineBreaks()
-                properties.append(try property())
+                drafts.properties.append(try property())
             }
             if current == .comma { index += 1 }
             skipLineBreaks()
         }
         _ = try expect(.rightBrace)
-        return properties
+        return UseCaseListSpan(start: Int32(start), count: Int32(drafts.properties.count - start))
     }
 
     private mutating func skipLineBreaks() {
         while current == .newline { index += 1 }
     }
 
-    /// Comma-separated identifiers.
+    /// Comma-separated identifiers, by their tokens.
     mutating func identifierList() throws(MermaidDiagramReadError) -> [Int] {
         var identifiers = [try expect(.identifier)]
         while current == .comma {
@@ -166,17 +176,19 @@ extension UseCaseParser {
         return identifiers
     }
 
-    /// Comma-separated `property: value` styles, each taken from the source as written, `\,` read as a comma.
-    mutating func styles() throws(MermaidDiagramReadError) -> [String] {
-        var styles = [try style()]
+    /// Comma-separated `property: value` styles, each taken from the source as written, `\,` read as a comma, added
+    /// to the drafts' style pool.
+    mutating func styles() throws(MermaidDiagramReadError) -> UseCaseListSpan {
+        let start = drafts.styleTexts.count
+        drafts.styleTexts.append(try style())
         while current == .comma {
             index += 1
-            styles.append(try style())
+            drafts.styleTexts.append(try style())
         }
-        return styles
+        return UseCaseListSpan(start: Int32(start), count: Int32(drafts.styleTexts.count - start))
     }
 
-    private mutating func style() throws(MermaidDiagramReadError) -> String {
+    private mutating func style() throws(MermaidDiagramReadError) -> MermaidTextRange {
         let first = index
         if current.isWord || current == .cssIdentifier {
             index += 1
@@ -190,6 +202,29 @@ extension UseCaseParser {
         _ = try expect(.colon)
         guard current.isIn(.stylePart) else { throw unexpected(.styleValue) }
         while current.isIn(.stylePart) { index += 1 }
-        return text.text(from: tokens.starts[first], to: tokens.ends[index - 1]).replacingOccurrences(of: "\\,", with: ",")
+        let written = MermaidTextRange(start: tokens.starts[first], end: tokens.ends[index - 1])
+        let bytes = text.bytes
+        var isASCII = true
+        var hasEscapedComma = false
+        for position in written.lowerBound..<written.upperBound {
+            if bytes[position] >= 0x80 { isASCII = false }
+            if bytes[position] == 0x5C, position + 1 < written.upperBound, bytes[position + 1] == UInt8(ascii: ",") { hasEscapedComma = true }
+        }
+        // Only a style holding `\,` is written again. Beyond ASCII it is replaced as 0.7.0 replaced it, by Foundation.
+        guard hasEscapedComma else { return written }
+        guard isASCII else { return text.append(Array(text.string(written).replacingOccurrences(of: "\\,", with: ",").utf8)) }
+        var unescaped: [UInt8] = []
+        unescaped.reserveCapacity(written.count)
+        var position = written.lowerBound
+        while position < written.upperBound {
+            if bytes[position] == 0x5C, position + 1 < written.upperBound, bytes[position + 1] == UInt8(ascii: ",") {
+                unescaped.append(UInt8(ascii: ","))
+                position += 2
+            } else {
+                unescaped.append(bytes[position])
+                position += 1
+            }
+        }
+        return text.append(unescaped)
     }
 }

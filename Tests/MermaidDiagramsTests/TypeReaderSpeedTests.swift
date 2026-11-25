@@ -9,8 +9,8 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -186,6 +186,15 @@ final class TypeReaderSpeedTests: XCTestCase {
             let fields: [(String, Any)] = [("title", block.title as Any), ("blocks", block.blocks), ("edges", block.edges), ("classes", block.classes),
                                            ("padding", block.padding as Any)]
             return "BlockDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
+        }
+        // A use case diagram too, its fields in the order 0.7.0 stored them.
+        if let useCase = value as? UseCaseDiagram {
+            let fields: [(String, Any)] = [("actors", useCase.actors), ("useCases", useCase.useCases), ("systemBoundaries", useCase.systemBoundaries),
+                                           ("relationships", useCase.relationships), ("notes", useCase.notes), ("jsonNodes", useCase.jsonNodes),
+                                           ("classDefinitions", useCase.classDefinitions), ("direction", useCase.direction), ("title", useCase.title as Any),
+                                           ("accessibilityTitle", useCase.accessibilityTitle), ("accessibilityDescription", useCase.accessibilityDescription),
+                                           ("nodeSpacing", useCase.nodeSpacing as Any), ("rankSpacing", useCase.rankSpacing as Any)]
+            return "UseCaseDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
         }
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {
