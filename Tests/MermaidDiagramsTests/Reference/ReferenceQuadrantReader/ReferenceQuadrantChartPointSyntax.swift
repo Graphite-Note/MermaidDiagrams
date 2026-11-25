@@ -5,7 +5,7 @@
  * Description: MermaidDiagrams 0.7.0's quadrant reader (its point syntax), frozen as main dad6fb8 had it: the
  *              reference the quadrant reader is proven against (QuadrantChartReaderEquivalenceTests).
  *
- * Authors: felixchvl
+ * Authors: felixchvl, Bahey Shalash
  * Version: 0.1
  * Date: 25/11/2026
  */

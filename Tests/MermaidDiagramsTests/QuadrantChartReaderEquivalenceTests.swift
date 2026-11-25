@@ -7,7 +7,7 @@
  *              them changed at random, random charts of every statement, and long and many hostile ones.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -73,6 +73,19 @@ final class QuadrantChartReaderEquivalenceTests: XCTestCase {
                 }
             }
             assertReadAsTheReference(text)
+        }
+    }
+
+    /// Quotations that start and end with each white space of ASCII and beyond it, alone or followed by words, read as
+    /// the frozen reader reads them: a lone ASCII quotation is trimmed on its bytes.
+    func testQuotationsEndingInEveryWhiteSpaceReadAsTheFrozenReaderReadThem() {
+        let blanks = ["\t", "\n", "\u{000B}", "\u{000C}", " ", "\u{00A0}", "\u{2003}", "\u{0085}", "\u{FEFF}"]
+        for blank in blanks {
+            for other in blanks {
+                let quoted = "\"\(blank)text\(other)\""
+                assertReadAsTheReference("quadrantChart\n  x-axis \(quoted) --> \"\(other)high\(blank)\"\n  quadrant-1 \(quoted)\n  \(quoted): [0.1, 0.2]\n")
+                assertReadAsTheReference("quadrantChart\n  y-axis \(quoted) more\n  quadrant-2 \"`\(blank)**md**\(other)`\"\n  x-axis \(quoted) -->\n")
+            }
         }
     }
 

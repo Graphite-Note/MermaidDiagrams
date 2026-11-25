@@ -7,7 +7,7 @@
  *              diagrams indented with every white space of JavaScript, and long, many and deep hostile ones.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -63,6 +63,18 @@ final class IshikawaReaderEquivalenceTests: XCTestCase {
                 text += indentation + texts[random.below(texts.count)] + ["\n", "\n\n", "\n%% c\n", "\u{2028}", "\n \n"][random.below(5)]
             }
             assertReadAsTheReference(text)
+        }
+    }
+
+    /// Texts that start, end and are made of each white space of ASCII and beyond it, after the indentation, read as the
+    /// frozen reader reads them: the reader trims them on their bytes where they are ASCII.
+    func testTextsEndingInEveryWhiteSpaceReadAsTheFrozenReaderReadThem() {
+        let blanks = ["\t", "\u{000B}", "\u{000C}", " ", "\u{00A0}", "\u{2003}", "\u{0085}", "\u{FEFF}"]
+        for blank in blanks {
+            for other in blanks {
+                assertReadAsTheReference("ishikawa-beta\nEffect\(blank)\n  Cause\(blank)\(other)\n    x\(other)y\(blank)\n  \(blank)\n  z\(other)\n")
+                assertReadAsTheReference("ishikawa\n\(blank)Effect \(other)\n  \(other)Cause\n")
+            }
         }
     }
 

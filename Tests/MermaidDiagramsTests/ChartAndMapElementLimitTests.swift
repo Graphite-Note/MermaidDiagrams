@@ -8,7 +8,7 @@
  *              drawn whole. Packet fields and XY chart bars stand for the charts, mindmap node outlines for the maps.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -51,6 +51,12 @@ final class ChartAndMapElementLimitTests: XCTestCase {
     func testAnXYChartPastTheElementLimitIsRefusedUnderTheLimitsItIsPreparedWith() throws {
         let values = (0..<14_000).map { index in String(index % 7) }.joined(separator: ",")
         try assertRefusedOnlyUnderSmallLimits("xychart-beta\nbar [" + values + "]")
+    }
+
+    /// A category's bones are one lane of straight lines, a move and a line each: 34,000 causes under one category hold
+    /// about 68,000 elements.
+    func testAnIshikawaDiagramPastTheElementLimitIsRefusedUnderTheLimitsItIsPreparedWith() throws {
+        try assertRefusedOnlyUnderSmallLimits("ishikawa-beta\nEffect\n  Category\n" + String(repeating: "    c\n", count: 34_000))
     }
 
     /// A branch's node outlines are one lane: 7,000 nodes under one category hold about 70,000 elements.
