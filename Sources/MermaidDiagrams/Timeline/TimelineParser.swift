@@ -6,8 +6,8 @@
  *              series colors.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -141,8 +141,23 @@ struct TimelineParser {
     }
 
     /// Text as the timeline draws it: `<br>` breaks a line, entity codes are read, and other tags stay as written.
+    /// Text of ASCII alone is trimmed on its bytes and decoded from them: within ASCII, Foundation's white space and line
+    /// breaks are the tab to the carriage return and the space. Any other text is trimmed by Foundation, as before.
     private static func label(_ text: String) -> DiagramLabel {
-        DiagramLabelDecoder.label(from: text.trimmingCharacters(in: .whitespacesAndNewlines), form: .literal)
+        if let label = text.utf8.withContiguousStorageIfAvailable(asciiLabel), let label { return label }
+        return DiagramLabelDecoder.label(from: text.trimmingCharacters(in: .whitespacesAndNewlines), form: .literal)
+    }
+
+    private static func asciiLabel(_ bytes: UnsafeBufferPointer<UInt8>) -> DiagramLabel? {
+        var combined: UInt8 = 0
+        for byte in bytes { combined |= byte }
+        guard combined < 0x80 else { return nil }
+        func isWhiteSpace(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
+        var start = 0
+        var end = bytes.count
+        while start < end, isWhiteSpace(bytes[start]) { start += 1 }
+        while end > start, isWhiteSpace(bytes[end - 1]) { end -= 1 }
+        return DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[start..<end]), form: .literal)
     }
 
     /// Whether `keyword` (lowercase) is at the cursor, in any case, and no letter, digit or underscore follows it.
