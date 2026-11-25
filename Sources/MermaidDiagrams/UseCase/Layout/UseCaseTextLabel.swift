@@ -7,20 +7,25 @@
  *              closer once there are several; and the measurers of the sizes and styles they are drawn in.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 25/11/2026
  */
 
 import CoreGraphics
 
 /// The measurers of a use case diagram's text: the diagram's font at any size, bold and italic or not, each made once.
-/// A diagram asks for a handful, so they are kept in a short list searched from its start, with no hashing.
+/// A diagram asks for a handful, so the first are kept in a short list searched from its start, with no hashing; a
+/// diagram whose styles set many sizes finds the rest by their hash, so that it never searches a long list.
 struct UseCaseTextMeasurers<Measurer: DiagramTextMeasuring> {
     let font: DiagramFont
     private let make: (CGFloat, Bool, Bool) -> Measurer
     private var made: [(key: UseCaseMeasurerKey, measurer: Measurer)] = []
+    private var madeBeyondList: [UseCaseMeasurerKey: Measurer] = [:]
 
-    private struct UseCaseMeasurerKey: Equatable {
+    /// How many measurers the short list holds.
+    static var listedMeasurerCount: Int { 8 }
+
+    private struct UseCaseMeasurerKey: Hashable {
         let size: CGFloat
         let isBold: Bool
         let isItalic: Bool
@@ -31,12 +36,21 @@ struct UseCaseTextMeasurers<Measurer: DiagramTextMeasuring> {
         self.make = make
     }
 
+    /// How many measurers were made.
+    var madeCount: Int { made.count + madeBeyondList.count }
+
     /// The font at `size`, bold or italic.
     mutating func measurer(size: CGFloat, isBold: Bool = false, isItalic: Bool = false) -> Measurer {
         let key = UseCaseMeasurerKey(size: size, isBold: isBold, isItalic: isItalic)
         for entry in made where entry.key == key { return entry.measurer }
+        if made.count < Self.listedMeasurerCount {
+            let measurer = make(size, isBold, isItalic)
+            made.append((key, measurer))
+            return measurer
+        }
+        if let measurer = madeBeyondList[key] { return measurer }
         let measurer = make(size, isBold, isItalic)
-        made.append((key, measurer))
+        madeBeyondList[key] = measurer
         return measurer
     }
 }
