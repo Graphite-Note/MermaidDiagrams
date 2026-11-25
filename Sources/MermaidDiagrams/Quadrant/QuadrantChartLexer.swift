@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: Cuts a quadrant chart's statements into tokens as Mermaid's quadrant grammar does (Pele's port of its
  *              lexer): comments, titles, accessibility statements, keywords, texts, points and punctuation, each
- *              token holding the ranges of its text's bytes rather than a String.
+ *              token holding the ranges of its text's bytes rather than a String, read on the borrowed bytes with
+ *              lines counted only where a token starts.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 25/11/2026
  */
 
@@ -17,96 +18,125 @@
 /// quotation marks or Markdown quotation marks, `:::` and a class's name, a point's `: [x, y]`
 /// (`QuadrantChartPointSyntax`), and otherwise runs of letters, digits and characters beyond ASCII, and single
 /// characters. Keywords are read without regard to case. A character no rule takes is an error, as in Mermaid.
+///
+/// The bytes are read where they lie, by offset. A token's line is counted forward from the last token's
+/// (`ChartLineCounter`); a cursor follows the offset only for an accessibility statement or an error, so that both
+/// are read as the cursor reads them, moving forward only, so the whole text is stepped once.
 struct QuadrantChartLexer {
-    private var cursor: MermaidTextCursor
+    private let bytes: UnsafeBufferPointer<UInt8>
+    private var position: Int
+    private var lines: ChartLineCounter
+    /// A cursor over the same bytes, moved forward to the offset only when a statement or an error is read with it.
+    private var followingCursor: MermaidTextCursor
     private var output = QuadrantChartTokens()
 
     /// The tokens of the statements after the cursor, which is just past the `quadrantChart` keyword, each holding the
     /// ranges of the bytes of its text.
     static func tokens(after cursor: MermaidTextCursor) throws(MermaidDiagramReadError) -> QuadrantChartTokens {
-        var lexer = QuadrantChartLexer(cursor: cursor)
-        while let byte = lexer.cursor.peek() { try lexer.readToken(startingWith: byte) }
-        return lexer.output
+        try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            var lexer = QuadrantChartLexer(bytes: buffer, cursor: cursor)
+            while lexer.position < buffer.count { try lexer.readToken(startingWith: buffer[lexer.position]) }
+            return lexer.output
+        }
     }
 
-    private init(cursor: MermaidTextCursor) {
-        self.cursor = cursor
+    private init(bytes: UnsafeBufferPointer<UInt8>, cursor: MermaidTextCursor) {
+        self.bytes = bytes
+        position = cursor.position
+        lines = ChartLineCounter(position: cursor.position, line: cursor.line)
+        followingCursor = cursor
         // About one token for every three bytes: room for them is made once.
-        output.tokens.reserveCapacity((cursor.bytes.count - cursor.position) / 3 + 8)
+        output.tokens.reserveCapacity((bytes.count - cursor.position) / 3 + 8)
+    }
+
+    private func byte(at offset: Int) -> UInt8? {
+        let index = position + offset
+        return index < bytes.count ? bytes[index] : nil
+    }
+
+    private mutating func advance(by count: Int = 1) {
+        position = min(bytes.count, position + count)
     }
 
     private mutating func readToken(startingWith byte: UInt8) throws(MermaidDiagramReadError) {
-        let start = TokenStart(position: cursor.position, line: cursor.line)
+        let start = position
         if skipComment(startingWith: byte) { return }
         if byte == MermaidByte.newline || byte == MermaidByte.carriageReturn {
-            while let next = cursor.peek(), next == MermaidByte.newline || next == MermaidByte.carriageReturn { cursor.advance() }
+            while let next = self.byte(at: 0), next == MermaidByte.newline || next == MermaidByte.carriageReturn { position += 1 }
             return append(.lineBreak, from: start)
         }
         // Each keyword is tried only where its first letter is, in either case: the rules are tried in the same order.
         let lowercased = MermaidByte.lowercased(byte)
-        if lowercased == Self.titleKeyword[0], let title = readTitle() { return append(.title, content: title, from: start) }
-        if lowercased == Self.accessibilityKeywordStart, let statement = try MermaidAccessibilityStatement.read(&cursor) {
-            output.statements.append(statement)
-            let index = output.statements.count - 1
+        if lowercased == UInt8(ascii: "t"), let title = readTitle() { return append(.title, content: title, from: start) }
+        if lowercased == UInt8(ascii: "a"), let index = try readAccessibilityStatement() {
             return append(.accessibility, second: MermaidTextRange(start: index, end: index), from: start)
         }
         if let keyword = readKeywordWithSpaces() { return append(keyword, from: start) }
-        if lowercased == Self.classDefinitionKeyword[0], isAtWord(Self.classDefinitionKeyword) {
-            cursor.advance(by: Self.classDefinitionKeyword.count)
+        if lowercased == UInt8(ascii: "c"), isAtWord("classdef") {
+            advance(by: 8)
             return append(.classDefinition, from: start)
         }
         if byte == MermaidByte.quotationMark { return try readString(from: start) }
-        if byte == MermaidByte.colon, cursor.hasPrefix(Self.classMarker) { return try readClassName(from: start) }
-        if let coordinates = try QuadrantChartPointSyntax.readPoint(&cursor) {
-            return append(.point, content: coordinates.x, second: coordinates.y, from: start)
+        if byte == MermaidByte.colon, self.byte(at: 1) == MermaidByte.colon, self.byte(at: 2) == MermaidByte.colon {
+            return try readClassName(from: start)
         }
+        if let coordinates = try readPoint() { return append(.point, content: coordinates.x, second: coordinates.y, from: start) }
         try readRunOrCharacter(startingWith: byte, from: start)
     }
 
-    /// Where a token starts: its position and line, kept without copying the cursor at every token.
-    private struct TokenStart {
-        let position: Int
-        let line: Int
-    }
-
-    private mutating func append(_ kind: QuadrantChartTokenKind, content: MermaidTextRange = .empty, second: MermaidTextRange = .empty,
-                                 from start: TokenStart) {
-        output.tokens.append(QuadrantChartToken(kind: kind, start: start.position, end: cursor.position, line: start.line, content: content, second: second))
+    private mutating func append(_ kind: QuadrantChartTokenKind, content: MermaidTextRange = .empty, second: MermaidTextRange = .empty, from start: Int) {
+        let line = lines.line(at: start, in: bytes)
+        output.tokens.append(QuadrantChartToken(kind: kind, start: start, end: position, line: line, content: content, second: second))
     }
 
     /// `%%` and the rest of its line, or a character other than `}` followed by `%%` and the rest of the line: Mermaid's
     /// second comment rule takes that character with it, a line break included.
     private mutating func skipComment(startingWith byte: UInt8) -> Bool {
-        if byte == MermaidByte.percent, cursor.peek(1) == MermaidByte.percent {
-            cursor.skipToEndOfLine()
+        if byte == MermaidByte.percent, self.byte(at: 1) == MermaidByte.percent {
+            skipToEndOfLine()
             return true
         }
-        guard byte != MermaidByte.closingBrace, cursor.peek(1) == MermaidByte.percent, cursor.peek(2) == MermaidByte.percent else { return false }
-        cursor.advance(by: 3)
-        cursor.skipToEndOfLine()
+        guard byte != MermaidByte.closingBrace, self.byte(at: 1) == MermaidByte.percent, self.byte(at: 2) == MermaidByte.percent else { return false }
+        advance(by: 3)
+        skipToEndOfLine()
         return true
+    }
+
+    private mutating func skipToEndOfLine() {
+        while position < bytes.count, bytes[position] != MermaidByte.newline { position += 1 }
     }
 
     /// `title` with no letter, digit or underscore after it, then the rest of its line, which is the title as written:
     /// its range.
     private mutating func readTitle() -> MermaidTextRange? {
-        guard isAtWord(Self.titleKeyword) else { return nil }
-        cursor.advance(by: Self.titleKeyword.count)
-        let start = cursor.position
-        cursor.skipToEndOfLine()
-        return MermaidTextRange(start: start, end: cursor.position)
+        guard isAtWord("title") else { return nil }
+        advance(by: 5)
+        let start = position
+        skipToEndOfLine()
+        return MermaidTextRange(start: start, end: position)
+    }
+
+    /// `accTitle` or `accDescr` and what follows, read by the cursor brought to the offset: the statement's index among
+    /// the lexer's statements, or nil when none is there.
+    private mutating func readAccessibilityStatement() throws(MermaidDiagramReadError) -> Int? {
+        guard hasCaseInsensitivePrefix("acctitle", at: 0) || hasCaseInsensitivePrefix("accdescr", at: 0) else { return nil }
+        bringCursorToOffset()
+        guard let statement = try MermaidAccessibilityStatement.read(&followingCursor) else { return nil }
+        position = followingCursor.position
+        output.statements.append(statement)
+        return output.statements.count - 1
     }
 
     /// After any spaces: `x-axis`, `y-axis`, `quadrant-1` to `quadrant-4`, `quadrantChart`, or two or more hyphens and
-    /// `>`, each taking the spaces after it too. Nil, with the cursor where it was, when none is there.
+    /// `>`, each taking the spaces after it too. Nil, with the offset where it was, when none is there.
     private mutating func readKeywordWithSpaces() -> QuadrantChartTokenKind? {
-        guard let byte = cursor.peek(), Self.canStartKeyword(byte) else { return nil }
+        guard let byte = byte(at: 0), Self.canStartKeyword(byte) else { return nil }
         var offset = 0
-        while cursor.peek(offset) == MermaidByte.space { offset += 1 }
+        while self.byte(at: offset) == MermaidByte.space { offset += 1 }
         guard let (kind, length) = keyword(at: offset) else { return nil }
         offset += length
-        while cursor.peek(offset) == MermaidByte.space { offset += 1 }
-        cursor.advance(by: offset)
+        while self.byte(at: offset) == MermaidByte.space { offset += 1 }
+        advance(by: offset)
         return kind
     }
 
@@ -118,92 +148,106 @@ struct QuadrantChartLexer {
         }
     }
 
-    /// The keyword or arrow `offset` bytes after the cursor and its length in bytes, or nil.
+    /// The keyword or arrow `offset` bytes after the offset and its length in bytes, or nil.
     private func keyword(at offset: Int) -> (QuadrantChartTokenKind, Int)? {
-        if hasCaseInsensitivePrefix(Self.xAxisKeyword, at: offset) { return (.xAxis, Self.xAxisKeyword.count) }
-        if hasCaseInsensitivePrefix(Self.yAxisKeyword, at: offset) { return (.yAxis, Self.yAxisKeyword.count) }
-        if cursor.peek(offset) == MermaidByte.hyphen {
+        if hasCaseInsensitivePrefix("x-axis", at: offset) { return (.xAxis, 6) }
+        if hasCaseInsensitivePrefix("y-axis", at: offset) { return (.yAxis, 6) }
+        if byte(at: offset) == MermaidByte.hyphen {
             var hyphenCount = 0
-            while cursor.peek(offset + hyphenCount) == MermaidByte.hyphen { hyphenCount += 1 }
-            return hyphenCount >= 2 && cursor.peek(offset + hyphenCount) == MermaidByte.greaterThan ? (.axisArrow, hyphenCount + 1) : nil
+            while byte(at: offset + hyphenCount) == MermaidByte.hyphen { hyphenCount += 1 }
+            return hyphenCount >= 2 && byte(at: offset + hyphenCount) == MermaidByte.greaterThan ? (.axisArrow, hyphenCount + 1) : nil
         }
-        guard hasCaseInsensitivePrefix(Self.quadrantKeyword, at: offset) else { return nil }
-        let quadrantLength = Self.quadrantKeyword.count
-        if cursor.peek(offset + quadrantLength) == MermaidByte.hyphen, let digit = cursor.peek(offset + quadrantLength + 1),
-           (Self.firstQuadrantDigit...Self.lastQuadrantDigit).contains(digit) {
-            return (QuadrantChartTokenKind.quadrants[Int(digit - Self.firstQuadrantDigit)], quadrantLength + 2)
+        guard hasCaseInsensitivePrefix("quadrant", at: offset) else { return nil }
+        if byte(at: offset + 8) == MermaidByte.hyphen, let digit = byte(at: offset + 9), digit >= UInt8(ascii: "1"), digit <= UInt8(ascii: "4") {
+            return (QuadrantChartTokenKind.quadrants[Int(digit - UInt8(ascii: "1"))], 10)
         }
-        return hasCaseInsensitivePrefix(Self.chartKeyword, at: offset + quadrantLength) ? (.chartKeyword, quadrantLength + Self.chartKeyword.count) : nil
+        return hasCaseInsensitivePrefix("chart", at: offset + 8) ? (.chartKeyword, 13) : nil
     }
 
-    /// Whether `literal` (lowercase) is `offset` bytes after the cursor, ASCII letters compared without regard to case.
-    private func hasCaseInsensitivePrefix(_ literal: [UInt8], at offset: Int) -> Bool {
-        for (index, byte) in literal.enumerated() {
-            guard let written = cursor.peek(offset + index), MermaidByte.lowercased(written) == byte else { return false }
-        }
+    /// Whether `literal` (lowercase ASCII) is `offset` bytes after the offset, ASCII letters compared without regard to case.
+    private func hasCaseInsensitivePrefix(_ literal: StaticString, at offset: Int) -> Bool {
+        let count = literal.utf8CodeUnitCount
+        guard position + offset + count <= bytes.count else { return false }
+        let letters = literal.utf8Start
+        for index in 0..<count where MermaidByte.lowercased(bytes[position + offset + index]) != letters[index] { return false }
         return true
     }
 
+    /// Whether `word` (lowercase) is at the offset in any case, with no letter, digit or underscore after it.
+    private func isAtWord(_ word: StaticString) -> Bool {
+        guard hasCaseInsensitivePrefix(word, at: 0) else { return false }
+        return !(byte(at: word.utf8CodeUnitCount).map(Self.isWordByte) ?? false)
+    }
+
+    static func isWordByte(_ byte: UInt8) -> Bool {
+        MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.underscore
+    }
+
+    /// Moves the cursor that follows the offset forward to it.
+    private mutating func bringCursorToOffset() {
+        followingCursor.advance(by: position - followingCursor.position)
+    }
+
+    /// The error of `problem` at the offset, on the line the cursor counts there.
+    private mutating func failure(_ problem: MermaidSyntaxProblem) -> MermaidDiagramReadError {
+        bringCursorToOffset()
+        return .invalidSyntax(line: followingCursor.line, problem: problem)
+    }
+
+    /// The error of text no rule takes at the offset: its first characters, as the cursor's excerpt gives them.
+    private mutating func unexpectedText() -> MermaidDiagramReadError {
+        bringCursorToOffset()
+        return .invalidSyntax(line: followingCursor.line, problem: .unexpectedText(followingCursor.excerpt()))
+    }
+}
+
+extension QuadrantChartLexer {
     /// Text in quotation marks, which may span lines, or a Markdown string between "` and `". Empty text makes no
     /// token, as in Mermaid's grammar; a quotation without its end is an error.
-    private mutating func readString(from start: TokenStart) throws(MermaidDiagramReadError) {
-        let isMarkdown = cursor.peek(1) == MermaidByte.graveAccent
-        cursor.advance(by: isMarkdown ? 2 : 1)
-        let textStart = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.quotationMark, !(isMarkdown && byte == MermaidByte.graveAccent) { cursor.advance() }
-        guard !cursor.isAtEnd else { throw .invalidSyntax(line: start.line, problem: .unclosedQuotation) }
-        let text = MermaidTextRange(start: textStart, end: cursor.position)
-        if isMarkdown {
-            guard cursor.peek() == MermaidByte.graveAccent, cursor.peek(1) == MermaidByte.quotationMark else {
-                throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
-            }
-            cursor.advance()
+    private mutating func readString(from start: Int) throws(MermaidDiagramReadError) {
+        let isMarkdown = byte(at: 1) == MermaidByte.graveAccent
+        advance(by: isMarkdown ? 2 : 1)
+        let textStart = position
+        while position < bytes.count, bytes[position] != MermaidByte.quotationMark, !(isMarkdown && bytes[position] == MermaidByte.graveAccent) {
+            position += 1
         }
-        cursor.advance()
+        guard position < bytes.count else { throw .invalidSyntax(line: lines.line(at: start, in: bytes), problem: .unclosedQuotation) }
+        let text = MermaidTextRange(start: textStart, end: position)
+        if isMarkdown {
+            guard byte(at: 0) == MermaidByte.graveAccent, byte(at: 1) == MermaidByte.quotationMark else { throw unexpectedText() }
+            advance()
+        }
+        advance()
         guard !text.isEmpty else { return }
         append(isMarkdown ? .markdownString : .string, content: text, from: start)
     }
 
     /// `:::` and a class's name: letters, digits and underscores, at least one.
-    private mutating func readClassName(from start: TokenStart) throws(MermaidDiagramReadError) {
-        cursor.advance(by: Self.classMarker.count)
-        let nameStart = cursor.position
-        while let byte = cursor.peek(), Self.isWordByte(byte) { cursor.advance() }
-        guard cursor.position > nameStart else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
-        append(.className, content: MermaidTextRange(start: nameStart, end: cursor.position), from: start)
+    private mutating func readClassName(from start: Int) throws(MermaidDiagramReadError) {
+        advance(by: 3)
+        let nameStart = position
+        while position < bytes.count, Self.isWordByte(bytes[position]) { position += 1 }
+        guard position > nameStart else { throw unexpectedText() }
+        append(.className, content: MermaidTextRange(start: nameStart, end: position), from: start)
     }
 
     /// A run of letters, of digits or of bytes beyond ASCII, or one character that makes a token alone.
-    private mutating func readRunOrCharacter(startingWith byte: UInt8, from start: TokenStart) throws(MermaidDiagramReadError) {
+    private mutating func readRunOrCharacter(startingWith byte: UInt8, from start: Int) throws(MermaidDiagramReadError) {
         if MermaidByte.isLetter(byte) {
-            skipRun(of: MermaidByte.isLetter)
+            while position < bytes.count, MermaidByte.isLetter(bytes[position]) { position += 1 }
             return append(.letters, from: start)
         }
-        if byte >= Self.firstByteBeyondASCII {
-            skipRun { next in next >= Self.firstByteBeyondASCII }
+        if byte >= 0x80 {
+            while position < bytes.count, bytes[position] >= 0x80 { position += 1 }
             return append(.otherCharacters, from: start)
         }
         if MermaidByte.isDigit(byte) {
-            skipRun(of: MermaidByte.isDigit)
+            while position < bytes.count, MermaidByte.isDigit(bytes[position]) { position += 1 }
             return append(.digits, from: start)
         }
-        guard let kind = Self.singleCharacterKinds[Int(byte)] else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
-        cursor.advance()
+        guard let kind = Self.singleCharacterKinds[Int(byte)] else { throw unexpectedText() }
+        position += 1
         append(kind, from: start)
-    }
-
-    private mutating func skipRun(of isInRun: (UInt8) -> Bool) {
-        while let byte = cursor.peek(), isInRun(byte) { cursor.advance() }
-    }
-
-    /// Whether `word` (lowercase) is at the cursor in any case, with no letter, digit or underscore after it.
-    private func isAtWord(_ word: [UInt8]) -> Bool {
-        guard cursor.hasCaseInsensitivePrefix(word) else { return false }
-        return !(cursor.peek(word.count).map(Self.isWordByte) ?? false)
-    }
-
-    static func isWordByte(_ byte: UInt8) -> Bool {
-        MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.underscore
     }
 
     /// `singleCharacters` by byte, read without hashing at every token.
@@ -212,28 +256,63 @@ struct QuadrantChartLexer {
     /// The characters that make a token alone, and the token each makes.
     private static let singleCharacters: [UInt8: QuadrantChartTokenKind] = {
         var kinds: [UInt8: QuadrantChartTokenKind] = [
-            MermaidByte.colon: .colon, MermaidByte.comma: .comma, MermaidByte.hyphen: .hyphen, numberSign: .numberSign,
-            MermaidByte.semicolon: .semicolon, MermaidByte.ampersand: .ampersand, asterisk: .asterisk,
+            MermaidByte.colon: .colon, MermaidByte.comma: .comma, MermaidByte.hyphen: .hyphen, UInt8(ascii: "#"): .numberSign,
+            MermaidByte.semicolon: .semicolon, MermaidByte.ampersand: .ampersand, UInt8(ascii: "*"): .asterisk,
         ]
         for character in "+=_.!$%'`?\\/".utf8 { kinds[character] = .otherPunctuation }
-        for space in [MermaidByte.space, MermaidByte.tab, verticalTab, formFeed] { kinds[space] = .space }
+        for space in [MermaidByte.space, MermaidByte.tab, 0x0B, 0x0C] { kinds[space] = .space }
         return kinds
     }()
+}
 
-    private static let titleKeyword = Array("title".utf8)
-    /// The first letter of `accTitle` and `accDescr`, lowercased.
-    private static let accessibilityKeywordStart = UInt8(ascii: "a")
-    private static let classDefinitionKeyword = Array("classdef".utf8)
-    private static let xAxisKeyword = Array("x-axis".utf8)
-    private static let yAxisKeyword = Array("y-axis".utf8)
-    private static let quadrantKeyword = Array("quadrant".utf8)
-    private static let chartKeyword = Array("chart".utf8)
-    private static let classMarker = Array(":::".utf8)
-    private static let firstQuadrantDigit = UInt8(ascii: "1")
-    private static let lastQuadrantDigit = UInt8(ascii: "4")
-    private static let firstByteBeyondASCII: UInt8 = 0x80
-    private static let numberSign = UInt8(ascii: "#")
-    private static let asterisk = UInt8(ascii: "*")
-    private static let verticalTab: UInt8 = 0x0B
-    private static let formFeed: UInt8 = 0x0C
+extension QuadrantChartLexer {
+    /// A point's `: [x, y]` at the offset (`QuadrantChartPointSyntax`): the coordinates as written, moving past them, or
+    /// nil, with the offset where it was, when no point starts there. Brackets that do not hold two coordinates are an
+    /// error.
+    private mutating func readPoint() throws(MermaidDiagramReadError) -> (x: MermaidTextRange, y: MermaidTextRange)? {
+        guard let first = byte(at: 0), first == MermaidByte.colon || QuadrantChartPointSyntax.isWhitespace(first) else { return nil }
+        var offset = 0
+        while let next = byte(at: offset), QuadrantChartPointSyntax.isWhitespace(next) { offset += 1 }
+        guard byte(at: offset) == MermaidByte.colon else { return nil }
+        offset += 1
+        while let next = byte(at: offset), QuadrantChartPointSyntax.isWhitespace(next) { offset += 1 }
+        guard byte(at: offset) == MermaidByte.openingBracket else { return nil }
+        advance(by: offset + 1)
+        skipPointWhitespace()
+        let xCoordinate = try readCoordinate()
+        skipPointWhitespace()
+        try expectInPoint(MermaidByte.comma)
+        skipPointWhitespace()
+        let yCoordinate = try readCoordinate()
+        skipPointWhitespace()
+        try expectInPoint(MermaidByte.closingBracket)
+        while byte(at: 0) == MermaidByte.space { position += 1 }
+        return (xCoordinate, yCoordinate)
+    }
+
+    /// `1`, or `0`, then any character but a line break and digits when they follow it.
+    private mutating func readCoordinate() throws(MermaidDiagramReadError) -> MermaidTextRange {
+        let start = position
+        if byte(at: 0) == UInt8(ascii: "1") {
+            position += 1
+        } else if byte(at: 0) == UInt8(ascii: "0") {
+            position += 1
+            if let next = byte(at: 0), next != MermaidByte.newline, next != MermaidByte.carriageReturn, let digit = byte(at: 1), MermaidByte.isDigit(digit) {
+                position += 2
+                while position < bytes.count, MermaidByte.isDigit(bytes[position]) { position += 1 }
+            }
+        } else {
+            throw failure(.expectedPointCoordinates)
+        }
+        return MermaidTextRange(start: start, end: position)
+    }
+
+    private mutating func expectInPoint(_ expected: UInt8) throws(MermaidDiagramReadError) {
+        guard byte(at: 0) == expected else { throw failure(.expectedPointCoordinates) }
+        position += 1
+    }
+
+    private mutating func skipPointWhitespace() {
+        while position < bytes.count, QuadrantChartPointSyntax.isWhitespace(bytes[position]) { position += 1 }
+    }
 }

@@ -1,3 +1,15 @@
+/**
+ * File: SankeyPreparedText.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: The text after a Sankey diagram's keyword as Mermaid prepares it for its CSV grammar: comment lines and
+ *              the blank lines before them removed, the whitespace at the end dropped, runs of line breaks made one.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// The text after a Sankey diagram's keyword as Mermaid prepares it for its CSV grammar: comment lines removed with
 /// the blank lines just before them (Mermaid's comment pattern, `^\s*%%(?!{)[^\n]+\n?` over lines, takes them), the
 /// whitespace at the end dropped, and each run of line breaks made one. The keyword's own line stays first, so the
@@ -17,10 +29,15 @@ struct SankeyPreparedText {
     init(after cursor: MermaidTextCursor) {
         let source = cursor.bytes
         var written = Self.lines(of: source, from: cursor.position, firstLine: cursor.line)
-        written = [written[0]] + Self.withoutComments(Array(written.dropFirst()), in: source)
+        // A comment line starts with `%%`: with no `%` after the keyword, every line is kept.
+        if source[cursor.position...].contains(MermaidByte.percent) {
+            written = [written[0]] + Self.withoutComments(Array(written.dropFirst()), in: source)
+        }
         while written.count > 1, let last = written.last, JavaScriptWhitespace.isBlank(source[last.start..<last.end]) { written.removeLast() }
         var bytes: [UInt8] = []
+        bytes.reserveCapacity(source.count - cursor.position)
         var lineStarts: [(offset: Int, line: Int)] = []
+        lineStarts.reserveCapacity(written.count)
         for (index, line) in written.enumerated() where index == 0 || line.end > line.start {
             if index > 0 { bytes.append(MermaidByte.newline) }
             lineStarts.append((bytes.count, line.line))

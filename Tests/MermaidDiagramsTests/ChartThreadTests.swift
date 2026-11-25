@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: Charts, block diagrams, Ishikawa diagrams and Wardley maps prepared on many threads at once are those
  *              prepared alone: each thread reads a block diagram in its own scratch arena, keeps each Ishikawa diagram's
- *              and quadrant chart's ranges of its own text, and records every scene into its own lanes.
+ *              and quadrant chart's ranges of its own text, finds each Sankey diagram's names in its own table, and
+ *              records every scene into its own lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -28,6 +29,9 @@ final class ChartThreadTests: XCTestCase {
         for name in Self.corpusNames { sources += try PeleResults.sources(ofCorpus: name) }
         // A block diagram large enough to grow the thread's arena past its first chunk while the others read.
         sources.append("block\ncolumns 6\n" + (0..<600).map { index in "b\(index)[\"block \(index)\"] space:\(index % 3)" }.joined(separator: "\n"))
+        // Sankey diagrams whose names grow the name table past its first slots, in ASCII and beyond it.
+        sources.append("sankey\n" + (0..<80).map { index in "node \(index),node \((index * 7 + 1) % 80),\(index + 1)" }.joined(separator: "\n"))
+        sources.append("sankey\n" + (0..<40).map { index in "nœud \(index),\"nœud \(index + 1)\",\(index + 1)" }.joined(separator: "\n"))
         XCTAssertGreaterThan(sources.count, 70)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }
