@@ -7,8 +7,8 @@
  *              boundary and its casing decided.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -26,7 +26,22 @@ struct C4RoutedRelation {
     let pointsAtStart: Bool
     let pointsAtEnd: Bool
     let lineColor: DiagramColor?
+    let textColor: DiagramColor?
     let isCased: Bool
+}
+
+/// The colors relations' styles write, each value read once for a drawing: a diagram's relations share a few.
+struct C4StyleColors {
+    private var known: [(value: String, property: String, color: DiagramColor?)] = []
+
+    /// `C4ElementLook.color(value, property:)`, read once for each value and property.
+    mutating func color(_ value: String?, property: String) -> DiagramColor? {
+        guard let value, !value.isEmpty else { return nil }
+        if let found = known.first(where: { entry in entry.value == value && entry.property == property }) { return found.color }
+        let color = C4ElementLook.color(value, property: property)
+        known.append((value, property, color))
+        return color
+    }
 }
 
 /// One drawing of a C4 diagram, as Pele's `draw` makes it: the grid's boxes (shapes first, boundary by boundary, then
@@ -49,11 +64,11 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
     var relations: [C4RoutedRelation] = []
     var squeezedCount = 0
 
-    init(diagram: C4Diagram, measurers: C4Measurers<Measurer>, room: CGFloat?, gap: CGFloat) {
+    init(diagram: C4Diagram, measurers: C4Measurers<Measurer>, room: CGFloat?, gap: CGFloat, texts: inout C4GridTexts) {
         self.diagram = diagram
         self.measurers = measurers
         isTight = room != nil
-        let grid = C4GridPlacement(diagram: diagram, measurers: measurers, room: room, tightGap: gap).placed()
+        let grid = C4GridPlacement(diagram: diagram, measurers: measurers, room: room, tightGap: gap).placed(measuring: &texts)
         groups = grid.groups
         shapes = grid.shapes
         shapeOrder = grid.groups.flatMap(\.shapes)
@@ -64,7 +79,7 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
             return boxes.count - 1
         }
         self.boxes = boxes
-        let relationCount = diagram.relations.count
+        let relationCount = diagram.relationRecords.count
         isCareful = relationCount * (shapeOrder.count + grid.groups.count + 3 * relationCount) <= C4Metrics.carefulPlacementBudget
         extent = CGRect(x: 0, y: 0, width: grid.groups[0].box.width, height: grid.groups[0].box.height)
         let allowance = C4Metrics.shapeEdgeAllowance
@@ -91,8 +106,9 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
         var router = C4Router(boxes: boxes, obstacles: isCareful ? Array(shapeOrder.indices) : nil)
         for box in groupBoxIndices.compactMap({ index in index }) { router.lanes.addFrame(boxes[box]) }
         let trim = DiagramEdgeMark.lineTrim(for: .arrow)
-        relations.reserveCapacity(diagram.relations.count)
-        for (relationIndex, relation) in diagram.relations.enumerated() {
+        var colors = C4StyleColors()
+        relations.reserveCapacity(diagram.relationRecords.count)
+        for (relationIndex, relation) in diagram.relationRecords.enumerated() {
             let (source, target) = ends[relationIndex]
             let pointsAtStart = relation.kind.pointsAtStart
             let pointsAtEnd = relation.kind.pointsAtEnd
@@ -104,32 +120,35 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
             let arrowLength = C4Metrics.arrowLength
             if pointsAtStart, isCareful { taken.append(CGRect(x: route.start.x - arrowLength, y: route.start.y - arrowLength, width: 2 * arrowLength, height: 2 * arrowLength)) }
             if pointsAtEnd, isCareful { taken.append(CGRect(x: route.end.x - arrowLength, y: route.end.y - arrowLength, width: 2 * arrowLength, height: 2 * arrowLength)) }
-            let painting = C4BoundaryFills.painting(of: route, lineColor: relation.lineColor, fills: fills)
+            let lineColor = diagram.string(relation.lineColor)
+            let painting = C4BoundaryFills.painting(of: route, lineColor: lineColor, ownColor: colors.color(lineColor, property: "stroke"), fills: fills)
             relations.append(C4RoutedRelation(relationIndex: relationIndex, route: route, pointsAtStart: pointsAtStart, pointsAtEnd: pointsAtEnd,
-                                              lineColor: painting.lineColor, isCased: painting.isCased))
+                                              lineColor: painting.lineColor, textColor: colors.color(diagram.string(relation.textColor), property: "color"),
+                                              isCased: painting.isCased))
         }
         squeezedCount = router.lanes.squeezedCount
     }
 
-    /// The box of each relation's two ends: a shape's or else a boundary's of that alias, among those drawn.
+    /// The box of each relation's two ends: a shape's or else a boundary's of that alias, among those drawn, found by the
+    /// aliases' interned names.
     private func relationEnds() throws(C4LayoutError) -> [(Int, Int)] {
-        var boxByAlias: [String: Int] = [:]
-        boxByAlias.reserveCapacity(boxes.count)
+        var boxByName = [Int](repeating: -1, count: diagram.nameCount)
         for (box, shapeIndex) in shapeOrder.enumerated() {
-            let element = diagram.shapes[shapes[shapeIndex].shapeIndex].element
-            if element.aliasArgument == nil { boxByAlias[element.alias] = box }
+            let element = diagram.shapeRecords[shapes[shapeIndex].shapeIndex].element
+            if element.aliasArgument < 0 { boxByName[Int(element.name)] = box }
         }
-        var shapeAliases = Set<String>(minimumCapacity: diagram.shapes.count + groups.count)
-        for shape in diagram.shapes where shape.element.aliasArgument == nil { shapeAliases.insert(shape.element.alias) }
+        var isTaken = [Bool](repeating: false, count: diagram.nameCount)
+        for shape in diagram.shapeRecords where shape.element.aliasArgument < 0 { isTaken[Int(shape.element.name)] = true }
         for (groupIndex, group) in groups.enumerated() {
-            let element = diagram.boundaries[group.boundaryIndex].element
-            guard let box = groupBoxIndices[groupIndex], element.aliasArgument == nil, !shapeAliases.contains(element.alias) else { continue }
-            boxByAlias[element.alias] = box
-            shapeAliases.insert(element.alias)
+            let element = diagram.boundaryRecords[group.boundaryIndex].element
+            guard let box = groupBoxIndices[groupIndex], element.aliasArgument < 0, !isTaken[Int(element.name)] else { continue }
+            boxByName[Int(element.name)] = box
+            isTaken[Int(element.name)] = true
         }
-        return try diagram.relations.map { relation throws(C4LayoutError) in
-            guard relation.fromArgument == nil, relation.toArgument == nil, let source = boxByAlias[relation.from], let target = boxByAlias[relation.to] else {
-                throw .relationToUnknownElement(from: relation.from, to: relation.to)
+        return try diagram.relationRecords.map { relation throws(C4LayoutError) in
+            guard relation.fromArgument < 0, relation.toArgument < 0, case let source = boxByName[Int(relation.fromName)], source >= 0,
+                  case let target = boxByName[Int(relation.toName)], target >= 0 else {
+                throw .relationToUnknownElement(from: diagram.text(relation.from), to: diagram.text(relation.to))
             }
             return (source, target)
         }
@@ -139,8 +158,9 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
     private func boundaryFills() -> [C4BoundaryFill] {
         groups.indices.compactMap { groupIndex in
             guard let box = groupBoxIndices[groupIndex] else { return nil }
-            let element = diagram.boundaries[groups[groupIndex].boundaryIndex].element
-            let look = C4ElementLook(backgroundColor: element.backgroundColor, borderColor: nil, fontColor: nil)
+            let element = diagram.boundaryRecords[groups[groupIndex].boundaryIndex].element
+            guard !element.backgroundColor.isNoneOrEmpty else { return nil }
+            let look = C4ElementLook(backgroundColor: diagram.string(element.backgroundColor), borderColor: nil, fontColor: nil)
             return look.paintsFill ? C4BoundaryFill(frame: boxes[box].frame, look: look) : nil
         }
     }

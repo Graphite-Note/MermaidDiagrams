@@ -7,8 +7,8 @@
  *              prototype dropped, merged into what the element had.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import Foundation
@@ -17,6 +17,13 @@ enum AgentFlowMetadataReading {
     /// The YAML of a metadata block's body, or nil when it is not YAML even without the commas that end its lines. A
     /// body on one line is read inside braces; one of several lines as a block. A null value is an empty mapping.
     static func value(of body: String) -> SequenceAttributeValue? {
+        // Most bodies are one line of plain entries, read on their bytes as the YAML reader reads them.
+        if let plain = AgentFlowPlainMetadata.value(of: body) { return plain }
+        return yamlValue(of: body)
+    }
+
+    /// The YAML of a metadata body read by the YAML reader, as `value(of:)` reads any body.
+    static func yamlValue(of body: String) -> SequenceAttributeValue? {
         // A line feed is a character of its own but after a carriage return: without one, its byte is the character.
         let isMultiline = body.utf8.contains(MermaidByte.newline) && (!body.utf8.contains(MermaidByte.carriageReturn) || body.contains("\n"))
         let document = isMultiline ? body + "\n" : "{\n" + body + "\n}"

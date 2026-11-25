@@ -6,8 +6,8 @@
  *              level stretches, the boundaries' frames, and where lines leave or reach each side of a box (Pele's Lanes).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,7 +19,8 @@ struct C4Lanes {
     private var level: [CGFloat] = []
     private var uprightFrames: [CGFloat] = []
     private var levelFrames: [CGFloat] = []
-    private var takenPorts: [Int: [CGFloat]] = [:]
+    /// By box, the sides and places taken, two numbers each.
+    private var takenPorts: [[CGFloat]] = []
     /// Routes that found no lane of their own: a line left straight behind a shape, or a lane that runs along another.
     var squeezedCount = 0
 
@@ -41,7 +42,7 @@ struct C4Lanes {
     }
 
     /// How many stretches already there the line through `points` crosses.
-    func crossings(_ points: [CGFloat]) -> Int {
+    func crossings<Points: RandomAccessCollection<CGFloat>>(_ points: Points) -> Int where Points.Index == Int {
         var count = 0
         var index = 2
         while index < points.count {
@@ -62,18 +63,22 @@ struct C4Lanes {
 
     /// A boundary's frame, which a lane keeps apart from.
     mutating func addFrame(_ box: C4RouteBox) {
-        uprightFrames += [box.x, box.y, box.bottom, box.right, box.y, box.bottom]
-        levelFrames += [box.y, box.x, box.right, box.bottom, box.x, box.right]
+        for value in [box.x, box.y, box.bottom, box.right, box.y, box.bottom] { uprightFrames.append(value) }
+        for value in [box.y, box.x, box.right, box.bottom, box.x, box.right] { levelFrames.append(value) }
     }
 
     /// The upright and level stretches of the line through `points`.
-    mutating func take(_ points: [CGFloat]) {
+    mutating func take<Points: RandomAccessCollection<CGFloat>>(_ points: Points) where Points.Index == Int {
         var index = 2
         while index < points.count {
             if points[index] == points[index - 2] {
-                upright += [points[index], min(points[index - 1], points[index + 1]), max(points[index - 1], points[index + 1])]
+                upright.append(points[index])
+                upright.append(min(points[index - 1], points[index + 1]))
+                upright.append(max(points[index - 1], points[index + 1]))
             } else if points[index + 1] == points[index - 1] {
-                level += [points[index + 1], min(points[index - 2], points[index]), max(points[index - 2], points[index])]
+                level.append(points[index + 1])
+                level.append(min(points[index - 2], points[index]))
+                level.append(max(points[index - 2], points[index]))
             }
             index += 2
         }
@@ -81,9 +86,9 @@ struct C4Lanes {
 
     /// Where on one side of the box `boxIndex` (0 left, 1 right, 2 top, 3 bottom) a line can leave or arrive, between
     /// `low` and `high`: up to four places clear of the lines already there, nearest `wanted` first, else `wanted`.
-    func ports(of boxIndex: Int, side: Int, wanted: CGFloat, low: CGFloat, high: CGFloat) -> [CGFloat] {
-        let used = takenPorts[boxIndex] ?? []
-        var found: [CGFloat] = []
+    func ports(of boxIndex: Int, side: Int, wanted: CGFloat, low: CGFloat, high: CGFloat) -> C4Numbers {
+        let used = boxIndex < takenPorts.count ? takenPorts[boxIndex] : []
+        var found = C4Numbers()
         for step in 0..<9 where found.count < 4 {
             let place = wanted + (step & 1 == 1 ? 1 : -1) * CGFloat((step + 1) / 2) * C4Metrics.portStep
             if place < low || place > high { continue }
@@ -95,10 +100,13 @@ struct C4Lanes {
             }
             if isClear { found.append(place) }
         }
-        return found.isEmpty ? [wanted] : found
+        if found.isEmpty { found.append(wanted) }
+        return found
     }
 
     mutating func claim(_ boxIndex: Int, side: Int, at place: CGFloat) {
-        takenPorts[boxIndex, default: []] += [CGFloat(side), place]
+        while takenPorts.count <= boxIndex { takenPorts.append([]) }
+        takenPorts[boxIndex].append(CGFloat(side))
+        takenPorts[boxIndex].append(place)
     }
 }

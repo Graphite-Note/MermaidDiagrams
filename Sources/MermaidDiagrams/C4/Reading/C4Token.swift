@@ -6,8 +6,8 @@
  *              are read from, and the characters JavaScript's string functions test on UTF-16 code units.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 /// A token of a C4 diagram, in the order of Pele's `tokens.ts`, by Jison's name (`PERSON`, `STR_KEY`). The order
@@ -69,6 +69,25 @@ enum C4TokenKind: Int, Comparable {
         "REL", "BIREL", "REL_U", "REL_D", "REL_L", "REL_R", "REL_B", "REL_INDEX", "UPDATE_EL_STYLE", "UPDATE_REL_STYLE",
         "UPDATE_LAYOUT_CONFIG", "EOF_IN_STRUCT", "ATTRIBUTE_EMPTY", "STR", "STR_KEY", "STR_VALUE", "LBRACE", "RBRACE", "EOF",
     ]
+}
+
+/// The keywords by their bytes: grouped by length, so that a word is compared with the few keywords as long as it is,
+/// with no String made.
+enum C4Keywords {
+    private static let byLength: [[([UInt8], C4TokenKind)]] = {
+        var groups = [[([UInt8], C4TokenKind)]](repeating: [], count: C4TokenKind.longestKeywordLength + 1)
+        for (word, kind) in C4TokenKind.keywords.sorted(by: { first, second in first.key < second.key }) {
+            groups[word.utf8.count].append((Array(word.utf8), kind))
+        }
+        return groups
+    }()
+
+    /// The keyword `word` spells, or nil.
+    static func kind(of word: UnsafeBufferPointer<UInt8>) -> C4TokenKind? {
+        guard word.count < byLength.count else { return nil }
+        for (keyword, kind) in byLength[word.count] where keyword.elementsEqual(word) { return kind }
+        return nil
+    }
 }
 
 /// The tokens of a text: each one's kind and where its text starts and ends, in UTF-8 bytes (Pele keeps UTF-16 code

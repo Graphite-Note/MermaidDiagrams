@@ -7,8 +7,8 @@
  *              it, slid along the line to the place that covers least of the shapes, arrowheads and labels already there.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -52,12 +52,11 @@ extension C4DrawingPass {
     }
 
     private mutating func placeLabel(of routed: C4RoutedRelation) -> C4PlacedLabel? {
-        let relation = diagram.relations[routed.relationIndex]
+        let relation = diagram.relationRecords[routed.relationIndex]
         let route = routed.route
-        let number = diagram.level == .dynamic ? "\(routed.relationIndex + 1): " : ""
-        let label = C4TextLabel.block(number + relation.label, measurer: measurers.small, maximumWidth: route.labelRoom)
-        let technology = C4TextLabel.block(relation.technology.flatMap { technology in technology.isEmpty ? nil : "[" + technology + "]" },
-                                           measurer: measurers.italicSmall, maximumWidth: route.labelRoom)
+        let number = diagram.level == .dynamic ? routed.relationIndex + 1 : 0
+        let label = C4TextLabel.numberedBlock(relation.label, number: number, in: diagram, measurer: measurers.small, maximumWidth: route.labelRoom)
+        let technology = C4TextLabel.bracketedBlock(relation.technology, in: diagram, measurer: measurers.italicSmall, maximumWidth: route.labelRoom)
         let width = max(label.measuredWidth, technology.measuredWidth) + C4Metrics.labelPadding
         let height = label.measuredHeight + technology.measuredHeight
         guard height > 0 else { return nil }
@@ -75,7 +74,7 @@ extension C4DrawingPass {
     /// The label sits on the line, or just beside it when another relation runs the opposite way, moved by the diagram's
     /// offsets unless tight. When careful it slides along the line to the place that covers least; the offsets are kept
     /// unless a place on the line itself covers less than any they lead to, as they are often tuned for Mermaid's spacing.
-    private func labelCenter(of route: C4Route, relation: C4Relation, size: CGSize) -> CGPoint {
+    private func labelCenter(of route: C4Route, relation: C4RelationRecord, size: CGSize) -> CGPoint {
         let side = route.labelSide
         let beside = abs(side.dx) * (size.width / 2) + abs(side.dy) * (size.height / 2) + 2
         let aside = route.labelLean != 0 ? max(0, min(route.labelLean, beside - 14)) : beside

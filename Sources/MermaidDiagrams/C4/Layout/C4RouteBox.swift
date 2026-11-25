@@ -6,8 +6,8 @@
  *              meets its outline: a box, a person's head over its body, a cylinder's caps, a queue's ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -26,11 +26,13 @@ public enum C4ShapeForm: String, Sendable {
     ]
 
     /// The form of a shape: its `$shape`, else its `$sprite`, else the first of its tags that names one, else its kind's.
-    static func form(of shape: C4Shape) -> C4ShapeForm {
+    /// A field is made a String only when it is written.
+    static func form(of shape: C4ShapeRecord, in diagram: C4Diagram) -> C4ShapeForm {
         let element = shape.element
-        if let named = namedForms[(element.shape ?? "").lowercased()] ?? namedForms[(element.sprite ?? "").lowercased()] { return named }
-        if let tags = element.tags, !tags.isEmpty {
-            for tag in tags.split(separator: ",", omittingEmptySubsequences: false) {
+        if !element.shape.isNoneOrEmpty, let named = namedForms[diagram.text(element.shape).lowercased()] { return named }
+        if !element.sprite.isNoneOrEmpty, let named = namedForms[diagram.text(element.sprite).lowercased()] { return named }
+        if !element.tags.isNoneOrEmpty {
+            for tag in diagram.text(element.tags).split(separator: ",", omittingEmptySubsequences: false) {
                 if let named = namedForms[C4Characters.trimmed(String(tag)).lowercased()] { return named }
             }
         }
@@ -130,7 +132,8 @@ enum C4RouteGeometry {
     }
 
     /// Whether the line through `points` (x, y pairs) crosses the rectangle.
-    static func crosses(_ points: [CGFloat], left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat) -> Bool {
+    static func crosses<Points: RandomAccessCollection<CGFloat>>(_ points: Points, left: CGFloat, top: CGFloat, right: CGFloat,
+                                                                 bottom: CGFloat) -> Bool where Points.Index == Int {
         var index = 2
         while index < points.count {
             let startX = points[index - 2]

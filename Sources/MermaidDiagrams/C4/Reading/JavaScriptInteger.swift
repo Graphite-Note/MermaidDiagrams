@@ -6,8 +6,8 @@
  *              diagrams give to Mermaid's parseInt: label offsets and row counts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// JavaScript's `parseInt(text)`: white space before it skipped, a sign, `0x` for hexadecimal digits, then the longest
@@ -35,6 +35,36 @@ enum JavaScriptInteger {
         }
         guard digitCount > 0 else { return nil }
         if radix == 10, digitCount > 15, let exact = Double(String(decoding: units.prefix(digitCount), as: UTF16.self)) { value = exact }
+        return sign * value
+    }
+
+    /// `parsed(_:)` of the text whose UTF-8 is `bytes`: read on the bytes when they are all ASCII, where each is a code
+    /// unit; else read from the String they spell.
+    static func parsed(utf8 bytes: UnsafeBufferPointer<UInt8>) -> Double? {
+        guard bytes.allSatisfy({ byte in byte < 0x80 }) else { return parsed(String(decoding: bytes, as: UTF8.self)) }
+        var index = 0
+        while index < bytes.count, C4Characters.isSpace(UInt16(bytes[index])) { index += 1 }
+        var sign: Double = 1
+        if index < bytes.count, UInt16(bytes[index]) == plus || UInt16(bytes[index]) == minus {
+            if UInt16(bytes[index]) == minus { sign = -1 }
+            index += 1
+        }
+        var radix: Double = 10
+        if bytes.count - index >= 2, UInt16(bytes[index]) == zero, UInt16(bytes[index + 1]) == lowercaseX || UInt16(bytes[index + 1]) == uppercaseX {
+            radix = 16
+            index += 2
+        }
+        let digitsStart = index
+        var value: Double = 0
+        while index < bytes.count, let digit = digitValue(UInt16(bytes[index])), digit < radix {
+            value = value * radix + digit
+            index += 1
+        }
+        let digitCount = index - digitsStart
+        guard digitCount > 0 else { return nil }
+        if radix == 10, digitCount > 15, let exact = Double(String(decoding: UnsafeBufferPointer(rebasing: bytes[digitsStart..<index]), as: UTF8.self)) {
+            value = exact
+        }
         return sign * value
     }
 

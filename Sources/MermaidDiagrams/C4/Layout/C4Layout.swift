@@ -6,8 +6,8 @@
  *              their texts, its relations' lines, arrowheads and labels, and the colors its styles set.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -110,6 +110,10 @@ public struct C4ElementLook: Equatable, Sendable {
     /// The color Pele's ink picks over the fill for a line that sets none.
     let inkForLines: DiagramColor?
 
+    /// The look of an element whose style writes no color, worked out once: most elements set none.
+    static let unstyled = C4ElementLook(backgroundColor: nil, borderColor: nil, fontColor: nil)
+
+
     /// The color a style value writes, nil when none is read.
     static func color(_ value: String?, property: String) -> DiagramColor? {
         guard let value, !value.isEmpty else { return nil }
@@ -129,5 +133,16 @@ public struct C4ElementLook: Equatable, Sendable {
         let lowered = C4Characters.trimmed(value).lowercased()
         guard lowered != "none", lowered != "transparent" else { return false }
         return (read?.alpha ?? 1) > 0
+    }
+}
+
+extension C4Diagram {
+    /// The look an element's colors give, as `C4ElementLook(backgroundColor:borderColor:fontColor:)` makes it from them;
+    /// `C4ElementLook.unstyled`, made once, when it writes none.
+    func look(of element: C4ElementRecord) -> C4ElementLook {
+        guard !element.backgroundColor.isNoneOrEmpty || !element.borderColor.isNoneOrEmpty || !element.fontColor.isNoneOrEmpty else {
+            return C4ElementLook.unstyled
+        }
+        return C4ElementLook(backgroundColor: string(element.backgroundColor), borderColor: string(element.borderColor), fontColor: string(element.fontColor))
     }
 }

@@ -7,8 +7,8 @@
  *              row, and, when a shape stands in the way, a line with corners around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -67,7 +67,7 @@ struct C4Router {
     }
 
     /// Whether the line through `points` keeps clear of every shape but its two ends.
-    func isClear(_ points: [CGFloat], of first: Int, _ second: Int) -> Bool {
+    func isClear<Points: RandomAccessCollection<CGFloat>>(_ points: Points, of first: Int, _ second: Int) -> Bool where Points.Index == Int {
         guard let obstacles else { return true }
         return !obstacles.contains { other in
             other != first && other != second
@@ -82,7 +82,7 @@ struct C4Router {
         let usedLength = length == 0 ? 1 : length
         let directionX = (end.x - start.x) / usedLength
         let directionY = (end.y - start.y) / usedLength
-        if start.x == end.x || start.y == end.y { lanes.take([start.x, start.y, end.x, end.y]) }
+        if start.x == end.x || start.y == end.y { lanes.take(C4Numbers(start.x, start.y, end.x, end.y)) }
         let path = DiagramPath(start: CGPoint(x: start.x + directionX * startTrim, y: start.y + directionY * startTrim),
                                segments: [.line(to: CGPoint(x: end.x - directionX * endTrim, y: end.y - directionY * endTrim))])
         return C4Route(path: path, start: start, startDirection: CGVector(dx: -directionX, dy: -directionY), end: end,

@@ -7,8 +7,8 @@
  *              fewer lines, a lane out from them and apart from the routes already there.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -16,7 +16,7 @@ import CoreGraphics
 /// A detour on one side of the shapes between two ends: its corners, the side of the ends it leaves and reaches, where
 /// on that side, and how many lanes out it went (5 when none was free).
 private struct C4Detour {
-    let points: [CGFloat]
+    let points: C4Numbers
     let side: Int
     let startPort: CGFloat
     let endPort: CGFloat
@@ -59,7 +59,7 @@ extension C4Router {
         lanes.take(chosen.points)
         lanes.claim(first, side: chosen.side, at: chosen.startPort)
         lanes.claim(second, side: chosen.side, at: chosen.endPort)
-        var route = Self.bent(chosen.points, labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
+        var route = Self.bent(Array(chosen.points), labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
         if ends.isUpright {
             route.labelSide = CGVector(dx: forward ? 1 : -1, dy: 0)
             route.labelLean = C4Metrics.labelLean
@@ -117,15 +117,15 @@ extension C4Router {
         let endPort = isUpright
             ? lanes.ports(of: ends.second, side: side, wanted: end.centerY - towards * end.height / 4, low: end.y + 8, high: end.bottom - 8)[0]
             : lanes.ports(of: ends.second, side: side, wanted: end.centerX - towards * end.width / 4, low: end.x + 8, high: end.right - 8)[0]
-        func points(at place: CGFloat) -> [CGFloat] {
+        func points(at place: CGFloat) -> C4Numbers {
             if isUpright {
                 let startX = place + (start.centerX - place) * min(start.hit(fromX: place, y: startPort, toX: start.centerX, y: startPort), 1)
                 let endX = place + (end.centerX - place) * min(end.hit(fromX: place, y: endPort, toX: end.centerX, y: endPort), 1)
-                return [startX, startPort, place, startPort, place, endPort, endX, endPort]
+                return C4Numbers(startX, startPort, place, startPort, place, endPort, endX, endPort)
             }
             let startY = place + (start.centerY - place) * min(start.hit(fromX: startPort, y: place, toX: startPort, y: start.centerY), 1)
             let endY = place + (end.centerY - place) * min(end.hit(fromX: endPort, y: place, toX: endPort, y: end.centerY), 1)
-            return [startPort, startY, startPort, place, endPort, place, endPort, endY]
+            return C4Numbers(startPort, startY, startPort, place, endPort, place, endPort, endY)
         }
         var chosen = points(at: outerEdge + sign * C4Metrics.lane)
         for step in 0...4 {

@@ -1,18 +1,21 @@
 /**
- * File: LayeredBalancedRanking.swift
- * ----------------------------------
- * Layer: Core
- * Description: Pele's own orientation and ranking of a layered graph (`orient` and `rank` of its `layered.ts`), which its
- *              lane layout ranks on: cycles broken in declaration order, longest paths, then nodes moved toward the side
- *              with more edges.
+ * File: ReferenceLayeredBalancedRanking.swift
+ * -------------------------------------------
+ * Layer: Tests
+ * Description: The 0.7.0 LayeredBalancedRanking kept as the reference the lane layout on the scratch arena is checked
+ *              against: Pele's own orientation and ranking of a layered graph (`orient` and `rank` of its
+ *              `layered.ts`), which its lane layout ranks on: cycles broken in declaration order, longest paths, then
+ *              nodes moved toward the side with more edges.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.1
+ * Date: 24/11/2026
  */
 
+@testable import MermaidDiagrams
+
 /// The ranking the lane layout uses; the layered layout itself ranks with `LayeredFlatRanking`.
-enum LayeredRanking {
+enum ReferenceLayeredRanking {
     /// The edges to turn around, as Pele's `orient` finds them: a depth-first walk from every node in turn, in the order of
     /// the nodes, turns each edge that reaches a node still on its path. The walk does not start
     /// from the nodes no edge enters first.

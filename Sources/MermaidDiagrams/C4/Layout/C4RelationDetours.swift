@@ -7,15 +7,15 @@
  *              already there.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
 
 /// A line with two corners: its points, its cost, whether its middle stretch is upright, and the sides of its ends.
 private struct C4Elbow {
-    let points: [CGFloat]
+    let points: C4Numbers
     let isUpright: Bool
     let startSide: Int
     let endSide: Int
@@ -36,7 +36,7 @@ extension C4Router {
         lanes.claim(first, side: best.startSide, at: best.isUpright ? best.points[1] : best.points[0])
         lanes.claim(second, side: best.endSide, at: best.isUpright ? best.points[7] : best.points[6])
         // The label sits on the middle stretch, across the gap.
-        var route = Self.bent(best.points, labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
+        var route = Self.bent(Array(best.points), labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
         route.labelRoom = best.isUpright ? C4Metrics.narrowLabelWidth : C4Metrics.wideLabelWidth
         return route
     }
@@ -56,7 +56,8 @@ extension C4Router {
                 for lane in gaps {
                     let startX = lane + (start.centerX - lane) * min(start.hit(fromX: lane, y: startY, toX: start.centerX, y: startY), 1)
                     let endX = lane + (end.centerX - lane) * min(end.hit(fromX: lane, y: endY, toX: end.centerX, y: endY), 1)
-                    let candidate = C4Elbow(points: [startX, startY, lane, startY, lane, endY, endX, endY], isUpright: true, startSide: sides.0, endSide: sides.1)
+                    let candidate = C4Elbow(points: C4Numbers(startX, startY, lane, startY, lane, endY, endX, endY), isUpright: true, startSide: sides.0,
+                                            endSide: sides.1)
                     if consider(candidate, from: first, to: second, best: &best) { return }
                 }
             }
@@ -77,7 +78,8 @@ extension C4Router {
                 for lane in gaps {
                     let startY = lane + (start.centerY - lane) * min(start.hit(fromX: startX, y: lane, toX: startX, y: start.centerY), 1)
                     let endY = lane + (end.centerY - lane) * min(end.hit(fromX: endX, y: lane, toX: endX, y: end.centerY), 1)
-                    let candidate = C4Elbow(points: [startX, startY, startX, lane, endX, lane, endX, endY], isUpright: false, startSide: sides.0, endSide: sides.1)
+                    let candidate = C4Elbow(points: C4Numbers(startX, startY, startX, lane, endX, lane, endX, endY), isUpright: false, startSide: sides.0,
+                                            endSide: sides.1)
                     if consider(candidate, from: first, to: second, best: &best) { return }
                 }
             }
@@ -102,7 +104,7 @@ extension C4Router {
         return true
     }
 
-    private func isEveryStretchFree(_ points: [CGFloat]) -> Bool {
+    private func isEveryStretchFree(_ points: C4Numbers) -> Bool {
         var index = 2
         while index < points.count {
             let isUpright = points[index] == points[index - 2]
@@ -115,12 +117,14 @@ extension C4Router {
 
     /// Up to nine places across the gap from `low` to `high`, its middle first, a quarter of the gap apart (at least a
     /// lane step), each kept a near distance from the gap's sides.
-    static func lanesAcross(from low: CGFloat, to high: CGFloat) -> [CGFloat] {
+    static func lanesAcross(from low: CGFloat, to high: CGFloat) -> C4Numbers {
         let middle = (low + high) / 2
         let step = max(C4Metrics.laneStep, (high - low) / 4)
-        return (0..<9).compactMap { index in
+        var places = C4Numbers()
+        for index in 0..<9 {
             let place = middle + (index & 1 == 1 ? 1 : -1) * CGFloat((index + 1) / 2) * step
-            return place >= low + C4Metrics.nearDistance && place <= high - C4Metrics.nearDistance ? place : nil
+            if place >= low + C4Metrics.nearDistance && place <= high - C4Metrics.nearDistance { places.append(place) }
         }
+        return places
     }
 }
