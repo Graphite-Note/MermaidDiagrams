@@ -16,7 +16,8 @@ import Foundation
 /// Reads a diagram's text, lays it out and prepares its scene, whatever its type, so that a reader needs no code of its
 /// own per type. A text that is not read, a layout that refuses what it holds, a diagram that declares nothing to draw,
 /// one longer than the limits' drawing side and one whose scene lost a path past its element limit are refused with why
-/// (`MermaidDiagramPreparationFailure`), never an empty, a giant or an incomplete scene. Adding a type means its parser, its layout, its scene, and one case in `prepare(_:)`'s switch.
+/// (`MermaidDiagramPreparationFailure`), never an empty, a giant or an incomplete scene. Adding a type means its parser,
+/// its layout, its scene, and one case in `prepare(_:)`'s switch.
 public enum MermaidDiagramPreparation {
     /// `source` read and prepared. `typography` is the text the diagram is measured in; `narrowestColumnWidth` the
     /// narrowest column it may be shown in, past which it is laid out a second time to run down (nil for none); `now` and
