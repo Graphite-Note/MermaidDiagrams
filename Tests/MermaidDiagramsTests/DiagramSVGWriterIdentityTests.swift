@@ -5,11 +5,11 @@
  * Description: The rewritten SVG writer writes every document 0.7.0's writer (kept as ReferenceSVGWriter) writes, byte
  *              for byte: every input of every corpus with Pele's variables, its title and its description, and with the
  *              fixed palette and background, the narrow scenes at 280, 390 and 600 points, and seeded random scenes of
- *              every painting, text, number and name a scene can hold, hostile ones included; and the bytes a host takes
- *              are the document's.
+ *              every painting, text, number and name a scene can hold, hostile ones included; the bytes a host takes are
+ *              the document's; and an identifier prefix that is not safe in an id is replaced by Pele's.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -132,6 +132,32 @@ final class DiagramSVGWriterIdentityTests: XCTestCase {
             }
         }
         XCTAssertEqual(documentCount, sizes.count * 2 * types.count * writers.count)
+    }
+
+    /// An identifier prefix is written into the document's ids unescaped, so one that is not made of ASCII letters,
+    /// digits, `-` and `_` alone is replaced by Pele's (`pele`), as 0.7.0 replaced it: Pele's own prefix, which the
+    /// writer takes without looking at its characters, and prefixes that start with it, end like it or look like it.
+    func testAnIdentifierPrefixOfOtherCharactersIsPelesAsThe070WritersIs() {
+        let prefixes = ["pele", "pele\"", "pele x", "pele\" onload=\"x", "pele<", "pelé", "pe\u{301}le", "Pele", "pele-2", "pele_",
+                        "xpele", "", " ", "p", "pel", "pele\u{0}", "ｐｅｌｅ", "diagram-1", "a&b"]
+        let scene = DiagramScene(size: CGSize(width: 40, height: 20), font: DiagramFont(postScriptName: nil, size: 16),
+                                 items: [.shape(DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 1, height: 1), transform: nil),
+                                                                  painting: .fill(.accent), part: .node))])
+        for prefix in prefixes {
+            let writer = DiagramSVGWriter(identifierPrefix: prefix)
+            let reference = ReferenceSVGWriter(identifierPrefix: prefix)
+            XCTAssertEqual(writer.identifierPrefix, reference.identifierPrefix, prefix)
+            let isSafe = !prefix.isEmpty && prefix.utf8.allSatisfy { byte in
+                (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte) || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte)
+                    || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte) || byte == UInt8(ascii: "-") || byte == UInt8(ascii: "_")
+            }
+            XCTAssertEqual(writer.identifierPrefix, isSafe ? prefix : "pele", prefix)
+            XCTAssertEqual(writer.document(of: scene, diagramType: "x", title: "T", description: "D"),
+                           reference.document(of: scene, diagramType: "x", title: "T", description: "D"), prefix)
+            var renamed = DiagramSVGWriter()
+            renamed.identifierPrefix = prefix
+            XCTAssertEqual(renamed.identifierPrefix, writer.identifierPrefix, prefix)
+        }
     }
 }
 
