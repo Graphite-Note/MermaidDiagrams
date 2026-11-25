@@ -7,7 +7,7 @@
  *              as their elements in one block, and a Core Graphics path is made only for a reader that asks for one.
  *
  * Authors: Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 24/11/2026
  */
 
@@ -37,6 +37,10 @@ public struct DiagramScene: Sendable {
     let storage: DiagramSceneStorage
     /// Each shape's painting, in the shapes' order.
     let paintings: [DiagramShapePainting]
+    /// The element limit a lane of the scene's recording went past (`DiagramSceneWorkspace.elementLimit(for:)`), which
+    /// emptied it, so that the scene lacks what it would have drawn; nil when every path is whole. The preparation refuses
+    /// such a scene (`MermaidDiagramPreparationFailure.tooManyPathElements`) instead of showing it with shapes missing.
+    let exceededPathElementLimit: Int?
 
     /// A scene of `items`, each shape's path read once into the scene's storage.
     public init(size: CGSize, font: DiagramFont, items: [DiagramSceneItem], seriesColors: DiagramSeriesColors = .none) {
@@ -46,13 +50,14 @@ public struct DiagramScene: Sendable {
     }
 
     init(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors, storage: DiagramSceneStorage, paintings: [DiagramShapePainting],
-         texts: [DiagramSceneText]) {
+         texts: [DiagramSceneText], exceededPathElementLimit: Int? = nil) {
         self.size = size
         self.font = font
         self.seriesColors = seriesColors
         self.storage = storage
         self.paintings = paintings
         self.texts = texts
+        self.exceededPathElementLimit = exceededPathElementLimit
     }
 
     /// The palette the scene is painted in where a host's is `palette`: the host's, with the series the diagram's theme

@@ -4,11 +4,11 @@
  * Layer: Tests
  * Description: The branchless number writer writes the bytes 0.7.0's writer wrote (kept as ReferenceSVGNumberWriting) on
  *              the design's 1.2 million values: coordinates, quarters, eighths, ties, signed zeros, values that are not
- *              finite, the limits around 10,000 and 1e12 and a sweep of two-hundredths; it stores nothing past its room;
- *              and path elements are written as 0.7.0 wrote them.
+ *              finite, the limits around 10,000 and 1e12 and a sweep of two-hundredths, and every hundredth its tables
+ *              cover; it stores nothing past its room; and path elements are written as 0.7.0 wrote them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -81,6 +81,44 @@ final class DiagramSVGNumberWritingTests: XCTestCase {
             let writtenCount = DiagramSVGNumberWriting.writeNumber(value, to: written)
             let referenceCount = ReferenceSVGNumberWriting.writeNumber(value, to: reference)
             XCTAssertEqual(Self.text(written, writtenCount), Self.text(reference, referenceCount), "\(value)")
+        }
+    }
+
+    /// Every number of hundredths the tables cover, from -9,999 to 9,999, signed both ways, is written as 0.7.0 wrote it:
+    /// each whole part's word and each fraction's word of `DiagramSVGDigitTables` is read at least once.
+    func testEveryHundredthTheTablesCoverIsWrittenAs070WroteIt() {
+        let written = UnsafeMutablePointer<UInt8>.allocate(capacity: 64), reference = UnsafeMutablePointer<UInt8>.allocate(capacity: 64)
+        defer {
+            written.deallocate()
+            reference.deallocate()
+        }
+        var differenceCount = 0
+        for hundredths in -999_899...999_899 {
+            let value = CGFloat(hundredths) / 100
+            let writtenCount = DiagramSVGNumberWriting.writeNumber(value, to: written)
+            let referenceCount = ReferenceSVGNumberWriting.writeNumber(value, to: reference)
+            guard writtenCount != referenceCount || memcmp(written, reference, writtenCount) != 0 else { continue }
+            differenceCount += 1
+            if differenceCount <= 5 { XCTFail("\(value): \(Self.text(written, writtenCount)) against \(Self.text(reference, referenceCount))") }
+        }
+        XCTAssertEqual(differenceCount, 0)
+    }
+
+    /// The tables hold each whole part's digits without leading zeros, the first lowest, and each fraction's point,
+    /// decimals and written count, as their documentation says.
+    func testTheDigitTablesHoldWhatTheyDocument() {
+        let tables = DiagramSVGDigitTables.shared
+        XCTAssertEqual(tables.wholeParts[0], 0x30)
+        XCTAssertEqual(tables.wholeParts[7], 0x37)
+        XCTAssertEqual(tables.wholeParts[1_250], 0x30_35_32_31)
+        XCTAssertEqual(tables.wholeParts[9_999], 0x39_39_39_39)
+        XCTAssertEqual(tables.fractions[0], 0x00_30_30_2E)
+        XCTAssertEqual(tables.fractions[50], 0x02_30_35_2E)
+        XCTAssertEqual(tables.fractions[25], 0x03_35_32_2E)
+        for whole in 0..<DiagramSVGDigitTables.wholePartCount {
+            let word = tables.wholeParts[whole]
+            let characters = (0..<4).map { index in UInt8(truncatingIfNeeded: word >> UInt32(8 * index)) }.filter { byte in byte != 0 }
+            XCTAssertEqual(String(decoding: characters, as: UTF8.self), String(whole))
         }
     }
 

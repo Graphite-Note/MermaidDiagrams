@@ -6,7 +6,7 @@
  *              and an icon's text cut down to its square with an ellipsis.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -27,10 +27,12 @@ enum ArchitectureIcons {
         "cloud": "M7 18a4 4 0 0 1-.5-7.97A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5z",
     ]
 
-    /// The outline of the icon `name` in `frame`'s square, or nil for a name Pele has no outline for.
-    static func outline(named name: String, in frame: CGRect) -> CGPath? {
-        guard let data = pathDataByName[name], let glyph = DiagramGlyphPath(pathData: data) else { return nil }
-        return glyph.path(in: frame)
+    /// Each icon's outline, read once from `pathDataByName`.
+    private static let glyphsByName: [String: DiagramGlyphPath] = pathDataByName.compactMapValues { data in DiagramGlyphPath(pathData: data) }
+
+    /// The outline of the icon `name`, read once, or nil for a name Pele has no outline for.
+    static func glyph(named name: String) -> DiagramGlyphPath? {
+        glyphsByName[name]
     }
 
     /// Pele's `fit`: `block` cut to `maximumWidth` and `maximumLines`, each line too wide (and the last kept, when lines

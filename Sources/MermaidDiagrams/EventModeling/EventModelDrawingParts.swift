@@ -6,8 +6,8 @@
  *              its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -47,67 +47,107 @@ public struct EventModelDrawingParts {
     static let cornerRadius: CGFloat = 4
 
     public init(layout: EventModelLayout) {
-        laneBands = Self.roundedRectangles(layout.laneBands)
+        let paths = EventModelDrawingPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        laneBands = paths.laneBands.path
         laneNames = layout.laneNames
-        let lines = CGMutablePath()
-        let arrows = CGMutablePath()
-        let unused = CGMutablePath()
-        for relation in layout.relations {
-            lines.addPath(DiagramEdgeDrawing.path(relation.path))
-            DiagramEdgeDrawing.addMark(relation.arrow, filled: arrows, stroked: unused)
-        }
-        relationLines = lines
-        self.arrows = arrows
-        outlinedBoxes = Self.roundedRectangles(layout.frames.filter { frame in frame.isOutlinedInBorder || frame.seriesIndex == nil }.map(\.frame))
-        plainBoxes = Self.roundedRectangles(layout.frames.filter { frame in !frame.isOutlinedInBorder && frame.seriesIndex != nil }.map(\.frame))
-        let seriesIndices = Set(layout.frames.compactMap(\.seriesIndex)).sorted()
-        seriesBoxes = seriesIndices.map { index in (index, Self.roundedRectangles(layout.frames.filter { frame in frame.seriesIndex == index }.map(\.frame))) }
+        relationLines = paths.relationLines.path
+        arrows = paths.arrows.path
+        outlinedBoxes = paths.outlinedBoxes.path
+        plainBoxes = paths.plainBoxes.path
+        seriesBoxes = paths.seriesBoxes.map { group in (group.seriesIndex, group.boxes.path) }
         names = layout.frames.map(\.name)
         numbers = layout.frames.compactMap(\.number)
         dataLines = layout.frames.flatMap(\.dataLines)
-        cards = Self.roundedRectangles(layout.cards.map(\.frame))
+        cards = paths.cards.path
         cardHeadings = layout.cards.map(\.heading)
         cardLines = layout.cards.flatMap(\.lines)
         title = layout.title
         runsDown = layout.runsDown
     }
+}
 
-    private static func roundedRectangles(_ frames: [CGRect]) -> CGPath {
-        let path = CGMutablePath()
-        for frame in frames { path.addRoundedRect(in: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius) }
-        return path
+/// An event model's paths, grouped as `EventModelDrawingParts` groups them, recorded into the paths a maker makes:
+/// Core Graphics paths for the drawing parts, lanes of the thread's scene workspace for the scene, the same elements.
+struct EventModelDrawingPaths<Path: DiagramCurvedPathRecording> {
+    let laneBands: Path
+    let relationLines: Path
+    let arrows: Path
+    let outlinedBoxes: Path
+    let plainBoxes: Path
+    /// For each series index used, from the smallest, the boxes in it.
+    let seriesBoxes: [(seriesIndex: Int, boxes: Path)]
+    let cards: Path
+
+    init<Maker: DiagramPathMaking>(layout: EventModelLayout, making maker: Maker) where Maker.Path == Path {
+        let radius = EventModelDrawingParts.cornerRadius
+        laneBands = maker.makePath()
+        for band in layout.laneBands { laneBands.addRoundedRect(in: band, cornerWidth: radius, cornerHeight: radius) }
+        relationLines = maker.makePath()
+        arrows = maker.makePath()
+        let unused = maker.makePath()
+        for relation in layout.relations {
+            let madeCount = maker.madePathCount
+            let drawn = maker.makePath()
+            DiagramEdgeDrawing.record(relation.path, into: drawn)
+            relationLines.addPath(drawn)
+            maker.givePathsBack(downTo: madeCount)
+            DiagramEdgeDrawing.addMark(relation.arrow, filled: arrows, stroked: unused)
+        }
+        outlinedBoxes = maker.makePath()
+        plainBoxes = maker.makePath()
+        var seriesIndices: [Int] = []
+        for frame in layout.frames {
+            let boxes = frame.isOutlinedInBorder || frame.seriesIndex == nil ? outlinedBoxes : plainBoxes
+            boxes.addRoundedRect(in: frame.frame, cornerWidth: radius, cornerHeight: radius)
+            if let index = frame.seriesIndex, !seriesIndices.contains(index) { seriesIndices.append(index) }
+        }
+        seriesIndices.sort()
+        seriesBoxes = seriesIndices.map { index in
+            let boxes = maker.makePath()
+            for frame in layout.frames where frame.seriesIndex == index {
+                boxes.addRoundedRect(in: frame.frame, cornerWidth: radius, cornerHeight: radius)
+            }
+            return (index, boxes)
+        }
+        cards = maker.makePath()
+        for card in layout.cards { cards.addRoundedRect(in: card.frame, cornerWidth: radius, cornerHeight: radius) }
     }
 }
 
 extension DiagramScene {
-    /// The event model's painting, in Pele's order and colors.
+    /// The event model's painting, in Pele's order and colors, its paths recorded into lanes of the thread's scene
+    /// workspace.
     public init(layout: EventModelLayout) {
-        var builder = DiagramSceneBuilder()
-        EventModelDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            EventModelSceneRecording.add(layout, to: &builder, paths: EventModelDrawingPaths(layout: layout, making: workspace))
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }
 
-extension EventModelDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
+/// Adds an event model's painting to a scene from its paths.
+enum EventModelSceneRecording {
+    static func add(_ layout: EventModelLayout, to builder: inout DiagramSceneBuilder, paths: EventModelDrawingPaths<DiagramPathLane>) {
         let line = DiagramStroke(lineWidth: 1)
-        builder.title(title)
-        builder.fill(laneBands, .surface, part: .cluster)
-        if !runsDown { builder.texts(laneNames, .muted, isBold: true, part: .clusterLabel) }
-        builder.stroke(relationLines, .line, line, part: .edge)
-        builder.fill(arrows, .line, part: .marker)
-        if runsDown { builder.texts(laneNames, .muted, isBold: true, part: .clusterLabel) }
-        builder.fillAndStroke(outlinedBoxes, fill: .background, stroke: .border, line, part: .node)
-        builder.fill(plainBoxes, .background, part: .node)
-        for (seriesIndex, boxes) in seriesBoxes {
-            builder.fillAndStroke(boxes, fill: DiagramPaint.series(seriesIndex).atOpacity(Self.seriesFillOpacity), stroke: .series(seriesIndex), line, part: .node)
+        builder.title(layout.title)
+        builder.fill(paths.laneBands, .surface, part: .cluster)
+        if !layout.runsDown { builder.texts(layout.laneNames, .muted, isBold: true, part: .clusterLabel) }
+        builder.stroke(paths.relationLines, .line, line, part: .edge)
+        builder.fill(paths.arrows, .line, part: .marker)
+        if layout.runsDown { builder.texts(layout.laneNames, .muted, isBold: true, part: .clusterLabel) }
+        builder.fillAndStroke(paths.outlinedBoxes, fill: .background, stroke: .border, line, part: .node)
+        builder.fill(paths.plainBoxes, .background, part: .node)
+        for (seriesIndex, boxes) in paths.seriesBoxes {
+            builder.fillAndStroke(boxes, fill: DiagramPaint.series(seriesIndex).atOpacity(EventModelDrawingParts.seriesFillOpacity),
+                                  stroke: .series(seriesIndex), line, part: .node)
         }
-        builder.texts(names, .foreground, isBold: true, part: .label)
-        builder.texts(numbers, .muted, part: .label)
-        builder.texts(dataLines, .foreground, isMonospaced: true, part: .label)
-        builder.fillAndStroke(cards, fill: .background, stroke: .border, line, part: .note)
-        builder.texts(cardHeadings, .foreground, isBold: true, part: .note)
-        builder.texts(cardLines, .foreground, part: .note)
+        for frame in layout.frames { builder.text(frame.name, .foreground, isBold: true, part: .label) }
+        for frame in layout.frames { builder.text(frame.number, .muted, part: .label) }
+        for frame in layout.frames { builder.texts(frame.dataLines, .foreground, isMonospaced: true, part: .label) }
+        builder.fillAndStroke(paths.cards, fill: .background, stroke: .border, line, part: .note)
+        for card in layout.cards { builder.text(card.heading, .foreground, isBold: true, part: .note) }
+        for card in layout.cards { builder.texts(card.lines, .foreground, part: .note) }
     }
 }
 

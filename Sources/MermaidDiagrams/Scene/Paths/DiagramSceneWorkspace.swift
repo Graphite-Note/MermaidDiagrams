@@ -5,10 +5,10 @@
  * Description: One thread's path lanes, kept between scenes: a recording hands lanes out of a pool whose blocks keep
  *              their size, takes back those a drawing made for a moment, last first, and all of them when it ends; a
  *              recording begun inside another gets a workspace of its own, blocks grown past a mebibyte are freed, and
- *              every lane is capped by the diagram limits.
+ *              every lane is capped by the diagram limits, a lane past its cap remembered until the recording ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -29,6 +29,8 @@ final class DiagramSceneWorkspace {
     private var handedOutCount = 0
     private var isRecording = false
     private var elementLimit = DiagramSceneWorkspace.elementLimit(for: .standard)
+    /// Whether a lane given back in this recording had gone past its element limit, which emptying it forgets.
+    private var gaveBackOverflowedLane = false
     /// The number of the last lane handed out: each lane handed out gets the next, and a lane given back or ended
     /// with its recording gets 0, which no handle has, so that debug builds catch a handle used after its lane went back.
     private var generation: UInt32 = 0
@@ -82,6 +84,7 @@ final class DiagramSceneWorkspace {
 
     private func beginRecording(limits: MermaidDiagramLimits) {
         isRecording = true
+        gaveBackOverflowedLane = false
         elementLimit = Self.elementLimit(for: limits)
     }
 
@@ -105,6 +108,7 @@ final class DiagramSceneWorkspace {
         precondition(count <= handedOutCount, "lanes are given back in the order opposite to the one they were handed out in")
         for index in count..<handedOutCount {
             let state = pool[index]
+            if state.pointee.hasOverflowed { gaveBackOverflowedLane = true }
             state.pointee.trim(toAtMost: Self.largestKeptByteCount, verbCapacity: Self.smallVerbCapacity)
             state.pointee.removeAll()
             state.pointee.generation = 0
@@ -156,11 +160,16 @@ final class DiagramSceneWorkspace {
         return lane
     }
 
-    /// Whether any lane handed out in this recording went past its element limit, which refuses the scene.
+    /// Whether any lane handed out in this recording went past its element limit, given back since or not, which
+    /// refuses the scene.
     var anyLaneOverflowed: Bool {
+        if gaveBackOverflowedLane { return true }
         for index in 0..<handedOutCount where pool[index].pointee.hasOverflowed { return true }
         return false
     }
+
+    /// The most verbs each lane of this recording holds.
+    var laneElementLimit: Int { elementLimit }
 
     /// How many lane states the pool keeps, and how many bytes their blocks take, for tests.
     var pooledLaneCount: Int { pool.count }

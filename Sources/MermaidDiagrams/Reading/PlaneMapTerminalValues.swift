@@ -6,8 +6,8 @@
  *              title's and an accessibility statement's text, and a string's without its quotation marks and escapes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// The values of shared terminals, each from the token's text as matched.
@@ -38,7 +38,8 @@ enum PlaneMapTerminalValues {
     /// break, `\t` a tab, `\0` a null character; any other character itself).
     static func string(_ token: String) -> String {
         let inside = token.dropFirst().dropLast()
-        guard inside.contains("\\") else { return String(inside) }
+        // Without a backslash's byte no character is one, and the text is kept as it is.
+        guard inside.utf8.contains(UInt8(ascii: "\\")) else { return String(inside) }
         var text = ""
         var isEscaping = false
         for character in inside {

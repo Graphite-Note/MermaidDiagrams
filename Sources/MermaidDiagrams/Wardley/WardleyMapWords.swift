@@ -6,8 +6,8 @@
  *              match them: sourcing words, keywords, names with spaces, numbers, identifiers and link arrows.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Matches the terminals of a Wardley map that start with a letter, a digit or a link's sign, in Pele's order.
@@ -19,6 +19,16 @@ enum WardleyMapWords {
         ("accelerator", .accelerator), ("deaccelerator", .deaccelerator),
     ]
     private static let sourcingWords = ["build", "buy", "outsource", "market"]
+    /// The sourcing words then the keywords, in that order, by their first byte, an ASCII letter: only those can start
+    /// at a byte.
+    private static let wordsByFirstByte: [[([UInt8], WardleyMapTokenKind)]] = {
+        var words = [[([UInt8], WardleyMapTokenKind)]](repeating: [], count: 0x80)
+        for (word, kind) in sourcingWords.map({ word in (word, WardleyMapTokenKind.sourcing) }) + keywords {
+            let bytes = Array(word.utf8)
+            words[Int(bytes[0])].append((bytes, kind))
+        }
+        return words
+    }()
 
     static func endOfBlanks(in terminals: PlaneMapTerminals, from start: Int) -> Int {
         var end = start
@@ -56,9 +66,8 @@ enum WardleyMapWords {
 
     /// A sourcing word, a keyword, a name with spaces, an accessibility statement, a title or an identifier.
     static func matchWord(in terminals: inout PlaneMapTerminals, at start: Int) -> (WardleyMapTokenKind?, Int)? {
-        for word in sourcingWords where terminals.hasPrefix(word, at: start) { return (.sourcing, start + word.utf8.count) }
-        for (word, kind) in keywords where terminals.hasPrefix(word, at: start) {
-            return (kind, start + word.utf8.count)
+        if let first = terminals.byte(start), first < 0x80 {
+            for (word, kind) in wordsByFirstByte[Int(first)] where terminals.hasPrefix(word, at: start) { return (kind, start + word.count) }
         }
         if let end = endOfName(in: terminals, at: start) { return (.name, end) }
         if let end = terminals.endOfAccessibilityDescription(at: start) { return (.accessibilityDescription, end) }

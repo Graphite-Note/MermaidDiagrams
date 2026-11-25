@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: The blocks a scene builder records its items' records, verbs and points into, kept by each thread between
  *              scenes, then copied once into the scene's own storage; a builder begun while another of the same thread
- *              records gets blocks of its own, and blocks grown past a mebibyte are freed.
+ *              records gets blocks of its own, and blocks grown past a mebibyte are freed. The paintings and texts are the
+ *              builder's own lists, which the scene takes as they are.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -16,14 +17,13 @@ import Darwin
 
 /// A builder's records, verbs and points as they are recorded, in blocks that grow and that the thread keeps
 /// (`borrow()`), so that a thread making scene after scene allocates nothing here once its blocks have grown. A shape's
-/// elements are appended as Core Graphics gives them out; `makeStorage` copies everything into the scene's storage.
+/// elements are appended as Core Graphics gives them out; `makeStorage` copies everything into the scene's storage. The
+/// shapes' paintings and the texts are not kept here: they are lists of the builder's own, which become the scene's
+/// without a copy, so that a small scene is not charged for emptying the thread's lists and copying them out.
 final class DiagramSceneRecordBuffers {
     private(set) var records: UnsafeMutablePointer<DiagramSceneItemRecord>
     private(set) var verbs: UnsafeMutablePointer<DiagramPathVerb>
     private(set) var points: UnsafeMutablePointer<CGPoint>
-    /// The shapes' paintings and the texts so far, whose room the thread keeps too; a scene gets copies of its own.
-    var paintings: [DiagramShapePainting] = []
-    var texts: [DiagramSceneText] = []
     private(set) var recordCount = 0
     private(set) var verbCount = 0
     private(set) var pointCount = 0
@@ -36,8 +36,6 @@ final class DiagramSceneRecordBuffers {
     /// The most bytes a thread's blocks keep between scenes.
     static let largestKeptByteCount = 1 << 20
     private static let smallCapacity = 64
-    /// The most paintings or texts whose room a thread keeps between scenes.
-    static let largestKeptListCount = 4_096
 
     init() {
         recordCapacity = Self.smallCapacity
@@ -84,8 +82,6 @@ final class DiagramSceneRecordBuffers {
     }
 
     func removeAll() {
-        paintings.removeAll(keepingCapacity: true)
-        texts.removeAll(keepingCapacity: true)
         recordCount = 0
         verbCount = 0
         pointCount = 0
@@ -159,19 +155,11 @@ final class DiagramSceneRecordBuffers {
 
     // MARK: Storage
 
-    /// A scene of everything recorded: its storage, and copies of the paintings and texts just as long as they are.
-    func makeScene(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors) -> DiagramScene {
-        DiagramScene(size: size, font: font, seriesColors: seriesColors, storage: makeStorage(), paintings: Self.copy(of: paintings),
-                     texts: Self.copy(of: texts))
-    }
-
-    /// A list of its own with `list`'s elements, as long as they are: the thread keeps `list`'s room.
-    private static func copy<Element>(of list: [Element]) -> [Element] {
-        guard !list.isEmpty else { return [] }
-        var copy: [Element] = []
-        copy.reserveCapacity(list.count)
-        copy.append(contentsOf: list)
-        return copy
+    /// A scene of everything recorded, the shapes' records pointing into `paintings` and the texts' into `texts`.
+    func makeScene(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors, paintings: [DiagramShapePainting], texts: [DiagramSceneText],
+                   exceededPathElementLimit: Int? = nil) -> DiagramScene {
+        DiagramScene(size: size, font: font, seriesColors: seriesColors, storage: makeStorage(), paintings: paintings, texts: texts,
+                     exceededPathElementLimit: exceededPathElementLimit)
     }
 
     /// A scene's storage holding everything recorded.
@@ -221,8 +209,6 @@ final class DiagramSceneRecordBuffers {
 
     /// Frees blocks a large scene grew and starts again from small ones.
     private func trimIfLarge() {
-        if paintings.capacity > Self.largestKeptListCount { paintings = [] }
-        if texts.capacity > Self.largestKeptListCount { texts = [] }
         guard capacityByteCount > Self.largestKeptByteCount else { return }
         records.deallocate()
         verbs.deallocate()
@@ -240,6 +226,8 @@ final class DiagramSceneRecordBuffers {
 /// (`DiagramScene.init(size:font:items:seriesColors:)`).
 struct DiagramSceneItemCopying: ~Copyable {
     private let buffers = DiagramSceneRecordBuffers.borrow()
+    private var paintings: [DiagramShapePainting] = []
+    private var texts: [DiagramSceneText] = []
 
     deinit {
         buffers.giveBack()
@@ -248,16 +236,16 @@ struct DiagramSceneItemCopying: ~Copyable {
     mutating func add(_ item: DiagramSceneItem) {
         switch item {
         case .shape(let shape):
-            buffers.appendRecord(kind: .shape, part: shape.part, index: buffers.paintings.count)
+            buffers.appendRecord(kind: .shape, part: shape.part, index: paintings.count)
             buffers.appendElements(of: shape.path)
-            buffers.paintings.append(shape.painting)
+            paintings.append(shape.painting)
         case .text(let text):
-            buffers.appendRecord(kind: .text, part: text.part, index: buffers.texts.count)
-            buffers.texts.append(text)
+            buffers.appendRecord(kind: .text, part: text.part, index: texts.count)
+            texts.append(text)
         }
     }
 
     func scene(size: CGSize, font: DiagramFont, seriesColors: DiagramSeriesColors) -> DiagramScene {
-        buffers.makeScene(size: size, font: font, seriesColors: seriesColors)
+        buffers.makeScene(size: size, font: font, seriesColors: seriesColors, paintings: paintings, texts: texts)
     }
 }

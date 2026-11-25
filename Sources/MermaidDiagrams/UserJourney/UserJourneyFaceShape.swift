@@ -1,3 +1,14 @@
+/**
+ * File: UserJourneyFaceShape.swift
+ * --------------------------------
+ * Layer: Core
+ * Description: Pele's face for a user journey's score, added to Core Graphics paths or to lanes.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.1
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -17,8 +28,14 @@ enum UserJourneyFaceShape {
     static let straightMouthHalfWidth: CGFloat = 4.5
     static let straightMouthDepth: CGFloat = 4.5
 
-    /// Adds the face's circle at `center` to `circles`, its eyes to `eyes` and its mouth to `mouths`.
+    /// Adds the face's circle at `center` to `circles`, its eyes to `eyes` and its mouth to `mouths`, Core Graphics paths.
     static func add(_ mood: UserJourneyMood, at center: CGPoint, circles: CGMutablePath, eyes: CGMutablePath, mouths: CGMutablePath) {
+        add(mood, at: center, circles: DiagramCoreGraphicsPath(mutable: circles), eyes: DiagramCoreGraphicsPath(mutable: eyes),
+            mouths: DiagramCoreGraphicsPath(mutable: mouths))
+    }
+
+    /// Adds the face's circle at `center` to `circles`, its eyes to `eyes` and its mouth to `mouths`.
+    static func add<Path: DiagramCurvedPathRecording>(_ mood: UserJourneyMood, at center: CGPoint, circles: Path, eyes: Path, mouths: Path) {
         let radius = UserJourneyGeometry.faceRadius
         circles.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
         for side in [-1.0, 1.0] {
@@ -35,7 +52,7 @@ enum UserJourneyFaceShape {
     }
 
     /// The shorter arc between the corners, below them for a smile and above them for a frown, from left to right.
-    private static func addCurvedMouth(at center: CGPoint, cornerDepth: CGFloat, bulgesDown: Bool, to mouths: CGMutablePath) {
+    private static func addCurvedMouth<Path: DiagramCurvedPathRecording>(at center: CGPoint, cornerDepth: CGFloat, bulgesDown: Bool, to mouths: Path) {
         let rise = (curvedMouthRadius * curvedMouthRadius - curvedMouthHalfWidth * curvedMouthHalfWidth).squareRoot()
         let arcCenter = CGPoint(x: center.x, y: center.y + cornerDepth + (bulgesDown ? -rise : rise))
         let cornerAngle = atan2(bulgesDown ? rise : -rise, curvedMouthHalfWidth)
