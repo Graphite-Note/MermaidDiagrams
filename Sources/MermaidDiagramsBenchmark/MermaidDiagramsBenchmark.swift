@@ -8,7 +8,7 @@
  *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.12
+ * Version: 0.13
  * Date: 24/11/2026
  */
 
@@ -49,6 +49,9 @@ struct MermaidDiagramsBenchmark {
         }
         if let digestIndex = CommandLine.arguments.firstIndex(of: "--output-digest") {
             return try OutputDigest.run(arguments: Array(CommandLine.arguments[(digestIndex + 1)...]), typography: typography)
+        }
+        if let inputDigestIndex = CommandLine.arguments.firstIndex(of: "--input-digest") {
+            return try InputDigest.run(arguments: Array(CommandLine.arguments[(inputDigestIndex + 1)...]), typography: typography)
         }
         if let flatTextIndex = CommandLine.arguments.firstIndex(of: "--flat-text") {
             return try FlatTextMeasuringBenchmark.run(arguments: Array(CommandLine.arguments[(flatTextIndex + 1)...]))
