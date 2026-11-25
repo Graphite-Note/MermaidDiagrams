@@ -5,7 +5,7 @@
  * Description: Where an XY chart's series go in its plot: bars, lines, point labels and bar values.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -126,7 +126,7 @@ struct XYChartSeriesPlacement {
             if let previous {
                 appendSegment(from: previous, to: (place, valueFraction), isDrawing: isDrawing, room: count - index + 1, to: &runs)
             } else if isInside {
-                runs.append(Self.run(from: point(place: place, valueFraction: valueFraction), room: count - index))
+                runs.append(Self.run(from: point(place: place, valueFraction: valueFraction), room: runs.isEmpty ? count - index : 1))
             }
             isDrawing = isInside
             previous = (place, valueFraction)
@@ -138,7 +138,9 @@ struct XYChartSeriesPlacement {
         lines.append(XYChartLine(seriesIndex: seriesIndex, runs: runs, dots: dots))
     }
 
-    /// A run of the line starting at `first`, with room for `room` points, the most the rest of the line adds to it.
+    /// A run of the line starting at `first`, with room for `room` points. The line's first run is given room for the most
+    /// the rest of the line adds to it; a later one grows as it is drawn, so that a line leaving and entering the range
+    /// at each value reserves room for its values once, not once for each run.
     private static func run(from first: CGPoint, room: Int) -> [CGPoint] {
         var run = [first]
         run.reserveCapacity(max(room, 1))
@@ -164,7 +166,7 @@ struct XYChartSeriesPlacement {
         func pointAt(_ share: Double) -> CGPoint {
             point(place: start.place + (end.place - start.place) * share, valueFraction: start.valueFraction + rise * share)
         }
-        if !isDrawing || entry > 0 || runs.isEmpty { runs.append(Self.run(from: pointAt(entry), room: room)) }
+        if !isDrawing || entry > 0 || runs.isEmpty { runs.append(Self.run(from: pointAt(entry), room: runs.isEmpty ? room : 1)) }
         runs[runs.count - 1].append(pointAt(exit))
     }
 
