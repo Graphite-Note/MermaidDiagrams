@@ -6,8 +6,8 @@
  *              order, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -113,7 +113,13 @@ extension DiagramScene {
     /// The railroad diagram's painting, in Pele's order and colors, its paths recorded into lanes of the thread's scene
     /// workspace.
     public init(layout: RailroadLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene with each of its lanes bounded as `limits` bound them (`DiagramSceneWorkspace.elementLimit(for:)`): a
+    /// lane past its limit is emptied and the scene says so (`exceededPathElementLimit`), which the preparation refuses.
+    public init(layout: RailroadLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             let paths = RailroadDrawingPaths(layout: layout, making: workspace)
             let line = DiagramStroke(lineWidth: layout.lineWidth)

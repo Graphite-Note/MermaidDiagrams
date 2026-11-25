@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,13 @@ extension DiagramScene {
     /// tasks' shapes by fill and then by outline, then the tasks' text, the sections' names, the axis' dates and the title.
     /// The paths are recorded into lanes of the thread's scene workspace.
     public init(layout: GanttLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene with each of its lanes bounded as `limits` bound them (`DiagramSceneWorkspace.elementLimit(for:)`): a
+    /// lane past its limit is emptied and the scene says so (`exceededPathElementLimit`), which the preparation refuses.
+    public init(layout: GanttLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             GanttDrawingParts.addScene(of: layout, paths: GanttDrawingPaths(layout: layout, making: workspace), to: &builder)
             return builder.scene(size: layout.size, font: layout.font)
