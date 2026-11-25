@@ -6,8 +6,8 @@
  *              reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -18,8 +18,8 @@ extension MermaidDiagramPreparationContext {
         let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
             ? narrowScene(of: diagram, regularSize: layout.size, laidOut: { diagram in
                 try C4LayoutEngine.tightLayout(diagram, typography: typography, columnWidth: narrowestColumnWidth)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .c4, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
+            }, scene: { layout in DiagramScene(layout: layout, limits: limits) }) : nil
+        return PreparedMermaidDiagram(kind: .c4, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(c4: diagram))
     }
 }

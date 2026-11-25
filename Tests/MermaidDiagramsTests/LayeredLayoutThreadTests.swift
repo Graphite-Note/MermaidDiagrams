@@ -7,8 +7,8 @@
  *              narrow scenes, gives the output it gives prepared alone on one thread.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,9 +18,10 @@ import XCTest
 @testable import MermaidDiagramsBenchmark
 
 final class LayeredLayoutThreadTests: XCTestCase {
-    /// The documentation corpora of every type whose layout runs on the arena, flat and in clusters.
+    /// The documentation corpora of every type whose layout runs on the arena, flat and in clusters, and C4's, whose
+    /// reading interns its names in a table of its own and whose scene records into the thread's lanes.
     private static let corpusNames = ["flowchart-docs", "state-docs", "class-docs", "er-docs", "requirement-docs", "usecase-docs", "agentflow-docs",
-                                      "swimlane-docs"]
+                                      "swimlane-docs", "c4-docs"]
 
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow
     /// widths (a narrow fitting lays the diagram out again inside the preparation): every SVG, narrow SVG and spoken

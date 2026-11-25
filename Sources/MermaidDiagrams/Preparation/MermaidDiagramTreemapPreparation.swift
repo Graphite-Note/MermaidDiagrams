@@ -5,8 +5,8 @@
  * Description: Prepares a treemap, with its layout for a narrow column, and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -17,8 +17,8 @@ extension MermaidDiagramPreparationContext {
         let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
             ? narrowScene(of: narrowestColumnWidth.map { width in (treemap, width) }, regularSize: layout.size, laidOut: { treemap, width in
                 TreemapLayoutEngine.layout(treemap, typography: typography, availableWidth: width)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .treemap, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
+            }, scene: { layout in DiagramScene(layout: layout, limits: limits) }) : nil
+        return PreparedMermaidDiagram(kind: .treemap, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(treemap: treemap), unappliedStatementCount: treemap.unappliedStatementCount)
     }
 }

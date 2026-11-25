@@ -1,3 +1,15 @@
+/**
+ * File: QuadrantChartPointSyntax.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: A quadrant chart point's `: [x, y]` as Mermaid's quadrant grammar reads it, its coordinates kept as
+ *              the ranges of the bytes they are written in.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// A quadrant chart point's `: [x, y]`, as Mermaid's quadrant grammar reads it: a colon and an opening bracket, with
 /// any spaces and line breaks before, between and after them, then two coordinates separated by a comma and the
 /// closing bracket, and the spaces after it. A coordinate is `1`, or `0` alone or followed by any character and digits
@@ -5,16 +17,16 @@
 enum QuadrantChartPointSyntax {
     /// The point's coordinates as written, moving the cursor past them, or nil, with the cursor where it was, when no
     /// point starts at the cursor. A point whose brackets do not hold two coordinates is an error.
-    static func readPoint(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> QuadrantChartTokenContent? {
+    static func readPoint(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> (x: MermaidTextRange, y: MermaidTextRange)? {
         guard let byte = cursor.peek(), byte == MermaidByte.colon || isWhitespace(byte) else { return nil }
-        var lookahead = cursor
-        skipWhitespace(&lookahead)
-        guard lookahead.peek() == MermaidByte.colon else { return nil }
-        lookahead.advance()
-        skipWhitespace(&lookahead)
-        guard lookahead.peek() == MermaidByte.openingBracket else { return nil }
-        lookahead.advance()
-        cursor = lookahead
+        // Looked ahead by offsets, so that the cursor is copied only once a point is there.
+        var offset = 0
+        while let next = cursor.peek(offset), isWhitespace(next) { offset += 1 }
+        guard cursor.peek(offset) == MermaidByte.colon else { return nil }
+        offset += 1
+        while let next = cursor.peek(offset), isWhitespace(next) { offset += 1 }
+        guard cursor.peek(offset) == MermaidByte.openingBracket else { return nil }
+        cursor.advance(by: offset + 1)
         skipWhitespace(&cursor)
         let xCoordinate = try readCoordinate(&cursor)
         skipWhitespace(&cursor)
@@ -24,11 +36,11 @@ enum QuadrantChartPointSyntax {
         skipWhitespace(&cursor)
         try expect(MermaidByte.closingBracket, &cursor)
         while cursor.peek() == MermaidByte.space { cursor.advance() }
-        return .coordinates(xCoordinate: xCoordinate, yCoordinate: yCoordinate)
+        return (xCoordinate, yCoordinate)
     }
 
     /// `1`, or `0`, then any character but a line break and digits when they follow it.
-    private static func readCoordinate(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String {
+    private static func readCoordinate(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> MermaidTextRange {
         let start = cursor.position
         if cursor.peek() == one {
             cursor.advance()
@@ -42,7 +54,7 @@ enum QuadrantChartPointSyntax {
         } else {
             throw .invalidSyntax(line: cursor.line, problem: .expectedPointCoordinates)
         }
-        return cursor.text(from: start, to: cursor.position)
+        return MermaidTextRange(start: start, end: cursor.position)
     }
 
     private static func expect(_ byte: UInt8, _ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) {

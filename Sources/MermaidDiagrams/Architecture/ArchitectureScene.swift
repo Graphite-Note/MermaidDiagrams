@@ -6,8 +6,8 @@
  *              with their heads, the edges and their arrows, the edges' texts, the services and junctions.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -20,7 +20,13 @@ extension DiagramScene {
     /// color, its icon or its text, and its title. Every shape is recorded into a lane of the thread's scene workspace,
     /// given back once the builder has copied it.
     public init(layout: ArchitectureLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: ArchitectureLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             let madeCount = workspace.madePathCount

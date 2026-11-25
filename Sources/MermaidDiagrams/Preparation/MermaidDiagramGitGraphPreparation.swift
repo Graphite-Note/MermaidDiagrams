@@ -6,8 +6,8 @@
  *              hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -18,8 +18,8 @@ extension MermaidDiagramPreparationContext {
         let narrow = turnedNarrowSceneIsWanted(forRegularSize: layout.size)
             ? turnedNarrowScene(of: gitGraph.turnedToRunDown, regularSize: layout.size, laidOut: { turned in
                 try GitGraphLayoutEngine.layout(turned, typography: typography)
-            }, scene: DiagramScene.init(layout:)) : nil
-        return PreparedMermaidDiagram(kind: .gitGraph, scene: DiagramScene(layout: layout), preparedNarrowScene: narrow,
+            }, scene: { layout in DiagramScene(layout: layout, limits: limits) }) : nil
+        return PreparedMermaidDiagram(kind: .gitGraph, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(gitGraph: gitGraph))
     }
 }

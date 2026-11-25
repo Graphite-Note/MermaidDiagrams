@@ -6,8 +6,8 @@
  *              into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -15,7 +15,13 @@ import CoreGraphics
 extension DiagramScene {
     /// The requirement diagram's painting, as Pele paints it (`RequirementDrawingParts`).
     public init(layout: RequirementLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting, each of its paths holding at most the elements `limits` allow
+    /// (`DiagramSceneWorkspace.elementLimit(for:)`): past them the scene says so, and its preparation refuses it.
+    public init(layout: RequirementLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             RequirementSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font)

@@ -7,8 +7,8 @@
  *              a fill.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -75,6 +75,21 @@ public struct UseCaseLook: Equatable, Sendable {
         hidesStroke = writtenStroke == "none" || writtenStroke == "transparent"
         fontSize = applied.last { declaration in declaration.property == "font-size" }.flatMap(Self.value(of:)).flatMap(Self.fontSize(_:))
     }
+
+    /// The look of `styles`: none's, made once, for no styles; else the one made last for the same styles in `made`, or a
+    /// new one kept there. Elements of one class share their styles, so a diagram makes each look once.
+    static func of(_ styles: [String], made: inout [(styles: [String], look: UseCaseLook)]) -> UseCaseLook {
+        guard !styles.isEmpty else { return .none }
+        for entry in made.reversed() where entry.styles == styles { return entry.look }
+        let look = UseCaseLook(styles: styles)
+        // A few distinct looks are kept: a diagram of thousands of differently styled elements compares with those alone.
+        if made.count == Self.keptLookCount { made.removeFirst() }
+        made.append((styles, look))
+        return look
+    }
+
+    /// How many looks `of(_:made:)` keeps.
+    static let keptLookCount = 8
 
     /// How much of a fill shows: its `fill-opacity` (else `usual`) times its `opacity`.
     func fillAmount(usual: CGFloat = 1) -> CGFloat { (fillOpacity ?? usual) * opacity }
