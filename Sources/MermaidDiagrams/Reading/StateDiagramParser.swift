@@ -1,3 +1,16 @@
+/**
+ * File: StateDiagramParser.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: Reads a state diagram's statements on its text's bytes, as Mermaid's grammar reads them: states,
+ *              transitions, starts and ends, declarations, notes, composite bodies, the direction, accessibility text,
+ *              and the statements that only style the diagram, counted and left.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import Foundation
 
 /// Reads a state diagram's statements after its `stateDiagram` or `stateDiagram-v2` keyword, as Mermaid's grammar
@@ -7,24 +20,27 @@ import Foundation
 /// same line, as in Mermaid (`a --> b class a done`); a line break, or a semicolon, ends a text. `%%` and `#` start a
 /// comment.
 struct StateDiagramParser {
-    private var cursor: MermaidTextCursor
+    private var bytes: GraphDiagramBytes
     private var builder: StateDiagramBuilder
 
-    /// Reads the state diagram whose keyword ends at the cursor.
+    /// Reads the state diagram whose keyword ends at the cursor, on the cursor's bytes, borrowed.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> StateDiagram {
-        var parser = StateDiagramParser(cursor: cursor, builder: StateDiagramBuilder(limits: limits))
-        try parser.readStatements()
-        return parser.builder.diagram
+        try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            let bytes = GraphDiagramBytes(buffer, position: cursor.position)
+            var parser = StateDiagramParser(bytes: bytes, builder: StateDiagramBuilder(limits: limits, isASCII: bytes.isASCII, byteCount: buffer.count - cursor.position))
+            try parser.readStatements()
+            return parser.builder.diagram
+        }
     }
 
     private mutating func readStatements() throws(MermaidDiagramReadError) {
         while true {
-            cursor.skipWhitespace()
-            guard let byte = cursor.peek() else { break }
+            bytes.skipWhitespace()
+            guard let byte = bytes.peek() else { break }
             if byte == MermaidByte.semicolon {
-                cursor.advance()
-            } else if cursor.hasPrefix(StateDiagramTextSyntax.commentStart) || byte == Self.numberSign {
-                cursor.skipToEndOfLine()
+                bytes.advance()
+            } else if bytes.isAtCommentStart || byte == Self.numberSign {
+                bytes.skipToEndOfLine()
             } else if try readKeywordStatement() {
                 continue
             } else if try readBodyPunctuation() {
@@ -34,41 +50,41 @@ struct StateDiagramParser {
             }
         }
         if let identifier = builder.innermostOpenCompositeIdentifier {
-            throw .invalidSyntax(line: cursor.line, problem: .unclosedCompositeState(identifier: identifier))
+            throw .invalidSyntax(line: bytes.line, problem: .unclosedCompositeState(identifier: identifier))
         }
     }
 
     /// Reads a statement that starts with a keyword, and returns whether there was one.
     private mutating func readKeywordStatement() throws(MermaidDiagramReadError) -> Bool {
-        let keywordLine = cursor.line
-        guard let (keyword, afterKeyword) = keywordAtCursor() else { return false }
-        cursor = afterKeyword
+        let keywordStart = bytes
+        guard let (keyword, afterKeyword) = keywordAtPosition() else { return false }
+        bytes = afterKeyword
         switch keyword {
         case .state: try readDeclaration()
         case .note:
-            if let note = try StateDiagramNoteSyntax.readNote(&cursor, keywordLine: keywordLine) {
-                let stateIndex = try builder.stateIndex(for: note.state, isFirst: true)
+            if let note = try StateDiagramNoteSyntax.readNote(&bytes, keyword: keywordStart) {
+                let stateIndex = try builder.stateIndex(for: note.state, in: bytes, isFirst: true)
                 try builder.addNote(toStateAt: stateIndex, side: note.side, text: note.text)
             }
         case .direction: try readDirection()
         case .accessibilityTitle: builder.setAccessibilityTitle(readAccessibilityLine())
         case .accessibilityDescription: builder.setAccessibilityDescription(try readAccessibilityDescription())
         case .classDefinition, .classAssignment, .style, .click:
-            cursor.skipToEndOfLine()
+            bytes.skipToEndOfLine()
             builder.countUnappliedStatement()
         case .scale, .hide:
             // `scale 350 width` and `hide empty description` change nothing in Mermaid's drawing.
-            cursor.skipToEndOfLine()
+            bytes.skipToEndOfLine()
         }
         return true
     }
 
-    /// The keyword at the cursor and the cursor past it, or nil. A word is a keyword only when a space or a line break
-    /// follows it, so that `classes` and `notes --> B` name states; `accTitle` and `accDescr` need a colon (or, for
-    /// `accDescr`, a brace), `direction` a word after it, and `hide` is only `hide empty description`.
-    private func keywordAtCursor() -> (Keyword, MermaidTextCursor)? {
-        var lookahead = cursor
-        guard let word = lookahead.readWord(), let keyword = Self.keywordsByLowercasedWord[word.lowercased()] else { return nil }
+    /// The keyword at the position and the position past it, or nil. A word is a keyword only when a space or a line
+    /// break follows it, so that `classes` and `notes --> B` name states; `accTitle` and `accDescr` need a colon (or,
+    /// for `accDescr`, a brace), `direction` a word after it, and `hide` is only `hide empty description`.
+    private func keywordAtPosition() -> (Keyword, GraphDiagramBytes)? {
+        var lookahead = bytes
+        guard let keyword = Self.keyword(lookahead.readWord(), in: bytes) else { return nil }
         switch keyword {
         case .accessibilityTitle, .accessibilityDescription:
             var afterSpaces = lookahead
@@ -76,9 +92,9 @@ struct StateDiagramParser {
             guard let next = afterSpaces.peek(),
                   next == MermaidByte.colon || (next == MermaidByte.openingBrace && keyword == .accessibilityDescription) else { return nil }
         case .hide:
-            guard cursor.hasCaseInsensitivePrefix(Self.hideEmptyDescription) else { return nil }
-            lookahead = cursor
-            lookahead.advance(by: Self.hideEmptyDescription.count)
+            guard bytes.hasCaseInsensitivePrefix(Self.hideEmptyDescription) else { return nil }
+            lookahead = bytes
+            lookahead.advance(by: Self.hideEmptyDescription.utf8CodeUnitCount)
             if let next = lookahead.peek(), MermaidByte.isIdentifierByte(next) { return nil }
         case .direction:
             var afterSpaces = lookahead
@@ -93,45 +109,43 @@ struct StateDiagramParser {
     /// `}`, which closes a composite's body, and `--`, which divides it into concurrent regions. Returns whether one
     /// was read.
     private mutating func readBodyPunctuation() throws(MermaidDiagramReadError) -> Bool {
-        let line = cursor.line
-        if cursor.peek() == MermaidByte.closingBrace {
-            guard builder.closeBody() else { throw .invalidSyntax(line: line, problem: .closingBraceWithoutCompositeState) }
-            cursor.advance()
+        if bytes.peek() == MermaidByte.closingBrace {
+            guard builder.closeBody() else { throw .invalidSyntax(line: bytes.line, problem: .closingBraceWithoutCompositeState) }
+            bytes.advance()
             return true
         }
-        guard cursor.hasPrefix(Self.regionDivider), !cursor.hasPrefix(Self.transitionArrow) else { return false }
-        guard builder.startRegion() else { throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt())) }
-        cursor.advance(by: Self.regionDivider.count)
+        guard bytes.isAt(MermaidByte.hyphen, MermaidByte.hyphen), !Self.isAtTransitionArrow(bytes) else { return false }
+        guard builder.startRegion() else { throw .invalidSyntax(line: bytes.line, problem: .unexpectedText(bytes.excerpt())) }
+        bytes.advance(by: 2)
         return true
     }
 
     /// `A`, `A : text`, `A --> B` or `A --> B : text`, each state optionally followed by `:::class`.
     private mutating func readStateStatement() throws(MermaidDiagramReadError) {
-        let line = cursor.line
-        guard cursor.peek() != MermaidByte.quotationMark, let first = readReference() else {
-            throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt()))
+        guard bytes.peek() != MermaidByte.quotationMark, let first = readReference() else {
+            throw .invalidSyntax(line: bytes.line, problem: .unexpectedText(bytes.excerpt()))
         }
-        cursor.skipSpaces()
-        guard cursor.hasPrefix(Self.transitionArrow) else {
-            let stateIndex = try builder.stateIndex(for: first, isFirst: true)
-            if let description = StateDiagramTextSyntax.readColonText(&cursor) { builder.addDescriptions([description], toStateAt: stateIndex) }
+        bytes.skipSpaces()
+        guard Self.isAtTransitionArrow(bytes) else {
+            let stateIndex = try builder.stateIndex(for: first, in: bytes, isFirst: true)
+            if let description = StateDiagramTextSyntax.readColonText(&bytes) { builder.addDescription(description, toStateAt: stateIndex) }
             return
         }
-        cursor.advance(by: Self.transitionArrow.count)
-        cursor.skipSpaces()
-        guard let second = readReference() else { throw .invalidSyntax(line: cursor.line, problem: .expectedState) }
-        let sourceIndex = try builder.stateIndex(for: first, isFirst: true)
-        let targetIndex = try builder.stateIndex(for: second, isFirst: false)
-        cursor.skipSpaces()
-        try builder.addTransition(from: sourceIndex, to: targetIndex, label: StateDiagramTextSyntax.readColonText(&cursor))
+        bytes.advance(by: 3)
+        bytes.skipSpaces()
+        guard let second = readReference() else { throw .invalidSyntax(line: bytes.line, problem: .expectedState) }
+        let sourceIndex = try builder.stateIndex(for: first, in: bytes, isFirst: true)
+        let targetIndex = try builder.stateIndex(for: second, in: bytes, isFirst: false)
+        bytes.skipSpaces()
+        try builder.addTransition(from: sourceIndex, to: targetIndex, label: StateDiagramTextSyntax.readColonText(&bytes))
     }
 
     /// A state reference and any `:::class` after it, which is counted and not applied.
     private mutating func readReference() -> StateDiagramStateReference? {
-        guard let reference = StateDiagramTextSyntax.readReference(&cursor) else { return nil }
-        while cursor.hasPrefix(Self.classMarker) {
-            cursor.advance(by: Self.classMarker.count)
-            _ = StateDiagramTextSyntax.readIdentifier(&cursor)
+        guard let reference = StateDiagramTextSyntax.readReference(&bytes) else { return nil }
+        while bytes.isAt(MermaidByte.colon, MermaidByte.colon, MermaidByte.colon) {
+            bytes.advance(by: 3)
+            _ = StateDiagramTextSyntax.readIdentifier(&bytes)
             builder.countUnappliedStatement()
         }
         return reference
@@ -139,15 +153,15 @@ struct StateDiagramParser {
 
     /// What follows `state`: a stereotype, a description, a composite's body, or nothing.
     private mutating func readDeclaration() throws(MermaidDiagramReadError) {
-        switch try StateDiagramDeclarationSyntax.readDeclaration(&cursor) {
+        switch try StateDiagramDeclarationSyntax.readDeclaration(&bytes) {
         case .stereotyped(let identifier, let kind):
-            _ = try builder.stateIndex(for: .named(identifier), isFirst: true, kind: kind)
+            _ = try builder.stateIndex(for: .named(identifier), in: bytes, isFirst: true, kind: kind)
         case .described(let identifier, let descriptions, let opensBody):
-            let stateIndex = try builder.stateIndex(for: .named(identifier), isFirst: true)
+            let stateIndex = try builder.stateIndex(for: identifier, in: bytes, isFirst: true)
             builder.addDescriptions(descriptions, toStateAt: stateIndex)
             if opensBody { builder.openBody(ofStateAt: stateIndex) }
         case .composite(let identifier):
-            builder.openBody(ofStateAt: try builder.stateIndex(for: .named(identifier), isFirst: true))
+            builder.openBody(ofStateAt: try builder.stateIndex(for: .named(identifier), in: bytes, isFirst: true))
         case .nothing:
             break
         }
@@ -155,33 +169,37 @@ struct StateDiagramParser {
 
     /// `direction TB`, `BT`, `LR` or `RL`, for the body it is written in or the whole diagram.
     private mutating func readDirection() throws(MermaidDiagramReadError) {
-        cursor.skipSpaces()
-        let line = cursor.line
-        let word = cursor.readWord() ?? ""
-        guard let direction = FlowchartDirection(keyword: word) else { throw .invalidSyntax(line: line, problem: .unknownDirection(word)) }
+        bytes.skipSpaces()
+        let wordStart = bytes
+        let word = bytes.text(bytes.readWord())
+        guard let direction = FlowchartDirection(keyword: word) else { throw .invalidSyntax(line: wordStart.line, problem: .unknownDirection(word)) }
         builder.setDirection(direction)
-        cursor.skipToEndOfLine()
+        bytes.skipToEndOfLine()
     }
 
     /// `accTitle: text`, to the end of the line.
     private mutating func readAccessibilityLine() -> String {
-        cursor.skipSpaces()
-        if cursor.peek() == MermaidByte.colon { cursor.advance() }
-        cursor.skipSpaces()
-        return DiagramLabelDecoder.decodingEntities(cursor.readRestOfLine())
+        bytes.skipSpaces()
+        if bytes.peek() == MermaidByte.colon { bytes.advance() }
+        bytes.skipSpaces()
+        let start = bytes.position
+        bytes.skipToEndOfLine()
+        var end = bytes.position
+        while end > start, MermaidByte.isSpace(bytes.buffer[end - 1]) || bytes.buffer[end - 1] == MermaidByte.carriageReturn { end -= 1 }
+        return DiagramLabelDecoder.decodingEntities(bytes.text(MermaidTextRange(start: start, end: end)))
     }
 
     /// `accDescr: text` or `accDescr { lines }`, whose lines are kept without their indentation and blank lines.
     private mutating func readAccessibilityDescription() throws(MermaidDiagramReadError) -> String {
-        cursor.skipSpaces()
-        guard cursor.peek() == MermaidByte.openingBrace else { return readAccessibilityLine() }
-        let openingLine = cursor.line
-        cursor.advance()
-        let start = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.closingBrace { cursor.advance() }
-        guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedAccessibilityDescription) }
-        let description = cursor.text(from: start, to: cursor.position)
-        cursor.advance()
+        bytes.skipSpaces()
+        guard bytes.peek() == MermaidByte.openingBrace else { return readAccessibilityLine() }
+        let opening = bytes
+        bytes.advance()
+        let start = bytes.position
+        while let byte = bytes.peek(), byte != MermaidByte.closingBrace { bytes.advance() }
+        guard !bytes.isAtEnd else { throw .invalidSyntax(line: opening.line, problem: .unclosedAccessibilityDescription) }
+        let description = bytes.text(MermaidTextRange(start: start, end: bytes.position))
+        bytes.advance()
         let lines = description.split(separator: "\n").map { line in line.trimmingCharacters(in: .whitespaces) }
         return DiagramLabelDecoder.decodingEntities(lines.filter { line in !line.isEmpty }.joined(separator: "\n"))
     }
@@ -190,14 +208,29 @@ struct StateDiagramParser {
         case state, note, direction, accessibilityTitle, accessibilityDescription, classDefinition, classAssignment, style, click, scale, hide
     }
 
-    /// The keywords by their lowercased words: Mermaid reads them in any case. `hide` is only `hide empty description`.
-    private static let keywordsByLowercasedWord: [String: Keyword] = [
-        "state": .state, "note": .note, "direction": .direction, "acctitle": .accessibilityTitle, "accdescr": .accessibilityDescription,
-        "classdef": .classDefinition, "class": .classAssignment, "style": .style, "click": .click, "scale": .scale, "hide": .hide,
-    ]
-    private static let hideEmptyDescription = Array("hide empty description".utf8)
-    private static let transitionArrow = Array("-->".utf8)
-    private static let regionDivider = Array("--".utf8)
-    private static let classMarker = Array(":::".utf8)
+    /// The keyword `word` spells in any case (Mermaid reads them so), or nil.
+    private static func keyword(_ word: MermaidTextRange, in bytes: GraphDiagramBytes) -> Keyword? {
+        func spells(_ literal: StaticString) -> Bool {
+            let literalBytes = literal.utf8Start
+            for offset in 0..<word.count where bytes.buffer[word.lowerBound + offset] | 0x20 != literalBytes[offset] { return false }
+            return true
+        }
+        // A word is ASCII letters, which setting their 0x20 bit lowercases.
+        switch word.count {
+        case 4: return spells("note") ? .note : spells("hide") ? .hide : nil
+        case 5: return spells("state") ? .state : spells("class") ? .classAssignment : spells("style") ? .style : spells("click") ? .click
+            : spells("scale") ? .scale : nil
+        case 8: return spells("acctitle") ? .accessibilityTitle : spells("accdescr") ? .accessibilityDescription : spells("classdef") ? .classDefinition : nil
+        case 9: return spells("direction") ? .direction : nil
+        default: return nil
+        }
+    }
+
+    /// Whether `-->` is at the position.
+    @inline(__always) private static func isAtTransitionArrow(_ bytes: GraphDiagramBytes) -> Bool {
+        bytes.isAt(MermaidByte.hyphen, MermaidByte.hyphen, MermaidByte.greaterThan)
+    }
+
+    private static let hideEmptyDescription: StaticString = "hide empty description"
     private static let numberSign = UInt8(ascii: "#")
 }
