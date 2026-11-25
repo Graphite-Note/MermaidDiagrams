@@ -8,7 +8,7 @@
  *              lists of its own that the scene takes, and says when a lane went past its element limit.
  *
  * Authors: Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 24/11/2026
  */
 
@@ -94,6 +94,10 @@ struct DiagramSceneBuilder: ~Copyable {
     mutating func fillAndStroke(_ lane: DiagramPathLane, fill: DiagramPaint, stroke paint: DiagramPaint, _ stroke: DiagramStroke,
                                 part: DiagramScenePart) {
         add(lane, painting: .fillAndStroke(fill, paint, stroke), part: part)
+    }
+
+    mutating func fill(_ lane: DiagramPathLane, _ gradient: DiagramLinearGradient, part: DiagramScenePart) {
+        add(lane, painting: .gradientFill(gradient), part: part)
     }
 
     // MARK: Text

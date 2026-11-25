@@ -3,11 +3,12 @@
  * ----------------------
  * Layer: Core
  * Description: A laid-out block diagram's scene, back to front as Pele writes its SVG: the title, the composites with
- *              their titles, the edges and their marks, the blocks and arrows with their text, the edges' text.
+ *              their titles, the edges and their marks, the blocks and arrows with their text, the edges' text, the shapes
+ *              recorded into lanes of the thread's scene workspace without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -20,27 +21,31 @@ extension DiagramScene {
     /// for `.-`, with its marks; each block's shape or arrow in the surface color outlined in the border color, its
     /// colors as its style sets, and its text; each edge's text on a patch of the page's color.
     public init(layout: BlockLayout) {
-        var builder = DiagramSceneBuilder()
-        builder.title(layout.title)
-        for composite in layout.composites { BlockScenePaths.add(composite, to: &builder) }
-        let inks = BlockEdgeInk.inks(of: layout.edges, over: layout.composites)
-        for (edge, ink) in zip(layout.edges, inks) where ink == .cased { BlockScenePaths.addCasing(of: edge, to: &builder) }
-        for (edge, ink) in zip(layout.edges, inks) {
-            guard case .inked(let color) = ink else {
-                BlockScenePaths.add(edge, in: .line, to: &builder)
-                continue
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            builder.title(layout.title)
+            for composite in layout.composites { BlockScenePaths.add(composite, to: &builder, workspace: workspace) }
+            let inks = BlockEdgeInk.inks(of: layout.edges, over: layout.composites)
+            for (edge, ink) in zip(layout.edges, inks) where ink == .cased { BlockScenePaths.addCasing(of: edge, to: &builder, workspace: workspace) }
+            for (edge, ink) in zip(layout.edges, inks) {
+                guard case .inked(let color) = ink else {
+                    BlockScenePaths.add(edge, in: .line, to: &builder, workspace: workspace)
+                    continue
+                }
+                BlockScenePaths.add(edge, in: .color(color), to: &builder, workspace: workspace)
             }
-            BlockScenePaths.add(edge, in: .color(color), to: &builder)
+            for node in layout.nodes { BlockScenePaths.add(node, to: &builder, workspace: workspace) }
+            for edge in layout.edges {
+                guard let text = edge.text else { continue }
+                let madeCount = workspace.madePathCount
+                let patch = text.frame.insetBy(dx: -BlockScenePaths.textPatchExtraWidth / 2, dy: 0)
+                builder.fill(workspace.roundedRectangle(patch, cornerWidth: BlockScenePaths.textPatchCornerRadius,
+                                                        cornerHeight: BlockScenePaths.textPatchCornerRadius), .background, part: .labelBackground)
+                workspace.givePathsBack(downTo: madeCount)
+                builder.text(text, .foreground, part: .edgeLabel)
+            }
+            return builder.scene(size: layout.size, font: layout.font)
         }
-        for node in layout.nodes { BlockScenePaths.add(node, to: &builder) }
-        for edge in layout.edges {
-            guard let text = edge.text else { continue }
-            let patch = text.frame.insetBy(dx: -BlockScenePaths.textPatchExtraWidth / 2, dy: 0)
-            builder.fill(CGPath(roundedRect: patch, cornerWidth: BlockScenePaths.textPatchCornerRadius, cornerHeight: BlockScenePaths.textPatchCornerRadius,
-                                transform: nil), .background, part: .labelBackground)
-            builder.text(text, .foreground, part: .edgeLabel)
-        }
-        self = builder.scene(size: layout.size, font: layout.font)
     }
 }
 
@@ -54,9 +59,11 @@ enum BlockScenePaths {
     static let thickLineWidth: CGFloat = 2.5
     static let dottedDashLengths: [CGFloat] = [3, 4]
 
-    static func add(_ composite: BlockLayoutComposite, to builder: inout DiagramSceneBuilder) {
+    static func add(_ composite: BlockLayoutComposite, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let style = composite.appearance.style
-        let box = CGPath(roundedRect: composite.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
+        let box = workspace.roundedRectangle(composite.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
         let fill = style.fill.map(DiagramPaint.color) ?? DiagramPaint.alternateSurface.atOpacity(compositeFillOpacity)
         builder.fillAndStroke(box, fill: fill, stroke: style.stroke.map(DiagramPaint.color) ?? .border, outlineStroke(style), part: .cluster)
         builder.text(composite.title, composite.appearance.textColor.map(DiagramPaint.color) ?? .muted, isBold: composite.appearance.isBold,
@@ -67,49 +74,63 @@ enum BlockScenePaths {
     static let casingExtraWidth: CGFloat = 4
 
     /// `edge`'s line and marks in `paint`.
-    static func add(_ edge: BlockLayoutEdge, in paint: DiagramPaint, to builder: inout DiagramSceneBuilder) {
+    static func add(_ edge: BlockLayoutEdge, in paint: DiagramPaint, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let stroke = DiagramStroke(lineWidth: edge.isThick ? thickLineWidth : 1, dashLengths: edge.isDotted ? dottedDashLengths : [], lineCap: .round)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, stroke, part: .edge)
-        let (filled, stroked) = marks(of: edge)
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
+        builder.stroke(line(of: edge, workspace: workspace), paint, stroke, part: .edge)
+        let (filled, stroked) = marks(of: edge, workspace: workspace)
         builder.fill(filled, paint, part: .marker)
         builder.stroke(stroked, paint, DiagramStroke(lineWidth: 1, lineCap: .round), part: .marker)
     }
 
     /// The stroke of the page's color under `edge` and its marks, 4 points wider than its line, with round ends and
     /// corners, and its marks filled and outlined in it: Pele's `edgeCasing`.
-    static func addCasing(of edge: BlockLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    static func addCasing(of edge: BlockLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let casing = DiagramStroke.rounded(lineWidth: (edge.isThick ? thickLineWidth : 1) + casingExtraWidth)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), .background, casing, part: .casing)
-        let (filled, stroked) = marks(of: edge)
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
+        builder.stroke(line(of: edge, workspace: workspace), .background, casing, part: .casing)
+        let (filled, stroked) = marks(of: edge, workspace: workspace)
         builder.fillAndStroke(filled, fill: .background, stroke: .background, casing, part: .casing)
         builder.stroke(stroked, .background, casing, part: .casing)
     }
 
     /// The marks at `edge`'s ends: those filled (arrows and circles) and those stroked (crosses).
-    private static func marks(of edge: BlockLayoutEdge) -> (filled: CGPath, stroked: CGPath) {
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
+    private static func marks(of edge: BlockLayoutEdge, workspace: DiagramSceneWorkspace) -> (filled: DiagramPathLane, stroked: DiagramPathLane) {
+        let filled = workspace.makeLane()
+        let stroked = workspace.makeLane()
+        if let mark = edge.sourceMark { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
+        if let mark = edge.targetMark { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
         return (filled, stroked)
     }
 
-    static func add(_ node: BlockLayoutNode, to builder: inout DiagramSceneBuilder) {
+    /// `edge`'s line, as `DiagramEdgeDrawing.path` draws it, in a lane given back by the caller.
+    private static func line(of edge: BlockLayoutEdge, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+        let line = workspace.makeLane()
+        DiagramEdgeDrawing.record(edge.path, into: line)
+        return line
+    }
+
+    static func add(_ node: BlockLayoutNode, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let style = node.appearance.style
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let fill = style.fill.map(DiagramPaint.color) ?? .surface
         let strokePaint = style.stroke.map(DiagramPaint.color) ?? .border
         switch node.form {
         case .arrow(let corners):
-            let outline = CGMutablePath()
+            let outline = workspace.makeLane()
             outline.addLines(between: corners)
             outline.closeSubpath()
             var stroke = outlineStroke(style)
             stroke = DiagramStroke(lineWidth: stroke.lineWidth, dashLengths: stroke.dashLengths, lineJoin: .round)
             builder.fillAndStroke(outline, fill: fill, stroke: strokePaint, stroke, part: .node)
         case .shape(let shape):
-            if let outline = FlowchartShapeDrawing.outline(of: shape, in: node.frame) {
+            if let outline = FlowchartShapeDrawing.outline(of: shape, in: node.frame, making: workspace) {
                 builder.fillAndStroke(outline, fill: fill, stroke: strokePaint, outlineStroke(style), part: .node)
             }
-            if let lines = FlowchartShapeDrawing.innerLines(of: shape, in: node.frame) { builder.stroke(lines, strokePaint, outlineStroke(style), part: .node) }
+            if let lines = FlowchartShapeDrawing.innerLines(of: shape, in: node.frame, making: workspace) { builder.stroke(lines, strokePaint, outlineStroke(style), part: .node) }
         }
         builder.text(node.text, node.appearance.textColor.map(DiagramPaint.color) ?? .foreground, isBold: node.appearance.isBold,
                      isItalic: node.appearance.isItalic, part: .label)

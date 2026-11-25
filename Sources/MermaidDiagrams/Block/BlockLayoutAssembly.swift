@@ -6,7 +6,7 @@
  *              title and clear of the padding, the composites, blocks and arrows with their text, the edges' lines and marks.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -19,11 +19,11 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
     let edges: BlockEdgePlacement
     var cache: BlockMeasurerCache<Measurer>
 
-    init(diagram: BlockDiagram, placement: BlockPlacement, edges: BlockEdgePlacement, measurers: BlockMeasurers<Measurer>) {
+    init(diagram: BlockDiagram, placement: BlockPlacement, edges: BlockEdgePlacement, cache: BlockMeasurerCache<Measurer>) {
         self.diagram = diagram
         self.placement = placement
         self.edges = edges
-        cache = BlockMeasurerCache(measurers: measurers)
+        self.cache = cache
     }
 
     mutating func layout(title: DiagramTextBlock?, font: DiagramFont) -> BlockLayout {
@@ -37,7 +37,7 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
         var nodes: [BlockLayoutNode] = []
         for index in placement.cells.indices.dropFirst() {
             let view = placement.views[index]
-            let identifier = diagram.blocks[view.blockIndex].identifier
+            let identifier = diagram.model.identifier(of: diagram.model.blocks[view.blockIndex])
             switch view.kind {
             case .space: continue
             case .composite:
@@ -64,7 +64,7 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
         let keepsOwnSize = if case .leaf(let shape) = view.kind { BlockViews.keepsOwnSize.contains(shape) } else { false }
         if let measured = view.text, cell.span > 1, measured.size.width > 0, measured.lineCount > 1, drawn.width > cell.neededWidth, !keepsOwnSize {
             let room = measured.size.width + (drawn.width - cell.neededWidth)
-            text = PlaneMapLabel.block(diagram.blocks[view.blockIndex].label, measurer: cache.measurer(for: view.appearance), maximumWidth: room)
+            text = diagram.model.textBlock(of: diagram.model.blocks[view.blockIndex].label, measurer: cache.measurer(for: view.appearance), maximumWidth: room)
         }
         let frame = CGRect(x: center.x - drawn.width / 2, y: center.y - drawn.height / 2, width: drawn.width, height: drawn.height)
         let form: BlockLayoutNodeForm
@@ -81,10 +81,13 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
 
     /// Each edge's line through its route (or its loop) on the page, cut back for its marks, and its text.
     private func edgeLayouts(offset: CGVector) -> [BlockLayoutEdge] {
-        edges.routes.enumerated().map { index, route in
-            let edge = diagram.edges[edges.edgeIndices[index]]
-            let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
-            let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
+        let model = diagram.model
+        return edges.routes.enumerated().map { index, route in
+            let edge = model.edges[edges.edgeIndices[index]]
+            let sourceArrowhead = BlockModel.arrowheads[Int(edge.sourceArrowhead)]
+            let targetArrowhead = BlockModel.arrowheads[Int(edge.targetArrowhead)]
+            let startTrim = DiagramEdgeMark.lineTrim(for: sourceArrowhead)
+            let endTrim = DiagramEdgeMark.lineTrim(for: targetArrowhead)
             let line: BlockEdgeLine
             if route.loopCount > 0 {
                 let outline = placement.outlines[edges.ends[index].source]
@@ -93,11 +96,11 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
             } else {
                 line = BlockEdgePaths.traced(route.points.map { point in point.translated(by: offset) }, startTrim: startTrim, endTrim: endTrim)
             }
-            let text = PlaneMapLabel.block(edge.label, measurer: cache.measurers.edgeText, maximumWidth: BlockLayoutEngine.wrappingWidth)
+            let text = model.textBlock(of: edge.label, measurer: cache.measurers.edgeText, maximumWidth: BlockLayoutEngine.wrappingWidth)
                 .map { block in PlaneMapLabel.placed(block, at: route.textCenter.translated(by: offset)) }
-            return BlockLayoutEdge(identifier: edge.identifier, path: line.path,
-                                   sourceMark: Self.mark(edge.sourceArrowhead, at: line.start, pointing: line.startDirection),
-                                   targetMark: Self.mark(edge.targetArrowhead, at: line.end, pointing: line.endDirection),
+            return BlockLayoutEdge(identifier: model.edgeIdentifier(edge), path: line.path,
+                                   sourceMark: Self.mark(sourceArrowhead, at: line.start, pointing: line.startDirection),
+                                   targetMark: Self.mark(targetArrowhead, at: line.end, pointing: line.endDirection),
                                    isThick: edge.isThick, isDotted: edge.isDotted, text: text)
         }
     }

@@ -132,8 +132,11 @@ public enum PacketDiagramLayoutEngine {
         var fitter = LabelFitter(labels: diagram.fields.map { field in
             DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines)
         }, measurer: text, size: (size * labelScale).rounded(), smallestSize: (size * smallestLabelScale).rounded())
+        let pieceCount = rows.reduce(0) { count, row in count + row.count }
         var boxes: [PacketLayoutField] = []
+        boxes.reserveCapacity(pieceCount)
         var bitNumbers: [DiagramTextBlock] = []
+        if options.showsBitNumbers { bitNumbers.reserveCapacity(2 * pieceCount) }
         var bitNumberMeasurers = DiagramTextMeasurerSizes(text)
         for (rowIndex, row) in rows.enumerated() {
             let top = padding + grid.rowTops[rowIndex] + grid.numbersHeight
@@ -148,8 +151,8 @@ public enum PacketDiagramLayoutEngine {
                 } ?? fitter.block(of: piece.fieldIndex, width: width - labelMargin, in: frame)
                 boxes.append(PacketLayoutField(frame: frame, firstBit: piece.firstBit, lastBit: piece.lastBit, label: label))
                 if options.showsBitNumbers {
-                    bitNumbers += Self.bitNumbers(piece, frame: frame, isDescending: options.isDescending, size: grid.bitNumberSize,
-                                                  measurers: &bitNumberMeasurers)
+                    Self.addBitNumbers(of: piece, frame: frame, isDescending: options.isDescending, size: grid.bitNumberSize,
+                                       measurers: &bitNumberMeasurers, to: &bitNumbers)
                 }
             }
         }
@@ -158,17 +161,21 @@ public enum PacketDiagramLayoutEngine {
 
     /// The numbers above a box: the bit alone, centered, for a one-bit box; else the box's first bit at its left end and its
     /// last at its right (the other way round when the bits count from the right).
-    private static func bitNumbers<Measurer: DiagramTextMeasuring>(_ piece: PacketFieldPiece, frame: CGRect, isDescending: Bool, size: CGFloat,
-                                                                   measurers: inout DiagramTextMeasurerSizes<Measurer>) -> [DiagramTextBlock] {
+    private static func addBitNumbers<Measurer: DiagramTextMeasuring>(of piece: PacketFieldPiece, frame: CGRect, isDescending: Bool, size: CGFloat,
+                                                                      measurers: inout DiagramTextMeasurerSizes<Measurer>,
+                                                                      to bitNumbers: inout [DiagramTextBlock]) {
         let centerY = frame.minY - bitNumberRise - size * DiagramTextDrawing.baselineShiftRatio
-        func number(_ bit: Int, centerX: (CGFloat) -> CGFloat) -> DiagramTextBlock {
-            var block = measurers.block(of: String(bit), fontSize: size)
-            block.center = CGPoint(x: centerX(block.size.width), y: centerY)
-            return block
+        if piece.firstBit == piece.lastBit {
+            var block = measurers.block(of: String(piece.firstBit), fontSize: size)
+            block.center = CGPoint(x: frame.midX, y: centerY)
+            return bitNumbers.append(block)
         }
-        if piece.firstBit == piece.lastBit { return [number(piece.firstBit) { _ in frame.midX }] }
-        return [number(isDescending ? piece.lastBit : piece.firstBit) { width in frame.minX + width / 2 },
-                number(isDescending ? piece.firstBit : piece.lastBit) { width in frame.maxX - width / 2 }]
+        var left = measurers.block(of: String(isDescending ? piece.lastBit : piece.firstBit), fontSize: size)
+        left.center = CGPoint(x: frame.minX + left.size.width / 2, y: centerY)
+        bitNumbers.append(left)
+        var right = measurers.block(of: String(isDescending ? piece.firstBit : piece.lastBit), fontSize: size)
+        right.center = CGPoint(x: frame.maxX - right.size.width / 2, y: centerY)
+        bitNumbers.append(right)
     }
 
     /// Fits each field's label once for each width it is fitted at: the pieces of a field that crosses rows share its
@@ -190,6 +197,7 @@ public enum PacketDiagramLayoutEngine {
             measurers = DiagramTextMeasurerSizes(measurer)
             self.size = size
             self.smallestSize = smallestSize
+            fitted.reserveCapacity(labels.count)
         }
 
         /// The label of the field in `frame`, centered in it, or nil when there is none to draw: it is empty, not even a
