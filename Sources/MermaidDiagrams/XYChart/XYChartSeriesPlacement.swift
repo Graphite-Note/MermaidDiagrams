@@ -5,8 +5,8 @@
  * Description: Where an XY chart's series go in its plot: bars, lines, point labels and bar values.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -112,6 +112,7 @@ struct XYChartSeriesPlacement {
     private mutating func placeLine(_ series: XYChartSeries, seriesIndex: Int, count: Int, text: XYChartText<some DiagramTextMeasuring>) {
         var runs: [[CGPoint]] = []
         var dots: [CGPoint] = []
+        if span >= Self.smallestDottedSpan { dots.reserveCapacity(count) }
         var isDrawing = false
         var previous: (place: Double, valueFraction: Double)?
         for index in 0..<count {
@@ -123,9 +124,9 @@ struct XYChartSeriesPlacement {
             let valueFraction = frame.valueScale.fraction(of: value)
             let isInside = valueFraction >= 0 && valueFraction <= 1
             if let previous {
-                appendSegment(from: previous, to: (place, valueFraction), isDrawing: isDrawing, to: &runs)
+                appendSegment(from: previous, to: (place, valueFraction), isDrawing: isDrawing, room: count - index + 1, to: &runs)
             } else if isInside {
-                runs.append([point(place: place, valueFraction: valueFraction)])
+                runs.append(Self.run(from: point(place: place, valueFraction: valueFraction), room: count - index))
             }
             isDrawing = isInside
             previous = (place, valueFraction)
@@ -137,10 +138,17 @@ struct XYChartSeriesPlacement {
         lines.append(XYChartLine(seriesIndex: seriesIndex, runs: runs, dots: dots))
     }
 
+    /// A run of the line starting at `first`, with room for `room` points, the most the rest of the line adds to it.
+    private static func run(from first: CGPoint, room: Int) -> [CGPoint] {
+        var run = [first]
+        run.reserveCapacity(max(room, 1))
+        return run
+    }
+
     /// The part of the line from one value to the next inside the value range, if any: it continues the run when it
     /// starts where the last one ended, and starts a new run otherwise.
     private func appendSegment(from start: (place: Double, valueFraction: Double), to end: (place: Double, valueFraction: Double),
-                               isDrawing: Bool, to runs: inout [[CGPoint]]) {
+                               isDrawing: Bool, room: Int, to runs: inout [[CGPoint]]) {
         let rise = end.valueFraction - start.valueFraction
         var entry = 0.0
         var exit = 1.0
@@ -156,7 +164,7 @@ struct XYChartSeriesPlacement {
         func pointAt(_ share: Double) -> CGPoint {
             point(place: start.place + (end.place - start.place) * share, valueFraction: start.valueFraction + rise * share)
         }
-        if !isDrawing || entry > 0 || runs.isEmpty { runs.append([pointAt(entry)]) }
+        if !isDrawing || entry > 0 || runs.isEmpty { runs.append(Self.run(from: pointAt(entry), room: room)) }
         runs[runs.count - 1].append(pointAt(exit))
     }
 

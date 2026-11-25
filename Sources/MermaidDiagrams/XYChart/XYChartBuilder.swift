@@ -5,8 +5,8 @@
  * Description: Collects an XY chart as its statements are read, as Mermaid's chart database does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -81,8 +81,12 @@ struct XYChartBuilder {
         case .categories(let categories): values = categories.indices.map { index in index < points.count ? points[index].value : nil }
         case .range: values = points.map(\.value)
         }
-        let labels = points.map { point in point.label.isEmpty ? point.label : point.label.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let pointLabels = kind == .line && labels.contains { label in !label.isEmpty } ? labels.map(Self.label) : []
+        // Labels are read only for a line with a label written: a label empty as written is empty trimmed.
+        var pointLabels: [DiagramLabel] = []
+        if kind == .line, points.contains(where: { point in !point.label.isEmpty }) {
+            let labels = points.map { point in point.label.isEmpty ? point.label : FoundationTextOnBytes.trimmed(point.label, includingLineBreaks: true) }
+            if labels.contains(where: { label in !label.isEmpty }) { pointLabels = labels.map(Self.label) }
+        }
         chart.series.append(XYChartSeries(kind: kind, title: Self.label(title), values: values, pointLabels: pointLabels))
     }
 
@@ -94,7 +98,7 @@ struct XYChartBuilder {
     /// Text as written, without spaces at either end, read as plain lines: `<br>` breaks a line, tags are dropped and
     /// entity codes decoded.
     private static func label(_ written: String) -> DiagramLabel {
-        let trimmed = written.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = FoundationTextOnBytes.trimmed(written, includingLineBreaks: true)
         return trimmed.isEmpty ? DiagramLabel(lines: []) : DiagramLabelDecoder.label(from: trimmed, form: .plain)
     }
 }
