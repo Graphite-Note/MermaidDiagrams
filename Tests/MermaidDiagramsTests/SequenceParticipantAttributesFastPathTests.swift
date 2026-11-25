@@ -6,7 +6,7 @@
  *              text of quoted keys and values put together at random and every attribute text of the corpora.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -20,10 +20,12 @@ final class SequenceParticipantAttributesFastPathTests: XCTestCase {
                        file: file, line: line)
     }
 
-    /// Texts of quoted and unquoted keys and values, blanks, commas, repeated keys and the bytes the fast path refuses.
+    /// Texts of quoted and unquoted keys and values, blanks, commas, repeated keys and the bytes the fast path refuses,
+    /// among them the backslash of a YAML escape (`\n`, `\\`, `\u0041`), which the YAML reader turns into another character.
     func testRandomAttributeTextsReadAsTheYAMLReaderReadsThem() {
         let keys = ["\"type\"", "\"alias\"", "\"other\"", "type", "alias", "\"Type\"", "\"\"", "'type'"]
         let values = ["\"boundary\"", "\"database\"", "\"\"", "\"Public API\"", "\"a: b\"", "\"#x\"", "\"[x]\"", "\"a\\\"b\"", "\"tab\there\"", "\"é\"",
+                      "\"line\\nbreak\"", "\"C:\\\\x\"", "\"\\u0041\"", "\"end\\\\\"", "\"\\t\"",
                       "control", "null", "0", "true", "\"null\"", "\"0\"", "'q'", "[1, 2]", "{a: 1}", "\"  spaced  \""]
         let blanks = ["", " ", "  ", "\t", " \t "]
         var state: UInt64 = 0x5E_A77_12
@@ -49,7 +51,8 @@ final class SequenceParticipantAttributesFastPathTests: XCTestCase {
     /// Every participant's attributes in the corpora, and the documented forms.
     func testDocumentedAndCorpusAttributesReadAsTheYAMLReaderReadsThem() throws {
         for text in [" \"type\" : \"boundary\" ", "\"type\": \"database\", \"alias\": \"Store\"", "\"alias\": \"\"", "\"alias\": \"A\", \"type\": \"actor\"",
-                     "\"type\": \"\"", "", " ", "\"type\": \"queue\",", "\"type\": \"queue\" \"alias\": \"x\""] {
+                     "\"type\": \"\"", "", " ", "\"type\": \"queue\",", "\"type\": \"queue\" \"alias\": \"x\"",
+                     "\"alias\": \"Line\\nBreak\"", "\"type\": \"\\x41ctor\"", "\"alias\": \"back\\\\slash\""] {
             assertSameAsYAML(text)
         }
         var attributeTexts: [String] = []
