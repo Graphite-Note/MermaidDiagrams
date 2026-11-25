@@ -3,10 +3,10 @@
  * ---------------------------------------------
  * Layer: Core
  * Description: Prepares a swimlane diagram, with the diagram turned to run down in Pele's tight measurements for a
- *              narrow column, and says what a screen reader hears of it.
+ *              narrow column, the regular layout not laid out again, and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -15,9 +15,11 @@ extension MermaidDiagramPreparationContext {
     /// measurements, as Pele's `turnToFit` and `tighten` draw it.
     func prepared(swimlane diagram: FlowchartDiagram) -> PreparedMermaidDiagram {
         let layout = SwimlaneLayoutEngine.layout(diagram, typography: typography)
+        // The regular layout is the one across in Pele's measurements that fitting tries first: it is not laid out again.
+        let regularWidth = layout.size.width
         let narrow = narrowSceneIsWanted(forRegularSize: layout.size)
             ? narrowScene(of: narrowestColumnWidth.map { width in (diagram, width) }, regularSize: layout.size, laidOut: { diagram, width in
-                SwimlaneLayoutEngine.layout(diagram, typography: typography, availableWidth: width)
+                try SwimlaneLayoutEngine.narrowLayout(diagram, typography: typography, availableWidth: width, regularWidth: regularWidth)
             }, scene: { layout in DiagramScene(layout: layout, limits: limits) }) : nil
         return PreparedMermaidDiagram(kind: .swimlane, scene: DiagramScene(layout: layout, limits: limits), preparedNarrowScene: narrow,
                                       accessibility: MermaidDiagramAccessibility(swimlane: diagram),
