@@ -5,7 +5,7 @@
  * Description: A list of plain values that grows inside a scratch arena, for work whose length is found as it goes.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -52,7 +52,7 @@ struct ScratchList<Element: BitwiseCopyable>: RandomAccessCollection {
     /// Appends every value of `span`.
     mutating func append(contentsOf span: ScratchSpan<Element>) {
         if count + span.count > storage.count { grow(toHold: count + span.count) }
-        (storage.start + count).update(from: span.start, count: span.count)
+        ScratchShortRuns.copy(from: span.start, to: storage.start + count, count: span.count)
         count += span.count
     }
 

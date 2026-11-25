@@ -5,13 +5,13 @@
  * Description: Orders the ranks of Pele's layered layout: barycenter sweeps, adjacent swaps, two attempts, the mirror.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 extension LayeredFlatCrossingReduction {
     /// Orders the graph's ranks for few crossings and returns the crossings after and before.
-    mutating func reduce() -> (crossings: Int, declared: Int) {
+    func reduce() -> (crossings: Int, declared: Int) {
         if widest < 2 { return (0, 0) }
         let declared = count()
         if graph.vertexGroup != nil { prepareGroups() }
@@ -50,7 +50,7 @@ extension LayeredFlatCrossingReduction {
 
     /// One attempt: sweeps until four in a row find nothing better, at most 24, then swaps for a small graph. Returns
     /// the crossings of the order it found, written to `foundOrder`.
-    private mutating func attemptOrder(attempt: Int, start: Int, initial: ScratchSpan<Int>, isSmall: Bool, found foundOrder: ScratchSpan<Int>) -> Int {
+    private func attemptOrder(attempt: Int, start: Int, initial: ScratchSpan<Int>, isSmall: Bool, found foundOrder: ScratchSpan<Int>) -> Int {
         var found = start
         foundOrder.copyElements(from: initial)
         var sweepIndex = 0
@@ -104,16 +104,16 @@ extension LayeredFlatCrossingReduction {
     }
 
     /// One barycenter sweep down (each rank by its upper neighbours) or up, ties broken towards the left or right.
-    private mutating func sweep(isDownward: Bool, isBiasedRight: Bool) {
+    private func sweep(isDownward: Bool, isBiasedRight: Bool) {
         for step in 1...max(1, graph.maximumRank) where step <= graph.maximumRank {
             let rank = isDownward ? step : graph.maximumRank - step
             if graph.isRankFixed[rank] { continue }
-            measureBarycenters(rank: rank, isDownward: isDownward)
+            let movingCount = measureBarycenters(rank: rank, isDownward: isDownward)
             if graph.vertexGroup != nil {
                 arrange(rank: rank, keys: barycenter)
                 continue
             }
-            let moving = movingVertices.elements
+            let moving = movingVertices.part(0..<movingCount)
             if moving.count < 2 { continue }
             // As `sortStably(by:)` with barycenter[first] - barycenter[second], or else the positions' difference
             // (towards the bias), as the comparison: a negative one puts `first` first.
@@ -133,23 +133,24 @@ extension LayeredFlatCrossingReduction {
         }
     }
 
-    /// Each vertex's barycenter in `rank` from its neighbours above (downward) or below; puts those that move in
-    /// `movingVertices`.
-    private mutating func measureBarycenters(rank: Int, isDownward: Bool) {
+    /// Each vertex's barycenter in `rank` from its neighbours above (downward) or below; puts those that move at the
+    /// start of `movingVertices` and returns how many they are.
+    private func measureBarycenters(rank: Int, isDownward: Bool) -> Int {
         let start = graph.rankStart[rank]
         let end = graph.rankStart[rank + 1]
         let neighbourStart = isDownward ? graph.predecessorStart : graph.successorStart
         let list = isDownward ? graph.predecessorSegments : graph.successorSegments
         let other = isDownward ? graph.segmentFrom : graph.segmentTo
         let otherOffset = isDownward ? graph.segmentFromOffset : graph.segmentToOffset
-        movingVertices.removeAll()
-        movingVertices.reserveCapacity(end - start)
+        // The rank's vertices are no more than the widest rank's, which `movingVertices` holds.
+        var movingCount = 0
         for index in start..<end {
             let vertex = graph.order[index]
             let pin = vertex < graph.nodeCount ? pins[vertex] : 0
             if pin != 0 {
                 barycenter[vertex] = Double(pin) * 1e9
-                movingVertices.append(vertex)
+                movingVertices[movingCount] = vertex
+                movingCount += 1
                 continue
             }
             let from = neighbourStart[vertex]
@@ -171,8 +172,10 @@ extension LayeredFlatCrossingReduction {
                 if graph.hasOffsets && graph.vertexWidth[neighbour] > 0 { sum += otherOffset[list[position]] / graph.vertexWidth[neighbour] }
             }
             barycenter[vertex] = sum / Double(to - from)
-            movingVertices.append(vertex)
+            movingVertices[movingCount] = vertex
+            movingCount += 1
         }
+        return movingCount
     }
 
     /// Adjacent swaps that remove crossings the sweeps missed, in up to eight passes.

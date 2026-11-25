@@ -5,8 +5,8 @@
  * Description: Gives the pieces of edges that cross one gap of Pele's layered layout their tracks or levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// The pieces of edges that each cross one gap (Pele's `Pieces`): where they leave the rank above and reach the one
@@ -27,8 +27,9 @@ struct LayeredEdgePieces {
 /// Pele's `assignTracks` (layout/layered.ts): two pieces of a gap share a track only where they cannot be mistaken
 /// for each other, and which of two goes above is whichever makes them cross less. With curves, only the pieces that
 /// would run along or too near another turn onto levels; a gap whose curves mostly cross gets taller instead.
+/// Every method reads the tracks as they are and writes only spans, so that none copies the tracks to call another.
 struct LayeredFlatTracks {
-    var pieces: LayeredEdgePieces
+    let pieces: LayeredEdgePieces
     let isCurved: Bool
     let room: ScratchSpan<Double>
     let trackCount: ScratchSpan<Int>
@@ -44,14 +45,15 @@ struct LayeredFlatTracks {
     /// The pieces' tracks and levels, the track counts and the tall gaps are taken from `arena` first, for the caller to
     /// read once the tracks are assigned.
     init(pieces: LayeredEdgePieces, isCurved: Bool, room: ScratchSpan<Double>, rankCount: Int, arena: DiagramScratchArena) {
+        var pieces = pieces
+        pieces.track = arena.span(count: pieces.count, repeating: -1)
+        pieces.levels = arena.span(count: pieces.count, repeating: 0)
         self.pieces = pieces
         self.isCurved = isCurved
         self.room = room
         self.arena = arena
         trackCount = arena.span(count: rankCount, repeating: 0)
         tallGap = arena.span(count: rankCount, repeating: 0.0)
-        self.pieces.track = arena.span(count: pieces.count, repeating: -1)
-        self.pieces.levels = arena.span(count: pieces.count, repeating: 0)
         let low: ScratchSpan<Double> = arena.uninitializedSpan(count: pieces.count)
         let high: ScratchSpan<Double> = arena.uninitializedSpan(count: pieces.count)
         for piece in 0..<pieces.count {
@@ -112,7 +114,7 @@ struct LayeredFlatTracks {
     }
 
     /// Gives every piece that does not run straight down a track across its gap (or a level), and counts the tracks.
-    mutating func assign() {
+    func assign() {
         let mark = arena.mark()
         defer { arena.release(to: mark) }
         // The pieces of each gap in the order they come, one gap after another, and the gaps in the order their first

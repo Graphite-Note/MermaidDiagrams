@@ -5,14 +5,16 @@
  * Description: Counts the crossings of an order of Pele's layered layout, with a tree over each rank's places.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Pele's `reduceCrossings` (layout/layered.ts): the counting of crossings here, the sweeps, swaps and attempts in
 /// `LayeredFlatCrossingReduction.swift`.
+/// Every method reads the reduction as it is and changes only the graph's spans and its own, so that none copies the
+/// reduction to call another.
 struct LayeredFlatCrossingReduction {
-    var graph: LayeredFlatGraph
+    let graph: LayeredFlatGraph
     /// The pin of each node.
     let pins: ScratchSpan<Int>
     let widest: Int
@@ -28,12 +30,14 @@ struct LayeredFlatCrossingReduction {
     let tree: ScratchSpan<Int>
     let targets: ScratchSpan<Int>
     let barycenter: ScratchSpan<Double>
-    /// The vertices of the rank a sweep is moving, kept between ranks so that each sweep reuses one list.
-    var movingVertices: ScratchList<Int>
-    var groupDepth = ScratchSpan<Int>.empty
-    var groupSum = ScratchSpan<Double>.empty
-    var groupCount = ScratchSpan<Int>.empty
-    var groupFirst = ScratchSpan<Int>.empty
+    /// Room for the vertices of the rank a sweep is moving, as many as the widest rank holds, reused by every rank.
+    let movingVertices: ScratchSpan<Int>
+    /// Each group's depth, and its sum of keys, count and first index in the rank being arranged; empty when the
+    /// graph keeps no groups together.
+    let groupDepth: ScratchSpan<Int>
+    let groupSum: ScratchSpan<Double>
+    let groupCount: ScratchSpan<Int>
+    let groupFirst: ScratchSpan<Int>
     let arena: DiagramScratchArena
 
     /// The reduction's lists come from `arena`; the caller gives them back once the reduction is finished.
@@ -59,7 +63,12 @@ struct LayeredFlatCrossingReduction {
         tree = arena.span(count: 2 * size, repeating: 0)
         targets = arena.span(count: segmentCount, repeating: 0)
         barycenter = arena.span(count: vertexCount, repeating: 0)
-        movingVertices = arena.list(capacity: widest, of: Int.self)
+        movingVertices = arena.uninitializedSpan(count: widest)
+        let groupTotal = self.graph.vertexGroup != nil ? self.graph.parentOfGroup.count : 0
+        groupDepth = arena.span(count: groupTotal, repeating: 0)
+        groupSum = arena.span(count: groupTotal, repeating: 0)
+        groupCount = arena.span(count: groupTotal, repeating: 0)
+        groupFirst = arena.span(count: groupTotal, repeating: 0)
         if hasOffsets { orderPlacesByOffset() }
     }
 

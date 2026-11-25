@@ -5,8 +5,8 @@
  * Description: The steps of Pele's layered layout after ordering: positions, ends, straightening and the edges' pieces.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 extension LayeredFlatLayout {
@@ -36,15 +36,17 @@ extension LayeredFlatLayout {
         let usesPieces = options.runsOnTracks || (segmentFromEnd != nil && !options.isStraight)
         let (pieces, pieceStart) = usesPieces ? cutPieces(graph: graph, across: across, emptyRanks: emptyRanks, isOnLine: isOnLine)
             : (nil, ScratchSpan<Int>.empty)
-        var bands = LayeredFlatBands(layout: self, graph: graph, across: across, emptyRanks: emptyRanks, pieces: pieces)
-        bands.size(layout: self, graph: graph)
+        var bands = LayeredFlatBands(graph: graph, across: across, emptyRanks: emptyRanks, pieces: pieces, options: options, rankStep: step,
+                                     labelHeadings: labelHeadings, arena: arena)
+        bands.size(graph: graph, vertexHeight: vertexHeight)
         return writePlaces(graph: graph, across: across, bands: bands, pieceStart: pieceStart, isOnLine: isOnLine)
     }
 
     /// Where nodes spread their ends: the labels aligned, the ends settled along their sides, the vertices snapped into
     /// line, and each edge's offsets at its nodes written back. Every step changes the graph's spans in place; each
-    /// step's working lists are given back when it ends.
-    private func settleEnds(graph: LayeredFlatGraph, across: ScratchSpan<Double>, emptyRanks: ScratchSpan<Bool>?,
+    /// step's working lists are given back when it ends. Mutating, as it writes the edges' offsets: a mutating pass
+    /// calls it without copying the layout.
+    private mutating func settleEnds(graph: LayeredFlatGraph, across: ScratchSpan<Double>, emptyRanks: ScratchSpan<Bool>?,
                                      fromEnds: ScratchSpan<LayeredSegmentEnd>, toEnds: ScratchSpan<LayeredSegmentEnd>) {
         let mark = arena.mark()
         defer { arena.release(to: mark) }
@@ -52,7 +54,7 @@ extension LayeredFlatLayout {
         let alignment = LayeredFlatLabelAlignment(graph: graph, nodes: nodes, free: free, options: options, emptyRanks: emptyRanks)
         alignment.align(across, arena: arena)
         let stepMark = arena.mark()
-        var settling = LayeredFlatEndSettling(graph: graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds,
+        let settling = LayeredFlatEndSettling(graph: graph, nodes: nodes, across: across, fromEnds: fromEnds, toEnds: toEnds,
                                               free: free, emptyRanks: emptyRanks, arena: arena)
         settling.settle()
         arena.release(to: stepMark)
