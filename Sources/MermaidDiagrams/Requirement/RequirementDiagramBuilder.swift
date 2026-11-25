@@ -2,47 +2,75 @@
  * File: RequirementDiagramBuilder.swift
  * -------------------------------------
  * Layer: Core
- * Description: Builds a requirement diagram from its statements as Mermaid's database and Pele's `db.ts` do: bodies'
- *              fields held until their requirement or element, a name declared twice kept as first declared, styles
- *              and classes copied onto the nodes, every count bounded.
+ * Description: Builds a requirement diagram from its statements as Mermaid's database and Pele's `db.ts` do, its names
+ *              interned from the text's bytes: bodies' fields held until their requirement or element, a name declared
+ *              twice kept as first declared, styles and classes copied onto the nodes, every count bounded.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
 /// Builds a requirement diagram as Mermaid's `requirementDb` does. The grammar reports a body's fields before the
-/// requirement or element they belong to, so they are held until it comes, and dropped if it was declared before. A
-/// requirement or element counts as a node of the limits and a relation as an edge, each before it is made. Applying a
-/// class copies its declarations onto each node, so a short text can ask for hundreds of millions of copies: the
-/// declarations copied and the classes given, together, are bounded by Pele's million.
+/// requirement or element they belong to, so the parser holds them until it comes; they are dropped if it was declared
+/// before. A requirement or element counts as a node of the limits and a relation as an edge, each before it is made.
+/// Applying a class copies its declarations onto each node, so a short text can ask for hundreds of millions of copies:
+/// the declarations copied and the classes given, together, are bounded by Pele's million. Names are byte ranges of the
+/// text, interned (`GraphDiagramNameTable`), so that each is compared as 0.7.0's String dictionaries compared it.
 struct RequirementDiagramBuilder {
     /// Pele's `MAX_STYLE_COPIES`.
     static let maximumStyleCopyCount = 1_000_000
 
-    private(set) var diagram = RequirementDiagram()
-    private let limits: MermaidDiagramLimits
-    private var requirementIndices: [String: Int] = [:]
-    private var elementIndices: [String: Int] = [:]
-    private var styleClassIndices: [String: Int] = [:]
-    /// Each node's classes as a set, by requirement and by element, so that a `classDef` finds the nodes that have it at once.
-    private var requirementClassSets: [Set<String>] = []
-    private var elementClassSets: [Set<String>] = []
-    private var styleCopyCount = 0
-    private var pendingIdentifier = ""
-    private var pendingText = ""
-    private var pendingRisk: RequirementRisk?
-    private var pendingVerificationMethod: RequirementVerificationMethod?
-    private var pendingType = ""
-    private var pendingDocumentReference = ""
+    var diagram = RequirementDiagram()
+    let limits: MermaidDiagramLimits
+    let bytes: UnsafeBufferPointer<UInt8>
+    private var names: GraphDiagramNameTable
+    /// What each name number names, by the number.
+    var namedByNumber: [RequirementNamed] = []
+    /// The number of the name `default`, the class every node has, or -1 while it is not written.
+    var defaultClassNumber = -1
+    /// The nodes given each class other than `default`, as lists through `classMembers`, from `RequirementNamed.firstMember`.
+    var classMembers: [RequirementClassMember] = []
+    /// Each node and class given, as `RequirementClassMember.key`, so that a node given a class twice is listed once.
+    var givenClasses: Set<UInt64> = []
+    var styleCopyCount = 0
 
-    init(limits: MermaidDiagramLimits) {
+    init(limits: MermaidDiagramLimits, bytes: UnsafeBufferPointer<UInt8>, isASCII: Bool) {
         self.limits = limits
+        self.bytes = bytes
+        names = GraphDiagramNameTable(isASCII: isASCII)
+        let nameCount = min(bytes.count / Self.bytesPerName + 4, Self.mostReserved)
+        names.reserveCapacity(nameCount)
+        namedByNumber.reserveCapacity(nameCount)
     }
+
+    /// About the bytes a name takes with what is written around it.
+    private static let bytesPerName = 24
+    /// The most names made room for at once; a longer text's lists grow.
+    private static let mostReserved = 2_048
 
     /// Why a statement could not be applied, which the parser reports at the statement's line.
     enum Refusal: Error, Equatable {
         case tooManyNodes, tooManyEdges, tooManyStyleCopies
+    }
+
+    /// The number of the name `range` spells, with what it names.
+    mutating func number(of range: Range<Int>) -> Int {
+        let (number, isNew) = names.intern(bytes, MermaidTextRange(start: range.lowerBound, end: range.upperBound))
+        if isNew {
+            namedByNumber.append(RequirementNamed())
+            if defaultClassNumber < 0, Self.spellsDefault(bytes, range) { defaultClassNumber = number }
+        }
+        return number
+    }
+
+    /// Whether `range` spells `default`: in a text beyond ASCII too, only these bytes make a String equal to it.
+    private static func spellsDefault(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Bool {
+        range.count == 7 && bytes[range].elementsEqual("default".utf8)
+    }
+
+    func string(_ range: Range<Int>) -> String {
+        String(decoding: UnsafeBufferPointer(rebasing: bytes[range]), as: UTF8.self)
     }
 
     mutating func setDirection(_ direction: FlowchartDirection) {
@@ -65,154 +93,62 @@ struct RequirementDiagramBuilder {
         diagram.accessibilityDescription = String(decoding: kept, as: UTF8.self)
     }
 
-    mutating func setPendingField(_ field: RequirementFieldName, text: String) {
-        switch field {
-        case .identifier: pendingIdentifier = text
-        case .text: pendingText = text
-        case .type: pendingType = text
-        case .documentReference: pendingDocumentReference = text
-        case .risk, .verificationMethod: break
-        }
-    }
-
-    mutating func setPendingRisk(_ risk: RequirementRisk) {
-        pendingRisk = risk
-    }
-
-    mutating func setPendingVerificationMethod(_ method: RequirementVerificationMethod) {
-        pendingVerificationMethod = method
-    }
-
-    /// The requirement named, with the fields held for it unless it was declared before; the fields are cleared either way.
-    mutating func addRequirement(named name: String, kind: RequirementKind) throws(Refusal) {
-        defer {
-            pendingIdentifier = ""
-            pendingText = ""
-            pendingRisk = nil
-            pendingVerificationMethod = nil
-        }
-        guard requirementIndices[name] == nil else { return }
+    /// The requirement named, with the fields held for it, unless it was declared before.
+    mutating func addRequirement(named name: Range<Int>, kind: RequirementKind, fields: RequirementBodyFields) throws(Refusal) {
+        let number = number(of: name)
+        guard namedByNumber[number].requirementIndex < 0 else { return }
         guard diagram.requirements.count + diagram.elements.count < limits.maximumNodeCount else { throw .tooManyNodes }
-        requirementIndices[name] = diagram.requirements.count
-        requirementClassSets.append(["default"])
-        diagram.requirements.append(RequirementDiagramRequirement(name: name, kind: kind, identifier: pendingIdentifier, text: pendingText,
-                                                                  risk: pendingRisk, verificationMethod: pendingVerificationMethod,
-                                                                  styleDeclarations: [], classNames: ["default"]))
+        namedByNumber[number].requirementIndex = Int32(diagram.requirements.count)
+        diagram.requirements.append(RequirementDiagramRequirement(name: string(name), kind: kind, identifier: fields.identifier.map(string) ?? "",
+                                                                  text: fields.text.map(string) ?? "", risk: fields.risk,
+                                                                  verificationMethod: fields.verificationMethod, styleDeclarations: [],
+                                                                  classNames: ["default"]))
     }
 
-    mutating func addElement(named name: String) throws(Refusal) {
-        defer {
-            pendingType = ""
-            pendingDocumentReference = ""
-        }
-        guard elementIndices[name] == nil else { return }
+    mutating func addElement(named name: Range<Int>, fields: RequirementBodyFields) throws(Refusal) {
+        let number = number(of: name)
+        guard namedByNumber[number].elementIndex < 0 else { return }
         guard diagram.requirements.count + diagram.elements.count < limits.maximumNodeCount else { throw .tooManyNodes }
-        elementIndices[name] = diagram.elements.count
-        elementClassSets.append(["default"])
-        diagram.elements.append(RequirementDiagramElement(name: name, type: pendingType, documentReference: pendingDocumentReference,
-                                                          styleDeclarations: [], classNames: ["default"]))
+        namedByNumber[number].elementIndex = Int32(diagram.elements.count)
+        diagram.elements.append(RequirementDiagramElement(name: string(name), type: fields.type.map(string) ?? "",
+                                                          documentReference: fields.documentReference.map(string) ?? "", styleDeclarations: [],
+                                                          classNames: ["default"]))
     }
 
-    mutating func addRelation(_ kind: RequirementRelationKind, from source: String, to target: String) throws(Refusal) {
+    mutating func addRelation(_ kind: RequirementRelationKind, from source: Range<Int>, to target: Range<Int>) throws(Refusal) {
         guard diagram.relations.count < limits.maximumEdgeCount else { throw .tooManyEdges }
-        diagram.relations.append(RequirementDiagramRelation(kind: kind, source: source, target: target))
+        diagram.relations.append(RequirementDiagramRelation(kind: kind, source: string(source), target: string(target)))
     }
 }
 
-extension RequirementDiagramBuilder {
-    /// A node by name: the requirement of that name, else the element.
-    private enum NodeReference {
-        case requirement(Int), element(Int)
-    }
+/// What a name names: the requirement, the element and the style class of that name, each -1 for none, and the first
+/// of the nodes given the class it names, -1 for none.
+struct RequirementNamed {
+    var requirementIndex: Int32 = -1
+    var elementIndex: Int32 = -1
+    var styleClassIndex: Int32 = -1
+    var firstMember: Int32 = -1
+}
 
-    private func node(named name: String) -> NodeReference? {
-        if let index = requirementIndices[name] { return .requirement(index) }
-        return elementIndices[name].map(NodeReference.element)
-    }
+/// A node given a class: a requirement's index, or an element's index with its bits inverted, and the next node given
+/// the same class, -1 for none.
+struct RequirementClassMember {
+    var node: Int32
+    var next: Int32
 
-    private mutating func copy(_ declarations: [String], onto node: NodeReference) throws(Refusal) {
-        try count(declarations.count)
-        switch node {
-        case .requirement(let index): diagram.requirements[index].styleDeclarations += declarations
-        case .element(let index): diagram.elements[index].styleDeclarations += declarations
-        }
+    /// The node and the class's name number as one key.
+    static func key(node: Int32, classNumber: Int) -> UInt64 {
+        UInt64(UInt32(bitPattern: node)) << 32 | UInt64(UInt32(truncatingIfNeeded: classNumber))
     }
+}
 
-    private mutating func count(_ copies: Int) throws(Refusal) {
-        styleCopyCount += copies
-        guard styleCopyCount <= Self.maximumStyleCopyCount else { throw .tooManyStyleCopies }
-    }
-
-    /// `style a,b declarations`: Mermaid stops at the first name that is no node, leaving the rest of the list unstyled.
-    mutating func setStyle(names: [String], declarations: [String]) throws(Refusal) {
-        let split = declarations.flatMap { declaration in declaration.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
-        for name in names {
-            guard let node = node(named: name) else { return }
-            try copy(split, onto: node)
-        }
-    }
-
-    /// `class a,b c1,c2` and `a:::c1,c2`: each class is given to each node named, with the declarations its class holds
-    /// now; a name that is no node is passed over.
-    mutating func setClasses(names: [String], classNames: [String]) throws(Refusal) {
-        for name in names {
-            guard let node = node(named: name) else { continue }
-            for className in classNames {
-                try count(1)
-                switch node {
-                case .requirement(let index):
-                    diagram.requirements[index].classNames.append(className)
-                    requirementClassSets[index].insert(className)
-                case .element(let index):
-                    diagram.elements[index].classNames.append(className)
-                    elementClassSets[index].insert(className)
-                }
-                if let classIndex = styleClassIndices[className] { try copy(diagram.styleClasses[classIndex].styleDeclarations, onto: node) }
-            }
-        }
-    }
-
-    /// Whether `declaration` holds `color`, as Foundation's search by characters finds it: never without its bytes,
-    /// always with them in a text of ASCII bytes, where the slow search is skipped.
-    static func holdsColor(_ declaration: String) -> Bool {
-        let utf8 = declaration.utf8
-        let color = Array("color".utf8)
-        var hasBytes = false
-        var isASCII = true
-        var index = utf8.startIndex
-        var matched = 0
-        while index != utf8.endIndex {
-            let byte = utf8[index]
-            if byte >= 0x80 { isASCII = false }
-            matched = byte == color[matched] ? matched + 1 : (byte == color[0] ? 1 : 0)
-            if matched == color.count {
-                hasBytes = true
-                matched = 0
-            }
-            index = utf8.index(after: index)
-        }
-        return hasBytes && (isASCII || declaration.contains("color"))
-    }
-
-    /// `classDef a,b declarations`: each class defined or extended, and its declarations copied onto every node that has
-    /// it already; a declaration that sets a color is also kept for text, its first `fill` written `bgFill`.
-    mutating func defineClasses(names: [String], declarations: [String]) throws(Refusal) {
-        let split = declarations.flatMap { declaration in declaration.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
-        for name in names {
-            let classIndex = styleClassIndices[name] ?? diagram.styleClasses.count
-            if classIndex == diagram.styleClasses.count {
-                styleClassIndices[name] = classIndex
-                diagram.styleClasses.append(RequirementDiagramStyleClass(name: name, styleDeclarations: [], textStyleDeclarations: []))
-            }
-            for declaration in declarations {
-                if Self.holdsColor(declaration) {
-                    let text = declaration.range(of: "fill").map { range in declaration.replacingCharacters(in: range, with: "bgFill") } ?? declaration
-                    diagram.styleClasses[classIndex].textStyleDeclarations.append(text)
-                }
-                diagram.styleClasses[classIndex].styleDeclarations.append(declaration)
-            }
-            for index in requirementClassSets.indices where requirementClassSets[index].contains(name) { try copy(split, onto: .requirement(index)) }
-            for index in elementClassSets.indices where elementClassSets[index].contains(name) { try copy(split, onto: .element(index)) }
-        }
-    }
+/// The fields of a body as held for its requirement or element: the first of each written, as Mermaid applies a right
+/// recursive grammar's fields last to first. Texts are byte ranges of the text.
+struct RequirementBodyFields {
+    var identifier: Range<Int>?
+    var text: Range<Int>?
+    var risk: RequirementRisk?
+    var verificationMethod: RequirementVerificationMethod?
+    var type: Range<Int>?
+    var documentReference: Range<Int>?
 }

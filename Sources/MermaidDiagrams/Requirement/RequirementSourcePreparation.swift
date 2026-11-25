@@ -7,9 +7,15 @@
  *              dropped, a line break added.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
+
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 /// A requirement diagram's text as its lexer reads it, and the line breaks taken out with comment lines, by where they
 /// were, so that an error still names the line it is on in the text as written.
@@ -37,6 +43,15 @@ enum RequirementSourcePreparation {
     /// The text with the keyword at `start`, prepared from `start` on; what comes before only has its line breaks made
     /// `\n`, so that lines are counted as Pele counts them.
     static func prepared(_ bytes: [UInt8], from start: Int) -> RequirementPreparedSource {
+        // Most texts have no carriage return and no comment line: they are copied once, with the line break added.
+        if !holdsCarriageReturnOrTwoPercentSigns(bytes, bodyStart: start) {
+            let text = [UInt8](unsafeUninitializedCapacity: bytes.count + 1) { buffer, initializedCount in
+                _ = buffer.initialize(from: bytes)
+                buffer[bytes.count] = MermaidByte.newline
+                initializedCount = bytes.count + 1
+            }
+            return RequirementPreparedSource(bytes: text, start: start, removedLineBreaks: [])
+        }
         let prefix = withLineBreaksNormalized(bytes[..<start])
         let normalizedBody = withLineBreaksNormalized(bytes[start...])
         // Without `%%` no comment line is taken out, and the bytes, a string's and so well formed, are the text as kept.
@@ -111,8 +126,23 @@ enum RequirementSourcePreparation {
         return end < text.count ? end + 1 : end
     }
 
+    /// Whether the text holds a carriage return, or `%%` from `bodyStart` on: only then is it more than copied.
+    private static func holdsCarriageReturnOrTwoPercentSigns(_ bytes: [UInt8], bodyStart: Int) -> Bool {
+        bytes.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return false }
+            if memchr(base, Int32(MermaidByte.carriageReturn), buffer.count) != nil { return true }
+            var position = min(bodyStart, buffer.count)
+            while position < buffer.count, let found = memchr(base + position, Int32(MermaidByte.percent), buffer.count - position) {
+                let index = base.distance(to: found.assumingMemoryBound(to: UInt8.self))
+                if index + 1 < buffer.count, buffer[index + 1] == MermaidByte.percent { return true }
+                position = index + 1
+            }
+            return false
+        }
+    }
+
     /// Whether `%%` is written anywhere: a comment line needs it.
-    private static func holdsTwoPercentSigns(_ bytes: [UInt8]) -> Bool {
+    private static func holdsTwoPercentSigns(_ bytes: some Sequence<UInt8>) -> Bool {
         var previousIsPercentSign = false
         for byte in bytes {
             let isPercentSign = byte == MermaidByte.percent

@@ -1,8 +1,20 @@
-/// A class's name as a class diagram writes it, and the generic type after it.
+/**
+ * File: ClassDiagramNameSyntax.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Reads a class diagram's class names and the generic types after them on the text's borrowed bytes, as
+ *              byte ranges: plain names, backticked names, `~T~`.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
+/// A class's name as a class diagram writes it, and the generic type after it, by their bytes.
 struct ClassDiagramName: Equatable {
-    let identifier: String
-    /// The text between the tildes after the name (`T` in `Square~T~`), or nil.
-    let genericType: String?
+    let identifier: MermaidTextRange
+    /// The text between the tildes after the name (`T` in `Square~T~`), or nil when there is none or it is empty.
+    let genericType: MermaidTextRange?
 }
 
 /// Reads class names: identifier characters (letters, digits, `_`, any character beyond ASCII), with a `-` or a `.`
@@ -10,56 +22,56 @@ struct ClassDiagramName: Equatable {
 /// the line); or any text but a backtick between backticks (`` `Animal Class!` ``). A generic type between tildes may
 /// follow either (`Square~Shape~`).
 enum ClassDiagramNameSyntax {
-    /// Reads a name at the cursor and moves past it, or returns nil, without moving, when no name starts there.
-    static func read(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> ClassDiagramName? {
-        let identifier: String
-        if cursor.peek() == MermaidByte.graveAccent {
-            identifier = try readBacktickedName(&cursor)
-        } else if let plain = readPlainName(&cursor) {
+    /// Reads a name at the position and moves past it, or returns nil, without moving, when no name starts there.
+    static func read(_ bytes: inout GraphDiagramBytes) throws(MermaidDiagramReadError) -> ClassDiagramName? {
+        let identifier: MermaidTextRange
+        if bytes.peek() == MermaidByte.graveAccent {
+            identifier = try readBacktickedName(&bytes)
+        } else if let plain = readPlainName(&bytes) {
             identifier = plain
         } else {
             return nil
         }
-        return ClassDiagramName(identifier: identifier, genericType: try readGenericType(&cursor))
+        return ClassDiagramName(identifier: identifier, genericType: try readGenericType(&bytes))
     }
 
-    private static func readPlainName(_ cursor: inout MermaidTextCursor) -> String? {
-        let start = cursor.position
-        while let byte = cursor.peek() {
+    private static func readPlainName(_ bytes: inout GraphDiagramBytes) -> MermaidTextRange? {
+        let start = bytes.position
+        while let byte = bytes.peek() {
             if MermaidByte.isIdentifierByte(byte) {
-                cursor.advance()
-            } else if byte == MermaidByte.hyphen || byte == MermaidByte.period, cursor.position > start, let next = cursor.peek(1),
+                bytes.advance()
+            } else if byte == MermaidByte.hyphen || byte == MermaidByte.period, bytes.position > start, let next = bytes.peek(1),
                       MermaidByte.isIdentifierByte(next) {
-                cursor.advance()
+                bytes.advance()
             } else {
                 break
             }
         }
-        return cursor.position > start ? cursor.text(from: start, to: cursor.position) : nil
+        return bytes.position > start ? MermaidTextRange(start: start, end: bytes.position) : nil
     }
 
     /// `` `any text` `` on one line.
-    private static func readBacktickedName(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String {
-        let line = cursor.line
-        cursor.advance()
-        let start = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.graveAccent, byte != MermaidByte.newline { cursor.advance() }
-        guard cursor.peek() == MermaidByte.graveAccent else { throw .invalidSyntax(line: line, problem: .unclosedQuotation) }
-        let name = cursor.text(from: start, to: cursor.position)
-        cursor.advance()
+    private static func readBacktickedName(_ bytes: inout GraphDiagramBytes) throws(MermaidDiagramReadError) -> MermaidTextRange {
+        let opening = bytes.position
+        bytes.advance()
+        let start = bytes.position
+        while let byte = bytes.peek(), byte != MermaidByte.graveAccent, byte != MermaidByte.newline { bytes.advance() }
+        guard bytes.peek() == MermaidByte.graveAccent else { throw .invalidSyntax(line: bytes.line(at: opening), problem: .unclosedQuotation) }
+        let name = MermaidTextRange(start: start, end: bytes.position)
+        bytes.advance()
         return name
     }
 
     /// `~T~` right after a name, on one line; nil when there is none or it is empty.
-    private static func readGenericType(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String? {
-        guard cursor.peek() == MermaidByte.tilde else { return nil }
-        let line = cursor.line
-        cursor.advance()
-        let start = cursor.position
-        while let byte = cursor.peek(), byte != MermaidByte.tilde, byte != MermaidByte.newline { cursor.advance() }
-        guard cursor.peek() == MermaidByte.tilde else { throw .invalidSyntax(line: line, problem: .unclosedGenericType) }
-        let genericType = cursor.text(from: start, to: cursor.position)
-        cursor.advance()
+    private static func readGenericType(_ bytes: inout GraphDiagramBytes) throws(MermaidDiagramReadError) -> MermaidTextRange? {
+        guard bytes.peek() == MermaidByte.tilde else { return nil }
+        let opening = bytes.position
+        bytes.advance()
+        let start = bytes.position
+        while let byte = bytes.peek(), byte != MermaidByte.tilde, byte != MermaidByte.newline { bytes.advance() }
+        guard bytes.peek() == MermaidByte.tilde else { throw .invalidSyntax(line: bytes.line(at: opening), problem: .unclosedGenericType) }
+        let genericType = MermaidTextRange(start: start, end: bytes.position)
+        bytes.advance()
         return genericType.isEmpty ? nil : genericType
     }
 }

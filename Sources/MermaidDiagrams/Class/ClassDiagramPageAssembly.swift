@@ -5,8 +5,8 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -116,10 +116,11 @@ struct ClassDiagramPageAssembly {
 
     /// The edge through `ports`; `segmentsRunVertically` gives each segment's flow for a route through boxes, else every
     /// segment follows the diagram's.
-    private func edgeAlong(_ ports: [CGPoint], edgeIndex: Int, ends: (source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End),
+    /// The route is taken, so that a straight end is put in its own list rather than in a copy.
+    private func edgeAlong(_ ports: consuming [CGPoint], edgeIndex: Int, ends: (source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End),
                            textCenter: CGPoint, segmentsRunVertically: [Bool]? = nil) -> ClassDiagramLayoutEdge {
         let edge = measured.edges[edgeIndex]
-        var points = ports
+        var points = consume ports
         var segmentAxes = segmentsRunVertically
         if let straight = straightEnd(from: points[0], toward: points[1], end: ends.source) {
             points.insert(straight, at: 1)

@@ -2,10 +2,11 @@
  * File: EntityRelationshipParser.swift
  * ------------------------------------
  * Layer: Core
- * Description: Reads an entity relationship diagram's statements after its keyword.
+ * Description: Reads an entity relationship diagram's statements after its keyword, on the text's borrowed bytes, its
+ *              names byte ranges until the diagram keeps them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 25/11/2026
  */
 
@@ -16,18 +17,26 @@
 struct EntityRelationshipParser {
     private var lexer: EntityRelationshipLexer
     private var builder: EntityRelationshipDiagramBuilder
-    /// The token being looked at, and a cursor at its first byte.
+    /// The token being looked at, and the position of its first byte.
     private var current: EntityRelationshipToken = .endOfText
-    private var currentStart: MermaidTextCursor
+    private var currentStart: Int
 
-    /// Reads the diagram whose keyword ends at the cursor.
+    /// Reads the diagram whose keyword ends at the cursor, on the cursor's bytes, borrowed.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> EntityRelationshipDiagram {
-        var parser = EntityRelationshipParser(lexer: EntityRelationshipLexer(cursor: cursor), builder: EntityRelationshipDiagramBuilder(limits: limits),
-                                              currentStart: cursor)
-        try parser.advance()
-        try parser.readStatements()
-        return parser.builder.finished()
+        try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            let bytes = GraphDiagramBytes(buffer, position: cursor.position)
+            var parser = EntityRelationshipParser(lexer: EntityRelationshipLexer(bytes: bytes),
+                                                  builder: EntityRelationshipDiagramBuilder(limits: limits, bytes: bytes), currentStart: bytes.position)
+            try parser.advance()
+            try parser.readStatements()
+            return parser.builder.finished()
+        }
     }
+
+    private var bytes: GraphDiagramBytes { lexer.bytes }
+
+    /// The line of the token being looked at, counted only for an error.
+    private var currentLine: Int { lexer.bytes.line(at: currentStart) }
 
     private mutating func advance() throws(MermaidDiagramReadError) {
         (current, currentStart) = try lexer.readToken()
@@ -38,7 +47,7 @@ struct EntityRelationshipParser {
             switch current {
             case .endOfText:
                 if let identifier = builder.innermostOpenSubgraphIdentifier {
-                    throw .invalidSyntax(line: currentStart.line, problem: .unclosedSubgraph(identifier: identifier))
+                    throw .invalidSyntax(line: currentLine, problem: .unclosedSubgraph(identifier: identifier))
                 }
                 return
             case .lineBreak: try advance()
@@ -65,7 +74,7 @@ struct EntityRelationshipParser {
         case .diagram: throw unexpectedToken()
         case .style, .classDefinition:
             // Styles take the rest of their line, and are not applied yet.
-            lexer.cursor.skipToEndOfLine()
+            lexer.bytes.skipToEndOfLine()
             builder.countUnappliedStatement()
             try advance()
         case .classAssignment:
@@ -75,7 +84,7 @@ struct EntityRelationshipParser {
             builder.countUnappliedStatement()
         case .subgraph: try readSubgraphOpening()
         case .end:
-            guard builder.closeSubgraph() else { throw .invalidSyntax(line: currentStart.line, problem: .endWithoutSubgraph) }
+            guard builder.closeSubgraph() else { throw .invalidSyntax(line: currentLine, problem: .endWithoutSubgraph) }
             try advance()
         }
     }
@@ -89,23 +98,23 @@ struct EntityRelationshipParser {
         let attributes = try readAttributeBlock(of: name)
         let index = try builder.entityIndex(for: name)
         builder.addAttributes(attributes, toEntityAt: index)
-        builder.noteNamesInOpenSubgraph([name.text])
+        builder.noteNameInOpenSubgraph(name.range)
     }
 
     /// `name[alias]`, then classes and attributes. As in Mermaid, no relationship follows an alias in one statement.
     private mutating func readAliasedEntity(_ name: EntityRelationshipName) throws(MermaidDiagramReadError) {
-        let openingLine = currentStart.line
+        let opening = currentStart
         try advance()
-        guard case .name(let aliasText, let aliasForm) = current else { throw unclosedAlias(openingLine: openingLine) }
+        guard case .name(let aliasRange, let aliasForm) = current else { throw unclosedAlias(opening: opening) }
         try advance()
-        guard current == .closingBracket else { throw unclosedAlias(openingLine: openingLine) }
+        guard current == .closingBracket else { throw unclosedAlias(opening: opening) }
         try advance()
         try readClassShorthand()
         let attributes = try readAttributeBlock(of: name)
         let index = try builder.entityIndex(for: name)
-        builder.setAlias(EntityRelationshipName(text: aliasText, form: aliasForm).label, ofEntityAt: index)
+        builder.setAlias(EntityRelationshipName(range: aliasRange, form: aliasForm), ofEntityAt: index)
         builder.addAttributes(attributes, toEntityAt: index)
-        builder.noteNamesInOpenSubgraph([name.text])
+        builder.noteNameInOpenSubgraph(name.range)
     }
 
     /// The rest of `first ||--o{ second : label`, from its first cardinality.
@@ -126,15 +135,15 @@ struct EntityRelationshipParser {
         let secondIndex = try builder.entityIndex(for: second)
         try builder.addRelationship(EntityRelationship(firstEntityIndex: firstIndex, secondEntityIndex: secondIndex, firstEntityCardinality: firstCardinality,
                                                        secondEntityCardinality: secondCardinality, identification: identification, label: label))
-        builder.noteNamesInOpenSubgraph(first.text, second.text)
+        builder.noteNamesInOpenSubgraph(first.range, second.range)
     }
 
     /// A word, a quoted name or other quoted text; a number is no label in Mermaid's grammar.
     private mutating func readRelationshipLabel() throws(MermaidDiagramReadError) -> DiagramLabel {
         let label: DiagramLabel
         switch current {
-        case .name(let text, let form) where form != .number: label = EntityRelationshipName(text: text, form: form).label
-        case .quotedText(let text): label = DiagramLabelDecoder.label(from: text, form: .markdown)
+        case .name(let range, let form) where form != .number: label = EntityRelationshipName(range: range, form: form).label(in: bytes)
+        case .quotedText(let range): label = DiagramLabelDecoder.label(from: bytes.text(range), form: .markdown)
         case .name, .cardinality, .identification, .keyword, .accessibilityTitle, .accessibilityDescription, .direction, .openingBrace,
              .openingBracket, .closingBracket, .classSeparator, .colon, .comma, .lineBreak, .endOfText, .unexpectedCharacter:
             throw problem(.expectedRelationshipLabel)
@@ -146,7 +155,7 @@ struct EntityRelationshipParser {
     /// The `{ … }` after an entity, or no attributes when there is none.
     private mutating func readAttributeBlock(of name: EntityRelationshipName) throws(MermaidDiagramReadError) -> [EntityRelationshipAttribute] {
         guard current == .openingBrace else { return [] }
-        let attributes = try EntityRelationshipAttributeSyntax.readBlock(&lexer.cursor, entity: name.text)
+        let attributes = try EntityRelationshipAttributeSyntax.readBlock(&lexer.bytes, entity: name.range)
         try advance()
         return attributes
     }
@@ -157,16 +166,16 @@ struct EntityRelationshipParser {
         guard case .name(let identifier, _) = current else { throw problem(.expectedNode) }
         try advance()
         // Pele's database keeps a group's title as Markdown, whether it is the identifier or the words in brackets.
-        var title = DiagramLabelDecoder.label(from: identifier, form: .markdown)
+        var title = DiagramLabelDecoder.label(from: bytes.text(identifier), form: .markdown)
         if current == .openingBracket {
-            let openingLine = currentStart.line
+            let opening = currentStart
             try advance()
             var words: [String] = []
             while case .name(let word, _) = current {
-                words.append(word)
+                words.append(bytes.text(word))
                 try advance()
             }
-            guard !words.isEmpty, current == .closingBracket else { throw unclosedAlias(openingLine: openingLine) }
+            guard !words.isEmpty, current == .closingBracket else { throw unclosedAlias(opening: opening) }
             title = DiagramLabelDecoder.label(from: words.joined(separator: " "), form: .markdown)
             try advance()
         }
@@ -197,22 +206,22 @@ struct EntityRelationshipParser {
     private mutating func readName() throws(MermaidDiagramReadError) -> EntityRelationshipName {
         guard case .name(let text, let form) = current else { throw unexpectedToken() }
         try advance()
-        return EntityRelationshipName(text: text, form: form)
+        return EntityRelationshipName(range: text, form: form)
     }
 
     private func problem(_ problem: MermaidSyntaxProblem) -> MermaidDiagramReadError {
-        .invalidSyntax(line: currentStart.line, problem: problem)
+        .invalidSyntax(line: currentLine, problem: problem)
     }
 
     /// The token where none of its kind may stand, by its first characters.
     private func unexpectedToken() -> MermaidDiagramReadError {
-        problem(.unexpectedText(currentStart.excerpt()))
+        problem(.unexpectedText(bytes.excerpt(at: currentStart)))
     }
 
     /// An alias or a title whose `[` the text ends without closing, or closes after more than a name.
-    private func unclosedAlias(openingLine: Int) -> MermaidDiagramReadError {
+    private func unclosedAlias(opening: Int) -> MermaidDiagramReadError {
         switch current {
-        case .lineBreak, .endOfText: .invalidSyntax(line: openingLine, problem: .unclosedShape(closingText: "]"))
+        case .lineBreak, .endOfText: .invalidSyntax(line: bytes.line(at: opening), problem: .unclosedShape(closingText: "]"))
         case .name, .quotedText, .cardinality, .identification, .keyword, .accessibilityTitle, .accessibilityDescription, .direction, .openingBrace,
              .openingBracket, .closingBracket, .classSeparator, .colon, .comma, .unexpectedCharacter:
             unexpectedToken()

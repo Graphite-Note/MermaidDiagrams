@@ -5,8 +5,8 @@
  * Description: Puts a placed entity relationship diagram on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -65,8 +65,9 @@ struct EntityRelationshipPageAssembly {
             let index = layeredIndices[layeredIndex]
             guard let start = ports.firstEntityPoints[index], let end = ports.secondEntityPoints[index] else { continue }
             let count = routes.count(of: layeredIndex)
+            // Room for the two straight runs' points `relationship(at:along:)` adds.
             var routePoints: [CGPoint] = []
-            routePoints.reserveCapacity(count)
+            routePoints.reserveCapacity(count + 2)
             routePoints.append(start)
             for pointIndex in 1..<(count - 1) { routePoints.append(axes.pagePoint(routes.point(pointIndex, count: count, of: layeredIndex))) }
             routePoints.append(end)
@@ -74,7 +75,7 @@ struct EntityRelationshipPageAssembly {
             let labelCenter = edge.labelWidth > 0 ? axes.pagePoint(edge.labelCenter) : CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
             let startSide = ends[2 * layeredIndex].side
             let endSide = ends[2 * layeredIndex + 1].side
-            relationships[index] = relationship(at: index, along: routePoints, leaving: EntityRelationshipEdgePorts.outward(from: startSide),
+            relationships[index] = relationship(at: index, along: &routePoints, leaving: EntityRelationshipEdgePorts.outward(from: startSide),
                                                 arriving: EntityRelationshipEdgePorts.outward(from: endSide), labelCenter: labelCenter)
         }
     }
@@ -120,14 +121,14 @@ struct EntityRelationshipPageAssembly {
         return ends
     }
 
-    /// A relationship along `points`, from the first box's side to the second's. `leaving` and `arriving` point out
+    /// A relationship along `routed`, from the first box's side to the second's. `leaving` and `arriving` point out
     /// of the two boxes; the line runs along them for a mark's length before it curves, so that each mark sits on a
-    /// straight run.
-    private func relationship(at index: Int, along points: [CGPoint], leaving: CGVector, arriving: CGVector,
+    /// straight run. The route is straightened and given its straight runs where it stands.
+    private func relationship(at index: Int, along routed: inout [CGPoint], leaving: CGVector, arriving: CGVector,
                               labelCenter: CGPoint) -> EntityRelationshipLayoutRelationship {
-        var routed = Self.straightened(points)
-        let first = points[0]
-        let last = points[points.count - 1]
+        let first = routed[0]
+        let last = routed[routed.count - 1]
+        Self.straighten(&routed)
         let isDirect = routed.count == 2 && (Self.isInLine(first, last) || hypot(last.x - first.x, last.y - first.y) <= Self.shortestRouteWithStraightRuns)
         if !isDirect {
             let straight = EntityRelationshipCardinalityMark.length
@@ -191,20 +192,23 @@ struct EntityRelationshipPageAssembly {
     }
 
     /// The route without each point that lies between its neighbours on one straight vertical or horizontal run, so
-    /// that a relationship whose route runs straight is one straight line.
-    private static func straightened(_ points: [CGPoint]) -> [CGPoint] {
-        var kept = [points[0]]
+    /// that a relationship whose route runs straight is one straight line; the points kept move to the front of the
+    /// list, which keeps its room. A point is compared with the last one kept and with the next one, as yet unmoved.
+    private static func straighten(_ points: inout [CGPoint]) {
+        var keptCount = 1
         for index in 1..<points.count {
             let point = points[index]
-            if index + 1 < points.count, let previous = kept.last {
+            if index + 1 < points.count {
+                let previous = points[keptCount - 1]
                 let next = points[index + 1]
                 let isOnVerticalRun = abs(previous.x - point.x) < 0.01 && abs(point.x - next.x) < 0.01
                 let isOnHorizontalRun = abs(previous.y - point.y) < 0.01 && abs(point.y - next.y) < 0.01
                 if isOnVerticalRun || isOnHorizontalRun { continue }
             }
-            kept.append(point)
+            points[keptCount] = point
+            keptCount += 1
         }
-        return kept
+        points.removeLast(points.count - keptCount)
     }
 
     /// Two points are in line when they share a coordinate, to a hundredth of a point.
@@ -213,8 +217,9 @@ struct EntityRelationshipPageAssembly {
     }
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
-    /// title, and centered under the title when the title is wider. Each part is placed once where it is moved to.
-    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> EntityRelationshipLayout {
+    /// title, and centered under the title when the title is wider. Each part is placed once where it is moved to; the
+    /// relationships are taken out of the assembly, so that each path is moved where it stands rather than copied.
+    mutating func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> EntityRelationshipLayout {
         // An entity that stands for a group is its box, not an entity: each drawn entity's top left corner.
         var drawnEntities: [(entity: Int, origin: CGVector)] = []
         drawnEntities.reserveCapacity(measured.boxes.count)
@@ -234,8 +239,8 @@ struct EntityRelationshipPageAssembly {
         for drawn in drawnEntities { entities.append(measured.boxes[drawn.entity].placed(origin: drawn.origin, offset: offset)) }
         var placedRelationships: [EntityRelationshipLayoutRelationship] = []
         placedRelationships.reserveCapacity(relationships.count)
-        for relationship in relationships {
-            guard var placed = relationship else { continue }
+        for index in relationships.indices {
+            guard var placed = relationships[index].take() else { continue }
             placed.translate(by: offset)
             placedRelationships.append(placed)
         }

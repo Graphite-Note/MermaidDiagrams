@@ -5,8 +5,8 @@
  * Description: Puts an entity relationship diagram laid out in its groups' boxes on the page: boxes, relationships, groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -32,6 +32,7 @@ extension EntityRelationshipPageAssembly {
     /// relationship between a group and an entity inside it straight from one center to the other, as Pele draws it.
     mutating func placeRelationships(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
         var ends: [EntityRelationshipEdgePorts.End] = []
+        ends.reserveCapacity(2 * clustered.layoutRelationshipIndices.count)
         for (layoutIndex, index) in clustered.layoutRelationshipIndices.enumerated() where !placement.strayEdgeIndices.contains(layoutIndex) {
             let relationship = diagram.relationships[index]
             let route = placement.edgeRoutes[layoutIndex]
@@ -42,7 +43,8 @@ extension EntityRelationshipPageAssembly {
             clustered.representedSubgraphs[entity].map { subgraph in placement.clusterFrames[subgraph].size } ?? measured.boxes[entity].size
         }
         let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: diagram.relationships.count, boxCenters: boxCenters, boxSizes: sizes)
-        var sidesByEnd: [Int: DiagramSide] = [:]
+        // Each relationship's two sides, the first entity's then the second's, by relationship; nil for an end not placed.
+        var sidesByEnd = [DiagramSide?](repeating: nil, count: 2 * diagram.relationships.count)
         for end in ends { sidesByEnd[2 * end.relationshipIndex + (end.isFirstEntityEnd ? 0 : 1)] = end.side }
         for (layoutIndex, index) in clustered.layoutRelationshipIndices.enumerated() {
             let route = placement.edgeRoutes[layoutIndex]
@@ -53,17 +55,44 @@ extension EntityRelationshipPageAssembly {
             }
             guard let start = ports.firstEntityPoints[index], let end = ports.secondEntityPoints[index],
                   let startSide = sidesByEnd[2 * index], let endSide = sidesByEnd[2 * index + 1] else { continue }
-            let interior = Array(route.points.dropFirst().dropLast())
-            relationshipPoints.append([start] + interior + [end])
-            let straight = EntityRelationshipCardinalityMark.length
-            let leaving = EntityRelationshipEdgePorts.outward(from: startSide)
-            let arriving = EntityRelationshipEdgePorts.outward(from: endSide)
-            let points = [start, CGPoint(x: start.x + leaving.dx * straight, y: start.y + leaving.dy * straight)] + interior
-                + [CGPoint(x: end.x + arriving.dx * straight, y: end.y + arriving.dy * straight), end]
-            let axes = [startSide.isHorizontal] + route.segmentsRunVertically + [endSide.isHorizontal]
+            let interior = route.points.dropFirst().dropLast()
+            relationshipPoints.append(Self.joined(start, interior, end))
+            let (points, axes) = Self.stubbed(route, interior: interior, start: start, startSide: startSide, end: end, endSide: endSide)
             setRelationship(at: index, along: points, segmentsRunVertically: axes,
                             labelCenter: labelCenter ?? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2))
         }
+    }
+
+    /// `start`, the points between, then `end`, in one list.
+    private static func joined(_ start: CGPoint, _ between: ArraySlice<CGPoint>, _ end: CGPoint) -> [CGPoint] {
+        var points: [CGPoint] = []
+        points.reserveCapacity(between.count + 2)
+        points.append(start)
+        points.append(contentsOf: between)
+        points.append(end)
+        return points
+    }
+
+    /// A route through boxes from `start` to `end` through its inner points, running straight out of each box for a
+    /// mark's length, and each segment's flow: the straight runs' across their sides, the others the route's.
+    private static func stubbed(_ route: LayeredClusterRoute, interior: ArraySlice<CGPoint>, start: CGPoint, startSide: DiagramSide, end: CGPoint,
+                                endSide: DiagramSide) -> (points: [CGPoint], segmentsRunVertically: [Bool]) {
+        let straight = EntityRelationshipCardinalityMark.length
+        let leaving = EntityRelationshipEdgePorts.outward(from: startSide)
+        let arriving = EntityRelationshipEdgePorts.outward(from: endSide)
+        var points: [CGPoint] = []
+        points.reserveCapacity(interior.count + 4)
+        points.append(start)
+        points.append(CGPoint(x: start.x + leaving.dx * straight, y: start.y + leaving.dy * straight))
+        points.append(contentsOf: interior)
+        points.append(CGPoint(x: end.x + arriving.dx * straight, y: end.y + arriving.dy * straight))
+        points.append(end)
+        var axes: [Bool] = []
+        axes.reserveCapacity(route.segmentsRunVertically.count + 2)
+        axes.append(startSide.isHorizontal)
+        axes.append(contentsOf: route.segmentsRunVertically)
+        axes.append(endSide.isHorizontal)
+        return (points, axes)
     }
 
     /// A relationship between a group and an entity inside it, from one center to the other as Pele's compound layout

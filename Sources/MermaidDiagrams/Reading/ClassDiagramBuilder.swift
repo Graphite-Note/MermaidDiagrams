@@ -5,8 +5,8 @@
  * Description: Collects a class diagram as its statements are read, within the limits.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Collects a class diagram as its statements are read: classes by identifier, relations and notes within the limits,
@@ -15,24 +15,49 @@
 struct ClassDiagramBuilder {
     private var diagram = ClassDiagram()
     private let limits: MermaidDiagramLimits
-    private var classIndexByIdentifier: [String: Int] = [:]
-    /// The identifier each note's `note for` names, by note index, found among the classes once all are declared.
-    private var noteClassIdentifiers: [String?] = []
+    private let bytes: GraphDiagramBytes
+    /// The names read, interned from their bytes; the class each names by its number, -1 for none.
+    private var names: GraphDiagramNameTable
+    private var classIndexByName: [Int32] = []
+    /// The number of the name each note's `note for` names, -1 for none, by note index, found among the classes once
+    /// all are declared.
+    private var noteClassNames: [Int32] = []
+    /// The bytes of the text a member shows, written member after member into one list.
+    private var shownMemberBytes: [UInt8] = []
     private var interfaceCount = 0
     /// The namespace boxes the names written so far make at most: each part of a dotted name may be a box of its own.
     private var namespaceBoxCount = 0
     /// Indexes into `diagram.namespaces` of the namespaces open now, outermost first.
     private var openNamespaceIndices: [Int] = []
 
-    init(limits: MermaidDiagramLimits) {
+    init(limits: MermaidDiagramLimits, bytes: GraphDiagramBytes) {
         self.limits = limits
+        self.bytes = bytes
+        names = GraphDiagramNameTable(isASCII: bytes.isASCII)
+        let nameCount = min((bytes.buffer.count - bytes.position) / Self.bytesPerName + 4, limits.maximumNodeCount, Self.mostReserved)
+        names.reserveCapacity(nameCount)
+        classIndexByName.reserveCapacity(nameCount)
+        diagram.classes.reserveCapacity(nameCount)
+    }
+
+    /// About the bytes a class's name takes with what is written around it.
+    private static let bytesPerName = 32
+    /// The most names made room for at once; a longer text's lists grow.
+    private static let mostReserved = 2_048
+
+    /// The number of the name `range` spells.
+    private mutating func number(of range: MermaidTextRange) -> Int {
+        let (number, isNew) = names.intern(bytes.buffer, range)
+        if isNew { classIndexByName.append(-1) }
+        return number
     }
 
     /// The diagram read, each note joined to the class its `note for` names when the diagram declares that class.
     func finished() -> ClassDiagram {
         var finished = diagram
-        for (noteIndex, identifier) in noteClassIdentifiers.enumerated() {
-            finished.notes[noteIndex].classIndex = identifier.flatMap { identifier in classIndexByIdentifier[identifier] }
+        for (noteIndex, name) in noteClassNames.enumerated() where name >= 0 {
+            let classIndex = classIndexByName[Int(name)]
+            finished.notes[noteIndex].classIndex = classIndex >= 0 ? Int(classIndex) : nil
         }
         return finished
     }
@@ -42,11 +67,13 @@ struct ClassDiagramBuilder {
     /// The index of the class `name` names, added the first time it is named, with its name as its label and the
     /// generic type written then.
     mutating func classIndex(for name: ClassDiagramName) throws(MermaidDiagramReadError) -> Int {
-        if let existing = classIndexByIdentifier[name.identifier] { return existing }
+        let number = number(of: name.identifier)
+        if classIndexByName[number] >= 0 { return Int(classIndexByName[number]) }
         guard nodeCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         let index = diagram.classes.count
-        diagram.classes.append(ClassDiagramClass(identifier: name.identifier, label: DiagramLabel(name.identifier), genericType: name.genericType))
-        classIndexByIdentifier[name.identifier] = index
+        let identifier = bytes.text(name.identifier)
+        diagram.classes.append(ClassDiagramClass(identifier: identifier, label: DiagramLabel(identifier), genericType: name.genericType.map(bytes.text)))
+        classIndexByName[number] = Int32(index)
         return index
     }
 
@@ -57,6 +84,22 @@ struct ClassDiagramBuilder {
 
     mutating func addAnnotation(_ annotation: String, toClassAt index: Int) {
         diagram.classes[index].annotations.append(annotation)
+    }
+
+    /// The member written at `range`, trimmed as `addMember(_:toClassAt:)` takes it: read on its bytes when they are
+    /// ASCII, where each byte is a character, else as a String.
+    mutating func addMember(at range: MermaidTextRange, toClassAt index: Int) {
+        let member = UnsafeBufferPointer(rebasing: bytes.buffer[range.lowerBound..<range.upperBound])
+        guard bytes.isASCII || GraphDiagramNameTable.isASCII(member) else { return addMember(bytes.text(range), toClassAt: index) }
+        guard !member.isEmpty else { return }
+        let count = member.count
+        if count >= 4, member[0] == MermaidByte.lessThan, member[1] == MermaidByte.lessThan, member[count - 2] == MermaidByte.greaterThan,
+           member[count - 1] == MermaidByte.greaterThan {
+            addAnnotation(String(decoding: UnsafeBufferPointer(rebasing: member[2..<(count - 2)]), as: UTF8.self), toClassAt: index)
+            return
+        }
+        let (read, isMethod) = ClassDiagramMemberBytes.member(from: member, shownInto: &shownMemberBytes)
+        if isMethod { diagram.classes[index].methods.append(read) } else { diagram.classes[index].attributes.append(read) }
     }
 
     /// A member as Mermaid sorts it: `<<…>>` is an annotation, text with a `)` after its first character a method
@@ -95,15 +138,15 @@ struct ClassDiagramBuilder {
     private mutating func interface(named name: ClassDiagramName) throws(MermaidDiagramReadError) -> ClassDiagramRelationEndpoint {
         guard nodeCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         interfaceCount += 1
-        return .interface(DiagramLabel(name.identifier))
+        return .interface(DiagramLabel(bytes.text(name.identifier)))
     }
 
     /// `note "text"`, or `note for Name "text"` with the identifier of the class it names.
-    mutating func addNote(_ text: DiagramLabel, forClassIdentifiedBy identifier: String?) throws(MermaidDiagramReadError) {
+    mutating func addNote(_ text: DiagramLabel, forClassIdentifiedBy identifier: MermaidTextRange?) throws(MermaidDiagramReadError) {
         guard nodeCount < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
         if let namespaceIndex = openNamespaceIndices.last { diagram.namespaces[namespaceIndex].noteIndices.append(diagram.notes.count) }
         diagram.notes.append(ClassDiagramNote(text: text))
-        noteClassIdentifiers.append(identifier)
+        noteClassNames.append(identifier.map { identifier in Int32(number(of: identifier)) } ?? -1)
     }
 
     /// Opens a namespace inside the innermost one open, its identifier joined to that one's by a dot. Each part of a

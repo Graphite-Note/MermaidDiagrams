@@ -6,8 +6,8 @@
  *              stereotype, the bold name and the rows of fields of each box, and each relation's text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -173,20 +173,24 @@ enum RequirementFieldKey: Int, CaseIterable {
 /// (`«contains»`). A block measured once is the block measuring its text again gives.
 struct RequirementConstantTexts<Measurer: DiagramTextMeasuring> {
     let measurers: RequirementTextMeasurers<Measurer>
-    private var stereotypes = [DiagramTextBlock?](repeating: nil, count: RequirementKind.allCases.count + 1)
-    private var keys = [DiagramTextBlock?](repeating: nil, count: RequirementFieldKey.allCases.count)
-    private var relationTexts = [DiagramTextBlock?](repeating: nil, count: RequirementRelationKind.allCases.count)
+    private var stereotypes = [DiagramTextBlock?](repeating: nil, count: RequirementConstantTextKinds.requirementKinds.count + 1)
+    private var keys = [DiagramTextBlock?](repeating: nil, count: RequirementConstantTextKinds.fieldKeyCount)
+    private var relationTexts = [DiagramTextBlock?](repeating: nil, count: RequirementConstantTextKinds.relationKinds.count)
 
     init(measurers: RequirementTextMeasurers<Measurer>) {
         self.measurers = measurers
     }
 
+    /// The kinds in their declared order, made once rather than at each look-up.
+    private static var requirementKinds: [RequirementKind] { RequirementConstantTextKinds.requirementKinds }
+    private static var relationKinds: [RequirementRelationKind] { RequirementConstantTextKinds.relationKinds }
+
     mutating func stereotype(of kind: RequirementKind) -> DiagramTextBlock {
-        stereotype(at: RequirementKind.allCases.firstIndex(of: kind) ?? 0, kind: kind.rawValue)
+        stereotype(at: Self.requirementKinds.firstIndex(of: kind) ?? 0, kind: kind.rawValue)
     }
 
     mutating func elementStereotype() -> DiagramTextBlock {
-        stereotype(at: RequirementKind.allCases.count, kind: "Element")
+        stereotype(at: Self.requirementKinds.count, kind: "Element")
     }
 
     private mutating func stereotype(at slot: Int, kind: String) -> DiagramTextBlock {
@@ -205,12 +209,19 @@ struct RequirementConstantTexts<Measurer: DiagramTextMeasuring> {
     }
 
     mutating func relationText(of kind: RequirementRelationKind) -> DiagramTextBlock {
-        let slot = RequirementRelationKind.allCases.firstIndex(of: kind) ?? 0
+        let slot = Self.relationKinds.firstIndex(of: kind) ?? 0
         if let measured = relationTexts[slot] { return measured }
         let measured = DiagramTextBlock(label: DiagramLabel("«\(kind.rawValue)»"), measurer: measurers.body, maximumWidth: RequirementMeasurement.unwrapped)
         relationTexts[slot] = measured
         return measured
     }
+}
+
+/// The kinds the constant texts are kept by, in their declared order (`allCases` makes a new list each time it is read).
+enum RequirementConstantTextKinds {
+    static let requirementKinds = RequirementKind.allCases
+    static let relationKinds = RequirementRelationKind.allCases
+    static let fieldKeyCount = RequirementFieldKey.allCases.count
 }
 
 extension RequirementDiagram {
@@ -234,11 +245,15 @@ struct RequirementStyleResolution {
         guard !declarations.isEmpty else { return nil }
         var style = DiagramElementStyle()
         for declaration in declarations {
-            let reading = read[declaration] ?? {
-                let reading = DiagramElementStyle.reading(declaration)
-                return (reading.style, reading.hasUnappliedDeclaration)
-            }()
-            read[declaration] = reading
+            // A declaration read before is looked up once; one read for the first time is kept.
+            let reading: (style: DiagramElementStyle, isUnapplied: Bool)
+            if let known = read[declaration] {
+                reading = known
+            } else {
+                let parsed = DiagramElementStyle.reading(declaration)
+                reading = (parsed.style, parsed.hasUnappliedDeclaration)
+                read[declaration] = reading
+            }
             style = style.overridden(by: reading.style)
             if reading.isUnapplied { unappliedCount += 1 }
         }
