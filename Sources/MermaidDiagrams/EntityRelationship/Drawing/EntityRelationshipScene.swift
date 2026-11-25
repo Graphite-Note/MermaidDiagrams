@@ -6,8 +6,8 @@
  *              Pele paints them, its paths recorded into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,13 @@ extension DiagramScene {
     /// with their striped rows, outlines and header dividers, the boxes' text, the title. Types, keys and comments are
     /// in the foreground at `EntityRelationshipDrawingParts.mutedTextOpacity`.
     public init(layout: EntityRelationshipLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting, each of its paths holding at most the elements `limits` allow
+    /// (`DiagramSceneWorkspace.elementLimit(for:)`): past them the scene says so, and its preparation refuses it.
+    public init(layout: EntityRelationshipLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             EntityRelationshipSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font)

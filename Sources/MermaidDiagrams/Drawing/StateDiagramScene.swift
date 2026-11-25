@@ -6,8 +6,8 @@
  *              them, its paths recorded into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,13 @@ extension DiagramScene {
     /// transitions, the dashed lines to the notes and the arrows, the names of boxes transitions cross, the patches behind
     /// transition text and that text, the states and their text, the notes and their text, the title.
     public init(layout: StateDiagramLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting, each of its paths holding at most the elements `limits` allow
+    /// (`DiagramSceneWorkspace.elementLimit(for:)`): past them the scene says so, and its preparation refuses it.
+    public init(layout: StateDiagramLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             StateDiagramSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font)

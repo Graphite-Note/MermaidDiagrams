@@ -7,8 +7,8 @@
  *              and a timeline's literal text, each line trimmed; then each line's markup (`DiagramLabelByteMarkup`).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// A label's decoded bytes and their lines and spans, as offsets into `output`, kept by a thread and reused. Every
@@ -109,6 +109,13 @@ struct DiagramLabelByteDecoder {
     /// A Markdown string's source as Pele reads it before its lines (text/label.ts `dedent`): carriage returns as line
     /// breaks, the indentation all its lines with text share taken off each line, and the whole trimmed.
     private mutating func prepareMarkdownSource() {
+        // Most Markdown text is one line written without indentation, as a requirement's `checkout_req` is: with no
+        // carriage return and a line of text that starts without white space, no indentation is shared and the text is
+        // only trimmed, which needs no copy when there is nothing to trim.
+        if let kept = prepared.withUnsafeBufferPointer({ bytes in Self.rangeKeptWithoutDedenting(bytes) }) {
+            if kept != 0..<prepared.count { prepared = Array(prepared[kept]) }
+            return
+        }
         var normalized: [UInt8] = []
         normalized.reserveCapacity(prepared.count)
         var index = 0
@@ -123,6 +130,25 @@ struct DiagramLabelByteDecoder {
         }
         let dedented = normalized.withUnsafeBufferPointer { bytes in Self.dedented(bytes) }
         prepared = dedented.withUnsafeBufferPointer { bytes in Array(bytes[DiagramLabelByteScanning.trimmed(bytes, 0..<bytes.count)]) }
+    }
+
+    /// The trimmed range of `bytes` when dedenting them changes nothing: no carriage return, and a line that holds text
+    /// from its first byte, so that the indentation shared by the lines with text is none; nil otherwise.
+    private static func rangeKeptWithoutDedenting(_ bytes: UnsafeBufferPointer<UInt8>) -> Range<Int>? {
+        var hasUnindentedLine = false
+        var lineStart = 0
+        for position in 0...bytes.count {
+            if position < bytes.count {
+                let byte = bytes[position]
+                if byte == UInt8(ascii: "\r") { return nil }
+                guard byte == UInt8(ascii: "\n") else { continue }
+            }
+            if !hasUnindentedLine, position > lineStart, JavaScriptWhitespace.length(in: bytes[..<position], at: lineStart) == 0 {
+                hasUnindentedLine = true
+            }
+            lineStart = position + 1
+        }
+        return hasUnindentedLine ? DiagramLabelByteScanning.trimmed(bytes, 0..<bytes.count) : nil
     }
 
     /// The lines of `bytes` with the indentation shared by the lines that hold text taken off, counted in characters of
