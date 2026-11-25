@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationshipWords.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: The words and symbols Mermaid's entity relationship lexer reads as cardinalities, lines and keywords
+ *              wherever they stand, found on the text's borrowed bytes by their first byte.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// The words and symbols that Mermaid's entity relationship lexer reads as cardinalities, lines and statement keywords
 /// wherever they stand, before it reads a name, matched without regard to case. Where two start alike the first listed
 /// is tried first, as in Mermaid's lexer.
@@ -52,19 +64,29 @@ enum EntityRelationshipWords {
 
     /// Reads the first entry that matches at the cursor and returns its token, or nil when none does. `u` before `.`,
     /// `-` or `|` is the parent cardinality; the character after it stays for the line.
-    static func readToken(_ cursor: inout MermaidTextCursor) -> EntityRelationshipToken? {
-        guard let first = cursor.peek().map(MermaidByte.lowercased) else { return nil }
-        if first == letterU, let next = cursor.peek(1), next == MermaidByte.period || next == MermaidByte.hyphen || next == MermaidByte.verticalBar {
-            cursor.advance()
+    static func readToken(_ bytes: inout GraphDiagramBytes) -> EntityRelationshipToken? {
+        guard let first = bytes.peek().map(MermaidByte.lowercased) else { return nil }
+        if first == letterU, let next = bytes.peek(1), next == MermaidByte.period || next == MermaidByte.hyphen || next == MermaidByte.verticalBar {
+            bytes.advance()
             return .cardinality(.parent)
         }
-        for entry in entries where entry.word[0] == first && cursor.hasCaseInsensitivePrefix(entry.word) {
-            if entry.endsAtWordBoundary, let next = cursor.peek(entry.word.count), isWordByte(next) { continue }
-            cursor.advance(by: entry.word.count)
+        guard first < 0x80, case let candidates = entryIndicesByFirstByte[Int(first)], !candidates.isEmpty else { return nil }
+        for index in candidates where bytes.hasCaseInsensitivePrefix(entries[index].word) {
+            let entry = entries[index]
+            if entry.endsAtWordBoundary, let next = bytes.peek(entry.word.count), isWordByte(next) { continue }
+            bytes.advance(by: entry.word.count)
             return entry.token
         }
         return nil
     }
+
+    /// The indexes of `entries` by their word's first byte, in their order, so that a name's first byte is looked up
+    /// once instead of compared with every entry.
+    private static let entryIndicesByFirstByte: [[Int]] = {
+        var indices = [[Int]](repeating: [], count: 128)
+        for (index, entry) in entries.enumerated() { indices[Int(entry.word[0])].append(index) }
+        return indices
+    }()
 
     /// A letter, a digit or `_`: what a word boundary has on one side only.
     static func isWordByte(_ byte: UInt8) -> Bool {

@@ -1,10 +1,22 @@
+/**
+ * File: EntityRelationshipToken.swift
+ * -----------------------------------
+ * Layer: Core
+ * Description: The tokens of an entity relationship diagram's statements as Mermaid's lexer reads them outside an
+ *              entity's block, names and quoted text as byte ranges, and a name as a statement wrote it.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// A piece of an entity relationship diagram's statements, as Mermaid's lexer reads it outside an entity's `{ … }`.
 enum EntityRelationshipToken: Equatable, Sendable {
-    /// A name of an entity, the alias of one, or a relationship's label, without quotation marks.
-    case name(String, form: EntityRelationshipNameForm)
+    /// A name of an entity, the alias of one, or a relationship's label, without quotation marks, by its bytes.
+    case name(MermaidTextRange, form: EntityRelationshipNameForm)
     /// Quoted text that is no name, without its quotation marks: empty, or holding `%`, `\` or a line break. Only a
     /// relationship's label may be one.
-    case quotedText(String)
+    case quotedText(MermaidTextRange)
     case cardinality(EntityRelationshipCardinality)
     case identification(EntityRelationshipIdentification)
     case keyword(EntityRelationshipKeyword)
@@ -56,17 +68,16 @@ enum EntityRelationshipKeyword: Equatable, Sendable {
     case end
 }
 
-/// A name as a statement wrote it: what relationships know it by, and how it was written.
+/// A name as a statement wrote it: its bytes, which relationships know it by, and how it was written.
 struct EntityRelationshipName: Equatable {
-    let text: String
+    let range: MermaidTextRange
     let form: EntityRelationshipNameForm
 
     /// The text drawn for it: a quoted name is read as Markdown (its emphasis markers dropped, `<br>` breaking it), a
     /// bare one or a number as it is.
-    var label: DiagramLabel {
-        switch form {
-        case .quoted: DiagramLabelDecoder.label(from: text, form: .markdown)
-        case .bare, .number: DiagramLabelDecoder.label(from: text, form: .plain)
-        }
+    func label(in bytes: GraphDiagramBytes) -> DiagramLabel {
+        // The text's bytes are a String's, so its range's bytes are well formed UTF-8, as the String it was read as.
+        DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes.buffer[range.lowerBound..<range.upperBound]),
+                                  form: form == .quoted ? .markdown : .plain)
     }
 }
