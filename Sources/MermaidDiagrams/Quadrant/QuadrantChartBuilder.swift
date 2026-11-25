@@ -6,8 +6,8 @@
  *              quadrants, points with their coordinates and styles, and classes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -17,10 +17,13 @@ import Foundation
 /// The parser hands it texts without the spaces at their ends. Points and classes count against the node limit.
 struct QuadrantChartBuilder {
     private(set) var chart = QuadrantChart()
+    /// The bytes the texts' and coordinates' ranges are of.
+    private let bytes: [UInt8]
     private let limits: MermaidDiagramLimits
     private var nodeCount = 0
 
-    init(limits: MermaidDiagramLimits) {
+    init(bytes: [UInt8], limits: MermaidDiagramLimits) {
+        self.bytes = bytes
         self.limits = limits
     }
 
@@ -32,26 +35,34 @@ struct QuadrantChartBuilder {
 
     /// The text of quadrant `index + 1`; a later one replaces an earlier one.
     mutating func setQuadrantLabel(at index: Int, _ text: QuadrantChartText) {
-        chart.quadrantLabels[index] = Self.label(text)
+        chart.quadrantLabels[index] = label(text)
     }
 
     /// An axis's texts; without a high end, the axis keeps the high end it had.
     mutating func setAxisLabels(low: QuadrantChartText, high: QuadrantChartText?, isHorizontal: Bool) {
         if isHorizontal {
-            chart.xAxisLowLabel = Self.label(low)
-            if let high { chart.xAxisHighLabel = Self.label(high) }
+            chart.xAxisLowLabel = label(low)
+            if let high { chart.xAxisHighLabel = label(high) }
         } else {
-            chart.yAxisLowLabel = Self.label(low)
-            if let high { chart.yAxisHighLabel = Self.label(high) }
+            chart.yAxisLowLabel = label(low)
+            if let high { chart.yAxisHighLabel = label(high) }
         }
     }
 
-    mutating func addPoint(_ point: QuadrantChartWrittenPoint, line: Int) throws(MermaidDiagramReadError) {
+    /// A point, its styles the ranges `styles`.
+    mutating func addPoint(_ point: QuadrantChartWrittenPoint, styles: [MermaidTextRange], line: Int) throws(MermaidDiagramReadError) {
         try countNode()
-        let style = try QuadrantChartPointStyleSyntax.style(from: point.styles, line: line)
-        chart.points.append(QuadrantChartPoint(label: Self.label(point.label) ?? DiagramLabel(lines: []),
-                                               xCoordinate: Self.coordinate(point.xCoordinate), yCoordinate: Self.coordinate(point.yCoordinate),
+        let style = try bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            try QuadrantChartPointStyleSyntax.style(from: styles, in: buffer, line: line)
+        }
+        chart.points.append(QuadrantChartPoint(label: label(point.label) ?? DiagramLabel(lines: []),
+                                               xCoordinate: Self.coordinate(text(point.xCoordinate)), yCoordinate: Self.coordinate(text(point.yCoordinate)),
                                                className: point.className, style: style))
+    }
+
+    /// The text of `range`.
+    private func text(_ range: MermaidTextRange) -> String {
+        String(decoding: bytes[range.lowerBound..<range.upperBound], as: UTF8.self)
     }
 
     /// A coordinate as JavaScript's `Number` reads it. The lexer writes `1`, `0`, or `0`, a character and digits
@@ -67,9 +78,11 @@ struct QuadrantChartBuilder {
     }
 
     /// The styles of the class `name`; a later `classDef` of a name replaces an earlier one.
-    mutating func addClass(_ name: String, styles: [String], line: Int) throws(MermaidDiagramReadError) {
+    mutating func addClass(_ name: String, styles: [MermaidTextRange], line: Int) throws(MermaidDiagramReadError) {
         try countNode()
-        chart.classStyles[name] = try QuadrantChartPointStyleSyntax.style(from: styles, line: line)
+        chart.classStyles[name] = try bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            try QuadrantChartPointStyleSyntax.style(from: styles, in: buffer, line: line)
+        }
     }
 
     mutating func apply(_ statement: MermaidAccessibilityStatement) {
@@ -86,8 +99,13 @@ struct QuadrantChartBuilder {
 
     /// A text as Pele draws it: a Markdown string without its emphasis markers, other text with `<br>` ending a line,
     /// tags dropped and entity codes read. Nil for empty text.
-    private static func label(_ text: QuadrantChartText) -> DiagramLabel? {
-        guard !text.text.isEmpty else { return nil }
-        return DiagramLabelDecoder.label(from: text.text, form: text.isMarkdown ? .markdown : .plain)
+    private func label(_ text: QuadrantChartText) -> DiagramLabel? {
+        guard !text.isEmpty else { return nil }
+        let form: DiagramLabelDecoder.Form = text.isMarkdown ? .markdown : .plain
+        if let written = text.text { return DiagramLabelDecoder.label(from: written, form: form) }
+        let range = text.range
+        return bytes.withUnsafeBufferPointer { buffer in
+            DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: buffer[range.lowerBound..<range.upperBound]), form: form)
+        }
     }
 }

@@ -5,8 +5,8 @@
  * Description: Reads a quadrant chart's statements from their tokens, as Mermaid's quadrant grammar does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Reads a quadrant chart's statements after its `quadrantChart` keyword from their tokens (`QuadrantChartLexer`), as
@@ -17,21 +17,25 @@
 /// words with the spaces and hyphens between them.
 struct QuadrantChartParser {
     private let tokens: [QuadrantChartToken]
+    private let statements: [MermaidAccessibilityStatement]
     private let bytes: [UInt8]
     private var index = 0
     private var builder: QuadrantChartBuilder
+    /// The ranges of the styles of the point or class read last, kept from one to the next.
+    private var styles: [MermaidTextRange] = []
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> QuadrantChart {
         var parser = QuadrantChartParser(tokens: try QuadrantChartLexer.tokens(after: cursor), bytes: cursor.bytes,
-                                         builder: QuadrantChartBuilder(limits: limits))
+                                         builder: QuadrantChartBuilder(bytes: cursor.bytes, limits: limits))
         try parser.readStatements()
         var chart = parser.builder.chart
         chart.options = QuadrantChartOptions(MermaidConfigurationOptions(section: "quadrantChart", in: cursor))
         return chart
     }
 
-    private init(tokens: [QuadrantChartToken], bytes: [UInt8], builder: QuadrantChartBuilder) {
-        self.tokens = tokens
+    private init(tokens: QuadrantChartTokens, bytes: [UInt8], builder: QuadrantChartBuilder) {
+        self.tokens = tokens.tokens
+        statements = tokens.statements
         self.bytes = bytes
         self.builder = builder
     }
@@ -60,12 +64,12 @@ struct QuadrantChartParser {
         } else if let quadrant = QuadrantChartTokenKind.quadrants.firstIndex(of: token.kind) {
             index += 1
             builder.setQuadrantLabel(at: quadrant, try requiredText(after: token))
-        } else if case .text(let title) = token.content, token.kind == .title {
+        } else if token.kind == .title {
             index += 1
-            builder.setTitle(title)
-        } else if case .accessibility(let statement) = token.content {
+            builder.setTitle(String(decoding: bytes[token.content.lowerBound..<token.content.upperBound], as: UTF8.self))
+        } else if token.kind == .accessibility {
             index += 1
-            builder.apply(statement)
+            builder.apply(statements[token.second.lowerBound])
         } else if QuadrantChartTokenKind.textStarts.contains(token.kind) {
             try readPoint(startingWith: token)
         }
@@ -81,7 +85,7 @@ struct QuadrantChartParser {
         if current?.kind == .axisArrow {
             index += 1
             high = readText()
-            if high == nil { low.text += Self.arrowAfterText }
+            if high == nil { low.append(Self.arrowAfterText, in: bytes) }
         }
         builder.setAxisLabels(low: low, high: high, isHorizontal: isHorizontal)
     }
@@ -90,17 +94,18 @@ struct QuadrantChartParser {
     private mutating func readPoint(startingWith token: QuadrantChartToken) throws(MermaidDiagramReadError) {
         guard let label = readText() else { return }
         var className: String?
-        if let classToken = current, classToken.kind == .className, case .text(let name) = classToken.content {
-            className = name
+        if let classToken = current, classToken.kind == .className {
+            className = String(decoding: bytes[classToken.content.lowerBound..<classToken.content.upperBound], as: UTF8.self)
             index += 1
         }
-        guard let pointToken = current, case .coordinates(let xCoordinate, let yCoordinate) = pointToken.content else {
+        guard let pointToken = current, pointToken.kind == .point else {
             throw .invalidSyntax(line: current?.line ?? token.line, problem: .expectedPointCoordinates)
         }
         index += 1
-        let styles = current.map { next in QuadrantChartTokenKind.stylePieces.contains(next.kind) } == true ? try readStyles() : []
-        try builder.addPoint(QuadrantChartWrittenPoint(label: label, className: className, xCoordinate: xCoordinate, yCoordinate: yCoordinate,
-                                                       styles: styles), line: token.line)
+        styles.removeAll(keepingCapacity: true)
+        if current.map({ next in QuadrantChartTokenKind.stylePieces.contains(next.kind) }) == true { try readStyles() }
+        try builder.addPoint(QuadrantChartWrittenPoint(label: label, className: className, xCoordinate: pointToken.content,
+                                                       yCoordinate: pointToken.second), styles: styles, line: token.line)
     }
 
     /// `classDef`, one space, the class's name, one space, and its styles.
@@ -110,22 +115,23 @@ struct QuadrantChartParser {
         try expectSpace()
         let nameStart = index
         while let piece = current, QuadrantChartTokenKind.classNamePieces.contains(piece.kind) { index += 1 }
-        let name = writtenText(fromToken: nameStart)
+        let name = writtenRange(fromToken: nameStart)
         guard !name.isEmpty else { throw current.map(unexpected) ?? .invalidSyntax(line: keyword.line, problem: .expectedName) }
         try expectSpace()
-        try builder.addClass(name, styles: try readStyles(), line: keyword.line)
+        styles.removeAll(keepingCapacity: true)
+        try readStyles()
+        try builder.addClass(String(decoding: bytes[name.lowerBound..<name.upperBound], as: UTF8.self), styles: styles, line: keyword.line)
     }
 
     /// Styles separated by commas, each made of letters, digits, colons, spaces, `#` and hyphens, without the spaces at
-    /// its ends.
-    private mutating func readStyles() throws(MermaidDiagramReadError) -> [String] {
-        var styles: [String] = []
+    /// its ends: their ranges, added to `styles`.
+    private mutating func readStyles() throws(MermaidDiagramReadError) {
         while true {
             let styleStart = index
             while let piece = current, QuadrantChartTokenKind.stylePieces.contains(piece.kind) { index += 1 }
             guard index > styleStart else { throw .invalidSyntax(line: current?.line ?? tokens[index - 1].line, problem: .expectedPointStyle) }
-            styles.append(writtenText(fromToken: styleStart))
-            guard current?.kind == .comma else { return styles }
+            styles.append(writtenRange(fromToken: styleStart))
+            guard current?.kind == .comma else { return }
             index += 1
         }
     }
@@ -137,20 +143,40 @@ struct QuadrantChartParser {
         let firstIndex = index
         index += 1
         while let piece = current, QuadrantChartTokenKind.textContinuations.contains(piece.kind) { index += 1 }
-        guard case .text(let quoted) = first.content else { return QuadrantChartText(text: writtenText(fromToken: firstIndex), isMarkdown: false) }
-        let rest = String(decoding: bytes[first.end..<tokens[index - 1].end], as: UTF8.self)
-        return QuadrantChartText(text: Self.trimmed(quoted + rest), isMarkdown: first.kind == .markdownString)
+        guard first.kind == .string || first.kind == .markdownString else {
+            return QuadrantChartText(range: writtenRange(fromToken: firstIndex), isMarkdown: false)
+        }
+        let quoted = first.content
+        let restEnd = tokens[index - 1].end
+        // A quoted text alone, ASCII, is its bytes trimmed as JavaScript trims them; with words after it, or beyond
+        // ASCII, it is the text and the words joined and trimmed.
+        if first.end == restEnd, !bytes[quoted.lowerBound..<quoted.upperBound].contains(where: { byte in byte >= 0x80 }) {
+            var start = quoted.lowerBound
+            var end = quoted.upperBound
+            while start < end, Self.isJavaScriptASCIIWhitespace(bytes[start]) { start += 1 }
+            while end > start, Self.isJavaScriptASCIIWhitespace(bytes[end - 1]) { end -= 1 }
+            return QuadrantChartText(range: MermaidTextRange(start: start, end: end), isMarkdown: first.kind == .markdownString)
+        }
+        let text = String(decoding: bytes[quoted.lowerBound..<quoted.upperBound], as: UTF8.self)
+            + String(decoding: bytes[first.end..<restEnd], as: UTF8.self)
+        return QuadrantChartText(text: Self.trimmed(text), isMarkdown: first.kind == .markdownString)
     }
 
-    /// The text of the tokens from `firstIndex` up to the current one, without the spaces at its ends. They follow one
+    /// The range of the tokens from `firstIndex` up to the current one, without the spaces at its ends. They follow one
     /// another in the text, since only a comment is skipped between tokens and a comment ends its line.
-    private func writtenText(fromToken firstIndex: Int) -> String {
-        guard index > firstIndex else { return "" }
+    private func writtenRange(fromToken firstIndex: Int) -> MermaidTextRange {
+        guard index > firstIndex else { return .empty }
         var start = tokens[firstIndex].start
         var end = tokens[index - 1].end
         while start < end, Self.isSpaceOrLineBreak(bytes[start]) { start += 1 }
         while end > start, Self.isSpaceOrLineBreak(bytes[end - 1]) { end -= 1 }
-        return String(decoding: bytes[start..<end], as: UTF8.self)
+        return MermaidTextRange(start: start, end: end)
+    }
+
+    /// The ASCII white space JavaScript's `trim` removes: a tab, a line feed, a vertical tab, a form feed, a carriage
+    /// return or a space, as Unicode's white space property holds them.
+    private static func isJavaScriptASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || (0x09...0x0D).contains(byte)
     }
 
     private static func isSpaceOrLineBreak(_ byte: UInt8) -> Bool {
@@ -194,17 +220,39 @@ struct QuadrantChartParser {
     private static let formFeed: UInt8 = 0x0C
 }
 
-/// A text of a quadrant chart as written, and whether it is a Markdown string.
+/// A text of a quadrant chart as written, and whether it is a Markdown string: the range of the bytes it is, or, for a
+/// text a quotation and words make or an axis's arrow ends, the text made.
 struct QuadrantChartText {
-    var text: String
+    private(set) var range: MermaidTextRange
+    private(set) var text: String?
     let isMarkdown: Bool
+
+    init(range: MermaidTextRange, isMarkdown: Bool) {
+        self.range = range
+        text = nil
+        self.isMarkdown = isMarkdown
+    }
+
+    init(text: String, isMarkdown: Bool) {
+        range = .empty
+        self.text = text
+        self.isMarkdown = isMarkdown
+    }
+
+    /// Whether the text has no character.
+    var isEmpty: Bool { text.map(\.isEmpty) ?? range.isEmpty }
+
+    /// Adds `suffix` after the text, whose bytes are `bytes`' when it is a range of them.
+    mutating func append(_ suffix: String, in bytes: [UInt8]) {
+        text = (text ?? String(decoding: bytes[range.lowerBound..<range.upperBound], as: UTF8.self)) + suffix
+    }
 }
 
-/// A point as its statement writes it, before its coordinates and styles are read.
+/// A point as its statement writes it, before its coordinates and styles are read: its coordinates as the ranges of
+/// their bytes.
 struct QuadrantChartWrittenPoint {
     let label: QuadrantChartText
     let className: String?
-    let xCoordinate: String
-    let yCoordinate: String
-    let styles: [String]
+    let xCoordinate: MermaidTextRange
+    let yCoordinate: MermaidTextRange
 }

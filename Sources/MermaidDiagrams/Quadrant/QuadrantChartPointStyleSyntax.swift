@@ -6,8 +6,8 @@
  *              color, stroke-color and stroke-width, refusing another name or a value of the wrong form.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Reads the styles a quadrant chart's point or `classDef` writes, as Mermaid's quadrant database does: `radius: 10`
@@ -17,27 +17,97 @@ enum QuadrantChartPointStyleSyntax {
     /// The styles `styles` give, each read as `name: value`; a later style of a name replaces an earlier one.
     static func style(from styles: [String], line: Int) throws(MermaidDiagramReadError) -> QuadrantChartPointStyle {
         var style = QuadrantChartPointStyle()
-        for written in styles {
-            let (name, value) = nameAndValue(written)
-            var invalid: MermaidDiagramReadError { .invalidSyntax(line: line, problem: .invalidPointStyleValue(name: name, value: value)) }
-            switch name {
-            case radiusName:
-                guard let radius = wholeNumber(value) else { throw invalid }
-                style.radius = radius
-            case colorName:
-                guard let color = color(value) else { throw invalid }
-                style.color = color
-            case strokeColorName:
-                guard let color = color(value) else { throw invalid }
-                style.strokeColor = color
-            case strokeWidthName:
-                guard value.hasSuffix(pixelUnit), let width = wholeNumber(String(value.dropLast(pixelUnit.count))) else { throw invalid }
-                style.strokeWidth = width
-            default:
-                throw .invalidSyntax(line: line, problem: .unsupportedPointStyle(name: name))
+        for written in styles { try apply(written, to: &style, line: line) }
+        return style
+    }
+
+    /// The styles whose bytes are the ranges `styles` of `bytes`, as `style(from:line:)` reads their texts: an ASCII
+    /// style written with a colon on its bytes, any other through its text.
+    static func style(from styles: [MermaidTextRange], in bytes: UnsafeBufferPointer<UInt8>, line: Int) throws(MermaidDiagramReadError)
+        -> QuadrantChartPointStyle {
+        var style = QuadrantChartPointStyle()
+        for range in styles {
+            let written = UnsafeBufferPointer(rebasing: bytes[range.lowerBound..<range.upperBound])
+            guard !written.contains(where: { byte in byte >= 0x80 }), let colon = written.firstIndex(of: MermaidByte.colon) else {
+                try apply(String(decoding: written, as: UTF8.self), to: &style, line: line)
+                continue
             }
+            try apply(name: trimmedRange(written, 0..<colon), value: valueRange(written, after: colon), of: written, to: &style, line: line)
         }
         return style
+    }
+
+    /// One style read from its text.
+    private static func apply(_ written: String, to style: inout QuadrantChartPointStyle, line: Int) throws(MermaidDiagramReadError) {
+        let (name, value) = nameAndValue(written)
+        var invalid: MermaidDiagramReadError { .invalidSyntax(line: line, problem: .invalidPointStyleValue(name: name, value: value)) }
+        switch name {
+        case radiusName:
+            guard let radius = wholeNumber(value) else { throw invalid }
+            style.radius = radius
+        case colorName:
+            guard let color = color(value) else { throw invalid }
+            style.color = color
+        case strokeColorName:
+            guard let color = color(value) else { throw invalid }
+            style.strokeColor = color
+        case strokeWidthName:
+            guard value.hasSuffix(pixelUnit), let width = wholeNumber(String(value.dropLast(pixelUnit.count))) else { throw invalid }
+            style.strokeWidth = width
+        default:
+            throw .invalidSyntax(line: line, problem: .unsupportedPointStyle(name: name))
+        }
+    }
+
+    /// One ASCII style read from its bytes, its name and its value the ranges `name` and `value` of `written`, as
+    /// `apply(_:to:line:)` reads its text.
+    private static func apply(name: Range<Int>, value: Range<Int>, of written: UnsafeBufferPointer<UInt8>, to style: inout QuadrantChartPointStyle,
+                              line: Int) throws(MermaidDiagramReadError) {
+        let nameBytes = UnsafeBufferPointer(rebasing: written[name])
+        let valueBytes = UnsafeBufferPointer(rebasing: written[value])
+        var invalid: MermaidDiagramReadError {
+            .invalidSyntax(line: line, problem: .invalidPointStyleValue(name: String(decoding: nameBytes, as: UTF8.self),
+                                                                        value: String(decoding: valueBytes, as: UTF8.self)))
+        }
+        if nameBytes.elementsEqual(radiusName.utf8) {
+            guard let radius = wholeNumber(valueBytes) else { throw invalid }
+            style.radius = radius
+        } else if nameBytes.elementsEqual(colorName.utf8) {
+            guard let color = color(valueBytes) else { throw invalid }
+            style.color = color
+        } else if nameBytes.elementsEqual(strokeColorName.utf8) {
+            guard let color = color(valueBytes) else { throw invalid }
+            style.strokeColor = color
+        } else if nameBytes.elementsEqual(strokeWidthName.utf8) {
+            let unitCount = pixelUnit.utf8.count
+            guard valueBytes.count >= unitCount, valueBytes[(valueBytes.count - unitCount)...].elementsEqual(pixelUnit.utf8),
+                  let width = wholeNumber(UnsafeBufferPointer(rebasing: valueBytes[..<(valueBytes.count - unitCount)])) else { throw invalid }
+            style.strokeWidth = width
+        } else {
+            throw .invalidSyntax(line: line, problem: .unsupportedPointStyle(name: String(decoding: nameBytes, as: UTF8.self)))
+        }
+    }
+
+    /// The value after the colon at `colon` up to a second colon, without the spaces around it.
+    private static func valueRange(_ written: UnsafeBufferPointer<UInt8>, after colon: Int) -> Range<Int> {
+        let rest = (colon + 1)..<written.count
+        let end = written[rest].firstIndex(of: MermaidByte.colon) ?? written.count
+        return trimmedRange(written, (colon + 1)..<end)
+    }
+
+    /// `range` of ASCII `written` without the spaces, tabs, vertical tabs and form feeds at its ends.
+    private static func trimmedRange(_ written: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Range<Int> {
+        var start = range.lowerBound
+        var end = range.upperBound
+        while start < end, isSpace(written[start]) { start += 1 }
+        while end > start, isSpace(written[end - 1]) { end -= 1 }
+        return start..<end
+    }
+
+    /// Digits only, as a number of points, read from ASCII bytes.
+    private static func wholeNumber(_ bytes: UnsafeBufferPointer<UInt8>) -> Double? {
+        guard !bytes.isEmpty, bytes.allSatisfy(MermaidByte.isDigit) else { return nil }
+        return Double(String(decoding: bytes, as: UTF8.self))
     }
 
     /// The name before the first colon and the value after it up to a second colon, without the spaces around them;
@@ -81,7 +151,13 @@ enum QuadrantChartPointStyleSyntax {
 
     /// Six or three hexadecimal digits, the `#` before them optional; three stand for each one doubled.
     private static func color(_ text: String) -> QuadrantChartColor? {
-        let digits = text.hasPrefix("#") ? text.utf8.dropFirst() : text.utf8[...]
+        var text = text
+        return text.withUTF8 { bytes in color(bytes) }
+    }
+
+    /// `color(_:)` of the text whose UTF-8 is `bytes`.
+    private static func color(_ bytes: UnsafeBufferPointer<UInt8>) -> QuadrantChartColor? {
+        let digits = bytes.first == UInt8(ascii: "#") ? bytes.dropFirst() : bytes[...]
         guard digits.count == 6 || digits.count == 3 else { return nil }
         // The digits' values, in lanes of a vector rather than an array.
         var values = SIMD8<UInt8>()
