@@ -6,8 +6,8 @@
  *              and whether the text takes the ink of a fill the class sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -90,10 +90,47 @@ public struct TreemapClassTextStyle: Equatable, Sendable {
     }
 
     /// What Pele refuses in a style's value: a resource, a script, markup or the end of a declaration.
-    private static func isUnsafe(_ value: String) -> Bool {
+    static func isUnsafe(_ value: String) -> Bool {
+        if let asciiUnsafe = isUnsafe(ascii: value) { return asciiUnsafe }
         let lowered = value.lowercased()
         let unsafeParts = ["javascript:", "@import", "image-set", "/*", "<", ">", "{", "}", ";", "\\"]
         if unsafeParts.contains(where: { part in lowered.contains(part) }) { return true }
         return lowered.range(of: #"(url|expression)\s*\("#, options: .regularExpression) != nil
     }
+
+    /// `isUnsafe` of an ASCII value without a vertical tab, read on its bytes: lowered, searched for each part, and for
+    /// `url` or `expression` anywhere followed by the white space the regular expression's `\s` takes in ASCII (a tab, a
+    /// line feed, a form feed, a carriage return or a space) and `(`. Nil for any other value, which the regular
+    /// expression reads.
+    private static func isUnsafe(ascii value: String) -> Bool? {
+        guard !value.utf8.contains(where: { byte in byte >= 0x80 || byte == 0x0B }) else { return nil }
+        let lowered = value.utf8.map(MermaidByte.lowercased)
+        for part in unsafeParts where contains(part, in: lowered) { return true }
+        for function in unsafeFunctions {
+            var start = 0
+            while let found = firstIndex(of: function, in: lowered, from: start) {
+                var index = found + function.count
+                while index < lowered.count, isRegularExpressionSpace(lowered[index]) { index += 1 }
+                if index < lowered.count, lowered[index] == UInt8(ascii: "(") { return true }
+                start = found + 1
+            }
+        }
+        return false
+    }
+
+    private static func isRegularExpressionSpace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0C || byte == 0x0D
+    }
+
+    private static func contains(_ part: [UInt8], in bytes: [UInt8]) -> Bool {
+        firstIndex(of: part, in: bytes, from: 0) != nil
+    }
+
+    private static func firstIndex(of part: [UInt8], in bytes: [UInt8], from start: Int) -> Int? {
+        guard part.count <= bytes.count, start <= bytes.count - part.count else { return nil }
+        return (start...(bytes.count - part.count)).first { index in bytes[index] == part[0] && bytes[index..<(index + part.count)].elementsEqual(part) }
+    }
+
+    private static let unsafeParts = ["javascript:", "@import", "image-set", "/*", "<", ">", "{", "}", ";", "\\"].map { part in Array(part.utf8) }
+    private static let unsafeFunctions = ["url", "expression"].map { word in Array(word.utf8) }
 }
