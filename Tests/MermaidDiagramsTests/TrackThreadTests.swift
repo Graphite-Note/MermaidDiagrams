@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: Twelve threads prepare the sequence, user journey, timeline, Gantt, kanban, railroad and event modeling
  *              corpora at once, with journeys of many actors and event models of many frames whose short lists turn into
- *              tables, regular and narrow: every outcome is the one prepared alone.
+ *              tables and kanban cards whose metadata is read on bytes and by the YAML reader, regular and narrow: every
+ *              outcome is the one prepared alone.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -27,6 +28,11 @@ final class TrackThreadTests: XCTestCase {
         sources.append("eventmodeling\n" + (1...40).map { frame in "tf \(frame) \(["ui", "cmd", "evt", "rmo"][frame % 4]) N\(frame % 12).E\(frame)" }
             .joined(separator: "\n"))
         sources.append("sequenceDiagram\n" + (0..<90).map { index in "P\(index % 30)->>P\((index * 7) % 30): wrap: m\(index)" }.joined(separator: "\n"))
+        // Kanban metadata read on its bytes and by the whole YAML reader, cards of both side by side.
+        sources.append("kanban\n  c[C]\n" + (0..<30).map { index in
+            index % 3 == 0 ? "    k\(index)[K]@{\n      ticket: T-\(index)\n      priority: Low\n    }"
+                : "    k\(index)[K]@{ ticket: T-\(index), assigned: 'a\(index)', priority: \(index % 2 == 0 ? "High" : "[Low]") }"
+        }.joined(separator: "\n"))
         XCTAssertGreaterThan(sources.count, 90)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }

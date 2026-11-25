@@ -5,8 +5,8 @@
  * Description: Pele's face for a user journey's score, added to Core Graphics paths or to lanes.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -51,11 +51,18 @@ enum UserJourneyFaceShape {
         }
     }
 
+    /// How far a curved mouth's corners are from its circle's center, up or down: the same for every face.
+    private static let curvedMouthRise = (curvedMouthRadius * curvedMouthRadius - curvedMouthHalfWidth * curvedMouthHalfWidth).squareRoot()
+    /// The angle of a smile's right corner, and of a frown's, from its circle's center, worked out once instead of for
+    /// each face: the same operations on the same constants, so the same bits.
+    private static let smileCornerAngle = atan2(curvedMouthRise, curvedMouthHalfWidth)
+    private static let frownCornerAngle = atan2(-curvedMouthRise, curvedMouthHalfWidth)
+
     /// The shorter arc between the corners, below them for a smile and above them for a frown, from left to right.
     private static func addCurvedMouth<Path: DiagramCurvedPathRecording>(at center: CGPoint, cornerDepth: CGFloat, bulgesDown: Bool, to mouths: Path) {
-        let rise = (curvedMouthRadius * curvedMouthRadius - curvedMouthHalfWidth * curvedMouthHalfWidth).squareRoot()
+        let rise = curvedMouthRise
         let arcCenter = CGPoint(x: center.x, y: center.y + cornerDepth + (bulgesDown ? -rise : rise))
-        let cornerAngle = atan2(bulgesDown ? rise : -rise, curvedMouthHalfWidth)
+        let cornerAngle = bulgesDown ? smileCornerAngle : frownCornerAngle
         let leftAngle = bulgesDown ? CGFloat.pi - cornerAngle : -CGFloat.pi - cornerAngle
         mouths.move(to: CGPoint(x: center.x - curvedMouthHalfWidth, y: center.y + cornerDepth))
         // Angles grow from the x axis toward the y axis, which runs down here: a smile runs from the left corner down

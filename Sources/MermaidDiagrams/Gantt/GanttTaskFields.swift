@@ -2,12 +2,12 @@
  * File: GanttTaskFields.swift
  * ---------------------------
  * Layer: Core
- * Description: A Gantt task's data after its colon: its tags, identifier, start and end, split and trimmed on the
- *              text's bytes when it is all ASCII.
+ * Description: A Gantt task's data after its colon: its tags, identifier, start and end, split, trimmed and its tags
+ *              told on the text's bytes when it is all ASCII, so that only the identifier, start and end become text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -30,9 +30,44 @@ struct GanttTaskFields {
     static let maximumFieldCount = 3
 
     init(name: String, data: String, line: Int) throws(MermaidDiagramReadError) {
-        var fields = Self.trimmedFields(of: data)
-        var firstField = 0
-        while firstField < fields.count, let tag = Self.tag(fields[firstField]) {
+        var tags = TagsOnBytes()
+        // Up to the last three fields after the tags (identifier, start, end), in order, and how many fields there are.
+        var texts: [String] = []
+        var fieldCount: Int
+        if let fieldsOnBytes = data.utf8.withContiguousStorageIfAvailable({ bytes in Self.fieldRangesOfASCII(bytes) }) ?? nil {
+            tags = fieldsOnBytes.tags
+            fieldCount = fieldsOnBytes.count
+            if fieldCount <= Self.maximumFieldCount {
+                texts = data.utf8.withContiguousStorageIfAvailable { bytes in fieldsOnBytes.texts(in: bytes) } ?? []
+            }
+        } else {
+            // Data with a character past ASCII, split and trimmed as Swift's characters split it.
+            texts = Self.trimmedFields(of: data)
+            let firstField = texts.prefix { field in Self.tag(field).map { tag in tags.set(tag) } != nil }.count
+            texts.removeFirst(firstField)
+            fieldCount = texts.count
+        }
+        guard fieldCount > 0 else { throw .invalidSyntax(line: line, problem: .taskWithoutEnd(task: name)) }
+        guard fieldCount <= Self.maximumFieldCount else { throw .invalidSyntax(line: line, problem: .taskWithTooManyFields(task: name)) }
+        isDone = tags.isDone
+        isActive = tags.isActive
+        isCritical = tags.isCritical
+        isMilestone = tags.isMilestone
+        isVerticalMarker = tags.isVerticalMarker
+        identifier = texts.count == Self.maximumFieldCount ? texts[0] : nil
+        startText = texts.count > 1 ? texts[texts.count - 2] : nil
+        endText = texts[texts.count - 1]
+    }
+
+    /// The tags that open a task's data, told on their bytes.
+    private struct TagsOnBytes {
+        var isDone = false
+        var isActive = false
+        var isCritical = false
+        var isMilestone = false
+        var isVerticalMarker = false
+
+        mutating func set(_ tag: Tag) {
             switch tag {
             case .active: isActive = true
             case .done: isDone = true
@@ -40,14 +75,57 @@ struct GanttTaskFields {
             case .milestone: isMilestone = true
             case .verticalMarker: isVerticalMarker = true
             }
-            firstField += 1
         }
-        fields.removeFirst(firstField)
-        guard let last = fields.last else { throw .invalidSyntax(line: line, problem: .taskWithoutEnd(task: name)) }
-        guard fields.count <= Self.maximumFieldCount else { throw .invalidSyntax(line: line, problem: .taskWithTooManyFields(task: name)) }
-        identifier = fields.count == Self.maximumFieldCount ? fields[0] : nil
-        startText = fields.count > 1 ? fields[fields.count - 2] : nil
-        endText = last
+    }
+
+    /// An ASCII task's tags and the trimmed ranges of the fields after them: the first three kept, without a list, and
+    /// how many there are.
+    private struct FieldRangesOnBytes {
+        var tags = TagsOnBytes()
+        var first = 0..<0
+        var second = 0..<0
+        var third = 0..<0
+        var count = 0
+
+        mutating func append(_ range: Range<Int>) {
+            switch count {
+            case 0: first = range
+            case 1: second = range
+            case 2: third = range
+            default: break
+            }
+            count += 1
+        }
+
+        /// The fields' texts, for at most three fields.
+        func texts(in bytes: UnsafeBufferPointer<UInt8>) -> [String] {
+            [first, second, third].prefix(count).map { range in String(decoding: UnsafeBufferPointer(rebasing: bytes[range]), as: UTF8.self) }
+        }
+    }
+
+    /// The fields of data all in ASCII, split at its commas, trimmed and the leading tags told on its bytes, or nil for
+    /// data with a byte past ASCII, which a mark may join to a comma.
+    private static func fieldRangesOfASCII(_ bytes: UnsafeBufferPointer<UInt8>) -> FieldRangesOnBytes? {
+        var combined: UInt8 = 0
+        for byte in bytes { combined |= byte }
+        guard combined < 0x80 else { return nil }
+        var result = FieldRangesOnBytes()
+        var isReadingTags = true
+        var fieldStart = 0
+        for index in 0...bytes.count where index == bytes.count || bytes[index] == MermaidByte.comma {
+            var start = fieldStart
+            var end = index
+            fieldStart = index + 1
+            while start < end, isASCIIWhitespace(bytes[start]) { start += 1 }
+            while start < end, isASCIIWhitespace(bytes[end - 1]) { end -= 1 }
+            if isReadingTags, let tag = tag(UnsafeBufferPointer(rebasing: bytes[start..<end])) {
+                result.tags.set(tag)
+                continue
+            }
+            isReadingTags = false
+            result.append(start..<end)
+        }
+        return result
     }
 
     /// The data's comma-separated fields, each without the white space and line breaks at its ends. A comma is a
@@ -95,6 +173,24 @@ struct GanttTaskFields {
     private enum Tag {
         case active, done, critical, milestone, verticalMarker
     }
+
+    /// The tag a trimmed field of ASCII bytes is, or nil.
+    private static func tag(_ field: UnsafeBufferPointer<UInt8>) -> Tag? {
+        switch field.count {
+        case 4 where field.elementsEqual(doneBytes): .done
+        case 4 where field.elementsEqual(critBytes): .critical
+        case 4 where field.elementsEqual(vertBytes): .verticalMarker
+        case 6 where field.elementsEqual(activeBytes): .active
+        case 9 where field.elementsEqual(milestoneBytes): .milestone
+        default: nil
+        }
+    }
+
+    private static let activeBytes = Array("active".utf8)
+    private static let doneBytes = Array("done".utf8)
+    private static let critBytes = Array("crit".utf8)
+    private static let milestoneBytes = Array("milestone".utf8)
+    private static let vertBytes = Array("vert".utf8)
 
     /// The tag a trimmed field is, or nil.
     private static func tag(_ field: String) -> Tag? {

@@ -6,7 +6,7 @@
  *              the faces at their tasks' levels with their stems, and the line from face to face.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -23,7 +23,7 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
 
     /// The body with its bands' top and its first card's left edge at `origin`.
     func placed(at origin: CGPoint) -> UserJourneyPlacedBody {
-        guard !diagram.tasks.isEmpty else { return UserJourneyPlacedBody(bottom: origin.y) }
+        guard !diagram.taskRecords.isEmpty else { return UserJourneyPlacedBody(bottom: origin.y) }
         let runs = UserJourneySectionRun.runs(of: diagram)
         let headings = runs.map { run in run.heading.map { heading in headingText(heading, taskCount: run.taskCount) } }
         let bandHeight = headings.compactMap { heading in heading.map(bandHeight) }.max() ?? 0
@@ -37,8 +37,8 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
                                width: CGFloat(run.taskCount) * measured.cardPitch - UserJourneyGeometry.cardGap, height: bandHeight)
             body.sections.append(UserJourneyLayoutSection(frame: frame, text: Self.centered(heading, at: CGPoint(x: frame.midX, y: frame.midY))))
         }
-        body.tasks.reserveCapacity(diagram.tasks.count)
-        body.tasks = diagram.tasks.indices.map { index in
+        // Made by one map, which sizes the list once (room reserved first would be dropped by the assignment).
+        body.tasks = diagram.taskRecords.indices.map { index in
             placedTask(index, frame: CGRect(x: origin.x + CGFloat(index) * measured.cardPitch, y: cardsTop, width: measured.cardWidth, height: cardHeight),
                        chartTop: chartTop)
         }
@@ -62,19 +62,25 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
     /// The task at `index` with its card at `frame`: its text at the card's top, its actors' dots along its bottom,
     /// spread at most 13 points apart and closer to stay inside it, and its face on the scale.
     private func placedTask(_ index: Int, frame: CGRect, chartTop: CGFloat) -> UserJourneyLayoutTask {
-        let task = diagram.tasks[index]
+        let task = diagram.taskRecords[index]
         let text = Self.centered(measured.taskTexts[index],
                                  at: CGPoint(x: frame.midX, y: frame.minY + UserJourneyGeometry.cardPadding.height + measured.textHeight / 2))
         let faceCenter = CGPoint(x: frame.midX, y: chartTop + UserJourneyGeometry.offset(ofLevel: task.level))
         let stem = DiagramPath(start: CGPoint(x: frame.midX, y: frame.maxY),
                                segments: [.line(to: CGPoint(x: frame.midX, y: faceCenter.y - UserJourneyGeometry.faceRadius))])
-        let named = diagram.actorIndices(ofTask: index).filter { actorIndex in actorIndex >= 0 }
+        // The named actors' mentions are read in place, a nameless one (-1) skipped, instead of copied into a list first.
+        let mentions = diagram.actorIndices(ofTask: index)
+        var namedCount = 0
+        for actorIndex in mentions where actorIndex >= 0 { namedCount += 1 }
         let room = frame.width - 2 * UserJourneyGeometry.cardPadding.width - 2 * UserJourneyGeometry.dotRadius
-        let spacing = min(UserJourneyGeometry.dotSpacing, room / CGFloat(max(named.count - 1, 1)))
+        let spacing = min(UserJourneyGeometry.dotSpacing, room / CGFloat(max(namedCount - 1, 1)))
         let dotsY = frame.maxY - UserJourneyGeometry.cardPadding.height - UserJourneyGeometry.dotRadius
-        let dots = named.enumerated().map { position, actorIndex in
-            UserJourneyActorDot(center: CGPoint(x: frame.midX + (CGFloat(position) - CGFloat(named.count - 1) / 2) * spacing, y: dotsY),
-                                seriesIndex: Int(actorIndex))
+        var dots: [UserJourneyActorDot] = []
+        dots.reserveCapacity(namedCount)
+        for actorIndex in mentions where actorIndex >= 0 {
+            let position = dots.count
+            dots.append(UserJourneyActorDot(center: CGPoint(x: frame.midX + (CGFloat(position) - CGFloat(namedCount - 1) / 2) * spacing, y: dotsY),
+                                            seriesIndex: Int(actorIndex)))
         }
         return UserJourneyLayoutTask(frame: frame, text: text, faceCenter: faceCenter, mood: task.mood, stem: stem, actorDots: dots)
     }
