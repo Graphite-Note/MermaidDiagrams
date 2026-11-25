@@ -6,8 +6,8 @@
  *              longer name, frame numbers, data in braces or quotes, data blocks, titles, comments.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// A token of an event model's text.
@@ -36,6 +36,7 @@ enum EventModelTokenKind: Equatable, Sendable {
 }
 
 /// Mermaid's event modeling tokens, in the order its generated lexer tries them (`EVENTMODELING_TOKENS` in Pele).
+/// Each rule names the bytes its match can start with, so that a byte is tried against the rules that may match there.
 enum EventModelLexer {
     typealias Rule = FirstMatchTokenRule<EventModelTokenKind>
     typealias Patterns = FirstMatchTokenPatterns
@@ -53,25 +54,26 @@ enum EventModelLexer {
         rules += [
             sign("->>", .arrow), word("gwt"), word("ui"), word("md"), word("tf"), sign("[[", .openingReference),
             sign("]]", .closingReference), word("rf"), sign("`", .graveAccent), sign(".", .period),
-            Rule(nameRule, kind: .name, match: Patterns.name(first: .letterOrUnderscore, rest: .word)),
-            Rule("EM_FID", kind: .frameNumber, match: .custom(frameNumber)),
-            Rule("EM_DATA_INLINE", kind: .inlineData, match: .custom(inlineData)),
-            Rule("EM_DATA_BLOCK", kind: .dataBlock, match: .custom(dataBlock)),
+            Rule(nameRule, kind: .name, firstBytes: letters + bytes("_"), match: Patterns.name(first: .letterOrUnderscore, rest: .word)),
+            Rule("EM_FID", kind: .frameNumber, firstBytes: bytes("0123456789"), match: .custom(frameNumber)),
+            Rule("EM_DATA_INLINE", kind: .inlineData, firstBytes: bytes("{\"'"), match: .custom(inlineData)),
+            Rule("EM_DATA_BLOCK", kind: .dataBlock, firstBytes: bytes("{"), match: .custom(dataBlock)),
             Rule("EM_ACC_DESCR", kind: .accessibilityDescription, firstBytes: bytes("\t a"), match: .custom(accessibilityDescription)),
             Rule("EM_ACC_TITLE", kind: .accessibilityTitle, firstBytes: bytes("\t a"), match: Patterns.accessibilityTitle(leadingBlanks: true)),
             Rule("EM_TITLE", kind: .title, firstBytes: bytes("\t t"),
                  match: Patterns.lineStatement("title", leadingBlanks: true, continuesName: .word)),
-            Rule("EM_WS", kind: nil, match: Patterns.whitespace(isJavaScriptWhitespace: true)),
+            Rule("EM_WS", kind: nil, firstBytes: bytes("\t\n\u{0B}\u{0C}\r "), match: Patterns.whitespace(isJavaScriptWhitespace: true)),
             Rule("EM_YAML", kind: nil, firstBytes: bytes("-"), match: Patterns.frontMatterFence),
             Rule("EM_DIRECTIVE", kind: nil, firstBytes: bytes("\t %"), match: Patterns.directive),
             Rule("EM_SINGLE_LINE_COMMENT", kind: nil, firstBytes: bytes("\t %"), match: Patterns.percentComment),
-            Rule("EM_ML_COMMENT", kind: nil, match: Patterns.blockComment(opening: "/*", closing: "*/")),
-            Rule("EM_SL_COMMENT", kind: nil, match: Patterns.lineComment(opening: "//")),
+            Rule("EM_ML_COMMENT", kind: nil, firstBytes: bytes("/"), match: Patterns.blockComment(opening: "/*", closing: "*/")),
+            Rule("EM_SL_COMMENT", kind: nil, firstBytes: bytes("/"), match: Patterns.lineComment(opening: "//")),
         ]
         return rules
     }
 
     private static let nameRule = "EM_ID"
+    private static let letters = bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 
     private static func word(_ text: String) -> Rule {
         Rule(text, kind: .word(text), firstBytes: [text.utf8.first ?? 0], longerAlternatives: [nameRule], match: Patterns.literal(text))

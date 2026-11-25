@@ -6,8 +6,8 @@
  *              line of each failure, and the values of the title and accessibility statements those grammars share.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// The tokens of a text and the one being read. A failure is placed on the line of the token where reading stopped, or
@@ -116,9 +116,35 @@ enum FirstMatchStatementValues {
     }
 
     /// The text after the first `keyword` in `statement`.
+    /// A statement of ASCII alone, as nearly all are, is searched on its bytes, where Foundation's search finds the same
+    /// place; any other through Foundation, which compares characters as Unicode makes them equal.
     private static func text(after keyword: String, in statement: String) -> Substring {
+        let utf8 = statement.utf8
+        if let search = utf8.withContiguousStorageIfAvailable({ bytes in asciiSearch(for: keyword, in: bytes) }), search.isASCII {
+            guard let end = search.end else { return "" }
+            return statement[utf8.index(utf8.startIndex, offsetBy: end)...]
+        }
         guard let range = statement.range(of: keyword) else { return "" }
         return statement[range.upperBound...]
+    }
+
+    /// Whether `bytes` and `keyword` are ASCII alone, and if so where the first `keyword` in `bytes` ends, nil when it is
+    /// not there (or empty, which Foundation finds nowhere).
+    private static func asciiSearch(for keyword: String, in bytes: UnsafeBufferPointer<UInt8>) -> (isASCII: Bool, end: Int?) {
+        var combined: UInt8 = 0
+        for byte in bytes { combined |= byte }
+        for byte in keyword.utf8 { combined |= byte }
+        guard combined < 0x80 else { return (false, nil) }
+        let needle = Array(keyword.utf8)
+        guard !needle.isEmpty else { return (true, nil) }
+        var start = 0
+        while start + needle.count <= bytes.count {
+            var offset = 0
+            while offset < needle.count, bytes[start + offset] == needle[offset] { offset += 1 }
+            if offset == needle.count { return (true, start + needle.count) }
+            start += 1
+        }
+        return (true, nil)
     }
 
     private static func single(_ text: String) -> String {
