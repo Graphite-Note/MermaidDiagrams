@@ -3,21 +3,26 @@
  * ----------------------------------
  * Layer: Core
  * Description: The arc Core Graphics puts in a corner between two lines (`add_arc_to_point`), which rounds a rounded
- *              rectangle's corners, worked out in the corner's own frame as Core Graphics does.
+ *              rectangle's corners, worked out in the corner's own frame as Core Graphics does, in one stretch of code
+ *              from the current point to the arc's last curve.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
 
 extension DiagramPathLaneState {
     /// The arc of `radius` tangent to the line from the current point to `corner` and to the line from `corner` to
-    /// `next`, joined to the current point by a line, in the space `transform` takes to the page.
-    mutating func appendTangentArc(corner: CGPoint, next: CGPoint, radius: CGFloat, transform: CGAffineTransform?) {
-        var current = currentPoint
-        if let transform { current = DiagramPathArithmetic.point(current, inverselyTransformedBy: transform) }
+    /// `next`, joined to the current point by a line, in the space `transform` takes to the page, whose determinant
+    /// (`DiagramPathArithmetic.determinant(of:)`) the caller works out once for the four corners of a rectangle. The lane
+    /// holds elements (a rounded rectangle's move comes first), so that Core Graphics' `add_arc` and `add_arc_relative`
+    /// take the same branches for every corner, which this follows without asking again: no whole turn held as an
+    /// ellipse, no arc held whole, a line to the arc's start. Every operation is Core Graphics' own, in its order.
+    @inline(__always)
+    mutating func appendTangentArc(corner: CGPoint, next: CGPoint, radius: CGFloat, transform: CGAffineTransform, determinant: CGFloat) {
+        let current = DiagramPathArithmetic.point(currentPoint, inverselyTransformedBy: transform, determinant: determinant)
         let towardCorner = CGPoint(x: corner.x - current.x, y: corner.y - current.y)
         let towardNext = CGPoint(x: next.x - current.x, y: next.y - current.y)
         let isAtCorner = towardCorner.x == 0 && towardCorner.y == 0
@@ -33,8 +38,48 @@ extension DiagramPathLaneState {
         let placement = frame.placement(radius: isAtCorner ? 0 : radius)
         let center = CGPoint(x: current.x + ((placement.across * -turn.sine).addingProduct(turn.cosine, placement.distance) + 0),
                              y: current.y + ((placement.across * turn.cosine).addingProduct(turn.sine, placement.distance) + 0))
-        appendArcBetweenAngles(center: center, radius: placement.radius, startAngle: angle + placement.startOffset, endAngle: angle + placement.endOffset,
-                               isClockwise: frame.turnsClockwise, transform: transform)
+        appendArcAfterElements(center: center, radius: placement.radius, startAngle: angle + placement.startOffset,
+                               endAngle: angle + placement.endOffset, isClockwise: frame.turnsClockwise, transform: transform)
+    }
+
+    /// `appendArcBetweenAngles` for a lane that holds elements and a transform: the end moved by whole turns past the
+    /// start in the arc's direction, then a line from the current point to the arc's start, a curve per quarter turn and
+    /// one for what is left (`appendRelativeArc` without its branches for an empty lane).
+    @inline(__always)
+    private mutating func appendArcAfterElements(center: CGPoint, radius: CGFloat, startAngle: CGFloat, endAngle: CGFloat, isClockwise: Bool,
+                                                 transform: CGAffineTransform) {
+        var start = startAngle
+        var end = endAngle
+        if isClockwise {
+            if start < end { start = start.addingProduct(((start - end) / -Self.fullTurn).rounded(.up), Self.fullTurn) }
+        } else if end < start {
+            end = end.addingProduct(((end - start) / -Self.fullTurn).rounded(.up), Self.fullTurn)
+        }
+        let sweep = end - start
+        let startTurn = DiagramPathArithmetic.sineAndCosine(of: start)
+        var radial = CGPoint(x: startTurn.cosine * radius, y: startTurn.sine * radius)
+        var arcPoint = CGPoint(x: radial.x + center.x, y: radial.y + center.y)
+        appendLine(to: arcPoint, transform: transform)
+        let turnsForward = sweep >= 0
+        let quarterTurn = turnsForward ? DiagramPathArithmetic.halfPi : -DiagramPathArithmetic.halfPi
+        let control = turnsForward ? DiagramPathArithmetic.quarterTurnControlDistance : -DiagramPathArithmetic.quarterTurnControlDistance
+        var remaining = sweep
+        var angle = start
+        var remainingMagnitude = abs(sweep)
+        while remainingMagnitude >= DiagramPathArithmetic.halfPi {
+            let nextRadial = turnsForward ? CGPoint(x: -radial.y, y: radial.x) : CGPoint(x: radial.y, y: -radial.x)
+            let control1 = CGPoint(x: arcPoint.x.addingProduct(-control, radial.y), y: arcPoint.y.addingProduct(control, radial.x))
+            let quarterEnd = CGPoint(x: nextRadial.x + center.x, y: nextRadial.y + center.y)
+            let control2 = CGPoint(x: quarterEnd.x.addingProduct(control, nextRadial.y), y: quarterEnd.y.addingProduct(-control, nextRadial.x))
+            appendCurve(control1, control2, quarterEnd, transform: transform)
+            angle = quarterTurn + angle
+            remainingMagnitude = abs(remaining - quarterTurn)
+            remaining = remaining - quarterTurn
+            arcPoint = quarterEnd
+            radial = nextRadial
+        }
+        guard !(remainingMagnitude <= Self.smallestDrawnSweep) else { return }
+        appendArcRest(center: center, radius: radius, from: arcPoint, radial: radial, angle: angle, sweep: remaining, transform: transform)
     }
 }
 
@@ -52,6 +97,7 @@ private struct DiagramPathTangentArcFrame {
     }
 
     /// Where the arc's center lies along and across the first line, its radius, and its angles from the first line's.
+    @inline(__always)
     func placement(radius: CGFloat) -> (distance: CGFloat, across: CGFloat, radius: CGFloat, startOffset: CGFloat, endOffset: CGFloat) {
         let along = cornerAlong + 0
         let acrossCorner = cornerAcross + 0

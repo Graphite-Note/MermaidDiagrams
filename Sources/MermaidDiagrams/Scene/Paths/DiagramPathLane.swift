@@ -7,8 +7,8 @@
  *              object, an allocation per path or a retain.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -76,9 +76,9 @@ struct DiagramPathLane {
         let lane = checked
         guard other.state != lane else {
             let copy = DiagramPathLaneCopy(of: other)
-            return withExtendedLifetime(copy) { lane.pointee.addPath(copy.state.pointee) }
+            return withExtendedLifetime(copy) { lane.pointee.addPath(copy.state) }
         }
-        lane.pointee.addPath(other.checked.pointee)
+        lane.pointee.addPath(other.checked)
     }
 
     /// `other`'s elements after this lane's and after `second`'s, as two calls of `addPath(_:)` add them, a shape `other`
@@ -87,7 +87,7 @@ struct DiagramPathLane {
     func addPath(_ other: DiagramPathLane, alsoTo second: DiagramPathLane) {
         let lane = checked
         let secondLane = second.checked
-        guard other.state.pointee.held != nil, other.state != lane, other.state != secondLane, lane != secondLane,
+        guard other.state.pointee.holdsShape, other.state != lane, other.state != secondLane, lane != secondLane,
               Self.endsWithElementsOtherThanAMove(lane), Self.endsWithElementsOtherThanAMove(secondLane) else {
             addPath(other)
             second.addPath(other)
@@ -95,14 +95,14 @@ struct DiagramPathLane {
         }
         let verbStart = lane.pointee.verbCount
         let pointStart = lane.pointee.pointCount
-        lane.pointee.addPath(other.checked.pointee)
-        secondLane.pointee.appendElements(of: lane.pointee, fromVerb: verbStart, point: pointStart)
+        lane.pointee.addPath(other.checked)
+        secondLane.pointee.appendElements(of: lane, fromVerb: verbStart, point: pointStart)
     }
 
     /// Whether a lane has elements, holds no shape whole and does not end with a move, which a shape's first move
     /// would take the place of.
     private static func endsWithElementsOtherThanAMove(_ state: UnsafeMutablePointer<DiagramPathLaneState>) -> Bool {
-        guard state.pointee.held == nil, let last = state.pointee.lastVerb else { return false }
+        guard !state.pointee.holdsShape, let last = state.pointee.lastVerb else { return false }
         return last != .move
     }
 
@@ -111,9 +111,9 @@ struct DiagramPathLane {
         let lane = checked
         guard other.state != lane else {
             let copy = DiagramPathLaneCopy(of: other)
-            return withExtendedLifetime(copy) { lane.pointee.addPath(copy.state.pointee, transform: transform) }
+            return withExtendedLifetime(copy) { lane.pointee.addPath(copy.state, transform: transform) }
         }
-        lane.pointee.addPath(other.checked.pointee, transform: transform)
+        lane.pointee.addPath(other.checked, transform: transform)
     }
 
     /// The smallest rectangle holding the lane (`boundingBoxOfPath`), worked out when first asked.
@@ -164,7 +164,7 @@ private final class DiagramPathLaneCopy {
     init(of lane: DiagramPathLane) {
         state = .allocate(capacity: 1)
         state.initialize(to: DiagramPathLaneState(verbCapacity: lane.state.pointee.verbCount, elementLimit: lane.state.pointee.elementLimit))
-        state.pointee.copyContents(of: lane.state.pointee)
+        state.pointee.copyContents(of: lane.state)
     }
 
     deinit {
@@ -177,9 +177,9 @@ extension DiagramPathLaneState {
     /// `other`'s elements, each point through `transform`, after this lane's, as Core Graphics adds them: a held shape
     /// into an empty lane stays held, its transform followed by `transform`; any other lane's elements are copied with
     /// their points moved; a held shape's first move, after a move this lane ends with, replaces it unmoved.
-    mutating func addPath(_ other: borrowing DiagramPathLaneState, transform: CGAffineTransform) {
-        guard !other.isEmpty else { return }
-        if isEmpty, let shape = other.held {
+    mutating func addPath(_ other: UnsafeMutablePointer<DiagramPathLaneState>, transform: CGAffineTransform) {
+        guard !other.pointee.isEmpty else { return }
+        if isEmpty, let shape = other.pointee.held {
             var moved = shape
             moved.transform = DiagramPathArithmetic.concatenation(shape.transform, then: transform)
             moved.wholeTurnArc = shape.wholeTurnArc.map { arc in
@@ -191,8 +191,8 @@ extension DiagramPathLaneState {
         expandHeldShape()
         // After a move this lane ends with, a held shape's first move takes its place as Core Graphics puts it there:
         // the element's point not moved through `transform`, unlike the rest, while the subpath starts at the moved one.
-        var replacesTrailingMove = other.held != nil && lastVerb == .move
-        other.forEachStoredElement { verb, elementPoints in
+        var replacesTrailingMove = other.pointee.holdsShape && lastVerb == .move
+        other.pointee.forEachStoredElement { verb, elementPoints in
             if replacesTrailingMove, verb == .move {
                 replacesTrailingMove = false
                 return replaceTrailingMove(writing: elementPoints[0], startingAt: DiagramPathArithmetic.point(elementPoints[0], transformedBy: transform))

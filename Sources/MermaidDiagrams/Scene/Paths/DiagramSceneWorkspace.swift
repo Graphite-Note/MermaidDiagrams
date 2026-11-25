@@ -8,8 +8,8 @@
  *              every lane is capped by the diagram limits, a lane past its cap remembered until the recording ends.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -24,9 +24,11 @@ import Darwin
 /// recording, and every grown block when the pool's blocks together take more, and each lane records at most
 /// `elementLimit(for:)` verbs, so hostile input cannot grow it without bound.
 final class DiagramSceneWorkspace {
-    /// The lane states, each at its own address, which lanes point at; the first `handedOutCount` are in use.
-    private var pool: [UnsafeMutablePointer<DiagramPathLaneState>] = []
-    private var handedOutCount = 0
+    /// The lane states, each at its own address, which lanes point at; the first `handedOutCount` are in use. A
+    /// workspace is used by one thread at a time (`current`, or one of a recording's own), so Swift's checks of
+    /// exclusive access at run time are left out of the lane handed out for each shape.
+    @exclusivity(unchecked) private var pool: [UnsafeMutablePointer<DiagramPathLaneState>] = []
+    @exclusivity(unchecked) private var handedOutCount = 0
     private var isRecording = false
     private var elementLimit = DiagramSceneWorkspace.elementLimit(for: .standard)
     /// Whether a lane given back in this recording had gone past its element limit, which emptying it forgets.

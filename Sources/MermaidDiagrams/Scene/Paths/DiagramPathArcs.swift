@@ -6,8 +6,8 @@
  *              control distance, the rest as one curve, and an arc held whole in an empty lane.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -93,7 +93,8 @@ extension DiagramPathLaneState {
     }
 
     /// The last curve of an arc, through what is left of its sweep after its quarter turns.
-    private mutating func appendArcRest(center: CGPoint, radius: CGFloat, from current: CGPoint, radial: CGPoint, angle: CGFloat, sweep: CGFloat,
+    @inline(__always)
+    mutating func appendArcRest(center: CGPoint, radius: CGFloat, from current: CGPoint, radial: CGPoint, angle: CGFloat, sweep: CGFloat,
                                         transform: CGAffineTransform?) {
         let half = DiagramPathArithmetic.sineAndCosine(of: sweep * 0.5)
         let control = ((1 - half.cosine) * 4) / (half.sine * 3)

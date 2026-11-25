@@ -8,8 +8,8 @@
  *              builder's own lists, which the scene takes as they are.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -149,7 +149,7 @@ final class DiagramSceneRecordBuffers {
     /// A lane's elements as it gives them out.
     func appendElements(of lane: DiagramPathLane) {
         let state = lane.state
-        guard state.pointee.held == nil else { return lane.forEachElement { verb, elementPoints in append(verb, elementPoints) } }
+        guard !state.pointee.holdsShape else { return lane.forEachElement { verb, elementPoints in append(verb, elementPoints) } }
         append(verbs: state.pointee.verbs, verbCount: state.pointee.verbCount, points: state.pointee.points, pointCount: state.pointee.pointCount)
     }
 

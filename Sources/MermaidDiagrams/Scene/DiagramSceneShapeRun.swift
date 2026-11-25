@@ -7,8 +7,8 @@
  *              paths are lanes, joined in the builder's run lane as they come, or Core Graphics paths kept as a list.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -95,7 +95,7 @@ struct DiagramSceneShapeRun {
     /// Turns a run of one filled lane into it filled and then stroked, when `lane` holds the same path, as Core Graphics
     /// compares paths: the same shape held whole, or the same elements.
     mutating func outline(_ lane: DiagramPathLane, painting: DiagramShapePainting, part: DiagramScenePart) -> Bool {
-        guard let runLane, pathCount == 1, runLane.state.pointee.holdsSamePath(as: lane.state.pointee) else { return false }
+        guard let runLane, pathCount == 1, runLane.state.pointee.holdsSamePath(as: lane.state) else { return false }
         return outline(painting: painting, part: part)
     }
 
@@ -146,11 +146,13 @@ struct DiagramSceneShapeRun {
 extension DiagramPathLaneState {
     /// Whether `other` holds the path this lane holds, as Core Graphics compares two paths: the same shape held whole, or
     /// the same elements, a shape held whole never equal to elements.
-    func holdsSamePath(as other: borrowing DiagramPathLaneState) -> Bool {
-        if let shape = held { return other.held == shape }
-        guard other.held == nil, verbCount == other.verbCount, pointCount == other.pointCount else { return false }
-        for index in 0..<verbCount where verbs[index] != other.verbs[index] { return false }
-        for index in 0..<pointCount where points[index] != other.points[index] { return false }
+    mutating func holdsSamePath(as other: UnsafeMutablePointer<DiagramPathLaneState>) -> Bool {
+        if holdsShape { return other.pointee.holdsShape && other.pointee.held == held }
+        guard !other.pointee.holdsShape, verbCount == other.pointee.verbCount, pointCount == other.pointee.pointCount else { return false }
+        let otherVerbs = other.pointee.verbs
+        let otherPoints = other.pointee.points
+        for index in 0..<verbCount where verbs[index] != otherVerbs[index] { return false }
+        for index in 0..<pointCount where points[index] != otherPoints[index] { return false }
         return true
     }
 }

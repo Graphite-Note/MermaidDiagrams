@@ -6,8 +6,8 @@
  *              construction, and held whole as Core Graphics holds one such shape added to an empty path.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -144,12 +144,16 @@ extension DiagramPathLaneState {
         let height = abs(size.height) / radii.height
         let halfHeight = height * 0.5
         let halfWidth = width * 0.5
+        let determinant = DiagramPathArithmetic.determinant(of: unitRadii)
         reserve(verbs: 10, points: 17)
         appendMove(to: CGPoint(x: width, y: halfHeight), transform: unitRadii)
-        appendTangentArc(corner: CGPoint(x: width, y: height), next: CGPoint(x: halfWidth, y: height), radius: 1, transform: unitRadii)
-        appendTangentArc(corner: CGPoint(x: 0, y: height), next: CGPoint(x: 0, y: halfHeight), radius: 1, transform: unitRadii)
-        appendTangentArc(corner: CGPoint(x: 0, y: 0), next: CGPoint(x: halfWidth, y: 0), radius: 1, transform: unitRadii)
-        appendTangentArc(corner: CGPoint(x: width, y: 0), next: CGPoint(x: width, y: halfHeight), radius: 1, transform: unitRadii)
+        appendTangentArc(corner: CGPoint(x: width, y: height), next: CGPoint(x: halfWidth, y: height), radius: 1, transform: unitRadii,
+                         determinant: determinant)
+        appendTangentArc(corner: CGPoint(x: 0, y: height), next: CGPoint(x: 0, y: halfHeight), radius: 1, transform: unitRadii,
+                         determinant: determinant)
+        appendTangentArc(corner: CGPoint(x: 0, y: 0), next: CGPoint(x: halfWidth, y: 0), radius: 1, transform: unitRadii, determinant: determinant)
+        appendTangentArc(corner: CGPoint(x: width, y: 0), next: CGPoint(x: width, y: halfHeight), radius: 1, transform: unitRadii,
+                         determinant: determinant)
         closeElements()
     }
 }

@@ -6,8 +6,8 @@
  *              transforming a point, joining two transforms, undoing a transform, and the sines it takes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -43,12 +43,24 @@ enum DiagramPathArithmetic {
     /// `point` taken back through `transform` (`CGPointApplyInverseAffineTransform`); unchanged for a transform that
     /// cannot be undone.
     static func point(_ point: CGPoint, inverselyTransformedBy transform: CGAffineTransform) -> CGPoint {
-        let determinant = (-(transform.c * transform.b)).addingProduct(transform.a, transform.d)
+        self.point(point, inverselyTransformedBy: transform, determinant: determinant(of: transform))
+    }
+
+    /// `point` taken back through `transform`, whose determinant (`determinant(of:)`) is worked out once for several
+    /// points.
+    @inline(__always)
+    static func point(_ point: CGPoint, inverselyTransformedBy transform: CGAffineTransform, determinant: CGFloat) -> CGPoint {
         guard determinant != 0 else { return point }
         let across = point.x - transform.tx
         let down = point.y - transform.ty
         return CGPoint(x: (-(down * transform.c)).addingProduct(transform.d, across) / determinant,
                        y: (-(across * transform.b)).addingProduct(transform.a, down) / determinant)
+    }
+
+    /// `a·d - c·b`, as `CGPointApplyInverseAffineTransform` works it out.
+    @inline(__always)
+    static func determinant(of transform: CGAffineTransform) -> CGFloat {
+        (-(transform.c * transform.b)).addingProduct(transform.a, transform.d)
     }
 
     /// The sine and cosine of `angle` as the system's `__sincos_stret` gives them, which Core Graphics calls; the angles
