@@ -59,14 +59,7 @@ struct C4NameTable {
 
     /// The number of the name `bytes[start..<end]` spells, made when it is new.
     mutating func intern(_ bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) -> Int32 {
-        guard isASCII else {
-            let name = String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self)
-            if let number = numberByString[name] { return number }
-            let number = Int32(count)
-            numberByString[name] = number
-            count += 1
-            return number
-        }
+        guard isASCII else { return internString(bytes, from: start, to: end) }
         if slots.isEmpty { slots = Array(repeating: 0, count: Self.leastSlotCount) }
         let hash = hash(bytes, from: start, to: end)
         var mask = slots.count - 1
@@ -98,6 +91,16 @@ struct C4NameTable {
         }
         slots[slot] = Int32(number + 1)
         return Int32(number)
+    }
+
+    /// A name of a text past ASCII, by its String.
+    private mutating func internString(_ bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) -> Int32 {
+        let name = String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self)
+        if let number = numberByString[name] { return number }
+        let number = Int32(count)
+        numberByString[name] = number
+        count += 1
+        return number
     }
 
     private static let leastSlotCount = 64
