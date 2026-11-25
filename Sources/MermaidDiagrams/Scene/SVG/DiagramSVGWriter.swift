@@ -7,8 +7,8 @@
  *              to a host as those bytes or made a String once.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
- * Date: 24/11/2026
+ * Version: 0.8
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -123,8 +123,9 @@ public struct DiagramSVGWriter: Sendable {
     /// `DiagramSeriesColors.styleDeclarations`, escaped, written piece by piece: `;--pele-series-N:<color>` for each slot
     /// set.
     private func appendSeriesDeclarations(_ seriesColors: DiagramSeriesColors, into document: inout DiagramSVGBuffer) {
-        for (slot, color) in seriesColors.colors.enumerated() {
-            guard let color else { continue }
+        let colors = seriesColors.colors
+        for slot in colors.indices {
+            guard let color = colors[slot] else { continue }
             document.reserve(16 + DiagramSVGNumberWriting.largestNumberByteCount)
             document.write(";--pele-series-")
             document.write(number: CGFloat(slot + 1))
@@ -181,9 +182,11 @@ public struct DiagramSVGWriter: Sendable {
         return isPeleVariables ? "var(--pele-font,\(family))" : family
     }
 
-    /// `prefix` when it is made of identifier characters only, else `pele`.
+    /// `prefix` when it is made of identifier characters only, else `pele`: Pele's own, which nearly every document is
+    /// written with, is known to be.
     private static func safeIdentifierPrefix(_ prefix: String) -> String {
-        !prefix.isEmpty && prefix.unicodeScalars.allSatisfy(isIdentifierCharacter) ? prefix : "pele"
+        if prefix == "pele" { return prefix }
+        return !prefix.isEmpty && prefix.unicodeScalars.allSatisfy(isIdentifierCharacter) ? prefix : "pele"
     }
 
     /// Letters, digits, `-` and `_` of ASCII: what an SVG id is made of here.

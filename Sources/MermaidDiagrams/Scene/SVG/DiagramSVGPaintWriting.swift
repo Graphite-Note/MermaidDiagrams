@@ -7,8 +7,8 @@
  *              document.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -22,7 +22,8 @@ struct DiagramSVGPaintWriter {
     let colors: DiagramSVGColors
     let isPeleVariables: Bool
     private var convertedPaints: [ConvertedPaint] = []
-    private var convertedPaintsByPaint: [DiagramPaint: ConvertedPaint] = [:]
+    /// The paints converted past the first `scannedPaintCount`, made when the first of them is.
+    private var convertedPaintsByPaint: [DiagramPaint: ConvertedPaint]?
 
     /// How many paints are kept to be compared in turn before the rest are hashed.
     static let scannedPaintCount = 24
@@ -89,7 +90,7 @@ struct DiagramSVGPaintWriter {
 
     private mutating func convertedPaint(of paint: DiagramPaint) -> ConvertedPaint {
         for converted in convertedPaints where converted.paint == paint { return converted }
-        if let converted = convertedPaintsByPaint[paint] { return converted }
+        if let converted = convertedPaintsByPaint?[paint] { return converted }
         guard case .palette(let palette) = colors else { preconditionFailure("palette colors are converted in palette mode") }
         let components = DiagramSVGColors.sRGBComponents(of: paint.color(in: palette))
         let converted = ConvertedPaint(paint: paint, hexadecimal: DiagramSVGColors.packedHexadecimal(components: components), opacity: components.opacity)
@@ -97,7 +98,8 @@ struct DiagramSVGPaintWriter {
             if convertedPaints.isEmpty { convertedPaints.reserveCapacity(Self.scannedPaintCount) }
             convertedPaints.append(converted)
         } else {
-            convertedPaintsByPaint[paint] = converted
+            if convertedPaintsByPaint == nil { convertedPaintsByPaint = [:] }
+            convertedPaintsByPaint?[paint] = converted
         }
         return converted
     }

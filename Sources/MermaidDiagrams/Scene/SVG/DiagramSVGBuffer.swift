@@ -8,8 +8,8 @@
  *              elements written by a writer handed the cursor.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -276,14 +276,22 @@ struct DiagramSVGBuffer: ~Copyable {
         copy.withUTF8 { textBytes in appendEscaped(textBytes) }
     }
 
-    /// Copies `textBytes` eight bytes at a time and looks at each word on the way (`mayNeedEscaping`), the last few bytes
-    /// in a word of their own padded with `A`; only text with a byte that is, or may start, something escaped or left out
-    /// is then written again, byte by byte.
+    /// Copies `textBytes` eight bytes at a time and looks at each word on the way (`mayNeedEscaping`): the last few
+    /// bytes of a text of eight bytes or more as the text's last eight, which overlap the bytes copied before them, and a
+    /// shorter text in one word read four, two and one bytes at a time and padded with `A`; only text with a byte that is,
+    /// or may start, something escaped or left out is then written again, byte by byte.
     mutating func appendEscaped(_ textBytes: UnsafeBufferPointer<UInt8>) {
         guard let source = textBytes.baseAddress else { return }
         let byteCount = textBytes.count
         reserve(byteCount &+ 8)
         let destination = UnsafeMutableRawPointer(cursor)
+        guard byteCount >= 8 else {
+            let word = Self.paddedWord(source, byteCount: byteCount)
+            destination.storeBytes(of: word, as: UInt64.self)
+            guard Self.mayNeedEscaping(word) == 0 else { return appendEscapedByteByByte(textBytes) }
+            count &+= byteCount
+            return
+        }
         var flags: UInt64 = 0
         var index = 0
         while index &+ 8 <= byteCount {
@@ -293,16 +301,34 @@ struct DiagramSVGBuffer: ~Copyable {
             index &+= 8
         }
         if index < byteCount {
-            var word = Self.everyByte &* UInt64(UInt8(ascii: "A"))
-            for offset in 0..<(byteCount &- index) {
-                let shift = UInt64(truncatingIfNeeded: offset &* 8)
-                word = word & ~(0xFF << shift) | UInt64(source[index &+ offset]) << shift
-            }
-            (destination + index).storeBytes(of: word, as: UInt64.self)
-            flags |= Self.mayNeedEscaping(word)
+            let lastWord = UnsafeRawPointer(source + (byteCount &- 8)).loadUnaligned(as: UInt64.self)
+            (destination + (byteCount &- 8)).storeBytes(of: lastWord, as: UInt64.self)
+            flags |= Self.mayNeedEscaping(lastWord)
         }
         guard flags == 0 else { return appendEscapedByteByByte(textBytes) }
         count &+= byteCount
+    }
+
+    /// The fewer than eight bytes at `source` as the low bytes of a word whose other bytes are `A`, which nothing
+    /// escapes: read four, two and one bytes at a time, as many as there are.
+    @inline(__always)
+    private static func paddedWord(_ source: UnsafePointer<UInt8>, byteCount: Int) -> UInt64 {
+        var word = everyByte &* UInt64(UInt8(ascii: "A"))
+        var offset = 0
+        if byteCount & 4 != 0 {
+            word = word & ~0xFFFF_FFFF | UInt64(UnsafeRawPointer(source).loadUnaligned(as: UInt32.self))
+            offset = 4
+        }
+        if byteCount & 2 != 0 {
+            let shift = UInt64(truncatingIfNeeded: offset &* 8)
+            word = word & ~(0xFFFF << shift) | UInt64(UnsafeRawPointer(source + offset).loadUnaligned(as: UInt16.self)) << shift
+            offset &+= 2
+        }
+        if byteCount & 1 != 0 {
+            let shift = UInt64(truncatingIfNeeded: offset &* 8)
+            word = word & ~(0xFF << shift) | UInt64(source[offset]) << shift
+        }
+        return word
     }
 
     private mutating func appendEscapedByteByByte(_ textBytes: UnsafeBufferPointer<UInt8>) {
