@@ -72,14 +72,15 @@ struct EntityRelationshipDiagramBuilder {
         diagram.subgraphCount += 1
     }
 
-    /// Records that the innermost open group's statements write `names`.
-    /// The two names a relationship writes, noted without a list made for them when no group is open, as most are.
+    /// Records that the innermost open group's statements write the two names a relationship writes, without a list
+    /// made for them when no group is open, as most are.
     mutating func noteNamesInOpenSubgraph(_ first: String, _ second: String) {
         guard !openSubgraphs.isEmpty else { return }
         openSubgraphs[openSubgraphs.count - 1].names.append(first)
         openSubgraphs[openSubgraphs.count - 1].names.append(second)
     }
 
+    /// Records that the innermost open group's statements write `names`.
     mutating func noteNamesInOpenSubgraph(_ names: [String]) {
         guard !openSubgraphs.isEmpty else { return }
         openSubgraphs[openSubgraphs.count - 1].names.append(contentsOf: names)

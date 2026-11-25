@@ -8,7 +8,7 @@
  *              in time that grows with their length, and readings on many threads at once alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -39,7 +39,9 @@ final class StateReadingEquivalenceTests: XCTestCase {
     func testMutatedTextsAreReadAsTheReferenceReadsThem() throws {
         var mutations = GraphTextMutations(seed: 29)
         let pieces = GraphTextMutations.commonPieces + ["-->", "[*]", "state ", "note left of ", "note right of ", "end note", "<<fork>>", "[[join]]",
-                                                        "<<choice>>", "hide empty description", "scale 2", "state \"t\" as ", " as X:y", "  A : x"]
+                                                        "<<choice>>", "hide empty description", "scale 2", "state \"t\" as ", " as X:y", "  A : x",
+                                                        // Bytes Foundation trims as white space or line breaks that the reader's byte tests do not.
+                                                        "\u{0B}", "\u{0C}", "\u{85}", " as X\u{0B}", " as X\u{0C}:y"]
         let originals = try StateDiagramCorpus.documentationExamples() + PeleResults.compatInputs().filter { $0.key.hasPrefix("state") }.flatMap(\.value)
         var sources: [String] = []
         for round in 0..<6_000 {
@@ -47,6 +49,22 @@ final class StateReadingEquivalenceTests: XCTestCase {
             sources.append(round % 2 == 0 ? mutated : GraphTextMutations.ascii(mutated))
         }
         XCTAssertGreaterThan(Self.assertReadAlike(sources), 4_000)
+    }
+
+    /// The vertical tab and the form feed, which Foundation trims from a declaration's quoted text but not from the
+    /// identifier after `as`, are trimmed and kept as 0.7.0 trimmed and kept them, in ASCII texts and beyond.
+    func testDeclarationsTrimAsFoundationTrims() {
+        var sources: [String] = []
+        for space in ["\u{0B}", "\u{0C}", "\u{85}", "\r", "\t"] {
+            sources += [
+                "stateDiagram-v2\n  state \"t\" as X\(space):y\n  X --> Z",
+                "stateDiagram-v2\n  state \"t\" as \(space)X:y\n  X --> Z",
+                "stateDiagram-v2\n  state \"\(space)t\(space)\" as X\n  X --> Z",
+                "stateDiagram-v2\n  state \"t\" as X:\(space)y\(space)\n  X --> Z",
+                "stateDiagram-v2\n  state \"t\" as X\(space) {\n    [*] --> X\n  }",
+            ]
+        }
+        XCTAssertEqual(Self.assertReadAlike(sources), sources.count)
     }
 
     func testLimitsRefuseAlike() {
