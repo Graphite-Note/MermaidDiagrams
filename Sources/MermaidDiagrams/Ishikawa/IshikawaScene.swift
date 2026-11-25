@@ -49,7 +49,7 @@ enum IshikawaScene {
         if let arrow = layout.spineArrow { builder.fill(arrowLane(arrow, workspace: workspace), .line, part: .marker) }
         for category in layout.categories {
             workspace.givePathsBack(downTo: madeCount)
-            builder.stroke(joined(category.bones, workspace: workspace), .line, line, part: .ishikawaBones)
+            builder.stroke(joined(category.boneLines, workspace: workspace), .line, line, part: .ishikawaBones)
             builder.fill(arrowLane(category.arrow, workspace: workspace), .line, part: .marker)
             let box = category.box
             let corners = (width: min(boxCornerRadius, box.width / 2), height: min(boxCornerRadius, box.height / 2))
@@ -86,6 +86,17 @@ enum IshikawaScene {
     private static func recorded(_ path: DiagramPath, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
         let lane = workspace.makeLane()
         DiagramEdgeDrawing.record(path, into: lane)
+        return lane
+    }
+
+    /// Straight lines in one lane, each a move to its start and a line to its end, as the lines' paths added one to
+    /// another give.
+    private static func joined(_ lines: [IshikawaBoneLine], workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+        let lane = workspace.makeLane()
+        for line in lines {
+            lane.move(to: line.start)
+            lane.addLine(to: line.end)
+        }
         return lane
     }
 

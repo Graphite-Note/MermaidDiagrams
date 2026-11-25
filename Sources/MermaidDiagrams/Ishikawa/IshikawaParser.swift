@@ -6,8 +6,8 @@
  *              reads them on UTF-16 units, and nests its causes by their indentation as Mermaid's database does.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -57,7 +57,7 @@ enum IshikawaParser {
             return .invalidSyntax(line: line, problem: token.kind == .endOfFile ? .expectedNode : .unexpectedText(excerpt))
         }
         func isStop(_ index: Int) -> Bool { Self.isStop(tokens[index].kind) }
-        var builder = IshikawaTreeBuilder(limits: limits)
+        var builder = IshikawaTreeBuilder(bytes: cursor.bytes, lineCount: tokens.count / 2, limits: limits)
         // The first token is the keyword, as the text starts with it.
         var index = tokens[1].kind == .newLine ? 2 : 1
         while true {
@@ -66,7 +66,7 @@ enum IshikawaParser {
                 let textIndex = token.kind == .text ? index : index + 1
                 index = textIndex + 1
                 guard isStop(index) else { throw failure(at: index) }
-                try builder.add(trimmed(bytes[tokens[textIndex].start..<tokens[textIndex].end]), indentation: token.kind == .text ? 0 : token.unitCount)
+                try builder.add(tokens[textIndex].start..<tokens[textIndex].end, indentation: token.kind == .text ? 0 : token.unitCount)
             } else if token.kind == .blankLine || token.kind == .indentation {
                 index += 1
                 guard isStop(index) else { throw failure(at: index) }
@@ -77,29 +77,14 @@ enum IshikawaParser {
             while tokens[index].kind == .newLine || tokens[index].kind == .endOfFile { index += 1 }
             if tokens[index].kind == .endOfInput { break }
         }
-        return builder.diagram
-    }
-
-    /// A line's text without the white space and line breaks at its ends, as Foundation trims it: on the bytes when they
-    /// are ASCII, whose white space is a tab, a line feed, a vertical tab, a form feed, a carriage return or a space.
-    private static func trimmed(_ text: ArraySlice<UInt8>) -> String {
-        guard text.allSatisfy({ byte in byte < 0x80 }) else {
-            return String(decoding: text, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        var start = text.startIndex
-        var end = text.endIndex
-        while start < end, isASCIIWhitespace(text[start]) { start += 1 }
-        while end > start, isASCIIWhitespace(text[end - 1]) { end -= 1 }
-        return String(decoding: text[start..<end], as: UTF8.self)
-    }
-
-    private static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
-        byte == 32 || (9...13).contains(byte)
+        return builder.diagram()
     }
 
     /// The tokens, ended by the end of the text twice: the parser's end of file and end of input.
     private static func tokenize(_ bytes: ArraySlice<UInt8>) -> [Token] {
         var tokens: [Token] = []
+        // A line makes at most three tokens: room for them is made once.
+        tokens.reserveCapacity(3 * bytes.count { byte in byte == newline } + 6)
         var start = bytes.startIndex
         while start < bytes.endIndex {
             var afterSpace = start
@@ -131,7 +116,9 @@ enum IshikawaParser {
             tokens.append(token)
             start = token.end
         }
-        return tokens + [Token(kind: .endOfFile, start: bytes.endIndex, end: bytes.endIndex), Token(kind: .endOfInput, start: bytes.endIndex, end: bytes.endIndex)]
+        tokens.append(Token(kind: .endOfFile, start: bytes.endIndex, end: bytes.endIndex))
+        tokens.append(Token(kind: .endOfInput, start: bytes.endIndex, end: bytes.endIndex))
+        return tokens
     }
 
     /// The length in bytes of the white space character at `index`, as JavaScript's `\s` sees it, else nil.
@@ -185,23 +172,31 @@ enum IshikawaParser {
 }
 
 /// Nests the lines as Mermaid's Ishikawa database does: the first is the effect; each later one is a cause at its
-/// indentation less the first cause's, plus one, at least one, under the last line before it nested less deep.
+/// indentation less the first cause's, plus one, at least one, under the last line before it nested less deep. Each
+/// line's text is kept as the range of the bytes read that is left once trimmed as Foundation trims it, its children
+/// gathered into one list when the diagram is made.
 struct IshikawaTreeBuilder {
-    private(set) var diagram = IshikawaDiagram()
+    private var bytes: [UInt8]
+    private var records: [IshikawaNodeRecord] = []
     private let limits: MermaidDiagramLimits
     private var firstCauseIndentation: Int?
     /// The effect and the open causes, by strictly increasing level, the effect at level 0.
-    private var openNodes: [(index: Int, level: Int)] = []
+    private var openNodes: [(index: Int32, level: Int)] = []
 
-    init(limits: MermaidDiagramLimits) {
+    /// `lineCount` is about how many lines the text has, which room is made for.
+    init(bytes: [UInt8], lineCount: Int, limits: MermaidDiagramLimits) {
+        self.bytes = bytes
         self.limits = limits
+        records.reserveCapacity(min(lineCount, limits.maximumNodeCount) + 1)
     }
 
-    mutating func add(_ text: String, indentation: Int) throws(MermaidDiagramReadError) {
-        guard diagram.nodes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        let index = diagram.nodes.count
-        guard !diagram.nodes.isEmpty else {
-            diagram.nodes.append(IshikawaNode(text: text, parentIndex: nil))
+    /// Adds the line whose text, untrimmed, is `text` of the bytes read.
+    mutating func add(_ text: Range<Int>, indentation: Int) throws(MermaidDiagramReadError) {
+        guard records.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        let trimmed = trimmedText(text)
+        let index = Int32(records.count)
+        guard !records.isEmpty else {
+            records.append(IshikawaNodeRecord(textStart: trimmed.start, textEnd: trimmed.end, parent: -1))
             openNodes = [(index, 0)]
             return
         }
@@ -209,9 +204,47 @@ struct IshikawaTreeBuilder {
         firstCauseIndentation = base
         let level = max(indentation - base + 1, 1)
         while openNodes.count > 1, let last = openNodes.last, last.level >= level { openNodes.removeLast() }
-        let parentIndex = openNodes[openNodes.count - 1].index
-        diagram.nodes.append(IshikawaNode(text: text, parentIndex: parentIndex))
-        diagram.nodes[parentIndex].childIndices.append(index)
+        records.append(IshikawaNodeRecord(textStart: trimmed.start, textEnd: trimmed.end, parent: openNodes[openNodes.count - 1].index))
         openNodes.append((index, level))
+    }
+
+    /// The diagram, each node's children gathered in the order written.
+    func diagram() -> IshikawaDiagram {
+        var childStarts = [Int32](repeating: 0, count: records.count + 1)
+        for record in records where record.parent >= 0 { childStarts[Int(record.parent) + 1] += 1 }
+        for index in 0..<records.count { childStarts[index + 1] += childStarts[index] }
+        var filled = childStarts
+        var children = [Int32](repeating: 0, count: Int(childStarts[records.count]))
+        for (index, record) in records.enumerated() where record.parent >= 0 {
+            children[Int(filled[Int(record.parent)])] = Int32(index)
+            filled[Int(record.parent)] += 1
+        }
+        return IshikawaDiagram(bytes: bytes, records: records, childStarts: childStarts, children: children)
+    }
+
+    /// The text without the white space and line breaks at its ends, as Foundation trims it: on the bytes when they are
+    /// ASCII, whose white space is a tab, a line feed, a vertical tab, a form feed, a carriage return or a space; else the
+    /// String Foundation trims, its bytes added after the others.
+    private mutating func trimmedText(_ text: Range<Int>) -> (start: Int32, end: Int32) {
+        var start = text.lowerBound
+        var end = text.upperBound
+        var isASCII = true
+        for index in start..<end where bytes[index] >= 0x80 {
+            isASCII = false
+            break
+        }
+        guard isASCII else {
+            let trimmed = String(decoding: bytes[start..<end], as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let derivedStart = bytes.count
+            bytes.append(contentsOf: trimmed.utf8)
+            return (Int32(derivedStart), Int32(bytes.count))
+        }
+        while start < end, Self.isASCIIWhitespace(bytes[start]) { start += 1 }
+        while end > start, Self.isASCIIWhitespace(bytes[end - 1]) { end -= 1 }
+        return (Int32(start), Int32(end))
+    }
+
+    private static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == 32 || (9...13).contains(byte)
     }
 }

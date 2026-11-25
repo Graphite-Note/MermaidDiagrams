@@ -6,8 +6,8 @@
  *              the categories and the causes as an indented list, each joined to its parent by an elbow.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -35,8 +35,10 @@ enum IshikawaOutlinePlacement {
         for (nodeIndex, depth, parentEntry) in order {
             let left = padding + CGFloat(depth) * indent
             let textRoom = max(60, room - CGFloat(depth) * indent - 20)
-            var text = DiagramTextBlock(label: DiagramLabelDecoder.label(from: diagram.nodes[nodeIndex].text, form: .plain),
-                                        measurer: depth < 2 ? measurers.bold : measurers.small, fittingWidth: textRoom)
+            var text = diagram.withText(of: nodeIndex) { text in
+                DiagramTextBlock(label: DiagramLabelDecoder.label(fromUTF8: text, form: .plain), measurer: depth < 2 ? measurers.bold : measurers.small,
+                                 fittingWidth: textRoom)
+            }
             let frame = CGRect(x: left, y: top, width: text.size.width + 20, height: text.size.height + 12)
             text.center = CGPoint(x: frame.midX, y: frame.midY)
             entries.append(IshikawaLayoutOutlineEntry(depth: depth, frame: frame, text: text))
@@ -61,11 +63,11 @@ enum IshikawaOutlinePlacement {
     /// its own so that the outline may be as deep as the text goes.
     private static func depthFirstOrder(_ diagram: IshikawaDiagram) -> [(nodeIndex: Int, depth: Int, parentEntry: Int?)] {
         var order: [(nodeIndex: Int, depth: Int, parentEntry: Int?)] = []
-        var pending: [(nodeIndex: Int, depth: Int, parentEntry: Int?)] = diagram.nodes.isEmpty ? [] : [(0, 0, nil)]
+        var pending: [(nodeIndex: Int, depth: Int, parentEntry: Int?)] = diagram.nodeCount == 0 ? [] : [(0, 0, nil)]
         while let entry = pending.popLast() {
             let entryIndex = order.count
             order.append(entry)
-            for child in diagram.nodes[entry.nodeIndex].childIndices.reversed() { pending.append((child, entry.depth + 1, entryIndex)) }
+            for child in diagram.childIndices(of: entry.nodeIndex).reversed() { pending.append((Int(child), entry.depth + 1, entryIndex)) }
         }
         return order
     }

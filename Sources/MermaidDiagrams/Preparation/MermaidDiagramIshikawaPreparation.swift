@@ -28,16 +28,16 @@ extension MermaidDiagramAccessibility {
     init(ishikawa diagram: IshikawaDiagram) {
         self.init(kind: .ishikawa, title: diagram.title, description: nil, summarySeparator: "; ") {
             var summary: [String] = []
-            if let effect = diagram.nodes.first {
-                summary.append(effect.text)
-                for categoryIndex in effect.childIndices {
+            if diagram.nodeCount > 0 {
+                summary.append(diagram.text(of: 0))
+                for categoryIndex in diagram.childIndices(of: 0) {
                     var causes: [String] = []
-                    var pending = Array(diagram.nodes[categoryIndex].childIndices.reversed())
+                    var pending = Array(diagram.childIndices(of: Int(categoryIndex)).reversed())
                     while let index = pending.popLast() {
-                        causes.append(diagram.nodes[index].text)
-                        pending += diagram.nodes[index].childIndices.reversed()
+                        causes.append(diagram.text(of: Int(index)))
+                        pending += diagram.childIndices(of: Int(index)).reversed()
                     }
-                    let category = diagram.nodes[categoryIndex].text
+                    let category = diagram.text(of: Int(categoryIndex))
                     summary.append(causes.isEmpty ? category : category + ": " + causes.joined(separator: ", "))
                 }
             }

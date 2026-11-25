@@ -5,8 +5,8 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagram {
@@ -29,7 +29,7 @@ extension MermaidDiagram {
         case .sankey(let diagram): diagram.links.isEmpty
         case .kanban(let board): board.columns.isEmpty
         case .treeView(let diagram): diagram.entries.isEmpty
-        case .ishikawa(let diagram): diagram.nodes.isEmpty
+        case .ishikawa(let diagram): diagram.nodeCount == 0
         case .packet(let diagram): diagram.fields.isEmpty
         case .radar(let chart): chart.axes.isEmpty
         case .treemap(let diagram): !diagram.nodes.contains { node in node.size > 0 }
