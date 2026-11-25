@@ -7,7 +7,7 @@
  *              storage, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -61,6 +61,7 @@ extension DiagramSVGBody {
         var point = UnsafePointer(contents.points + Int(contents.records[index].firstPoint))
         let verbs = UnsafePointer(contents.verbs)
         let range = contents.verbRange(ofItemAt: index)
+        let digits = DiagramSVGDigitTables.shared
         var verbIndex = range.lowerBound
         while verbIndex < range.upperBound {
             let end = min(verbIndex + Self.elementsReservedTogether, range.upperBound)
@@ -68,7 +69,7 @@ extension DiagramSVGBody {
                 var cursor = start
                 for element in verbIndex..<end {
                     let verb = verbs[element]
-                    cursor += DiagramSVGNumberWriting.writePathElement(verb, point, to: cursor)
+                    cursor += DiagramSVGNumberWriting.writePathElement(verb, point, to: cursor, digits: digits)
                     point += verb.pointCount
                 }
                 return cursor - start

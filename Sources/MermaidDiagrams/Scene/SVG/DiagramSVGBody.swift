@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: Writes a scene's items as SVG elements into the document's buffer, the room of each element's fixed
  *              parts made sure of once: a path per shape (one for a fill and its stroke), a text per placed text, and
- *              before them the definitions of the gradients they name.
+ *              before them the definitions of the gradients they name; classes copied from a table, text escaped from
+ *              the bytes its storage keeps.
  *
  * Authors: Bahey Shalash
- * Version: 0.9
+ * Version: 0.10
  * Date: 24/11/2026
  */
 
@@ -50,10 +51,14 @@ struct DiagramSVGBody: ~Copyable {
 
     /// A shape's element up to its path's data, which the scene's reader writes next, wherever the scene keeps it.
     mutating func appendShapeOpening(part: DiagramScenePart) {
-        content.append("<path class=\"pele-")
-        content.append(part.rawValue)
-        content.append("\" d=\"")
+        content.reserve(Self.classOpeningRoom)
+        content.write("<path class=\"")
+        content.write(classOf: part)
+        content.write("\" d=\"")
     }
+
+    /// The room of an element's tag, its class and the start of the next attribute: the class's whole entry is copied.
+    static let classOpeningRoom = 32 + DiagramSVGClassNames.entryByteCount
 
     /// The rest of a shape's element after its path's data: its painting.
     mutating func appendShapeClosing(painting: DiagramShapePainting) {
@@ -187,9 +192,9 @@ struct DiagramSVGBody: ~Copyable {
 
     /// `<text`, its class and size, with the room of the rest of its opening reserved.
     private mutating func appendTextOpening(_ text: DiagramSceneText) {
-        content.append("<text class=\"pele-")
-        content.append(text.part.rawValue)
-        content.reserve(Self.textOpeningRoom)
+        content.reserve(Self.classOpeningRoom + Self.textOpeningRoom)
+        content.write("<text class=\"")
+        content.write(classOf: text.part)
         content.write("\" font-size=\"")
         content.write(number: text.block.fontSize)
         content.write(byte: UInt8(ascii: "\""))
@@ -233,7 +238,7 @@ struct DiagramSVGBody: ~Copyable {
     /// lines have runs in their emphasis writes them as Pele writes a label's spans.
     private mutating func addLines(of block: DiagramTextBlock) {
         let top = block.center.y - block.size.height / 2
-        if let lineRuns = block.lineRuns { return addLines(of: block, runs: lineRuns, top: top) }
+        if block.record.hasEmphasis { return addRuns(of: block, top: top) }
         if block.lineCount == 1 {
             content.reserve(Self.lineRoom)
             writePosition(ofLine: 0, in: block, top: top)
@@ -256,28 +261,29 @@ struct DiagramSVGBody: ~Copyable {
     }
 
     /// The lines of a text whose lines have runs: a `tspan` at the line's middle for its first run and one after it for
-    /// each other run, with the run's weight, slant or font.
-    private mutating func addLines(of block: DiagramTextBlock, runs lineRuns: [[DiagramTextRun]], top: CGFloat) {
+    /// each other run, with the run's weight, slant or font, each run's bytes escaped where the block's storage keeps them.
+    private mutating func addRuns(of block: DiagramTextBlock, top: CGFloat) {
         content.reserve(Self.lineRoom)
         content.write(" text-anchor=\"middle\">")
         for lineIndex in 0..<block.lineCount {
-            let runs = lineRuns[lineIndex]
             content.reserve(Self.lineRoom)
-            guard !runs.isEmpty else {
+            guard block.runCount(ofLine: lineIndex) > 0 else {
                 content.write("<tspan")
                 writePosition(ofLine: lineIndex, in: block, top: top)
                 content.write("></tspan>")
                 continue
             }
-            for (index, run) in runs.enumerated() {
+            var isFirstRun = true
+            block.forEachRun(ofLine: lineIndex) { bytes, style, _ in
                 content.reserve(Self.lineRoom)
                 content.write("<tspan")
-                if index == 0 { writePosition(ofLine: lineIndex, in: block, top: top) }
-                if run.style.contains(.bold) { content.write(" font-weight=\"bold\"") }
-                if run.style.contains(.italic) { content.write(" font-style=\"italic\"") }
-                if run.style.contains(.monospaced) { writeFontFamily() }
+                if isFirstRun { writePosition(ofLine: lineIndex, in: block, top: top) }
+                isFirstRun = false
+                if style.contains(.bold) { content.write(" font-weight=\"bold\"") }
+                if style.contains(.italic) { content.write(" font-style=\"italic\"") }
+                if style.contains(.monospaced) { writeFontFamily() }
                 content.write(byte: UInt8(ascii: ">"))
-                content.appendEscaped(run.text)
+                content.appendEscaped(bytes)
                 content.append("</tspan>")
             }
         }
