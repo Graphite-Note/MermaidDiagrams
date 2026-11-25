@@ -3,11 +3,12 @@
  * ---------------------------------------
  * Layer: Tests
  * Description: Scenes painted on many threads at once, each drawing with its own fonts and attributes, are painted to the
- *              pixel as they are painted alone; scenes of many texts and of many shapes painted apart are built in time
- *              linear in their count.
+ *              pixel as they are painted alone, without antialiasing, which Core Graphics does not do the same way twice
+ *              while other threads paint; scenes of many texts and of many shapes painted apart are built in time linear
+ *              in their count.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -18,7 +19,11 @@ import XCTest
 @testable import MermaidDiagramsBenchmark
 
 final class DiagramSceneTextThreadTests: XCTestCase {
-    /// Twelve threads paint the same scenes at once, each in its own order: every picture is the one painted alone.
+    /// Twelve threads paint the same scenes at once, each in its own order: every picture is the one painted alone. Each
+    /// is painted without antialiasing: Core Graphics' antialiased fills and strokes come out a few pixels unlike
+    /// themselves, now and then, while other threads paint other shapes (seen on macOS 27.2.1 with Core Graphics alone,
+    /// six rounded rectangles in about half of 3,200 pictures, and never with antialiasing off), which no state of the
+    /// painter causes; with it off, the same drawing calls are compared, the same fonts, attributes and strings.
     func testScenesPaintedOnManyThreadsAtOnceAreThosePaintedAlone() throws {
         var scenes: [DiagramScene] = []
         for (_, sources) in try OutputDigest.corpora() {
@@ -30,9 +35,7 @@ final class DiagramSceneTextThreadTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(scenes.count, 60)
-        let alone = scenes.map { scene in
-            DiagramScenePixels(size: scene.size, scale: 1) { context in DiagramSceneRenderer.draw(scene, in: context, palette: DiagramScenePaletteSamples.light) }
-        }
+        let alone = scenes.map(Self.paintedWithoutAntialiasing)
         let shared = PaintedScenes(scenes: scenes, alone: alone)
         let tally = PaintingTally()
         DispatchQueue.concurrentPerform(iterations: 12) { thread in
@@ -40,14 +43,18 @@ final class DiagramSceneTextThreadTests: XCTestCase {
             for step in 0..<count {
                 let index = (thread &* 29 &+ step) % count
                 let scene = shared.scenes[index]
-                let painted = DiagramScenePixels(size: scene.size, scale: 1) { context in
-                    DiagramSceneRenderer.draw(scene, in: context, palette: DiagramScenePaletteSamples.light)
-                }
-                tally.record(painted == shared.alone[index])
+                tally.record(Self.paintedWithoutAntialiasing(scene) == shared.alone[index])
             }
         }
         XCTAssertEqual(tally.matchCount, 12 * scenes.count)
         XCTAssertEqual(tally.differenceCount, 0)
+    }
+
+    private static func paintedWithoutAntialiasing(_ scene: DiagramScene) -> DiagramScenePixels? {
+        DiagramScenePixels(size: scene.size, scale: 1) { context in
+            context.setShouldAntialias(false)
+            DiagramSceneRenderer.draw(scene, in: context, palette: DiagramScenePaletteSamples.light)
+        }
     }
 
     /// 60,000 texts and 60,000 shapes kept apart: the builder's lists grow by doubling, the scene takes them, and the
