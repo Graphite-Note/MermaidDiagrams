@@ -6,16 +6,24 @@
  *              repeat: `trim`, the order of `sort`, the replacement of runs of blanks, and a search for an ASCII text.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// JavaScript's string operations as Pele's readers of the diagrams drawn on a fixed plane use them.
 enum PlaneMapText {
     /// `text` without the white space at its ends, as JavaScript's `trim` leaves it.
     static func trimmed(_ text: String) -> String {
+        // A text that starts and ends with printable ASCII other than a space has no white space at its ends to trim.
+        if let first = text.utf8.first, let last = text.utf8.last, isPrintableASCIIOtherThanSpace(first), isPrintableASCIIOtherThanSpace(last) {
+            return text
+        }
         let bytes = Array(text.utf8)
         return String(decoding: JavaScriptWhitespace.trimmed(bytes[...]), as: UTF8.self)
+    }
+
+    private static func isPrintableASCIIOtherThanSpace(_ byte: UInt8) -> Bool {
+        byte > 0x20 && byte < 0x7F
     }
 
     /// Whether `text` holds `literal`, printable ASCII, as Foundation's `contains` finds it: on the bytes when `text` is

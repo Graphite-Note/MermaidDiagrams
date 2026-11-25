@@ -6,8 +6,8 @@
  *              the frozen Wardley map reader.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -232,7 +232,7 @@ struct ReferenceWardleyMapBuilder {
         map.size = statements.size
         if let stages = statements.stages {
             map.stages = stages.map { stage in
-                stage.secondName.map { second in PlaneMapText.trimmed(stage.name) + " / " + PlaneMapText.trimmed(second) } ?? PlaneMapText.trimmed(stage.name)
+                stage.secondName.map { second in ReferencePlaneMapText.trimmed(stage.name) + " / " + ReferencePlaneMapText.trimmed(second) } ?? ReferencePlaneMapText.trimmed(stage.name)
             }
             map.stageBoundaries = stages.compactMap(\.boundary)
         }
