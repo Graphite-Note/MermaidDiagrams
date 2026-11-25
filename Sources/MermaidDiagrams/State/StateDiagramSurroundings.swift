@@ -1,3 +1,14 @@
+/**
+ * File: StateDiagramSurroundings.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: What sits beside each state across the flow, its loops and its notes, and the place it takes in its rank.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import CoreGraphics
 
 /// What sits beside each state across the flow: the loops of its transitions to itself, and its notes, `left of` on
@@ -25,7 +36,8 @@ struct StateDiagramSurroundings {
     }
 
     init(diagram: StateDiagram, measured: StateDiagramMeasurement, axes: FlowchartFlowAxes) {
-        var notesBySide = [[Int]](repeating: [], count: diagram.states.count * StateDiagramNoteSide.allCases.count)
+        // A diagram without notes makes no list of them by side.
+        var notesBySide = [[Int]](repeating: [], count: diagram.notes.isEmpty ? 0 : diagram.states.count * StateDiagramNoteSide.allCases.count)
         for (noteIndex, note) in diagram.notes.enumerated() { notesBySide[Self.slot(state: note.stateIndex, side: note.side)].append(noteIndex) }
         var placeSizes: [LayeredSize] = []
         var noteOffsets = [CGVector](repeating: .zero, count: diagram.notes.count)
@@ -38,7 +50,7 @@ struct StateDiagramSurroundings {
             let halfAcross = shape.across / 2 + loops.room
             var along = max(shape.along, loops.textAlong)
             var noteRoom: CGFloat = 0
-            for side in StateDiagramNoteSide.allCases {
+            for side in StateDiagramNoteSide.allCases where !notesBySide.isEmpty {
                 let noteIndices = notesBySide[Self.slot(state: state, side: side)]
                 guard !noteIndices.isEmpty else { continue }
                 let stack = Self.stack(noteIndices.map { noteIndex in axes.flowSize(of: measured.noteSizes[noteIndex]) })
