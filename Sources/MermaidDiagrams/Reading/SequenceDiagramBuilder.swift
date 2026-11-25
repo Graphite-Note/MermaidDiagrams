@@ -6,8 +6,8 @@
  *              created and destroyed participants, activations and blocks.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Collects a sequence diagram as its statements are read, with Mermaid's rules: participants by identifier in the
@@ -17,7 +17,7 @@
 struct SequenceDiagramBuilder {
     private var diagram = SequenceDiagram()
     private let limits: MermaidDiagramLimits
-    private var participantIndexByIdentifier: [String: Int] = [:]
+    private var participantIndexByIdentifier = SequenceParticipantNameTable()
     /// How many activations each participant has open, by identifier, named or not.
     private var openActivationCountByIdentifier: [String: Int] = [:]
     /// Activations of a participant no statement had named when they were written: the event's index, the identifier
@@ -52,11 +52,11 @@ struct SequenceDiagramBuilder {
     /// The index of the participant named `identifier`, added as a participant with its identifier as its text the
     /// first time it is named.
     mutating func participantIndex(for identifier: String) throws(MermaidDiagramReadError) -> Int {
-        if let index = participantIndexByIdentifier[identifier] { return index }
+        if let index = participantIndexByIdentifier.index(of: identifier) { return index }
         guard diagram.participants.count < limits.maximumNodeCount else { throw .tooManyParticipants(limit: limits.maximumNodeCount) }
         let index = diagram.participants.count
         diagram.participants.append(SequenceParticipant(identifier: identifier, label: DiagramLabel(identifier)))
-        participantIndexByIdentifier[identifier] = index
+        participantIndexByIdentifier.append(identifier)
         return index
     }
 
@@ -71,7 +71,7 @@ struct SequenceDiagramBuilder {
         if let attributeAlias = attributes?.alias, alias == nil || alias?.text == identifier {
             label = DiagramLabelDecoder.label(from: attributeAlias, form: .plain)
         }
-        let isNew = participantIndexByIdentifier[identifier] == nil
+        let isNew = participantIndexByIdentifier.index(of: identifier) == nil
         let index = try participantIndex(for: identifier)
         if let openBoxIndex {
             if let boxIndex = diagram.participants[index].boxIndex, boxIndex != openBoxIndex {
@@ -87,7 +87,7 @@ struct SequenceDiagramBuilder {
     /// `create participant` or `create actor`, which must name a participant not named yet.
     mutating func createParticipant(_ identifier: String, kind: SequenceParticipantKind, alias: SequenceTextSyntax.WrittenText?,
                                     attributes: SequenceParticipantAttributes?, line: Int) throws(MermaidDiagramReadError) {
-        guard participantIndexByIdentifier[identifier] == nil else {
+        guard participantIndexByIdentifier.index(of: identifier) == nil else {
             throw .invalidSyntax(line: line, problem: .sequence(.createdParticipantAlreadyNamed(identifier: identifier)))
         }
         try declareParticipant(identifier, kind: kind, alias: alias, attributes: attributes, line: line)
@@ -190,7 +190,7 @@ struct SequenceDiagramBuilder {
         var resolved = diagram
         var droppedEventIndices = Set<Int>()
         for activation in activationsOfUnnamedParticipants {
-            guard let index = participantIndexByIdentifier[activation.identifier] else {
+            guard let index = participantIndexByIdentifier.index(of: activation.identifier) else {
                 droppedEventIndices.insert(activation.eventIndex)
                 continue
             }
@@ -203,7 +203,7 @@ struct SequenceDiagramBuilder {
     }
 
     private mutating func appendActivation(of identifier: String, isStart: Bool) throws(MermaidDiagramReadError) {
-        guard let index = participantIndexByIdentifier[identifier] else {
+        guard let index = participantIndexByIdentifier.index(of: identifier) else {
             activationsOfUnnamedParticipants.append((diagram.events.count, identifier, isStart))
             // A stand-in that `finished()` replaces or drops.
             try append(isStart ? .activationStart(participantIndex: -1) : .activationEnd(participantIndex: -1))

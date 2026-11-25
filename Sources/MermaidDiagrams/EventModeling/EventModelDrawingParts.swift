@@ -86,11 +86,7 @@ struct EventModelDrawingPaths<Path: DiagramCurvedPathRecording> {
         arrows = maker.makePath()
         let unused = maker.makePath()
         for relation in layout.relations {
-            let madeCount = maker.madePathCount
-            let drawn = maker.makePath()
-            DiagramEdgeDrawing.record(relation.path, into: drawn)
-            relationLines.addPath(drawn)
-            maker.givePathsBack(downTo: madeCount)
+            maker.addEdgeLineInPlace(relation.path, to: relationLines)
             DiagramEdgeDrawing.addMark(relation.arrow, filled: arrows, stroked: unused)
         }
         outlinedBoxes = maker.makePath()

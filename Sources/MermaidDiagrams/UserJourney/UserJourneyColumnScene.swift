@@ -36,7 +36,7 @@ enum UserJourneyColumnSceneRecording {
         let lineWidth = UserJourneyDrawingParts.lineWidth
         let roundJoin = DiagramStroke(lineWidth: lineWidth, lineJoin: .round)
         let connectors = workspace.makePath()
-        for connector in layout.connectors { workspace.addEdgeLine(connector, to: connectors) }
+        for connector in layout.connectors { workspace.addEdgeLineInPlace(connector, to: connectors) }
         builder.stroke(connectors, .line, DiagramStroke(lineWidth: lineWidth), part: .edge)
         let cards = workspace.makePath()
         let faces = workspace.makePath()

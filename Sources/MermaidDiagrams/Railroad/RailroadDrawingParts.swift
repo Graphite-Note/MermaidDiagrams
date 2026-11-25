@@ -78,13 +78,7 @@ struct RailroadDrawingPaths<Path: DiagramCurvedPathRecording> {
         specials = maker.makePath()
         let radius = layout.markerRadius
         for rule in layout.rules {
-            for piece in rule.track {
-                let madeCount = maker.madePathCount
-                let drawn = maker.makePath()
-                DiagramEdgeDrawing.record(piece, into: drawn)
-                track.addPath(drawn)
-                maker.givePathsBack(downTo: madeCount)
-            }
+            for piece in rule.track { maker.addEdgeLineInPlace(piece, to: track) }
             for arrow in rule.arrows {
                 arrows.addLines(between: arrow.points)
                 arrows.closeSubpath()

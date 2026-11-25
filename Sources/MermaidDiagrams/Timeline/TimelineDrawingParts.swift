@@ -6,8 +6,8 @@
  *              periods' text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -121,13 +121,7 @@ struct TimelineDrawingPaths<Path: DiagramPathRecording> {
             Self.addBox(period.frame, to: paths.boxes, radius: radius, making: maker)
             for event in period.events { Self.addBox(event.frame, to: paths.eventBoxes, radius: radius, making: maker) }
             paths.dots.addEllipse(in: CGRect(x: period.dot.x - dotRadius, y: period.dot.y - dotRadius, width: 2 * dotRadius, height: 2 * dotRadius))
-            for connector in period.connectors {
-                let madeCount = maker.madePathCount
-                let drawn = maker.makePath()
-                DiagramEdgeDrawing.record(connector, into: drawn)
-                connectors.addPath(drawn)
-                maker.givePathsBack(downTo: madeCount)
-            }
+            for connector in period.connectors { maker.addEdgeLineInPlace(connector, to: connectors) }
         }
         colorGroups = groups.filter { group in !(group.boxes.isEmpty && group.dots.isEmpty) }
         axis = maker.makePath()
