@@ -8,8 +8,8 @@
  *              beyond ASCII.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import XCTest
@@ -59,5 +59,45 @@ final class BlockAppearanceBytesTests: XCTestCase {
             assertSameLook(classNames: nil, styles: [entry], classes: [:])
             assertSameLook(classNames: next(2) == 0 ? ["hot"] : nil, styles: next(2) == 0 ? [entry, entry] : nil, classes: classes)
         }
+    }
+
+    /// Removing every `!important` again and again in one pass leaves what removing the first again and again leaves, on
+    /// random runs of its pieces, cases and nestings.
+    func testImportanceIsTakenOutAsRemovingTheFirstAgainAndAgain() {
+        func removedOneByOne(_ text: String) -> [UInt8] {
+            var value = Array(text.utf8)
+            let word = Array("!important".utf8)
+            while let start = (0..<max(0, value.count - word.count + 1)).first(where: { start in
+                (0..<word.count).allSatisfy { offset in MermaidByte.lowercased(value[start + offset]) == word[offset] }
+            }) {
+                value.removeSubrange(start..<(start + word.count))
+            }
+            return value
+        }
+        var state: UInt64 = 0x1A90_47A2
+        func next(_ bound: Int) -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int((state >> 33) % UInt64(bound))
+        }
+        let pieces = ["!", "!imp", "ortant", "!important", "!IMPORTANT", "!Important", "important", "t", "i", "x", " ", "red", "!!", "nt"]
+        for _ in 0..<20_000 {
+            let text = (0..<next(12)).map { _ in pieces[next(pieces.count)] }.joined()
+            let removed = Array(text.utf8).withUnsafeBufferPointer { bytes in BlockAppearance.withoutImportance(bytes) }
+            XCTAssertEqual(removed, removedOneByOne(text), text)
+        }
+    }
+
+    /// A style of many nested or repeated `!important`s, `url`s and declarations reads in time that grows with its length.
+    func testLongStylesReadInLinearTime() {
+        let nested = String(repeating: "!imp", count: 20_000) + String(repeating: "ortant", count: 20_000)
+        let texts = ["fill:" + nested + "red", "fill:" + String(repeating: "!important", count: 40_000) + "#f96",
+                     "color:" + String(repeating: "url ", count: 50_000), String(repeating: "fill:red;", count: 40_000),
+                     "stroke:" + String(repeating: "u", count: 200_000)]
+        let start = Date()
+        for text in texts {
+            let look = BlockAppearance(classNames: nil, styles: [text], classes: [:])
+            if text.hasPrefix("fill:!") { XCTAssertNotNil(look.style.fill, String(text.prefix(40))) }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5)
     }
 }
