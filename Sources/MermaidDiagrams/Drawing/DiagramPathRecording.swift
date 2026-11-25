@@ -6,7 +6,7 @@
  *              own, for the public drawing parts, and the lanes of the thread's scene workspace, for the scene.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -86,6 +86,12 @@ struct DiagramCoreGraphicsPath: DiagramPathRecording {
     func addLines(between linePoints: [CGPoint]) { recorded.addLines(between: linePoints) }
     func addRect(_ rect: CGRect) { recorded.addRect(rect) }
     func addEllipse(in rect: CGRect) { recorded.addEllipse(in: rect) }
+    func addRoundedRect(in rect: CGRect, cornerWidth: CGFloat, cornerHeight: CGFloat, transform: CGAffineTransform?) {
+        recorded.addRoundedRect(in: rect, cornerWidth: cornerWidth, cornerHeight: cornerHeight, transform: transform ?? .identity)
+    }
+    func addArc(center: CGPoint, radius: CGFloat, startAngle: CGFloat, endAngle: CGFloat, clockwise: Bool, transform: CGAffineTransform?) {
+        recorded.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: clockwise, transform: transform ?? .identity)
+    }
     func addPath(_ other: DiagramCoreGraphicsPath) { recorded.addPath(other.path) }
 
     func addPath(_ other: DiagramCoreGraphicsPath, alsoTo second: DiagramCoreGraphicsPath) {

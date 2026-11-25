@@ -6,8 +6,8 @@
  *              order, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -42,27 +42,14 @@ public struct RailroadDrawingParts {
     public init(layout: RailroadLayout) {
         title = layout.title
         ruleNames = layout.rules.map(\.name)
-        let track = CGMutablePath()
-        let arrows = CGMutablePath()
-        let markers = CGMutablePath()
-        for rule in layout.rules {
-            for piece in rule.track { track.addPath(DiagramEdgeDrawing.path(piece)) }
-            for arrow in rule.arrows {
-                arrows.addLines(between: arrow.points)
-                arrows.closeSubpath()
-            }
-            for center in rule.markerCenters {
-                markers.addEllipse(in: CGRect(x: center.x - layout.markerRadius, y: center.y - layout.markerRadius, width: 2 * layout.markerRadius,
-                                              height: 2 * layout.markerRadius))
-            }
-        }
-        self.track = track
-        self.arrows = arrows
-        self.markers = markers
+        let paths = RailroadDrawingPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        track = paths.track.path
+        arrows = paths.arrows.path
+        markers = paths.markers.path
+        terminals = paths.terminals.path
+        nonterminals = paths.nonterminals.path
+        specials = paths.specials.path
         let boxes = layout.rules.flatMap(\.boxes)
-        terminals = Self.outlines(boxes, .terminal) { frame in frame.height / 2 }
-        nonterminals = Self.outlines(boxes, .nonterminal) { _ in Self.cornerRadius }
-        specials = Self.outlines(boxes, .special) { _ in Self.cornerRadius }
         terminalTexts = boxes.filter { box in box.kind == .terminal }.map(\.text)
         nonterminalTexts = boxes.filter { box in box.kind == .nonterminal }.map(\.text)
         specialTexts = boxes.filter { box in box.kind == .special }.map(\.text)
@@ -70,42 +57,96 @@ public struct RailroadDrawingParts {
         counts = layout.rules.flatMap(\.counts)
         lineWidth = layout.lineWidth
     }
+}
 
-    private static func outlines(_ boxes: [RailroadLayoutBox], _ kind: RailroadLayoutBox.Kind, radius: (CGRect) -> CGFloat) -> CGPath {
-        let path = CGMutablePath()
-        for box in boxes where box.kind == kind {
-            let corner = min(radius(box.frame), box.frame.width / 2, box.frame.height / 2)
-            path.addRoundedRect(in: box.frame, cornerWidth: corner, cornerHeight: corner)
+/// A railroad diagram's paths, grouped as `RailroadDrawingParts` groups them, recorded into the paths a maker makes:
+/// Core Graphics paths for the drawing parts, lanes of the thread's scene workspace for the scene, the same elements.
+struct RailroadDrawingPaths<Path: DiagramCurvedPathRecording> {
+    let track: Path
+    let arrows: Path
+    let markers: Path
+    let terminals: Path
+    let nonterminals: Path
+    let specials: Path
+
+    init<Maker: DiagramPathMaking>(layout: RailroadLayout, making maker: Maker) where Maker.Path == Path {
+        track = maker.makePath()
+        arrows = maker.makePath()
+        markers = maker.makePath()
+        terminals = maker.makePath()
+        nonterminals = maker.makePath()
+        specials = maker.makePath()
+        let radius = layout.markerRadius
+        for rule in layout.rules {
+            for piece in rule.track {
+                let madeCount = maker.madePathCount
+                let drawn = maker.makePath()
+                DiagramEdgeDrawing.record(piece, into: drawn)
+                track.addPath(drawn)
+                maker.givePathsBack(downTo: madeCount)
+            }
+            for arrow in rule.arrows {
+                arrows.addLines(between: arrow.points)
+                arrows.closeSubpath()
+            }
+            for center in rule.markerCenters {
+                markers.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
+            }
         }
-        return path
+        for rule in layout.rules {
+            for box in rule.boxes {
+                let outlines: Path
+                let corner: CGFloat
+                switch box.kind {
+                case .terminal: (outlines, corner) = (terminals, box.frame.height / 2)
+                case .nonterminal: (outlines, corner) = (nonterminals, RailroadDrawingParts.cornerRadius)
+                case .special: (outlines, corner) = (specials, RailroadDrawingParts.cornerRadius)
+                }
+                let clamped = min(corner, box.frame.width / 2, box.frame.height / 2)
+                outlines.addRoundedRect(in: box.frame, cornerWidth: clamped, cornerHeight: clamped)
+            }
+        }
     }
 }
 
 extension DiagramScene {
-    /// The railroad diagram's painting, in Pele's order and colors.
+    /// The railroad diagram's painting, in Pele's order and colors, its paths recorded into lanes of the thread's scene
+    /// workspace.
     public init(layout: RailroadLayout) {
-        var builder = DiagramSceneBuilder()
-        RailroadDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            let paths = RailroadDrawingPaths(layout: layout, making: workspace)
+            let line = DiagramStroke(lineWidth: layout.lineWidth)
+            builder.title(layout.title)
+            for rule in layout.rules { builder.text(rule.name, .foreground, isBold: true, part: .clusterLabel) }
+            builder.stroke(paths.track, .line, line, part: .edge)
+            builder.fill(paths.arrows, .line, part: .marker)
+            builder.fill(paths.markers, .line, part: .marker)
+            builder.fillAndStroke(paths.terminals, fill: .surface, stroke: .border, line, part: .node)
+            builder.fillAndStroke(paths.nonterminals, fill: .background, stroke: .border, line, part: .node)
+            builder.fillAndStroke(paths.specials, fill: .background, stroke: .border,
+                                  DiagramStroke(lineWidth: layout.lineWidth, dashLengths: RailroadDrawingParts.specialDashLengths), part: .node)
+            Self.addBoxTexts(of: layout, to: &builder)
+            for rule in layout.rules { builder.texts(rule.counts, .muted, part: .edgeLabel) }
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
-}
 
-extension RailroadDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke(lineWidth: lineWidth)
-        builder.title(title)
-        builder.texts(ruleNames, .foreground, isBold: true, part: .clusterLabel)
-        builder.stroke(track, .line, line, part: .edge)
-        builder.fill(arrows, .line, part: .marker)
-        builder.fill(markers, .line, part: .marker)
-        builder.fillAndStroke(terminals, fill: .surface, stroke: .border, line, part: .node)
-        builder.fillAndStroke(nonterminals, fill: .background, stroke: .border, line, part: .node)
-        builder.fillAndStroke(specials, fill: .background, stroke: .border, DiagramStroke(lineWidth: lineWidth, dashLengths: Self.specialDashLengths), part: .node)
-        builder.texts(terminalTexts, .foreground, isMonospaced: true, part: .label)
-        builder.texts(nonterminalTexts, .foreground, part: .label)
-        builder.texts(specialQuestionMarks, .muted, isItalic: true, part: .label)
-        builder.texts(specialTexts, .foreground, isItalic: true, part: .label)
-        builder.texts(counts, .muted, part: .edgeLabel)
+    /// The boxes' text: the terminals' in the monospaced font, the names', the special sequences' question marks in the
+    /// muted color, then their text in italics.
+    private static func addBoxTexts(of layout: RailroadLayout, to builder: inout DiagramSceneBuilder) {
+        for rule in layout.rules {
+            for box in rule.boxes where box.kind == .terminal { builder.text(box.text, .foreground, isMonospaced: true, part: .label) }
+        }
+        for rule in layout.rules {
+            for box in rule.boxes where box.kind == .nonterminal { builder.text(box.text, .foreground, part: .label) }
+        }
+        for rule in layout.rules {
+            for box in rule.boxes { builder.texts(box.questionMarks, .muted, isItalic: true, part: .label) }
+        }
+        for rule in layout.rules {
+            for box in rule.boxes where box.kind == .special { builder.text(box.text, .foreground, isItalic: true, part: .label) }
+        }
     }
 }
 

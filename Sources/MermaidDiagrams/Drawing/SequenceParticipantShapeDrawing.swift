@@ -6,8 +6,8 @@
  *              control, entity and database figures, the two cards of collections and the queue's lying cylinder.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -15,16 +15,19 @@ import CoreGraphics
 /// The participants' paths by how they are painted (`sequence/actors.ts`): shapes filled with the surface and outlined
 /// in the border color, lines stroked in the border color, and the front card of collections, filled and outlined after
 /// the others so that it hides the back card's outline.
-struct SequenceParticipantShapeDrawing {
-    let shapes = CGMutablePath()
-    let lines = CGMutablePath()
-    let frontShapes = CGMutablePath()
+struct SequenceParticipantShapeDrawing<Path: DiagramCurvedPathRecording> {
+    let shapes: Path
+    let lines: Path
+    let frontShapes: Path
 
-    init(participants: [SequenceLayoutParticipant]) {
-        for participant in participants { add(participant.kind, in: participant.frame) }
+    init<Maker: DiagramPathMaking>(participants: [SequenceLayoutParticipant], making maker: Maker) where Maker.Path == Path {
+        shapes = maker.makePath()
+        lines = maker.makePath()
+        frontShapes = maker.makePath()
+        for participant in participants { add(participant.kind, in: participant.frame, making: maker) }
     }
 
-    private func add(_ kind: SequenceParticipantKind, in frame: CGRect) {
+    private func add<Maker: DiagramPathMaking>(_ kind: SequenceParticipantKind, in frame: CGRect, making maker: Maker) where Maker.Path == Path {
         let centerX = frame.midX
         let top = frame.minY
         func point(_ horizontal: CGFloat, _ depth: CGFloat) -> CGPoint { CGPoint(x: centerX + horizontal, y: top + depth) }
@@ -32,8 +35,9 @@ struct SequenceParticipantShapeDrawing {
             let radius: CGFloat = 11
             return CGRect(x: centerX + horizontal - radius, y: top + depth - radius, width: 2 * radius, height: 2 * radius)
         }
+        let cornerRadius = SequenceDrawingParts.cornerRadius
         switch kind {
-        case .participant: shapes.addPath(SequenceDrawingParts.roundedRectangle(frame))
+        case .participant: maker.addMadeRoundedRectangle(frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, to: shapes)
         case .actor:
             shapes.addEllipse(in: SequenceParticipantGeometry.figureHead(in: frame))
             for limb in SequenceParticipantGeometry.figureLimbs(in: frame) { lines.addLines(between: limb) }
@@ -51,8 +55,10 @@ struct SequenceParticipantShapeDrawing {
         case .collections:
             let offset = SequenceParticipantGeometry.collectionsOffset
             let cardSize = CGSize(width: frame.width - offset, height: frame.height - offset)
-            shapes.addPath(SequenceDrawingParts.roundedRectangle(CGRect(origin: CGPoint(x: frame.minX + offset, y: top), size: cardSize)))
-            frontShapes.addPath(SequenceDrawingParts.roundedRectangle(CGRect(origin: CGPoint(x: frame.minX, y: top + offset), size: cardSize)))
+            maker.addMadeRoundedRectangle(CGRect(origin: CGPoint(x: frame.minX + offset, y: top), size: cardSize), cornerWidth: cornerRadius,
+                                          cornerHeight: cornerRadius, to: shapes)
+            maker.addMadeRoundedRectangle(CGRect(origin: CGPoint(x: frame.minX, y: top + offset), size: cardSize), cornerWidth: cornerRadius,
+                                          cornerHeight: cornerRadius, to: frontShapes)
         case .queue: addQueue(in: frame)
         }
     }
@@ -92,7 +98,7 @@ struct SequenceParticipantShapeDrawing {
 
     /// Half an ellipse from angle `start` to `end`, on a page whose y runs down: angles grow toward the bottom, and
     /// Core Graphics' `clockwise` is against their growth there.
-    private static func addHalfEllipse(to path: CGMutablePath, center: CGPoint, radii: CGSize, from start: CGFloat, to end: CGFloat, isClockwise: Bool) {
+    private static func addHalfEllipse(to path: Path, center: CGPoint, radii: CGSize, from start: CGFloat, to end: CGFloat, isClockwise: Bool) {
         let transform = CGAffineTransform(a: radii.width, b: 0, c: 0, d: radii.height, tx: center.x, ty: center.y)
         path.addArc(center: .zero, radius: 1, startAngle: start, endAngle: end, clockwise: isClockwise, transform: transform)
     }

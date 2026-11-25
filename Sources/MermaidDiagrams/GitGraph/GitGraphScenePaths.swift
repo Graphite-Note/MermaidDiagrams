@@ -7,7 +7,7 @@
  *              then the marks, the ids' patches and the tags.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -21,15 +21,9 @@ protocol GitGraphPathRecording: DiagramPathRecording {
 
 extension DiagramPathLane: GitGraphPathRecording {}
 
-extension DiagramCoreGraphicsPath: GitGraphPathRecording {
-    /// Only for a path the Core Graphics maker made with `makePath()`, a mutable one: the Git graph's drawing adds rounded
-    /// rectangles to nothing else.
-    func addRoundedRect(in rect: CGRect, cornerWidth: CGFloat, cornerHeight: CGFloat, transform: CGAffineTransform?) {
-        // A Core Foundation cast, which does not check: `path` is the mutable path `makePath()` made.
-        let mutablePath = path as! CGMutablePath
-        mutablePath.addRoundedRect(in: rect, cornerWidth: cornerWidth, cornerHeight: cornerHeight, transform: transform ?? .identity)
-    }
-}
+/// `DiagramCoreGraphicsPath.addRoundedRect(in:cornerWidth:cornerHeight:transform:)` (DiagramPathRecording.swift) adds
+/// them to a path `makePath()` made and stops on a shape Core Graphics made whole.
+extension DiagramCoreGraphicsPath: GitGraphPathRecording {}
 
 /// A Git graph's shapes, each made once, in any kind its drawing records: the drawing parts' Core Graphics paths, or a
 /// scene's lanes, which hold Core Graphics' elements for the same calls, bit for bit.
