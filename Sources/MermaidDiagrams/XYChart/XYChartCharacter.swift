@@ -1,3 +1,15 @@
+/**
+ * File: XYChartCharacter.swift
+ * ----------------------------
+ * Layer: Core
+ * Description: The classes of characters Mermaid's XY chart lexer tests over UTF-8 bytes: word characters, the
+ *              numbers of an axis' range and a series' values, and what a comment may take before it.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// The classes of characters Mermaid's XY chart lexer tests, over UTF-8 bytes, besides whitespace (`JavaScriptWhitespace`):
 /// word characters (`\w`) and the numbers of an axis' range and a series' values.
 enum XYChartCharacter {
@@ -9,7 +21,7 @@ enum XYChartCharacter {
 
     /// The end of the number at `position`, or nil when none is there: a sign, then digits with an optional fraction
     /// (`-45`, `56.6`) or only a fraction (`.33`).
-    static func endOfNumber(in bytes: [UInt8], from position: Int) -> Int? {
+    static func endOfNumber(in bytes: UnsafeBufferPointer<UInt8>, from position: Int) -> Int? {
         func isDigit(at index: Int) -> Bool { index < bytes.count && MermaidByte.isDigit(bytes[index]) }
         func endOfDigits(from index: Int) -> Int {
             var end = index

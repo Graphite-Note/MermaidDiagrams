@@ -3,11 +3,11 @@
  * ------------------------
  * Layer: Core
  * Description: Splits an XY chart's text after its keyword into the tokens of Mermaid's XY chart grammar, on its
- *              UTF-8 bytes, as Pele's lexer does.
+ *              borrowed UTF-8 bytes with lines counted only where a token starts, as Pele's lexer does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Splits an XY chart's text after its keyword into the tokens of Mermaid's XY chart grammar, as Pele's lexer does:
@@ -18,7 +18,8 @@
 /// character followed by `%%` start a comment that runs to the end of the line. A character no rule reads ends
 /// the tokens with an `invalid` one.
 struct XYChartLexer {
-    private var cursor: MermaidTextCursor
+    /// The cursor's bytes, borrowed, with the line counted only where a token starts.
+    private var cursor: ChartByteCursor
     private var state = State.initial
     private var stack: [State] = []
     private var tokens: [XYChartToken] = []
@@ -43,12 +44,14 @@ struct XYChartLexer {
 
     /// The tokens from the cursor to the end of the text, the last `end`, or `invalid` where a character no rule reads is.
     static func tokens(after cursor: MermaidTextCursor) -> [XYChartToken] {
-        var lexer = XYChartLexer(cursor: cursor)
-        lexer.readTokens()
-        return lexer.tokens
+        cursor.bytes.withUnsafeBufferPointer { bytes in
+            var lexer = XYChartLexer(cursor: ChartByteCursor(cursor, bytes: bytes))
+            lexer.readTokens()
+            return lexer.tokens
+        }
     }
 
-    private init(cursor: MermaidTextCursor) {
+    private init(cursor: ChartByteCursor) {
         self.cursor = cursor
         // About one token in three bytes in the documentation's examples.
         tokens.reserveCapacity((cursor.bytes.count - cursor.position) / 3 + 2)
