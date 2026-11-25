@@ -37,38 +37,10 @@ enum UseCaseEdgeEnds {
     /// found, each group's ends in the order found, then each group sorted as a list of its ends would be.
     private static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [UseCaseNodeView],
                                arena: DiagramScratchArena) {
-        let groupOfKey = arena.span(count: 4 * views.count, repeating: Int32(-1))
-        var groupKeys = arena.list(capacity: 2 * routes.count, of: Int32.self)
-        var groupCounts = arena.list(capacity: 2 * routes.count, of: Int32.self)
-        var found = arena.list(capacity: 2 * routes.count, of: End.self)
-        for (route, path) in routes.enumerated() where path.points.count >= 2 {
-            for endNumber in 0..<2 {
-                let isFirst = endNumber == 0
-                let (side, toward) = Self.side(of: path, isFirst: isFirst)
-                let key = (isFirst ? sources[route] : targets[route]) * 4 + Self.number(of: side)
-                var group = groupOfKey[key]
-                if group < 0 {
-                    group = Int32(groupKeys.count)
-                    groupOfKey[key] = group
-                    groupKeys.append(Int32(key))
-                    groupCounts.append(0)
-                }
-                found.append(End(key: Int32(key), route: Int32(route), isFirst: isFirst, toward: toward, place: groupCounts[Int(group)]))
-                groupCounts[Int(group)] += 1
-            }
-        }
-        // Each group's ends together, in the order found.
-        let groupStarts: ScratchSpan<Int> = arena.uninitializedSpan(count: groupKeys.count + 1)
-        groupStarts[0] = 0
-        for group in 0..<groupKeys.count { groupStarts[group + 1] = groupStarts[group] + Int(groupCounts[group]) }
-        let grouped: ScratchSpan<End> = arena.uninitializedSpan(count: found.count)
-        for index in 0..<found.count {
-            let end = found[index]
-            grouped[groupStarts[Int(groupOfKey[Int(end.key)])] + Int(end.place)] = end
-        }
-        for group in 0..<groupKeys.count {
-            let key = Int(groupKeys[group])
+        let (grouped, groupStarts) = groupedEnds(of: routes, sources: sources, targets: targets, nodeCount: views.count, arena: arena)
+        for group in 0..<(groupStarts.count - 1) {
             var ends = UnsafeMutableBufferPointer(rebasing: grouped.buffer[groupStarts[group]..<groupStarts[group + 1]])
+            let key = Int(ends[0].key)
             let node = key / 4
             let side = DiagramSide.allCases[key % 4]
             let step = ends.count > 1 ? min(portGap, sideLength(of: views[node], side: side) / CGFloat(ends.count - 1)) : 0
@@ -82,6 +54,40 @@ enum UseCaseEdgeEnds {
                 routes[route].points[index] = point
             }
         }
+    }
+
+    /// Every end of every route of two points or more, grouped by node and side: the groups one after the other in the
+    /// order their first end was found, each group's ends in the order found, and where each group starts (one more
+    /// start for the end of the last).
+    private static func groupedEnds(of routes: [LayeredClusterRoute], sources: [Int], targets: [Int], nodeCount: Int,
+                                    arena: DiagramScratchArena) -> (ends: ScratchSpan<End>, groupStarts: ScratchSpan<Int>) {
+        let groupOfKey = arena.span(count: 4 * nodeCount, repeating: Int32(-1))
+        var groupCounts = arena.list(capacity: 2 * routes.count, of: Int32.self)
+        var found = arena.list(capacity: 2 * routes.count, of: End.self)
+        for (route, path) in routes.enumerated() where path.points.count >= 2 {
+            for endNumber in 0..<2 {
+                let isFirst = endNumber == 0
+                let (side, toward) = Self.side(of: path, isFirst: isFirst)
+                let key = (isFirst ? sources[route] : targets[route]) * 4 + Self.number(of: side)
+                var group = groupOfKey[key]
+                if group < 0 {
+                    group = Int32(groupCounts.count)
+                    groupOfKey[key] = group
+                    groupCounts.append(0)
+                }
+                found.append(End(key: Int32(key), route: Int32(route), isFirst: isFirst, toward: toward, place: groupCounts[Int(group)]))
+                groupCounts[Int(group)] += 1
+            }
+        }
+        let groupStarts: ScratchSpan<Int> = arena.uninitializedSpan(count: groupCounts.count + 1)
+        groupStarts[0] = 0
+        for group in 0..<groupCounts.count { groupStarts[group + 1] = groupStarts[group] + Int(groupCounts[group]) }
+        let grouped: ScratchSpan<End> = arena.uninitializedSpan(count: found.count)
+        for index in 0..<found.count {
+            let end = found[index]
+            grouped[groupStarts[Int(groupOfKey[Int(end.key)])] + Int(end.place)] = end
+        }
+        return (grouped, groupStarts)
     }
 
     /// The side a route leaves its source by or arrives at its target from, along its end segment's flow, and where it
