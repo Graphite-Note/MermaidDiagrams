@@ -2,55 +2,50 @@
  * File: UseCaseCharacters.swift
  * -----------------------------
  * Layer: Core
- * Description: The classes of UTF-16 code units Mermaid's use case lexer tells apart, and what it reads of a text by
- *              them: word characters, punctuation, blanks, line breaks and keywords.
+ * Description: The classes of bytes Mermaid's use case lexer tells apart (word characters, punctuation, blanks, line
+ *              breaks), JavaScript's white space found in UTF-8 and in UTF-16, and `trim()` as JavaScript trims.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
-/// The code units of a use case diagram's text as Pele's lexer reads them with `charCodeAt`: past the end of the text
-/// a read is nil, which is in no class.
-struct UseCaseCharacters {
-    let units: [UInt16]
-    /// The line breaks taken out with comment lines before the text was read, so that a line is named as written.
-    var removedLineBreaks: [UseCaseRemovedLineBreaks] = []
-
-    subscript(index: Int) -> UInt16? { index >= 0 && index < units.count ? units[index] : nil }
-
-    var count: Int { units.count }
-
+/// The characters Mermaid's use case lexer tells apart. Its classes are ASCII's, so a byte of UTF-8 is in one exactly
+/// when the UTF-16 code unit of the same character is; a read past the end of the text is nil, which is in no class.
+enum UseCaseCharacters {
     /// `[A-Za-z0-9_]`.
-    static func isWord(_ unit: UInt16?) -> Bool {
-        guard let unit else { return false }
-        return isDigit(unit) || isLetter(unit) || unit == 0x5F
+    @inline(__always) static func isWord(_ byte: UInt8?) -> Bool {
+        guard let byte else { return false }
+        return isDigit(byte) || isLetter(byte) || byte == 0x5F
     }
 
     /// The punctuation a style may hold: `!#$&*+/=?^|~`.
-    static func isCSSPunctuation(_ unit: UInt16) -> Bool {
-        [0x21, 0x23, 0x24, 0x26, 0x2A, 0x2B, 0x2F, 0x3D, 0x3F, 0x5E, 0x7C, 0x7E].contains(unit)
+    static func isCSSPunctuation(_ byte: UInt8) -> Bool {
+        switch byte {
+        case 0x21, 0x23, 0x24, 0x26, 0x2A, 0x2B, 0x2F, 0x3D, 0x3F, 0x5E, 0x7C, 0x7E: true
+        default: false
+        }
     }
 
-    static func isBlank(_ unit: UInt16?) -> Bool { unit == 0x20 || unit == 0x09 }
+    @inline(__always) static func isBlank(_ byte: UInt8?) -> Bool { byte == 0x20 || byte == 0x09 }
 
-    static let lineFeed: UInt16 = 0x0A
+    static let lineFeed: UInt8 = 0x0A
 
-    static func isLineBreak(_ unit: UInt16?) -> Bool { unit == 0x0A || unit == 0x0D }
+    @inline(__always) static func isLineBreak(_ byte: UInt8?) -> Bool { byte == 0x0A || byte == 0x0D }
 
-    static func isDigit(_ unit: UInt16?) -> Bool {
-        guard let unit else { return false }
-        return unit >= 0x30 && unit <= 0x39
+    @inline(__always) static func isDigit(_ byte: UInt8?) -> Bool {
+        guard let byte else { return false }
+        return byte >= 0x30 && byte <= 0x39
     }
 
-    static func isLetter(_ unit: UInt16?) -> Bool {
-        guard let unit else { return false }
-        return (unit >= 0x41 && unit <= 0x5A) || (unit >= 0x61 && unit <= 0x7A)
+    @inline(__always) static func isLetter(_ byte: UInt8?) -> Bool {
+        guard let byte else { return false }
+        return (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A)
     }
 
-    static func isHexadecimal(_ unit: UInt16?) -> Bool {
-        guard let unit else { return false }
-        return isDigit(unit) || (unit >= 0x41 && unit <= 0x46) || (unit >= 0x61 && unit <= 0x66)
+    static func isHexadecimal(_ byte: UInt8?) -> Bool {
+        guard let byte else { return false }
+        return isDigit(byte) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
     }
 
     /// JavaScript's whitespace (`\s`, what `trim()` takes away) as one code unit.
@@ -61,91 +56,59 @@ struct UseCaseCharacters {
         }
     }
 
+    /// The length in bytes of the character of JavaScript's whitespace that starts at `index` of `bytes`, before
+    /// `end`, or 0 when none does: in UTF-8, U+00A0 takes two bytes, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F,
+    /// U+205F, U+3000 and U+FEFF three.
+    @inline(__always) static func javaScriptWhitespaceLength(in bytes: UnsafeBufferPointer<UInt8>, at index: Int, end: Int) -> Int {
+        let byte = bytes[index]
+        if byte < 0x80 { return (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 ? 1 : 0 }
+        guard byte == 0xC2 || byte == 0xE1 || byte == 0xE2 || byte == 0xE3 || byte == 0xEF else { return 0 }
+        guard index + 1 < end else { return 0 }
+        let second = bytes[index + 1]
+        if byte == 0xC2 { return second == 0xA0 ? 2 : 0 }
+        guard index + 2 < end else { return 0 }
+        let third = bytes[index + 2]
+        switch byte {
+        case 0xE1: return second == 0x9A && third == 0x80 ? 3 : 0
+        case 0xE2:
+            if second == 0x80 { return third <= 0x8A || third == 0xA8 || third == 0xA9 || third == 0xAF ? 3 : 0 }
+            return second == 0x81 && third == 0x9F ? 3 : 0
+        case 0xE3: return second == 0x80 && third == 0x80 ? 3 : 0
+        default: return second == 0xBB && third == 0xBF ? 3 : 0
+        }
+    }
+
+    /// Whether the three bytes at `index` are U+2028 or U+2029, after which JavaScript's `^` also matches.
+    @inline(__always) static func isLineOrParagraphSeparator(in bytes: UnsafeBufferPointer<UInt8>, at index: Int, end: Int) -> Bool {
+        index + 2 < end && bytes[index] == 0xE2 && bytes[index + 1] == 0x80 && (bytes[index + 2] == 0xA8 || bytes[index + 2] == 0xA9)
+    }
+
+    /// `range` of `bytes` without JavaScript's whitespace at its ends, as `trim()` gives it.
+    static func trimmed(_ range: MermaidTextRange, in bytes: UnsafeBufferPointer<UInt8>) -> MermaidTextRange {
+        var start = range.lowerBound
+        let end = range.upperBound
+        while start < end {
+            let length = javaScriptWhitespaceLength(in: bytes, at: start, end: end)
+            guard length > 0 else { break }
+            start += length
+        }
+        guard start < end else { return MermaidTextRange(start: start, end: start) }
+        var last = end
+        // A character ends where the next one starts: step back over continuation bytes to the start of the last.
+        while last > start {
+            var characterStart = last - 1
+            while characterStart > start, bytes[characterStart] & 0xC0 == 0x80 { characterStart -= 1 }
+            guard javaScriptWhitespaceLength(in: bytes, at: characterStart, end: last) == last - characterStart else { break }
+            last = characterStart
+        }
+        return MermaidTextRange(start: start, end: last)
+    }
+
     /// `text` without JavaScript's whitespace at its ends, as `trim()` gives it.
     static func trimmed(_ text: String) -> String {
         let units = Array(text.utf16)
         guard let first = units.firstIndex(where: { unit in !isJavaScriptWhitespace(unit) }),
               let last = units.lastIndex(where: { unit in !isJavaScriptWhitespace(unit) }) else { return "" }
         return UnicodeScalarText.string(utf16: units[first...last])
-    }
-
-    /// Whether the text at `index` starts with `word`, exactly or, for `include` and `extend`, in any case.
-    func starts(with word: String, at index: Int, ignoringCase: Bool = false) -> Bool {
-        var position = index
-        for expected in word.utf16 {
-            guard let unit = self[position] else { return false }
-            if ignoringCase ? unit | 0x20 != expected : unit != expected { return false }
-            position += 1
-        }
-        return true
-    }
-
-    /// The text between two offsets.
-    func text(from start: Int, to end: Int) -> String {
-        UnicodeScalarText.string(utf16: units[max(0, start)..<min(units.count, max(start, end))])
-    }
-
-    /// The first offset from `index` where the line ends, or the end of the text.
-    func lineEnd(from index: Int) -> Int {
-        var position = index
-        while position < units.count, !Self.isLineBreak(units[position]) { position += 1 }
-        return position
-    }
-
-    /// The keyword the text at `index` starts with, tried in the order of Mermaid's token list; `.end` for none.
-    func keyword(at index: Int) -> UseCaseTokenKind {
-        switch self[index] {
-        case UInt16(ascii: "a"): starts(with: "actor", at: index) ? .actor : .end
-        case UInt16(ascii: "s"): starts(with: "systemBoundary", at: index) ? .systemBoundary : starts(with: "style", at: index) ? .style : .end
-        case UInt16(ascii: "e"): starts(with: "end", at: index) ? .endKeyword : starts(with: "extend", at: index, ignoringCase: true) ? .extend : .end
-        case UInt16(ascii: "E"): starts(with: "extend", at: index, ignoringCase: true) ? .extend : .end
-        case UInt16(ascii: "d"): starts(with: "direction", at: index) ? .direction : .end
-        case UInt16(ascii: "T"): starts(with: "TD", at: index) ? .topDown : starts(with: "TB", at: index) ? .topBottom : .end
-        case UInt16(ascii: "B"): starts(with: "BT", at: index) ? .bottomTop : .end
-        case UInt16(ascii: "L"): starts(with: "LR", at: index) ? .leftRight : .end
-        case UInt16(ascii: "R"): starts(with: "RL", at: index) ? .rightLeft : .end
-        case UInt16(ascii: "n"): starts(with: "note", at: index) ? .note : .end
-        case UInt16(ascii: "f"): starts(with: "for", at: index) ? .forKeyword : starts(with: "false", at: index) ? .falseKeyword : .end
-        case UInt16(ascii: "j"): starts(with: "json", at: index) ? .json : .end
-        case UInt16(ascii: "c"): starts(with: "classDef", at: index) ? .classDefinition : starts(with: "class", at: index) ? .classKeyword : .end
-        case UInt16(ascii: "i"), UInt16(ascii: "I"): starts(with: "include", at: index, ignoringCase: true) ? .include : .end
-        case UInt16(ascii: "t"): starts(with: "true", at: index) ? .trueKeyword : .end
-        case UInt16(ascii: "u"): starts(with: "usecase-beta", at: index) ? .useCase : .end
-        default: .end
-        }
-    }
-
-    /// The 1-based line of `offset` in the text as written: counting a line feed, a carriage return, or both together,
-    /// as one line break, and the line breaks taken out with comment lines before it.
-    func line(of offset: Int) -> Int {
-        let line = lineInText(of: offset)
-        return line + (removedLineBreaks.last { removal in removal.line <= line }?.count ?? 0)
-    }
-
-    private func lineInText(of offset: Int) -> Int {
-        var line = 1
-        var index = 0
-        let end = min(offset, units.count)
-        while index < end {
-            let unit = units[index]
-            if unit == 0x0D, index + 1 < end, units[index + 1] == 0x0A { index += 1 }
-            if unit == 0x0A || unit == 0x0D { line += 1 }
-            index += 1
-        }
-        return line
-    }
-
-    /// The 1-based column of `offset` on its line.
-    func column(of offset: Int) -> Int {
-        var start = min(offset, units.count)
-        while start > 0, !Self.isLineBreak(units[start - 1]) { start -= 1 }
-        return offset - start + 1
-    }
-}
-
-extension UInt16 {
-    /// The code unit of an ASCII character, as `UInt8(ascii:)` gives its byte.
-    init(ascii scalar: Unicode.Scalar) {
-        self = UInt16(truncatingIfNeeded: scalar.value)
     }
 }

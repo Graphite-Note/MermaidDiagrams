@@ -7,19 +7,21 @@
  *              lengths, and the lines of a boundary.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// What follows a relationship's source: its explicit id, operator, label and target.
 struct UseCaseRelationTail {
-    var identifier: (text: String, start: Int)?
+    /// Its explicit id's name, or -1, and where the id is written.
+    var identifier: Int32 = -1
+    var identifierStart: Int32 = 0
     var type = UseCaseRelationshipType.association
     var arrow = UseCaseArrow.solidArrow
-    var label: UseCaseDraftLabel?
-    var minimumLength = 1
+    var label: UseCaseLabelText?
+    var minimumLength: Int32 = 1
     var target: UseCaseParsedItem?
-    var start = 0
+    var start: Int32 = 0
 }
 
 extension UseCaseParser {
@@ -57,25 +59,25 @@ extension UseCaseParser {
     /// `systemBoundary Name …`, the actors and use cases declared on its lines, then `end`.
     mutating func boundary() throws(MermaidDiagramReadError) {
         index += 1
-        var named = try name(allowingBrackets: true)
+        let named = try name(allowingBrackets: true)
         let inline = current == .metadataStart ? try metadata() : nil
-        if current == .classSeparator { try classSuffix(&named.classes) }
+        let classes = current == .classSeparator ? try classSuffix() : .empty
         try lineEnd()
-        drafts.boundaries.append(UseCaseDraftBoundary(name: named.name, classes: named.classes))
-        parent = drafts.boundaries.count - 1
+        drafts.boundaries.append(UseCaseDraftBoundary(name: named.name, classes: classes))
+        parent = Int32(drafts.boundaries.count - 1)
         while current.isIn(.boundaryLine) {
             try line(isTopLevel: false)
             try checkCounts()
         }
-        parent = nil
+        parent = -1
         _ = try expect(.endKeyword)
         try lineEnd()
-        if let inline { drafts.metadata.append((named.name.identifier, named.name.start, inline)) }
+        if let inline { drafts.metadata.append(UseCaseDraftMetadata(target: named.name.name, start: named.name.start, properties: inline)) }
     }
 
     func draft(_ item: UseCaseParsedItem, kind: UseCaseElementKind) -> UseCaseDraftElement {
-        UseCaseDraftElement(name: item.name, kind: kind, parent: parent, shape: item.shape, metadata: item.metadata, stereotype: item.stereotype,
-                            classes: item.classes)
+        UseCaseDraftElement(name: item.name, kind: kind, parent: parent, shape: item.shape, metadata: item.metadata, hasMetadata: item.hasMetadata,
+                            stereotype: item.stereotype, hasStereotype: item.hasStereotype, classes: item.classes)
     }
 
     private mutating func relate(_ source: UseCaseParsedItem, declares: Bool, tail: UseCaseRelationTail) {
@@ -84,8 +86,8 @@ extension UseCaseParser {
         drafts.relationships.append(UseCaseDraftRelationship(
             source: UseCaseDraftEndpoint(name: source.name, declares: declares, isClassed: !source.classes.isEmpty),
             target: UseCaseDraftEndpoint(name: target.name, declares: target.isExplicit, isClassed: !target.classes.isEmpty),
-            start: tail.start, identifier: tail.identifier?.text, identifierStart: tail.identifier?.start, type: tail.type, arrow: tail.arrow,
-            label: tail.label, minimumLength: tail.minimumLength))
+            start: tail.start, identifier: tail.identifier, identifierStart: tail.identifierStart, type: tail.type, arrow: tail.arrow,
+            label: tail.label ?? UseCaseLabelText(text: .empty, type: .text), hasLabel: tail.label != nil, minimumLength: tail.minimumLength))
     }
 
     /// Whether a label and then one of `closers` (or `--`) come next.
@@ -101,16 +103,17 @@ extension UseCaseParser {
     }
 
     /// Each dash beyond the second asks for one more rank between the two ends.
-    private func minimumLength(of token: Int) -> Int {
+    private func minimumLength(of token: Int) -> Int32 {
         let dashes = tokens.ends[token] - tokens.starts[token] - (tokens.kinds[token] == .markerlessSolid ? 0 : 1)
-        return max(1, dashes - 1)
+        return Int32(max(1, dashes - 1))
     }
 
     /// An explicit id (`login@`), an operator with its label where it takes one, and the target.
     mutating func relationTail() throws(MermaidDiagramReadError) -> UseCaseRelationTail {
-        var tail = UseCaseRelationTail(start: tokens.starts[index])
+        var tail = UseCaseRelationTail(start: Int32(tokens.starts[index]))
         if current == .identifier, kind(at: index + 1) == .at {
-            tail.identifier = (image(index), tokens.starts[index])
+            tail.identifier = name(of: index)
+            tail.identifierStart = Int32(tokens.starts[index])
             index += 2
         }
         let operatorToken = index
@@ -120,7 +123,7 @@ extension UseCaseParser {
             _ = try expect(.colon)
             guard current == .include || current == .extend else { throw unexpected(.includeOrExtend) }
             tail.type = current == .include ? .include : .extend
-            tail.label = UseCaseDraftLabel(text: tail.type.rawValue, type: .text, start: tokens.starts[index])
+            tail.label = UseCaseLabelText(text: semanticLabel(tail.type), type: .text)
             index += 1
         case .generalization: tail.type = .generalization
         case .forwardSolid: tail.minimumLength = minimumLength(of: operatorToken)
@@ -170,5 +173,14 @@ extension UseCaseParser {
         }
         if tail.arrow == .solidArrow || tail.arrow == .lineSolid { tail.minimumLength = minimumLength(of: index) }
         index += 1
+    }
+
+    /// The label `include` or `extend` gets: its kind's name, written once among the bytes the reading makes.
+    private mutating func semanticLabel(_ type: UseCaseRelationshipType) -> MermaidTextRange {
+        let slot = type == .include ? 0 : 1
+        if let written = semanticLabels[slot] { return written }
+        let written = text.append(type == .include ? Array("include".utf8) : Array("extend".utf8))
+        semanticLabels[slot] = written
+        return written
     }
 }

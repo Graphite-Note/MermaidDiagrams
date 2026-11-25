@@ -3,10 +3,11 @@
  * --------------------------------
  * Layer: Core
  * Description: Puts a swimlane diagram's lane layout on the page as Pele's flowchart renderer draws its swimlane variant:
- *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
+ *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes, read from the lane
+ *              layout's placement where it lies in the thread's scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 25/11/2026
  */
 
@@ -21,18 +22,20 @@ struct SwimlanePageAssembly {
     let diagram: FlowchartDiagram
     let measured: FlowchartMeasurement
     let graph: SwimlaneGraph
-    let placement: LaneLayoutPlacement
+    /// Where the lane layout put everything, in the calling thread's arena: the assembly lasts no longer than it.
+    let placement: LaneLayoutPlacedView
     private var edges: [FlowchartLayoutEdge?]
-    /// The points each edge's route passes, its ends on their outlines: where it crosses a group's top.
+    /// The points each edge's route passes, its ends on their outlines: where it crosses a group's top. Kept only when a
+    /// group sits inside a lane, whose title they move.
     private var edgePoints: [[CGPoint]] = []
 
-    init(diagram: FlowchartDiagram, measured: FlowchartMeasurement, graph: SwimlaneGraph, placement: LaneLayoutPlacement) {
+    init(diagram: FlowchartDiagram, measured: FlowchartMeasurement, graph: SwimlaneGraph, placement: LaneLayoutPlacedView, arena: DiagramScratchArena) {
         self.diagram = diagram
         self.measured = measured
         self.graph = graph
         self.placement = placement
         edges = Array(repeating: nil, count: diagram.edgeCount)
-        placeEdges()
+        placeEdges(arena: arena)
         placeSelfLoops()
     }
 
@@ -41,19 +44,22 @@ struct SwimlanePageAssembly {
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
-    private mutating func placeEdges() {
-        let reaches = sideReaches()
+    private mutating func placeEdges(arena: DiagramScratchArena) {
+        let reaches = sideReaches(arena: arena)
+        let keepsEdgePoints = graph.nesting.subgraphParents.contains { parent in parent != nil }
         for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() {
-            guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
-            var points = route.points
+            let route = placement.route(of: edgeIndex)
+            guard route.count >= 2 else { continue }
+            var points = route.map(\.point)
+            let segmentsRunVertically = route.dropFirst().map { point in point.axis == 0 }
             let startReach = reach(at: points[0], box: graph.nodeBoxes[edge.sourceIndex], in: reaches)
             let endReach = reach(at: points[points.count - 1], box: graph.nodeBoxes[edge.targetIndex], in: reaches)
             points[0] = onOutline(points[0], node: edge.sourceIndex)
             points[points.count - 1] = onOutline(points[points.count - 1], node: edge.targetIndex)
-            edgePoints.append(points)
+            if keepsEdgePoints { edgePoints.append(points) }
             let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
             let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-            let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: route.segmentsRunVertically, startTrim: startTrim, endTrim: endTrim,
+            let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: segmentsRunVertically, startTrim: startTrim, endTrim: endTrim,
                                                         startReach: startReach, endReach: endReach)
             let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
             edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: drawn.path,
@@ -67,23 +73,24 @@ struct SwimlanePageAssembly {
     /// largest mark there needs, with the lead, for every edge on that side, so that none turns sooner than its neighbour and
     /// crosses it. By box and side (`sideKey`), 0 for a side no edge with a mark meets; an edge to itself or one not drawn
     /// counts for none.
-    private func sideReaches() -> [CGFloat] {
-        var reaches = [CGFloat](repeating: 0, count: 4 * placement.frames.count)
+    private func sideReaches(arena: DiagramScratchArena) -> ScratchSpan<CGFloat> {
+        let reaches = arena.span(count: 4 * placement.frames.count, repeating: CGFloat(0))
+        func reach(_ point: CGPoint, box: Int, arrowhead: FlowchartArrowhead) {
+            let trim = DiagramEdgeMark.lineTrim(for: arrowhead)
+            guard trim > 0, let key = sideKey(at: point, box: box) else { return }
+            reaches[key] = max(reaches[key], DiagramTurningRouteDrawing.defaultReach(trim: trim))
+        }
         for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() where edge.stroke != .invisible {
-            guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
-            let ends = [(route.points[0], graph.nodeBoxes[edge.sourceIndex], edge.sourceArrowhead),
-                        (route.points[route.points.count - 1], graph.nodeBoxes[edge.targetIndex], edge.targetArrowhead)]
-            for (point, box, arrowhead) in ends {
-                let trim = DiagramEdgeMark.lineTrim(for: arrowhead)
-                guard trim > 0, let key = sideKey(at: point, box: box) else { continue }
-                reaches[key] = max(reaches[key], DiagramTurningRouteDrawing.defaultReach(trim: trim))
-            }
+            let route = placement.route(of: edgeIndex)
+            guard route.count >= 2 else { continue }
+            reach(route[0].point, box: graph.nodeBoxes[edge.sourceIndex], arrowhead: edge.sourceArrowhead)
+            reach(route[route.count - 1].point, box: graph.nodeBoxes[edge.targetIndex], arrowhead: edge.targetArrowhead)
         }
         return reaches
     }
 
     /// The reach of the side of `box` that `point` is on, 0 for a point on no side, as Pele's `sideReach` gives it.
-    private func reach(at point: CGPoint, box: Int, in reaches: [CGFloat]) -> CGFloat {
+    private func reach(at point: CGPoint, box: Int, in reaches: ScratchSpan<CGFloat>) -> CGFloat {
         sideKey(at: point, box: box).map { key in reaches[key] } ?? 0
     }
 

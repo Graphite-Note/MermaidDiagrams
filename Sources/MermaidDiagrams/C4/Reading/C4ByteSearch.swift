@@ -6,18 +6,23 @@
  *              bytes, as the C4 lexer looks for the next `direction`.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 enum C4ByteSearch {
     /// Where `word` (two bytes or more) next starts from `start`, or nil: sixteen places at a time are tested for its first
     /// two bytes, and only those that hold them are compared whole.
     static func firstIndex(of word: [UInt8], in bytes: [UInt8], from start: Int) -> Int? {
-        let count = bytes.count
+        bytes.withUnsafeBufferPointer { text in firstIndex(of: word, in: text, from: start) }
+    }
+
+    /// Where `word` next starts in borrowed bytes from `start`, or nil.
+    static func firstIndex(of word: [UInt8], in text: UnsafeBufferPointer<UInt8>, from start: Int) -> Int? {
+        let count = text.count
         let wordCount = word.count
         guard start >= 0, wordCount >= 2, start + wordCount <= count else { return nil }
-        return bytes.withUnsafeBufferPointer { text in
+        do {
             guard let base = text.baseAddress else { return nil }
             let raw = UnsafeRawPointer(base)
             let first = SIMD16<UInt8>(repeating: word[0])

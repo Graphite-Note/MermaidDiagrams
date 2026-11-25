@@ -5,8 +5,8 @@
  * Description: The order Pele's layered layout starts its sweeps from: depth first from the top, keys, pins and hints.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 extension LayeredFlatLayout {
@@ -47,13 +47,17 @@ extension LayeredFlatLayout {
 
     private func depthFirstOrder(_ graph: LayeredFlatGraph) {
         let vertexCount = graph.vertexCount
+        // The graph's spans read once: they live in the arena, where every store below could be to them as far as the
+        // compiler knows.
+        let vertexRank = graph.vertexRank, rankStart = graph.rankStart, order = graph.order
+        let successorStart = graph.successorStart, successorSegments = graph.successorSegments, segmentTo = graph.segmentTo
         let byRank: ScratchSpan<Int> = arena.uninitializedSpan(count: vertexCount)
-        let fill = arena.copy(of: graph.rankStart.part(0..<(graph.maximumRank + 1)))
+        let fill = arena.copy(of: rankStart.part(0..<(graph.maximumRank + 1)))
         for vertex in 0..<vertexCount {
-            byRank[fill[graph.vertexRank[vertex]]] = vertex
-            fill[graph.vertexRank[vertex]] += 1
+            byRank[fill[vertexRank[vertex]]] = vertex
+            fill[vertexRank[vertex]] += 1
         }
-        for rank in 0...graph.maximumRank { fill[rank] = graph.rankStart[rank] }
+        for rank in 0...graph.maximumRank { fill[rank] = rankStart[rank] }
         let visited = arena.span(count: vertexCount, repeating: false)
         var stack = arena.list(capacity: vertexCount, of: Int.self)
         for start in byRank where !visited[start] {
@@ -61,11 +65,11 @@ extension LayeredFlatLayout {
             while let vertex = stack.popLast() {
                 if visited[vertex] { continue }
                 visited[vertex] = true
-                graph.order[fill[graph.vertexRank[vertex]]] = vertex
-                fill[graph.vertexRank[vertex]] += 1
-                var position = graph.successorStart[vertex + 1] - 1
-                while position >= graph.successorStart[vertex] {
-                    let next = graph.segmentTo[graph.successorSegments[position]]
+                order[fill[vertexRank[vertex]]] = vertex
+                fill[vertexRank[vertex]] += 1
+                var position = successorStart[vertex + 1] - 1
+                while position >= successorStart[vertex] {
+                    let next = segmentTo[successorSegments[position]]
                     if !visited[next] { stack.append(next) }
                     position -= 1
                 }

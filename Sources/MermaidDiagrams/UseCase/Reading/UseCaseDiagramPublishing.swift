@@ -2,52 +2,70 @@
  * File: UseCaseDiagramPublishing.swift
  * ------------------------------------
  * Layer: Core
- * Description: The last steps of resolving a use case diagram, as Pele's resolveUsecase takes them: each element
- *              checked and published in the order first mentioned, the boundaries' members, the notes, and the class
- *              definitions, classes and styles given to their targets.
+ * Description: A use case diagram's actors, use cases, boundaries and notes written as the model's records once their
+ *              declarations are resolved, in the order Pele publishes them, then its class definitions, `class` and
+ *              `style` statements applied, each list made once whatever the order of the statements that add to it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 extension UseCaseDiagramBuilder {
     /// Each element checked in the order it was added, then the actors and use cases in the order first mentioned,
     /// and the boundaries with their members.
     mutating func publishElements() throws(UseCaseBuildFailure) {
-        for identifier in elementOrder {
-            guard let state = elements[identifier] else { continue }
+        var actorCount = 0
+        var classCount = 0
+        for state in elements {
             try checkGeometry(of: state)
+            if state.kind == .actor { actorCount += 1 }
+            classCount += state.classes.count
         }
-        for identifier in inMentionOrder(elementOrder) {
-            guard let state = elements[identifier] else { continue }
-            let parent = namedParent(state.parent).map { parent in drafts.boundaries[parent].name.identifier }
+        diagram.actorRecords.reserveCapacity(actorCount)
+        diagram.useCaseRecords.reserveCapacity(elements.count - actorCount)
+        diagram.namePool.reserveCapacity(diagram.namePool.count + classCount)
+        for place in placesInMentionOrder(elements.map(\.name.name)) {
+            let state = elements[place]
+            let parent = namedParent(state.parent)
+            let parentName = parent >= 0 ? drafts.boundaries[Int(parent)].name.name : -1
+            let classes = pooled(state.classes)
             if state.kind == .actor {
-                diagram.actors.append(UseCaseActor(identifier: identifier, label: state.name.label.text, labelType: state.name.label.type,
-                                                   type: state.icon != nil ? .icon : state.actorType ?? .normal, icon: state.icon,
-                                                   isBusiness: state.isBusiness ?? false, stereotype: state.stereotype, parentIdentifier: parent,
-                                                   classes: state.classes, styles: []))
+                diagram.actorRecords.append(UseCaseElementRecord(
+                    name: state.name.name, label: state.name.label, actorType: state.hasIcon ? .icon : state.actorType ?? .normal, shape: .ellipse,
+                    icon: state.icon, hasIcon: state.hasIcon, isBusiness: state.isBusiness ?? false, stereotype: state.stereotype,
+                    hasStereotype: state.hasStereotype, parent: parentName, classes: classes, styles: .empty))
             } else {
-                diagram.useCases.append(UseCase(identifier: identifier, label: state.name.label.text, labelType: state.name.label.type,
-                                                shape: state.shape ?? .ellipse, isBusiness: state.isBusiness ?? false, stereotype: state.stereotype,
-                                                parentIdentifier: parent, classes: state.classes, styles: []))
+                diagram.useCaseRecords.append(UseCaseElementRecord(
+                    name: state.name.name, label: state.name.label, actorType: .normal, shape: state.shape ?? .ellipse, icon: .empty, hasIcon: false,
+                    isBusiness: state.isBusiness ?? false, stereotype: state.stereotype, hasStereotype: state.hasStereotype, parent: parentName,
+                    classes: classes, styles: .empty))
             }
         }
         publishBoundaries()
     }
 
+    /// `names` added to the diagram's name pool, and where.
+    mutating func pooled(_ names: [Int32]) -> UseCaseListSpan {
+        guard !names.isEmpty else { return .empty }
+        let start = diagram.namePool.count
+        diagram.namePool.append(contentsOf: names)
+        return UseCaseListSpan(start: Int32(start), count: Int32(names.count))
+    }
+
     /// An icon goes with a plain figure only, and a business element with a figure or an oval.
     private func checkGeometry(of state: UseCaseElementState) throws(UseCaseBuildFailure) {
-        let identifier = state.name.identifier
         guard state.kind == .actor else {
-            if state.shape == .rectangle, state.isBusiness == true { throw contradiction(.rectangularBusinessUseCase(identifier: identifier), at: state.name.start) }
+            if state.shape == .rectangle, state.isBusiness == true {
+                throw contradiction(.rectangularBusinessUseCase(identifier: identifier(state.name.name)), at: state.name.start)
+            }
             return
         }
-        if state.icon != nil, let type = state.actorType, type != .normal {
-            throw contradiction(.iconWithActorType(actor: identifier, type: type), at: state.name.start)
+        if state.hasIcon, let type = state.actorType, type != .normal {
+            throw contradiction(.iconWithActorType(actor: identifier(state.name.name), type: type), at: state.name.start)
         }
-        if state.isBusiness == true, state.icon != nil || state.actorType == .awesome {
-            throw contradiction(.businessActorGeometry(actor: identifier), at: state.name.start)
+        if state.isBusiness == true, state.hasIcon || state.actorType == .awesome {
+            throw contradiction(.businessActorGeometry(actor: identifier(state.name.name)), at: state.name.start)
         }
     }
 
@@ -55,122 +73,42 @@ extension UseCaseDiagramBuilder {
     private mutating func publishBoundaries() {
         // Without boundaries no element has a parent, and there is nothing to publish.
         guard !drafts.boundaries.isEmpty else { return }
-        let declarations = drafts.elements.enumerated().sorted { first, second in
-            first.element.name.start != second.element.name.start ? first.element.name.start < second.element.name.start : first.offset < second.offset
+        let declarations = drafts.elements.indices.sorted { first, second in
+            let firstStart = drafts.elements[first].name.start
+            let secondStart = drafts.elements[second].name.start
+            return firstStart != secondStart ? firstStart < secondStart : first < second
         }
-        var placed: Set<Membership> = []
-        for (_, draft) in declarations {
-            guard let parent = namedParent(draft.parent) else { continue }
-            let boundary = drafts.boundaries[parent].name.identifier
-            if placed.insert(Membership(boundary: boundary, element: draft.name.identifier)).inserted {
-                boundaries[boundary]?.members.append(draft.name.identifier)
-            }
+        // By element: the boundary it was placed in, so that each is placed once.
+        var placedIn = [Int32](repeating: -1, count: diagram.nameRanges.count)
+        for place in declarations {
+            let draft = drafts.elements[place]
+            let parent = namedParent(draft.parent)
+            guard parent >= 0 else { continue }
+            let boundary = drafts.boundaries[Int(parent)].name.name
+            guard placedIn[Int(draft.name.name)] != boundary else { continue }
+            placedIn[Int(draft.name.name)] = boundary
+            let boundaryPlace = nameStates[Int(boundary)].boundary
+            if boundaryPlace >= 0 { boundaries[Int(boundaryPlace)].members.append(draft.name.name) }
         }
-        diagram.systemBoundaries = inMentionOrder(boundaryOrder).compactMap { identifier in
-            boundaries[identifier].map { state in
-                UseCaseSystemBoundary(identifier: identifier, label: state.name.label.text, labelType: state.name.label.type, type: state.type ?? .rectangle,
-                                      members: state.members, classes: state.classes, styles: [])
-            }
+        for place in placesInMentionOrder(boundaries.map(\.name.name)) {
+            let state = boundaries[place]
+            let members = pooled(state.members)
+            let classes = pooled(state.classes)
+            diagram.boundaryRecords.append(UseCaseBoundaryRecord(name: state.name.name, label: state.name.label, type: state.type ?? .rectangle,
+                                                                 members: members, classes: classes, styles: .empty))
         }
     }
 
     /// The notes, each for an actor or a use case.
     mutating func resolveNotes() throws(UseCaseBuildFailure) {
-        for (place, note) in drafts.notes.enumerated() {
-            guard let origin = symbols[note.target] else { throw contradiction(.unresolvedNoteTarget(identifier: note.target), at: note.start) }
-            guard origin.kind == .actor || origin.kind == .useCase else {
-                throw contradiction(.noteTargetKind(identifier: note.target, kind: origin.kind), at: note.start)
+        for note in drafts.notes {
+            guard let origin = nameStates[Int(note.target)].kind else {
+                throw contradiction(.unresolvedNoteTarget(identifier: identifier(note.target)), at: note.start)
             }
-            diagram.notes.append(UseCaseNote(identifier: "note-\(place)", target: note.target, label: note.label.text, labelType: note.label.type))
-        }
-    }
-
-    /// The class definitions, each name in its first place with its last styles, then `class` and `style` statements.
-    mutating func applyClassesAndStyles() throws(UseCaseBuildFailure) {
-        var definitionPlaces: [String: Int] = [:]
-        for definition in drafts.classDefinitions {
-            for identifier in definition.identifiers {
-                if let place = definitionPlaces[identifier] {
-                    diagram.classDefinitions[place].styles = definition.styles
-                } else {
-                    definitionPlaces[identifier] = diagram.classDefinitions.count
-                    diagram.classDefinitions.append(UseCaseClassDefinition(identifier: identifier, styles: definition.styles))
-                }
+            guard origin == .actor || origin == .useCase else {
+                throw contradiction(.noteTargetKind(identifier: identifier(note.target), kind: origin), at: note.start)
             }
+            diagram.noteRecords.append(UseCaseNoteRecord(target: note.target, label: note.label))
         }
-        // Only `class` and `style` statements look anything up.
-        guard !drafts.classAssignments.isEmpty || !drafts.styles.isEmpty else { return }
-        let places = StylablePlaces(diagram: diagram)
-        for assignment in drafts.classAssignments {
-            for target in assignment.targets {
-                try modifyStylable(target.identifier, at: target.start, places: places) { classes, _ in Self.appendUnique(assignment.classes, to: &classes) }
-            }
-        }
-        for (target, start, styles) in drafts.styles {
-            try modifyStylable(target, at: start, places: places) { _, written in written.append(contentsOf: styles) }
-        }
-    }
-
-    /// Where each id's element, boundary, JSON table and relationship is in the diagram.
-    private struct StylablePlaces {
-        let actors: [String: Int]
-        let useCases: [String: Int]
-        let boundaries: [String: Int]
-        let jsonNodes: [String: Int]
-
-        init(diagram: UseCaseDiagram) {
-            func places(_ identifiers: [String]) -> [String: Int] {
-                Dictionary(identifiers.enumerated().map { place, identifier in (identifier, place) }, uniquingKeysWith: { first, _ in first })
-            }
-            actors = places(diagram.actors.map(\.identifier))
-            useCases = places(diagram.useCases.map(\.identifier))
-            boundaries = places(diagram.systemBoundaries.map(\.identifier))
-            jsonNodes = places(diagram.jsonNodes.map(\.identifier))
-        }
-    }
-
-    /// An element placed in a boundary.
-    private struct Membership: Hashable {
-        let boundary: String
-        let element: String
-    }
-
-    /// The classes and styles of what `identifier` names changed by `change`: an actor, a use case, a boundary or a
-    /// JSON table by its kind, else a relationship by its id.
-    private mutating func modifyStylable(_ identifier: String, at start: Int, places: StylablePlaces,
-                                         _ change: (inout [String], inout [String]) -> Void) throws(UseCaseBuildFailure) {
-        switch symbols[identifier]?.kind {
-        case .actor?:
-            if let place = places.actors[identifier] { return Self.change(&diagram.actors[place], change) }
-        case .useCase?:
-            if let place = places.useCases[identifier] { return Self.change(&diagram.useCases[place], change) }
-        case .boundary?:
-            if let place = places.boundaries[identifier] { return Self.change(&diagram.systemBoundaries[place], change) }
-        case .json?:
-            if let place = places.jsonNodes[identifier] { return Self.change(&diagram.jsonNodes[place], change) }
-        default:
-            if let place = relationshipPlaces[identifier] { return Self.change(&diagram.relationships[place], change) }
-        }
-        throw contradiction(.unresolvedStyleTarget(identifier: identifier), at: start)
-    }
-
-    private static func change<Item: UseCaseStylable>(_ item: inout Item, _ change: (inout [String], inout [String]) -> Void) {
-        var classes = item.classes
-        var styles = item.styles
-        change(&classes, &styles)
-        item.classes = classes
-        item.styles = styles
     }
 }
-
-/// What `class` and `style` statements change: its classes and its styles.
-protocol UseCaseStylable {
-    var classes: [String] { get set }
-    var styles: [String] { get set }
-}
-
-extension UseCaseActor: UseCaseStylable {}
-extension UseCase: UseCaseStylable {}
-extension UseCaseSystemBoundary: UseCaseStylable {}
-extension UseCaseJSONNode: UseCaseStylable {}
-extension UseCaseRelationship: UseCaseStylable {}

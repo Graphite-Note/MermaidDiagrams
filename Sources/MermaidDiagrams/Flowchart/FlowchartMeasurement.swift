@@ -2,11 +2,12 @@
  * File: FlowchartMeasurement.swift
  * --------------------------------
  * Layer: Core
- * Description: A flowchart's text measured and its shapes sized, before the layout places anything.
+ * Description: A flowchart's text measured, its markup decoded from the bytes it was written in, and its shapes sized,
+ *              before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
- * Date: 24/11/2026
+ * Version: 0.8
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -30,40 +31,59 @@ struct FlowchartMeasurement {
     /// node is.
     private(set) var assetNodeFlags: [Bool] = []
 
+    /// A text written with markup is decoded from the bytes it was written in (`FlowchartTextMeasuring`).
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, wrappingWidth: CGFloat) {
-        var nodeTexts: [DiagramTextBlock] = []
         var shapeSizes: [CGSize] = []
         var textOffsets: [CGFloat] = []
         let nodeCount = diagram.nodeCount
-        nodeTexts.reserveCapacity(nodeCount)
         shapeSizes.reserveCapacity(nodeCount)
         textOffsets.reserveCapacity(nodeCount)
+        let (nodeTexts, edgeTexts) = diagram.model.text.withBytes { source in
+            Self.texts(of: diagram, source: source, nodeText: nodeText, edgeText: edgeText, wrappingWidth: wrappingWidth)
+        }
         for index in 0..<nodeCount {
             let asset = diagram.nodeAsset(at: index)
-            let shape = diagram.nodeShape(at: index)
             if asset != nil {
                 if assetNodeFlags.isEmpty { assetNodeFlags = [Bool](repeating: false, count: nodeCount) }
                 assetNodeFlags[index] = true
             }
-            // A shape drawn without text (a start, a fork, a junction) measures none, as Pele lays out no label for it.
-            let label = shape.holdsText || asset != nil ? diagram.nodeLabel(at: index) : DiagramLabel(lines: [])
-            let text = DiagramTextBlock(label: label, measurer: nodeText, maximumWidth: wrappingWidth)
-            let (size, textOffset) = asset?.size(textSize: text.size) ?? FlowchartShapeGeometry.size(of: shape, textSize: text.size)
-            nodeTexts.append(text)
+            let textSize = nodeTexts[index].size
+            let (size, textOffset) = asset?.size(textSize: textSize) ?? FlowchartShapeGeometry.size(of: diagram.nodeShape(at: index), textSize: textSize)
             shapeSizes.append(size)
             textOffsets.append(textOffset)
         }
         self.nodeTexts = nodeTexts
         self.shapeSizes = shapeSizes
         self.textOffsets = textOffsets
-        var edgeTexts: [DiagramTextBlock?] = []
-        edgeTexts.reserveCapacity(diagram.edgeCount)
-        for edgeIndex in 0..<diagram.edgeCount {
-            let text = diagram.edgeLabel(at: edgeIndex).map { label in DiagramTextBlock(label: label, measurer: edgeText, maximumWidth: wrappingWidth) }
-            edgeTexts.append(text.flatMap { text in text.lineCount == 0 ? nil : text })
-        }
         self.edgeTexts = edgeTexts
         selfLoopEdgeIndices = FlowchartSelfLoopIndex(diagram: diagram)
+    }
+
+    /// The nodes' texts and the edges' texts of `diagram`, whose text's bytes are `source`. A shape drawn without text (a
+    /// start, a fork, a junction) and not as an icon or a picture measures none, as Pele lays out no label for it; an
+    /// edge's text of no line is none.
+    private static func texts<Measurer: DiagramTextMeasuring>(of diagram: FlowchartDiagram, source: UnsafeBufferPointer<UInt8>, nodeText: Measurer,
+                                                              edgeText: Measurer, wrappingWidth: CGFloat) -> ([DiagramTextBlock], [DiagramTextBlock?]) {
+        let model = diagram.model
+        let nodeMeasuring = FlowchartTextMeasuring(model: model, measurer: nodeText, maximumWidth: wrappingWidth)
+        var nodeTexts: [DiagramTextBlock] = []
+        nodeTexts.reserveCapacity(model.nodes.count)
+        for (index, node) in model.nodes.enumerated() {
+            let measuresText = node.shape.holdsText || diagram.nodeAsset(at: index) != nil
+            nodeTexts.append(nodeMeasuring.block(of: measuresText ? node.label : .none, source: source))
+        }
+        let edgeMeasuring = FlowchartTextMeasuring(model: model, measurer: edgeText, maximumWidth: wrappingWidth)
+        var edgeTexts: [DiagramTextBlock?] = []
+        edgeTexts.reserveCapacity(model.edges.count)
+        for edge in model.edges {
+            guard edge.label.kind != .none else {
+                edgeTexts.append(nil)
+                continue
+            }
+            let text = edgeMeasuring.block(of: edge.label, source: source)
+            edgeTexts.append(text.lineCount == 0 ? nil : text)
+        }
+        return (nodeTexts, edgeTexts)
     }
 
     /// A flowchart measured by a diagram drawn as one, which sizes its nodes its own way.

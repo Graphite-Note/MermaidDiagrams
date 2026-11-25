@@ -3,10 +3,11 @@
  * -------------------------------
  * Layer: Core
  * Description: Lays a use case diagram out as Pele's renderUsecase does: its nodes measured, its system boundaries as
- *              boxes of the layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
+ *              boxes of the compound layout (the flat layout without boundaries) on the thread's scratch arena, loops
+ *              grown into their nodes' boxes, then the page assembled from the arena's lists.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -52,13 +53,19 @@ public enum UseCaseLayoutEngine {
         var pass = UseCaseLayoutPass(diagram: diagram, measurers: &measurers)
         let spacing = LayeredSpacing(nodeSeparation: diagram.nodeSpacing.map { CGFloat($0) } ?? nodeSeparation, edgeSeparation: edgeSeparation,
                                      rankSeparation: diagram.rankSpacing.map { CGFloat($0) } ?? rankSeparation, borderSeparation: borderSeparation)
-        let placement: LayeredClusterPlacement
-        do {
-            placement = try LayeredClusterLayout.place(pass.clusterGraph(), spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        #if DEBUG
+        if let recording = LayeredLayoutRecording.current {
+            recording.clusterPlacements.append(.init(graph: pass.clusterGraph(), spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount))
         }
-        return pass.assembled(placement, measurers: &measurers)
+        #endif
+        let laidOut: UseCaseLayout? = DiagramScratchArena.withCurrentThread { arena in
+            guard let placed = UseCasePlacedGraph(pass: &pass, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount, arena: arena) else {
+                return nil
+            }
+            return pass.assembled(placed, measurers: &measurers, arena: arena)
+        }
+        guard let laidOut else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        return laidOut
     }
 
     /// The way ranks follow each other in the layout.
@@ -135,7 +142,8 @@ struct UseCaseLayoutPass {
         }
     }
 
-    /// The boundaries as clusters, every other node in the cluster of its boundary, and the edges between two nodes.
+    /// The boundaries as clusters, every other node in the cluster of its boundary, and the edges between two nodes: the
+    /// graph `UseCasePlacedGraph` lays out, as the layered layouts' recording keeps it for the tests.
     mutating func clusterGraph() -> LayeredClusterGraph {
         var clusterPlaces: [String: Int] = [:]
         var clusters: [LayeredCluster] = []

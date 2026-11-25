@@ -3,11 +3,12 @@
  * --------------------------------
  * Layer: Core
  * Description: Lays a swimlane diagram out as Pele's swimlane variant of its flowchart renderer: the flowchart measured
- *              as a flowchart, its top-level groups lanes, laid out in lanes, drawn as a flowchart inside them.
+ *              as a flowchart, its top-level groups lanes, laid out in lanes, drawn as a flowchart inside them; for a
+ *              narrow column fitted by SwimlaneNarrowLayout.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -40,31 +41,44 @@ public enum SwimlaneLayoutEngine {
     /// across is turned to run down (`swimlaneTurnedToRunDown`) when it does not fit a container under 640 points and
     /// turned is narrower (`turnToFit`); either way it takes the tight measurements when it does not fit and tight is
     /// narrower (`tighten`).
+    ///
+    /// The regular layout is laid out first, then fitted as `narrowLayout` fits it.
     public static func layout(_ diagram: FlowchartDiagram, typography: DiagramTypography, availableWidth: CGFloat?) -> SwimlaneLayout {
-        func fitted(_ diagram: FlowchartDiagram) -> SwimlaneLayout {
-            DiagramWidthFitting.tighten(availableWidth: availableWidth, width: { (layout: SwimlaneLayout) in layout.size.width }) { isTight in
-                layout(diagram, typography: typography, spacing: isTight ? .compact : .standard, columnWidth: availableWidth)
-            }
-        }
-        guard let turned = diagram.swimlaneTurnedToRunDown else { return fitted(diagram) }
-        return DiagramWidthFitting.turnToFit(availableWidth: availableWidth, width: { (layout: SwimlaneLayout) in layout.size.width }) { isDown in
-            fitted(isDown ? turned : diagram)
+        let regular = layout(diagram, typography: typography)
+        do {
+            return try narrowLayout(diagram, typography: typography, availableWidth: availableWidth, regularWidth: regular.size.width)
+        } catch {
+            return regular
         }
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ written: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, titleText: Measurer,
                                                        font: DiagramFont, isTight: Bool, columnWidth: CGFloat? = nil) -> SwimlaneLayout {
         let diagram = FlowchartCollapsedGroups.collapsing(written)
-        let measured = FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText,
-                                            wrappingWidth: isTight ? tightWrappingWidth : wrappingWidth)
+        return layout(collapsed: diagram, measured: measurement(of: diagram, nodeText: nodeText, edgeText: edgeText, isTight: isTight),
+                      nodeText: nodeText, titleText: titleText, font: font, isTight: isTight, columnWidth: columnWidth)
+    }
+
+    /// The nodes' and edges' texts of a diagram whose collapsed groups are folded, wrapped at Pele's width or its tight one.
+    static func measurement<Measurer: DiagramTextMeasuring>(of diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer,
+                                                                    isTight: Bool) -> FlowchartMeasurement {
+        FlowchartMeasurement(diagram: diagram, nodeText: nodeText, edgeText: edgeText, wrappingWidth: isTight ? tightWrappingWidth : wrappingWidth)
+    }
+
+    /// A diagram whose collapsed groups are folded, its texts `measured`, laid out in lanes and put on the page.
+    static func layout<Measurer: DiagramTextMeasuring>(collapsed diagram: FlowchartDiagram, measured: FlowchartMeasurement, nodeText: Measurer,
+                                                               titleText: Measurer, font: DiagramFont, isTight: Bool, columnWidth: CGFloat?) -> SwimlaneLayout {
         // Pele's room for a title in a column: its width less the page's padding, at least 80 points.
         let titleRoom = isTight ? columnWidth.map { width in max(80, width - 2 * padding) } ?? unwrapped : unwrapped
         let graph = SwimlaneGraph(diagram: diagram, measured: measured, titleText: nodeText, titleWidth: isTight ? max(80, titleRoom / 2) : unwrapped,
                                   isTight: isTight, edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom)
-        let placement = LaneLayout.place(graph.graph, spacing: isTight ? tightSpacing : spacing)
-        let page = SwimlanePageAssembly(diagram: diagram, measured: measured, graph: graph, placement: placement)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: titleText, maximumWidth: titleRoom) }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        return LaneLayout.withPlacement(graph.graph, spacing: isTight ? tightSpacing : spacing) { placement in
+            DiagramScratchArena.withCurrentThread { arena in
+                SwimlanePageAssembly(diagram: diagram, measured: measured, graph: graph, placement: placement, arena: arena)
+                    .finished(font: font, title: title, padding: padding, titleGap: titleGap)
+            }
+        }
     }
 }
 

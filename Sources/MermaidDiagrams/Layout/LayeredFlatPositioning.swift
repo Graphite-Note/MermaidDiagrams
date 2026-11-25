@@ -5,8 +5,8 @@
  * Description: Pele's positions across the flow: Brandes and Köpf's four aligned layouts, balanced (layered.ts position).
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Pele's `position`: each vertex aligned with a median neighbour above or below, leftmost or rightmost first, every
@@ -21,12 +21,12 @@ enum LayeredFlatPositioning {
         let mark = arena.mark()
         defer { arena.release(to: mark) }
         let gap: ScratchSpan<Double> = arena.uninitializedSpan(count: vertexCount)
-        for vertex in 0..<vertexCount { gap[vertex] = graph.halfRoom(of: vertex, options: options) }
+        for vertex in 0..<vertexCount { gap[unchecked: vertex] = graph.halfRoom(of: vertex, options: options) }
         sortNeighbours(graph)
         let conflict = conflictingSegments(graph, arena: arena)
         // The four layouts one after the other, made with one set of working spans.
         let results = arena.span(count: 4 * vertexCount, repeating: 0.0)
-        var work = LayeredPositioningWork(vertexCount: vertexCount, arena: arena)
+        let work = LayeredPositioningWork(vertexCount: vertexCount, arena: arena)
         for variant in 0..<4 {
             let isRightward = variant & 1 == 1
             work.align(graph, conflict: conflict, isUpward: variant < 2, isRightward: isRightward)
@@ -62,29 +62,33 @@ enum LayeredFlatPositioning {
     private static func conflictingSegments(_ graph: LayeredFlatGraph, arena: DiagramScratchArena) -> ScratchSpan<Bool> {
         let conflict = arena.span(count: graph.segmentCount, repeating: false)
         guard graph.maximumRank >= 1 else { return conflict }
+        // The graph's spans read once: they live in the arena, where a store to `conflict` could be to them as far as
+        // the compiler knows.
+        let rankStart = graph.rankStart, order = graph.order, vertexKind = graph.vertexKind, positionInRank = graph.position
+        let segmentFrom = graph.segmentFrom, predecessorStart = graph.predecessorStart, predecessorSegments = graph.predecessorSegments
         for rank in 1...graph.maximumRank {
-            let previousLength = graph.rankStart[rank] - graph.rankStart[rank - 1]
-            let start = graph.rankStart[rank]
-            let end = graph.rankStart[rank + 1]
+            let previousLength = rankStart[rank] - rankStart[rank - 1]
+            let start = rankStart[rank]
+            let end = rankStart[rank + 1]
             var lowerBound = 0
             var scan = start
             for index in start..<end {
-                let vertex = graph.order[index]
+                let vertex = order[index]
                 var inner = -1
-                if graph.vertexKind[vertex].isPassingPoint {
-                    let upper = graph.segmentFrom[graph.predecessorSegments[graph.predecessorStart[vertex]]]
-                    if graph.vertexKind[upper].isPassingPoint { inner = upper }
+                if vertexKind[vertex].isPassingPoint {
+                    let upper = segmentFrom[predecessorSegments[predecessorStart[vertex]]]
+                    if vertexKind[upper].isPassingPoint { inner = upper }
                 }
-                let upperBound = inner >= 0 ? graph.position[inner] : previousLength
+                let upperBound = inner >= 0 ? positionInRank[inner] : previousLength
                 guard inner >= 0 || index == end - 1 else { continue }
                 for scanned in scan...index {
-                    let lower = graph.order[scanned]
-                    let lowerIsPassing = graph.vertexKind[lower].isPassingPoint
-                    for position in graph.predecessorStart[lower]..<graph.predecessorStart[lower + 1] {
-                        let segment = graph.predecessorSegments[position]
-                        let upperPosition = graph.position[graph.segmentFrom[segment]]
+                    let lower = order[scanned]
+                    let lowerIsPassing = vertexKind[lower].isPassingPoint
+                    for position in predecessorStart[lower]..<predecessorStart[lower + 1] {
+                        let segment = predecessorSegments[position]
+                        let upperPosition = positionInRank[segmentFrom[segment]]
                         if (upperPosition < lowerBound || upperBound < upperPosition)
-                            && !(lowerIsPassing && graph.vertexKind[graph.segmentFrom[segment]].isPassingPoint) { conflict[segment] = true }
+                            && !(lowerIsPassing && vertexKind[segmentFrom[segment]].isPassingPoint) { conflict[segment] = true }
                     }
                 }
                 scan = index + 1
@@ -97,6 +101,8 @@ enum LayeredFlatPositioning {
     /// The four layouts moved onto the narrowest (the leftward ones by their left edges, the rightward by their right),
     /// each vertex at the mean of its middle two positions. `results` holds the four layouts one after the other.
     private static func balanced(_ results: ScratchSpan<Double>, vertexCount: Int, widths: ScratchSpan<Double>, into balanced: ScratchSpan<Double>) {
+        precondition(vertexCount >= 0 && results.count == 4 * vertexCount && widths.count >= vertexCount && balanced.count >= vertexCount,
+                     "Four layouts and a width and a place for every vertex")
         var narrowest = 0
         var bestWidth = Double.infinity
         var lows = SIMD4<Double>()
@@ -106,8 +112,8 @@ enum LayeredFlatPositioning {
             var low = Double.infinity
             var high = -Double.infinity
             for vertex in 0..<vertexCount {
-                low = min(low, results[base + vertex] - widths[vertex] / 2)
-                high = max(high, results[base + vertex] + widths[vertex] / 2)
+                low = min(low, results[unchecked: base + vertex] - widths[unchecked: vertex] / 2)
+                high = max(high, results[unchecked: base + vertex] + widths[unchecked: vertex] / 2)
             }
             lows[variant] = low
             highs[variant] = high
@@ -120,12 +126,12 @@ enum LayeredFlatPositioning {
             let delta = variant & 1 == 0 ? lows[narrowest] - lows[variant] : highs[narrowest] - highs[variant]
             if delta == 0 { continue }
             let base = variant * vertexCount
-            for vertex in 0..<vertexCount { results[base + vertex] = results[base + vertex] + delta }
+            for vertex in 0..<vertexCount { results[unchecked: base + vertex] = results[unchecked: base + vertex] + delta }
         }
         for vertex in 0..<vertexCount {
-            let middle = middleTwo(results[vertex], results[vertexCount + vertex], results[2 * vertexCount + vertex],
-                                   results[3 * vertexCount + vertex])
-            balanced[vertex] = (middle.second + middle.third) / 2
+            let middle = middleTwo(results[unchecked: vertex], results[unchecked: vertexCount + vertex],
+                                   results[unchecked: 2 * vertexCount + vertex], results[unchecked: 3 * vertexCount + vertex])
+            balanced[unchecked: vertex] = (middle.second + middle.third) / 2
         }
     }
 

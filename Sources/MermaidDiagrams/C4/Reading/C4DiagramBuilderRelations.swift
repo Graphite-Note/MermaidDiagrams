@@ -6,14 +6,14 @@
  *              `UpdateRelStyle`, `UpdateLayoutConfig`), as Pele's db.ts applies them, on ranges and interned names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 extension C4DiagramBuilder {
     /// `from, to, label, ?techn, ?descr, ?sprite, ?tags, $link`; nothing without the first three. A relation between two
     /// aliases already related is that relation again, of the new kind.
-    mutating func addRelation(_ kind: C4RelationKind, arguments: [C4ArgumentRecord]) throws(MermaidDiagramReadError) {
+    mutating func addRelation(_ kind: C4RelationKind, arguments: ScratchSpan<C4ArgumentRecord>) throws(MermaidDiagramReadError) {
         guard arguments.count >= 3 else { return }
         let fromName = arguments[0].isNamed ? -1 : name(of: arguments[0].text)
         let toName = arguments[1].isNamed ? -1 : name(of: arguments[1].text)
@@ -51,7 +51,7 @@ extension C4DiagramBuilder {
     // MARK: - Updates
 
     /// `elementName, ?bgColor, ?fontColor, ?borderColor, ?shadowing, ?shape, ?sprite, ?techn, ?legendText, ?legendSprite`.
-    mutating func updateElementStyle(_ arguments: [C4ArgumentRecord]) {
+    mutating func updateElementStyle(_ arguments: ScratchSpan<C4ArgumentRecord>) {
         guard !arguments[0].isNamed else { return }
         let name = Int(name(of: arguments[0].text))
         if shapeIndexByName[name] >= 0 {
@@ -67,7 +67,7 @@ extension C4DiagramBuilder {
         }
     }
 
-    private mutating func updateStyle(of element: inout C4ElementRecord, arguments: [C4ArgumentRecord]) {
+    private mutating func updateStyle(of element: inout C4ElementRecord, arguments: ScratchSpan<C4ArgumentRecord>) {
         for (offset, field) in Self.styleFields.enumerated() { diagram.put(field, Self.argument(arguments, offset + 1), to: &element) }
     }
 
@@ -75,7 +75,7 @@ extension C4DiagramBuilder {
                                                         .legendSprite]
 
     /// `from, to, ?textColor, ?lineColor, ?offsetX, ?offsetY`, for a relation already written.
-    mutating func updateRelationStyle(_ arguments: [C4ArgumentRecord]) {
+    mutating func updateRelationStyle(_ arguments: ScratchSpan<C4ArgumentRecord>) {
         guard arguments.count >= 2, !arguments[0].isNamed, !arguments[1].isNamed else { return }
         let ends = Self.endsKey(name(of: arguments[0].text), name(of: arguments[1].text))
         guard let known = relationIndexByEnds[ends] else { return }
@@ -94,7 +94,7 @@ extension C4DiagramBuilder {
 
     /// `?c4ShapeInRow, ?c4BoundaryInRow`. As in Mermaid, the place decides which one a value sets, not its name; a value
     /// under one is left out.
-    mutating func updateLayoutConfiguration(_ arguments: [C4ArgumentRecord]) {
+    mutating func updateLayoutConfiguration(_ arguments: ScratchSpan<C4ArgumentRecord>) {
         func count(_ argument: C4ArgumentRecord?) -> Int? {
             guard let argument else { return nil }
             let text = argument.isNamed ? diagram.namedArguments[Int(argument.named)].value : argument.text

@@ -5,8 +5,8 @@
  * Description: The bands of Pele's layered layout along the flow: each rank's height and the gap under it.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Where each rank's band starts and ends along the flow, and the gaps between them: a usual gap, a smaller one next to
@@ -27,12 +27,12 @@ struct LayeredFlatBands {
     let mostPitch: Double
     var height: Double = 0
 
-    init(layout: LayeredFlatLayout, graph: LayeredFlatGraph, across: ScratchSpan<Double>, emptyRanks: ScratchSpan<Bool>?,
-         pieces: LayeredEdgePieces?) {
+    /// The bands of a layout with `options` and `rankStep` (its `step`) and the headings of its ranks of labels
+    /// (`labelHeadings`): the layout's own values, handed over one by one so that the layout is not copied whole.
+    init(graph: LayeredFlatGraph, across: ScratchSpan<Double>, emptyRanks: ScratchSpan<Bool>?, pieces: LayeredEdgePieces?,
+         options: LayeredFlatOptions, rankStep: Int, labelHeadings: ScratchSpan<UInt8>, arena: DiagramScratchArena) {
         let maximumRank = graph.maximumRank
-        let options = layout.options
-        let step = Double(layout.step)
-        let arena = layout.arena
+        let step = Double(rankStep)
         self.pieces = pieces
         bandTop = arena.span(count: maximumRank + 1, repeating: 0.0)
         bandBottom = arena.span(count: maximumRank + 1, repeating: 0.0)
@@ -42,8 +42,8 @@ struct LayeredFlatBands {
         leastPitch = options.runsOnTracks ? LayeredFlatConstants.trackPitch : LayeredFlatConstants.levelPitch
         mostPitch = options.runsOnTracks ? LayeredFlatConstants.trackSpread : LayeredFlatConstants.levelPitch
         // Ranks that hold only border ports or their pass-through bends need little room of their own.
-        let startRanks = Self.holdsOnly(.startPort, rank: 0, graph: graph) ? layout.step : 0
-        let endRanks = Self.holdsOnly(.endPort, rank: maximumRank, graph: graph) ? layout.step : 0
+        let startRanks = Self.holdsOnly(.startPort, rank: 0, graph: graph) ? rankStep : 0
+        let endRanks = Self.holdsOnly(.endPort, rank: maximumRank, graph: graph) ? rankStep : 0
         gapUnder = arena.span(count: maximumRank + 1, repeating: 0.0)
         isBetween = arena.span(count: maximumRank + 1, repeating: true)
         let mark = arena.mark()
@@ -60,7 +60,7 @@ struct LayeredFlatBands {
         }
         arena.release(to: mark)
         for node in 0..<graph.nodeCount { isBetween[graph.vertexRank[node]] = false }
-        moveHeadRoom(headings: layout.labelHeadings, options: options)
+        moveHeadRoom(headings: labelHeadings, options: options)
         if pieces != nil { growForPieces(options: options, emptyRanks: emptyRanks, arena: arena) }
     }
 
@@ -110,7 +110,7 @@ struct LayeredFlatBands {
             self.pieces = pieces
             return
         }
-        var tracks = LayeredFlatTracks(pieces: pieces, isCurved: !options.runsOnTracks, room: room, rankCount: maximumRank + 1, arena: arena)
+        let tracks = LayeredFlatTracks(pieces: pieces, isCurved: !options.runsOnTracks, room: room, rankCount: maximumRank + 1, arena: arena)
         tracks.assign()
         self.pieces = tracks.pieces
         trackCount = tracks.trackCount
@@ -140,12 +140,12 @@ struct LayeredFlatBands {
         return room
     }
 
-    /// Each rank's band as tall as its tallest vertex, one after the other with their gaps.
-    mutating func size(layout: LayeredFlatLayout, graph: LayeredFlatGraph) {
+    /// Each rank's band as tall as its tallest vertex (`vertexHeight`), one after the other with their gaps.
+    mutating func size(graph: LayeredFlatGraph, vertexHeight: ScratchSpan<Double>) {
         var along: Double = 0
         for rank in 0...graph.maximumRank {
             var tallest: Double = 0
-            for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] { tallest = max(tallest, layout.vertexHeight[graph.order[index]]) }
+            for index in graph.rankStart[rank]..<graph.rankStart[rank + 1] { tallest = max(tallest, vertexHeight[graph.order[index]]) }
             bandTop[rank] = along
             bandBottom[rank] = along + tallest
             along += tallest + gapUnder[rank]
