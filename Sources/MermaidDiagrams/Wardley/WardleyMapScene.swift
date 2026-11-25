@@ -6,8 +6,8 @@
  *              pipelines, the links, the evolutions, the nodes with their labels, the annotations, notes and forces.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -20,7 +20,13 @@ extension DiagramScene {
     /// accent color; each node's shape, inertia bar and label; the annotations; the notes in bold; the forces. Every shape
     /// is recorded into a lane of the thread's scene workspace, given back once the builder has copied it.
     public init(layout: WardleyMapLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: WardleyMapLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             let paths = WardleyMapScenePaths(workspace: workspace)
             builder.title(layout.title)

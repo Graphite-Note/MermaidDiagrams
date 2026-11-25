@@ -5,8 +5,8 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 /// Reads an XY chart's statements after its `xychart` or `xychart-beta` keyword, as Mermaid's grammar and Pele's
@@ -125,6 +125,10 @@ struct XYChartParser {
         let title = kind == .openingBracket ? "" : try readText(orElse: .expectedSeriesValues)
         try expect(.openingBracket, orElse: .expectedSeriesValues)
         var points: [(value: Double, label: String)] = []
+        // A value and a comma at least for each point: room for them is made once.
+        var closing = index
+        while closing < tokens.count, tokens[closing].kind != .closingBracket { closing += 1 }
+        points.reserveCapacity((closing - index) / 2 + 1)
         while true {
             let value = try readNumber(orElse: .expectedSeriesValues)
             var label = ""

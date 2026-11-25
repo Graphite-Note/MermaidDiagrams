@@ -2,37 +2,51 @@
  * File: QuadrantChartToken.swift
  * ------------------------------
  * Layer: Core
- * Description: A token of a quadrant chart's text: its kind, what it holds, where it lies and its line; and the sets of
- *              kinds the grammar reads texts, class names and styles from, tested without hashing.
+ * Description: A token of a quadrant chart's text: its kind, where it lies, its line and the ranges of the bytes it
+ *              holds, a few integers that copy without reference counting; and the sets of kinds the grammar reads
+ *              texts, class names and styles from, tested without hashing.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
-/// A piece of a quadrant chart's text, as Mermaid's quadrant grammar cuts it: what it is, what it holds, where it starts
-/// and ends in the diagram's UTF-8 bytes, and the line it starts on.
+/// A piece of a quadrant chart's text, as Mermaid's quadrant grammar cuts it: what it is, where it starts and ends in
+/// the diagram's UTF-8 bytes, the line it starts on, and what it holds as ranges of those bytes.
 struct QuadrantChartToken: Equatable {
     let kind: QuadrantChartTokenKind
-    let content: QuadrantChartTokenContent
-    let start: Int
-    let end: Int
-    let line: Int
+    private let startOffset: Int32
+    private let endOffset: Int32
+    private let lineNumber: Int32
+    /// A title's text, a quoted or Markdown string's text, a class's name, or a point's x coordinate as written; empty
+    /// for the others.
+    let content: MermaidTextRange
+    /// A point's y coordinate as written; for an accessibility statement, its index among the lexer's statements.
+    let second: MermaidTextRange
+
+    init(kind: QuadrantChartTokenKind, start: Int, end: Int, line: Int, content: MermaidTextRange = .empty, second: MermaidTextRange = .empty) {
+        self.kind = kind
+        startOffset = Int32(truncatingIfNeeded: start)
+        endOffset = Int32(truncatingIfNeeded: end)
+        lineNumber = Int32(truncatingIfNeeded: line)
+        self.content = content
+        self.second = second
+    }
+
+    var start: Int { Int(startOffset) }
+    var end: Int { Int(endOffset) }
+    var line: Int { Int(lineNumber) }
 }
 
-/// What a token holds besides its bytes.
-enum QuadrantChartTokenContent: Equatable {
-    case none
-    /// A title's text, a quoted or Markdown string's text, or a class's name.
-    case text(String)
-    case accessibility(MermaidAccessibilityStatement)
-    /// A point's coordinates, as written.
-    case coordinates(xCoordinate: String, yCoordinate: String)
+/// A quadrant chart's tokens, and the accessibility statements its accessibility tokens stand for.
+struct QuadrantChartTokens {
+    var tokens: [QuadrantChartToken] = []
+    var statements: [MermaidAccessibilityStatement] = []
 }
 
 /// What a piece of a quadrant chart's text is. Keywords, the axis arrow and a point's start take the spaces around
 /// them; other text is cut into runs of letters, of digits and of characters beyond ASCII, and single characters.
-enum QuadrantChartTokenKind: Int, Hashable {
+enum QuadrantChartTokenKind: UInt8, Hashable {
     /// One or more line breaks or carriage returns.
     case lineBreak
     /// `title` and the rest of its line, which is the title.

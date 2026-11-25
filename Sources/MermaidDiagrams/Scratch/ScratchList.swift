@@ -5,8 +5,8 @@
  * Description: A list of plain values that grows inside a scratch arena, for work whose length is found as it goes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// A list in a `DiagramScratchArena`: values appended until its room is full move to room twice as large in the same
@@ -56,18 +56,22 @@ struct ScratchList<Element: BitwiseCopyable>: RandomAccessCollection {
         count += span.count
     }
 
+    /// The last value, taken off: its index lies below the count, which never passes the room, so only debug builds
+    /// check it again.
     @inline(__always)
     mutating func removeLast() -> Element {
         precondition(count > 0, "Removing the last value of an empty scratch list")
         count -= 1
-        return storage[count]
+        assert(count < storage.count, "a list's count lies within its room")
+        return storage.start[count]
     }
 
     @inline(__always)
     mutating func popLast() -> Element? {
         guard count > 0 else { return nil }
         count -= 1
-        return storage[count]
+        assert(count < storage.count, "a list's count lies within its room")
+        return storage.start[count]
     }
 
     /// Empties the list, keeping its room.

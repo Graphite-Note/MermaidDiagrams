@@ -5,13 +5,13 @@
  * Description: Prepares a Cynefin framework and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
     func prepared(_ cynefin: CynefinDiagram) -> PreparedMermaidDiagram {
-        PreparedMermaidDiagram(kind: .cynefin, scene: DiagramScene(layout: CynefinLayoutEngine.layout(cynefin, typography: typography)),
+        PreparedMermaidDiagram(kind: .cynefin, scene: DiagramScene(layout: CynefinLayoutEngine.layout(cynefin, typography: typography), limits: limits),
                                accessibility: MermaidDiagramAccessibility(cynefin: cynefin))
     }
 }

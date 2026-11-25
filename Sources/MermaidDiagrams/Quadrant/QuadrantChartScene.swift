@@ -6,8 +6,8 @@
  *              workspace and added back to front in the colors' roles, as Pele paints them, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -17,7 +17,13 @@ extension DiagramScene {
     /// in the muted color (the y axis's turned a quarter anticlockwise), the points in the first series color or the
     /// colors the chart writes, their texts, the title.
     public init(layout: QuadrantChartLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: QuadrantChartLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             QuadrantChartSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font)

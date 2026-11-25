@@ -9,8 +9,8 @@
  *              written as 0.7.0 wrote them; a shape's view kept after its scene still reads its elements.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -187,9 +187,8 @@ final class DiagramSceneStorageTests: XCTestCase {
     func testScenesBuiltOnManyThreadsAtOnceAreThoseBuiltAlone() throws {
         var sources: [String] = []
         for (_, corpus) in try OutputDigest.corpora() { sources += corpus.prefix(6) }
-        let typography = DiagramSceneSamples.typography
-        func document(_ source: String) -> String? {
-            (try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
+        @Sendable func document(_ source: String) -> String? {
+            (try? MermaidDiagramPreparation.prepare(source: source, typography: DiagramSceneSamples.typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
                                                     timeZone: GanttChartCorpus.timeZone)).map { prepared in prepared.svgDocument() }
         }
         let expected = sources.map(document)
@@ -204,6 +203,38 @@ final class DiagramSceneStorageTests: XCTestCase {
         }
         XCTAssertEqual(tally.differenceCount, 0)
         XCTAssertEqual(tally.matchCount, 16 * sources.count)
+    }
+
+    /// Twelve threads prepare and write diagrams at once in fonts of three sizes and both color modes, each thread
+    /// changing font and colors from one document to the next, so that the root style each thread's scratch keeps for a
+    /// font and colors is asked again for another: every document is the one prepared and written alone.
+    func testDocumentsOfChangingFontsAndColorsWrittenOnTwelveThreadsAreThoseWrittenAlone() throws {
+        var sources: [String] = []
+        for (_, corpus) in try OutputDigest.corpora() { sources += corpus.prefix(3) }
+        @Sendable func document(_ source: String, variant: Int) -> String? {
+            let sizes: [CGFloat] = [16, 13, 16.5]
+            let typography = DiagramTypography(font: DiagramFont(postScriptName: variant % 2 == 0 ? nil : "Menlo-Regular", size: sizes[variant % 3]))
+            let colors: DiagramSVGColors = variant % 4 < 2 ? .peleVariables : .palette(DiagramScenePaletteSamples.dark)
+            return (try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
+                                                           timeZone: GanttChartCorpus.timeZone)).map { prepared in prepared.svgDocument(colors: colors) }
+        }
+        let variantCount = 12
+        var expected: [String?] = []
+        for source in sources {
+            for variant in 0..<variantCount { expected.append(document(source, variant: variant)) }
+        }
+        XCTAssertGreaterThan(expected.compactMap { $0 }.count, 900)
+        let shared = SharedSources(sources: sources, expected: expected)
+        let tally = StorageThreadTally()
+        DispatchQueue.concurrentPerform(iterations: 12) { thread in
+            for step in 0..<shared.sources.count {
+                let index = (thread &* 37 &+ step) % shared.sources.count
+                let variant = (thread &+ step) % variantCount
+                tally.record(document(shared.sources[index], variant: variant) == shared.expected[index * variantCount + variant])
+            }
+        }
+        XCTAssertEqual(tally.differenceCount, 0)
+        XCTAssertEqual(tally.matchCount, 12 * sources.count)
     }
 }
 

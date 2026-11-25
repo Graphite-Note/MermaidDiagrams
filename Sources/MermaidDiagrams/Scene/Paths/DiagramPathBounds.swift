@@ -6,8 +6,8 @@
  *              any other lane's from its points and the extremes of its curves, found as Core Graphics finds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,12 +18,12 @@ extension DiagramPathLaneState {
     /// asked and kept until the lane changes.
     mutating func boundsOfPath() -> CGRect {
         if let cachedBounds { return cachedBounds }
-        let bounds = computedBounds
+        let bounds = computedBounds()
         cachedBounds = bounds
         return bounds
     }
 
-    private var computedBounds: CGRect {
+    private mutating func computedBounds() -> CGRect {
         guard !isEmpty else { return .null }
         if let shape = held, let bounds = shape.bounds { return bounds }
         var collector = DiagramPathBoundsCollector()

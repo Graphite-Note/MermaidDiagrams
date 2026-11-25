@@ -6,8 +6,8 @@
  *              container too narrow for it, as Pele turns one to fit.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -99,7 +99,7 @@ public enum PacketDiagramLayoutEngine {
     private static func turnedLabels<Measurer: DiagramTextMeasuring>(of diagram: PacketDiagram, rows: [[PacketFieldPiece]], grid: PacketTurnedGrid,
                                                                       measurer: Measurer) -> [[DiagramTextBlock?]] {
         let gap = min(diagram.options.horizontalPadding, grid.bitWidth - 1)
-        let texts = diagram.fields.map { field in DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let texts = diagram.fields.map { field in PacketTextBlocks.trimmedLabel(field.label) }
         return rows.map { row in
             row.map { piece in
                 let room = max(1, CGFloat(piece.lastBit - piece.firstBit + 1) * grid.bitWidth - gap - labelMargin)
@@ -129,9 +129,7 @@ public enum PacketDiagramLayoutEngine {
                                                                     text: Measurer) -> ([PacketLayoutField], [DiagramTextBlock]) {
         let options = diagram.options
         let size = text.fontSize
-        var fitter = LabelFitter(labels: diagram.fields.map { field in
-            DiagramLabelDecoder.decodingEntities(field.label).trimmingCharacters(in: .whitespacesAndNewlines)
-        }, measurer: text, size: (size * labelScale).rounded(), smallestSize: (size * smallestLabelScale).rounded())
+        var fitter = LabelFitter(labels: diagram.fields.map { field in PacketTextBlocks.trimmedLabel(field.label) }, measurer: text, size: (size * labelScale).rounded(), smallestSize: (size * smallestLabelScale).rounded())
         let pieceCount = rows.reduce(0) { count, row in count + row.count }
         var boxes: [PacketLayoutField] = []
         boxes.reserveCapacity(pieceCount)
@@ -166,14 +164,14 @@ public enum PacketDiagramLayoutEngine {
                                                                       to bitNumbers: inout [DiagramTextBlock]) {
         let centerY = frame.minY - bitNumberRise - size * DiagramTextDrawing.baselineShiftRatio
         if piece.firstBit == piece.lastBit {
-            var block = measurers.block(of: String(piece.firstBit), fontSize: size)
+            var block = PacketTextBlocks.number(piece.firstBit, fontSize: size, measurers: &measurers)
             block.center = CGPoint(x: frame.midX, y: centerY)
             return bitNumbers.append(block)
         }
-        var left = measurers.block(of: String(isDescending ? piece.lastBit : piece.firstBit), fontSize: size)
+        var left = PacketTextBlocks.number(isDescending ? piece.lastBit : piece.firstBit, fontSize: size, measurers: &measurers)
         left.center = CGPoint(x: frame.minX + left.size.width / 2, y: centerY)
         bitNumbers.append(left)
-        var right = measurers.block(of: String(isDescending ? piece.firstBit : piece.lastBit), fontSize: size)
+        var right = PacketTextBlocks.number(isDescending ? piece.firstBit : piece.lastBit, fontSize: size, measurers: &measurers)
         right.center = CGPoint(x: frame.maxX - right.size.width / 2, y: centerY)
         bitNumbers.append(right)
     }
@@ -185,7 +183,8 @@ public enum PacketDiagramLayoutEngine {
         var measurers: DiagramTextMeasurerSizes<Measurer>
         let size: CGFloat
         let smallestSize: CGFloat
-        private var fitted: [FitKey: DiagramFittedText?] = [:]
+        /// Each label fitted so far, as the block it fits as (nil when it does not), and its size.
+        private var fitted: [FitKey: (fontSize: CGFloat, block: DiagramTextBlock)?] = [:]
 
         private struct FitKey: Hashable {
             let fieldIndex: Int
@@ -204,11 +203,12 @@ public enum PacketDiagramLayoutEngine {
         /// character of it fits `width`, or its size is more than the frame is high.
         mutating func block(of fieldIndex: Int, width: CGFloat, in frame: CGRect) -> DiagramTextBlock? {
             let key = FitKey(fieldIndex: fieldIndex, width: width)
-            let fit: DiagramFittedText?
+            let fit: (fontSize: CGFloat, block: DiagramTextBlock)?
             if let known = fitted[key] {
                 fit = known
             } else {
                 fit = DiagramTextFitting.fitted(labels[fieldIndex], maximumWidth: width, fontSize: size, minimumFontSize: smallestSize, measurers: &measurers)
+                    .map { fitted in (fitted.fontSize, PacketTextBlocks.oneLine(fitted.text, width: fitted.width, fontSize: fitted.fontSize)) }
                 fitted[key] = fit
             }
             guard let fit, fit.fontSize <= frame.height else { return nil }

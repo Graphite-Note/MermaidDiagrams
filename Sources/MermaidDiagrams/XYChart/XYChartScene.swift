@@ -7,8 +7,8 @@
  *              path.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,13 @@ extension DiagramScene {
     /// marks' labels in the muted color, the other text (the left axis' title turned a quarter anticlockwise) and the
     /// title.
     public init(layout: XYChartLayout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The same painting recorded under `limits`: a scene one of whose lanes goes past their element limit says so
+    /// (`exceededPathElementLimit`), and the preparation refuses it.
+    public init(layout: XYChartLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             XYChartSceneRecording.add(layout, to: &builder, workspace: workspace)
             return builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)

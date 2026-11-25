@@ -5,8 +5,8 @@
  * Description: A fixed run of plain values in a scratch arena, read and written in place through any copy of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// `count` plain values one after another in memory a `DiagramScratchArena` handed out. A span is a view: its copies
@@ -66,13 +66,17 @@ struct ScratchSpan<Element: BitwiseCopyable>: RandomAccessCollection {
         start.update(from: source.start, count: count)
     }
 
-    /// The values of `range` in reverse order.
+    /// The values of `range` in reverse order. The range is checked once; the swaps inside it are not checked again
+    /// (debug builds still check them).
     func reverse(_ range: Range<Int>) {
         precondition(range.lowerBound >= 0 && range.upperBound <= count, "Range out of range of a scratch span")
         var low = range.lowerBound
         var high = range.upperBound - 1
         while low < high {
-            swapAt(low, high)
+            assert(low >= 0 && high < count, "a swap within the range checked")
+            let value = start[low]
+            start[low] = start[high]
+            start[high] = value
             low += 1
             high -= 1
         }

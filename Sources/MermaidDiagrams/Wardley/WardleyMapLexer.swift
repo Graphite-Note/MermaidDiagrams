@@ -6,8 +6,8 @@
  *              terminals tried in order, the first that matches taken, `-` giving way to a longer arrow or front matter.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// The kinds of a Wardley map's tokens.
@@ -53,6 +53,8 @@ enum WardleyMapLexer {
         var terminals = PlaneMapTerminals(bytes: cursor.bytes)
         var position = cursor.position
         var tokens: [WardleyMapToken] = []
+        // About one token for every four bytes: room for them is made once.
+        tokens.reserveCapacity((cursor.bytes.count - position) / 4 + 8)
         while position < cursor.bytes.count {
             let start = position
             guard let (kind, end) = match(at: start, terminals: &terminals) else {

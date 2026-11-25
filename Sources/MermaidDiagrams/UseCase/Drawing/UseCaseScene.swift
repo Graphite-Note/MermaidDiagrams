@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: A laid-out use case diagram's scene, as Pele paints it: the title, the system boundaries with their
  *              titles, the casings, the lines with their marks, the lines' labels, then the actors, use cases, notes
- *              and JSON tables with their texts.
+ *              and JSON tables with their texts, its paths recorded into the thread's path lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -24,18 +24,29 @@ extension DiagramScene {
     /// slant reach a label but not a stereotype or a JSON key, and text on a fill a style sets takes the dark or light
     /// text color that reads on it.
     public init(layout: UseCaseLayout) {
-        var builder = DiagramSceneBuilder()
-        builder.title(layout.title)
-        for boundary in layout.boundaries { UseCaseScenePainting.add(boundary, to: &builder) }
-        for edge in layout.edges where edge.isCased && !edge.look.hidesStroke { UseCaseScenePainting.addCasing(of: edge, to: &builder) }
-        for edge in layout.edges { UseCaseScenePainting.addLine(of: edge, to: &builder) }
-        for edge in layout.edges { UseCaseScenePainting.addLabel(of: edge, to: &builder) }
-        for node in layout.nodes { UseCaseNodePainting.add(node, to: &builder) }
-        self = builder.scene(size: layout.size, font: layout.font)
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene recorded into lanes of at most `DiagramSceneWorkspace.elementLimit(for: limits)` elements: one past
+    /// it marks the scene (`exceededPathElementLimit`), which the preparation refuses.
+    init(layout: UseCaseLayout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            builder.title(layout.title)
+            for boundary in layout.boundaries { UseCaseScenePainting.add(boundary, to: &builder, workspace: workspace) }
+            for edge in layout.edges where edge.isCased && !edge.look.hidesStroke {
+                UseCaseScenePainting.addCasing(of: edge, to: &builder, workspace: workspace)
+            }
+            for edge in layout.edges { UseCaseScenePainting.addLine(of: edge, to: &builder, workspace: workspace) }
+            for edge in layout.edges { UseCaseScenePainting.addLabel(of: edge, to: &builder, workspace: workspace) }
+            for node in layout.nodes { UseCaseNodePainting.add(node, to: &builder, workspace: workspace) }
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }
 
-/// The boundaries and lines of a use case diagram's scene.
+/// The boundaries and lines of a use case diagram's scene. Each piece's paths are recorded into lanes made for a moment
+/// and given back once the builder has copied them.
 enum UseCaseScenePainting {
     static let cornerRadius = FlowchartShapeDrawing.rectangleCornerRadius
     static let labelPatchRadius: CGFloat = 3
@@ -61,47 +72,55 @@ enum UseCaseScenePainting {
         (readsTextColor ? look.textColor.map(DiagramPaint.color) : nil) ?? (readsInk ? look.ink.map(DiagramPaint.color) : nil) ?? usual
     }
 
-    static func add(_ boundary: UseCaseLayoutBoundary, to builder: inout DiagramSceneBuilder) {
+    static func add(_ boundary: UseCaseLayoutBoundary, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let look = boundary.look
         let fill = fill(look, usual: .alternateSurface, usualOpacity: look.setsFill ? 1 : boundaryFillOpacity)
         let (strokePaint, stroke) = outline(look)
         if let tab = boundary.tabFrame {
-            builder.fillAndStroke(CGPath(rect: tab, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .boundaryTab)
+            builder.fillAndStroke(workspace.rectangle(tab), fill: fill, stroke: strokePaint, stroke, part: .boundaryTab)
             let body = CGRect(x: boundary.frame.minX, y: tab.maxY, width: boundary.frame.width, height: boundary.frame.height - tab.height)
-            builder.fillAndStroke(CGPath(rect: body, transform: nil), fill: fill, stroke: strokePaint, stroke, part: .cluster)
+            builder.fillAndStroke(workspace.rectangle(body), fill: fill, stroke: strokePaint, stroke, part: .cluster)
         } else {
-            let box = CGPath(roundedRect: boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+            let box = workspace.roundedRectangle(boundary.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
             builder.fillAndStroke(box, fill: fill, stroke: strokePaint, stroke, part: .cluster)
         }
         builder.text(boundary.title, textPaint(look, usual: .muted), isBold: look.isBold, isItalic: look.isItalic, part: .clusterLabel)
     }
 
     /// A wider line of the page's color under the line and its marks, as faint as the line.
-    static func addCasing(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    static func addCasing(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         let stroke = DiagramStroke.rounded(lineWidth: edge.lineWidth + casingWidening)
         let paint = DiagramPaint.background.atOpacity(edge.look.strokeAmount)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, stroke, part: .casing)
-        let marks = CGMutablePath()
-        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) { addOutline(of: mark, to: marks) }
+        builder.stroke(line(of: edge, workspace: workspace), paint, stroke, part: .casing)
+        let marks = workspace.makeLane()
+        if let mark = edge.startMark { addOutline(of: mark, to: marks) }
+        if let mark = edge.endMark { addOutline(of: mark, to: marks) }
         if !marks.isEmpty { builder.fillAndStroke(marks, fill: paint, stroke: paint, stroke, part: .casing) }
     }
 
-    static func addLine(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    static func addLine(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
         // The line's style sets the opacity of the whole line, and its stroke's opacity that of what is stroked.
         let color = edge.inkOverFill.map(DiagramPaint.color) ?? edge.look.stroke.map(DiagramPaint.color) ?? .line
         let paint = color.atOpacity(edge.look.strokeAmount)
         let filledPaint = color.atOpacity(edge.look.opacity)
-        builder.stroke(DiagramEdgeDrawing.path(edge.path), paint, DiagramStroke(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths, lineCap: .round),
-                       part: .edge)
-        let filled = CGMutablePath()
-        let stroked = CGMutablePath()
-        for mark in [edge.startMark, edge.endMark].compactMap({ mark in mark }) {
+        builder.stroke(line(of: edge, workspace: workspace), paint,
+                       DiagramStroke(lineWidth: edge.lineWidth, dashLengths: edge.dashLengths, lineCap: .round), part: .edge)
+        let filled = workspace.makeLane()
+        let stroked = workspace.makeLane()
+        for mark in [edge.startMark, edge.endMark] {
+            guard let mark else { continue }
             guard mark.marker == .hollowTriangle else {
                 DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
                                            filled: filled, stroked: stroked)
                 continue
             }
-            builder.fillAndStroke(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction),
+            builder.fillAndStroke(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction, workspace: workspace),
                                   fill: (edge.fillUnderMarks.map(DiagramPaint.color) ?? .background).atOpacity(edge.look.opacity), stroke: paint,
                                   DiagramStroke(lineWidth: edge.lineWidth, lineCap: .round, lineJoin: .round), part: .marker)
         }
@@ -109,10 +128,17 @@ enum UseCaseScenePainting {
         builder.stroke(stroked, paint, DiagramStroke(lineWidth: edge.lineWidth, lineCap: .round), part: .marker)
     }
 
+    /// The edge's line, in a lane.
+    private static func line(of edge: UseCaseLayoutEdge, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+        let drawn = workspace.makeLane()
+        DiagramEdgeDrawing.record(edge.path, into: drawn)
+        return drawn
+    }
+
     /// The mark's shape as its casing covers it: an arrow's triangle, a circle, a cross's arms, a triangle.
-    private static func addOutline(of mark: UseCaseLayoutMark, to path: CGMutablePath) {
+    private static func addOutline(of mark: UseCaseLayoutMark, to path: DiagramPathLane) {
         if mark.marker == .hollowTriangle {
-            path.addPath(UseCaseFigureShapes.extensionTriangle(tip: mark.tip, direction: mark.direction))
+            UseCaseFigureShapes.addExtensionTriangle(tip: mark.tip, direction: mark.direction, to: path)
         } else {
             DiagramEdgeDrawing.addMark(DiagramEdgeMark(arrowhead: arrowhead(of: mark.marker), tip: mark.tip, direction: mark.direction),
                                        filled: path, stroked: path)
@@ -129,9 +155,11 @@ enum UseCaseScenePainting {
     }
 
     /// The label on a patch of the page's color: an include's or extend's muted, else in the style's text color.
-    static func addLabel(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder) {
+    static func addLabel(of edge: UseCaseLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         guard let label = edge.label, let patch = edge.labelPatch else { return }
-        builder.fill(CGPath(roundedRect: patch, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius, transform: nil), .background,
+        let madeCount = workspace.madePathCount
+        defer { workspace.givePathsBack(downTo: madeCount) }
+        builder.fill(workspace.roundedRectangle(patch, cornerWidth: labelPatchRadius, cornerHeight: labelPatchRadius), .background,
                      part: .labelBackground)
         builder.text(label, edge.look.textColor.map(DiagramPaint.color) ?? (edge.isSemantic ? .muted : .foreground), isBold: edge.look.isBold,
                      isItalic: edge.look.isItalic, part: .edgeLabel)
