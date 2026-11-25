@@ -2,11 +2,11 @@
  * File: UserJourneyDiagram.swift
  * ------------------------------
  * Layer: Core
- * Description: A user journey as its text describes it: sections, tasks with their scores and actors, the actors once
- *              each in Mermaid's order, and which of them each task names.
+ * Description: A user journey as its text describes it: sections, tasks with their scores (flat records, without a
+ *              list of names each), the actors once each in Mermaid's order, and which of them each task names.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -17,9 +17,17 @@ public struct UserJourneyDiagram: Equatable, Sendable {
     public internal(set) var title: String?
     /// The `section …` headings, in the order they are written.
     public internal(set) var sections: [DiagramLabel]
-    /// The tasks in the order they are written; the reader adds them with the actors they name (`init(title:sections:...)`
-    /// works those out once for tasks given whole).
-    public private(set) var tasks: [UserJourneyTask]
+    /// The tasks in the order they are written, each with the names of the actors it names, made when read from the
+    /// flat records and the actors' mentions (the layout reads `taskRecords` and `actorIndices(ofTask:)` instead).
+    public var tasks: [UserJourneyTask] {
+        taskRecords.indices.map { index in
+            let record = taskRecords[index]
+            let actors = actorIndices(ofTask: index).map { actorIndex in actorIndex < 0 ? "" : actorNames[Int(actorIndex)] }
+            return UserJourneyTask(label: record.label, score: record.score, actors: actors, sectionIndex: record.sectionIndex)
+        }
+    }
+    /// The tasks in the order they are written, without their actors, which `actorIndices(ofTask:)` gives.
+    private(set) var taskRecords: [UserJourneyTaskRecord]
     /// `accTitle: …`, the short name a screen reader gives the diagram, or nil.
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
@@ -46,18 +54,19 @@ public struct UserJourneyDiagram: Equatable, Sendable {
             for name in task.actors { mentions.append(indexByName[name] ?? -1) }
             firstMentions.append(Int32(mentions.count))
         }
-        self.init(title: title, sections: sections, tasks: tasks, actorNames: names, actorMentions: mentions, firstActorMentions: firstMentions,
+        let records = tasks.map { task in UserJourneyTaskRecord(label: task.label, score: task.score, sectionIndex: task.sectionIndex) }
+        self.init(title: title, sections: sections, taskRecords: records, actorNames: names, actorMentions: mentions, firstActorMentions: firstMentions,
                   accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
     }
 
     /// A journey whose actors the reader has already interned and sorted.
-    init(title: String?, sections: [DiagramLabel], tasks: [UserJourneyTask], actorNames: [String], actorMentions: [Int32],
+    init(title: String?, sections: [DiagramLabel], taskRecords: [UserJourneyTaskRecord], actorNames: [String], actorMentions: [Int32],
          firstActorMentions: [Int32], accessibilityTitle: String?, accessibilityDescription: String?) {
-        precondition(firstActorMentions.count == tasks.count + 1 && firstActorMentions.last.map(Int.init) == actorMentions.count,
+        precondition(firstActorMentions.count == taskRecords.count + 1 && firstActorMentions.last.map(Int.init) == actorMentions.count,
                      "every task's actors are in the mentions")
         self.title = title
         self.sections = sections
-        self.tasks = tasks
+        self.taskRecords = taskRecords
         self.actorNames = actorNames
         self.actorMentions = actorMentions
         self.firstActorMentions = firstActorMentions
@@ -97,17 +106,32 @@ public struct UserJourneyTask: Equatable, Sendable {
     }
 
     /// Where the task's face sits on the scale from 1 to 5: its score kept within the scale, or the middle without one.
-    public var level: Double {
-        guard let score else { return Self.middleLevel }
-        return min(Self.highestLevel, max(Self.lowestLevel, score))
-    }
+    public var level: Double { Self.level(ofScore: score) }
 
     /// The face the task's score shows: happy above the middle, sad below it, neutral at it or without a score.
-    public var mood: UserJourneyMood {
-        guard let score else { return .neutral }
-        if score > Self.middleLevel { return .happy }
-        return score < Self.middleLevel ? .sad : .neutral
+    public var mood: UserJourneyMood { Self.mood(ofScore: score) }
+
+    static func level(ofScore score: Double?) -> Double {
+        guard let score else { return middleLevel }
+        return min(highestLevel, max(lowestLevel, score))
     }
+
+    static func mood(ofScore score: Double?) -> UserJourneyMood {
+        guard let score else { return .neutral }
+        if score > middleLevel { return .happy }
+        return score < middleLevel ? .sad : .neutral
+    }
+}
+
+/// A task as the journey keeps it: a `UserJourneyTask` without its list of actors' names, which the journey's mentions
+/// give, so that reading a task makes no list.
+struct UserJourneyTaskRecord: Equatable, Sendable {
+    let label: DiagramLabel
+    let score: Double?
+    let sectionIndex: Int?
+
+    var level: Double { UserJourneyTask.level(ofScore: score) }
+    var mood: UserJourneyMood { UserJourneyTask.mood(ofScore: score) }
 }
 
 /// The face a task's score shows, as Pele draws it.

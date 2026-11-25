@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyMeasurement.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: A user journey's cards measured as Pele measures them: each task's text wrapped in its column, the
+ *              cards' width and spacing, and the width of the run of cards.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import CoreGraphics
 
 /// A user journey's cards measured as Pele measures them: each task's text wrapped in a column 124 points wide; a word
@@ -15,11 +27,11 @@ struct UserJourneyMeasurement {
 
     init(diagram: UserJourneyDiagram, taskText: some DiagramTextMeasuring) {
         var textWidth = Self.narrowestTextWidth
-        var taskTexts = diagram.tasks.map { task in TimelineTextFitting.wrapped(task.label, measurer: taskText, maximumWidth: textWidth) }
+        var taskTexts = diagram.taskRecords.map { task in TimelineTextFitting.wrapped(task.label, measurer: taskText, maximumWidth: textWidth) }
         let widest = taskTexts.map(\.size.width).max() ?? 0
         if widest > textWidth {
             textWidth = min(widest.rounded(.up), Self.widestTextWidth)
-            taskTexts = diagram.tasks.map { task in TimelineTextFitting.fitted(task.label, measurer: taskText, maximumWidth: textWidth) }
+            taskTexts = diagram.taskRecords.map { task in TimelineTextFitting.fitted(task.label, measurer: taskText, maximumWidth: textWidth) }
         }
         self.textWidth = textWidth
         self.taskTexts = taskTexts

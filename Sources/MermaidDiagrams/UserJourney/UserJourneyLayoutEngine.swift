@@ -6,7 +6,7 @@
  *              of cards.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -66,13 +66,13 @@ public enum UserJourneyLayoutEngine {
         let actorNames = diagram.actorNames
         let legend = UserJourneyLegendRows(actorNames: actorNames, measurer: taskText,
                                            rowWidth: max(measured.plotWidth, UserJourneyGeometry.narrowestLegendWidth))
-        let bodyWidth = diagram.tasks.isEmpty ? 0 : UserJourneyGeometry.scaleGutter + measured.plotWidth
+        let bodyWidth = diagram.taskRecords.isEmpty ? 0 : UserJourneyGeometry.scaleGutter + measured.plotWidth
         let title = diagram.title.map { title in
             TimelineTextFitting.fitted(DiagramLabelDecoder.label(from: title, form: .literal), measurer: titleText,
                                        maximumWidth: max(bodyWidth, narrowestTitleWidth))
         }
         let titleSize = title?.size ?? .zero
-        let legendWidth = diagram.tasks.isEmpty ? 0 : UserJourneyGeometry.scaleGutter + legend.size.width
+        let legendWidth = diagram.taskRecords.isEmpty ? 0 : UserJourneyGeometry.scaleGutter + legend.size.width
         let width = max(bodyWidth, titleSize.width, legendWidth)
         let origin = CGPoint(x: padding + (width - bodyWidth) / 2 + UserJourneyGeometry.scaleGutter,
                              y: padding + (title == nil ? 0 : titleSize.height + titleGap))
@@ -80,7 +80,7 @@ public enum UserJourneyLayoutEngine {
             .placed(at: origin)
         var bottom = body.bottom
         var legendEntries: [UserJourneyLegendEntry] = []
-        if !diagram.tasks.isEmpty, !legend.entries.isEmpty {
+        if !diagram.taskRecords.isEmpty, !legend.entries.isEmpty {
             let legendOrigin = CGPoint(x: origin.x + (measured.plotWidth - legend.size.width) / 2, y: body.bottom + UserJourneyGeometry.legendGap)
             legendEntries = legend.placed(at: legendOrigin)
             bottom = legendOrigin.y + legend.size.height

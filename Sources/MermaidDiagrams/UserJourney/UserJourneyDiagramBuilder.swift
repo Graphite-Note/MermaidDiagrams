@@ -6,7 +6,7 @@
  *              on the bytes after a task's colon, the actors interned once each, and the title and accessibility text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -23,7 +23,7 @@ struct UserJourneyDiagramBuilder {
     private var actorMentionCount = 0
     private var title: String?
     private var sections: [DiagramLabel] = []
-    private var tasks: [UserJourneyTask] = []
+    private var tasks: [UserJourneyTaskRecord] = []
     private var accessibilityTitle: String?
     private var accessibilityDescription: String?
     /// Each named actor's place in `actorNamesInFirstNamedOrder`, once there are more than `mostActorsSearched`: fewer
@@ -54,7 +54,7 @@ struct UserJourneyDiagramBuilder {
         }
         var sortedIndexByPlace = [Int32](repeating: 0, count: sortedPlaces.count)
         for (sortedIndex, place) in sortedPlaces.enumerated() { sortedIndexByPlace[place] = Int32(sortedIndex) }
-        return UserJourneyDiagram(title: title, sections: sections, tasks: tasks,
+        return UserJourneyDiagram(title: title, sections: sections, taskRecords: tasks,
                                   actorNames: sortedPlaces.map { place in actorNamesInFirstNamedOrder[place] },
                                   actorMentions: actorMentions.map { place in place < 0 ? place : sortedIndexByPlace[Int(place)] },
                                   firstActorMentions: firstActorMentions, accessibilityTitle: accessibilityTitle,
@@ -90,20 +90,19 @@ struct UserJourneyDiagramBuilder {
         let actorCount = hasActors ? Self.count(of: MermaidByte.comma, in: data, from: scoreEnd + 1, to: actorsEnd) + 1 : 0
         guard actorMentionCount + actorCount <= limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
         actorMentionCount += actorCount
-        var actors: [String] = []
         if hasActors {
-            actors.reserveCapacity(actorCount)
             var start = scoreEnd + 1
             while true {
                 let end = Self.index(of: MermaidByte.comma, in: data, from: start, to: actorsEnd) ?? actorsEnd
-                let name = Self.trimmedASCII(data, start, end)
-                actors.append(String(decoding: UnsafeBufferPointer(rebasing: data[name]), as: UTF8.self))
+                let name = UnsafeBufferPointer(rebasing: data[Self.trimmedASCII(data, start, end)])
+                actorMentions.append(name.isEmpty ? -1 : place(ofActorWritten: name))
                 guard end < actorsEnd else { break }
                 start = end + 1
             }
         }
-        appendTask(UserJourneyTask(label: label, score: Self.score(UnsafeBufferPointer(rebasing: data[1..<scoreEnd])), actors: actors,
-                                   sectionIndex: sections.isEmpty ? nil : sections.count - 1))
+        firstActorMentions.append(Int32(actorMentions.count))
+        tasks.append(UserJourneyTaskRecord(label: label, score: Self.score(UnsafeBufferPointer(rebasing: data[1..<scoreEnd])),
+                                           sectionIndex: sections.isEmpty ? nil : sections.count - 1))
     }
 
     /// `addTask(_:data:)` for data with a character past ASCII, split and trimmed on Swift's characters and scalars.
@@ -115,21 +114,19 @@ struct UserJourneyDiagramBuilder {
         guard actorMentionCount + actorCount <= limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
         actorMentionCount += actorCount
         let actors = writtenActors.map { actors in actors.split(separator: ",", omittingEmptySubsequences: false).map(Self.trimmed) } ?? []
-        appendTask(UserJourneyTask(label: label, score: JavaScriptNumber.value(of: pieces[0]), actors: actors,
-                                   sectionIndex: sections.isEmpty ? nil : sections.count - 1))
+        for name in actors { actorMentions.append(name.isEmpty ? -1 : place(ofActor: name)) }
+        firstActorMentions.append(Int32(actorMentions.count))
+        tasks.append(UserJourneyTaskRecord(label: label, score: JavaScriptNumber.value(of: pieces[0]), sectionIndex: sections.isEmpty ? nil : sections.count - 1))
     }
 
-    /// `task` added, each actor it names looked up in the table, or added to it when first named.
-    private mutating func appendTask(_ task: UserJourneyTask) {
-        for name in task.actors {
-            guard !name.isEmpty else {
-                actorMentions.append(-1)
-                continue
-            }
-            actorMentions.append(place(ofActor: name))
+    /// The place of the actor whose ASCII name is `name`, compared on its bytes while there are few actors, so that a
+    /// name already met makes no text.
+    private mutating func place(ofActorWritten name: UnsafeBufferPointer<UInt8>) -> Int32 {
+        if actorNamesInFirstNamedOrder.count <= Self.mostActorsSearched,
+           let place = actorNamesInFirstNamedOrder.firstIndex(where: { known in known.utf8.elementsEqual(name) }) {
+            return Int32(place)
         }
-        firstActorMentions.append(Int32(actorMentions.count))
-        tasks.append(task)
+        return place(ofActor: String(decoding: name, as: UTF8.self))
     }
 
     /// `name`'s place among the actors in the order they were first named, added when it is new: looked up by comparing
