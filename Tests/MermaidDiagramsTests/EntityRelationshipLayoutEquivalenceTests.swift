@@ -7,7 +7,7 @@
  *              down as Graphite's narrow columns lay them out, alike to the bit; small layout budgets refused alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -58,6 +58,31 @@ final class EntityRelationshipLayoutEquivalenceTests: XCTestCase {
         }
         XCTAssertGreaterThan(diagramCount, 1_400)
         XCTAssertGreaterThan(groupedCount, 300)
+    }
+
+    /// Types and names with every line ending: a line feed, a carriage return and line feed, a carriage return alone at
+    /// the end or inside, both at once, and text without any, read from backticks and, as the reader turns a lone
+    /// carriage return into a line feed, also set on the attribute as a diagram built in code holds it; the layout splits
+    /// and trims them as the 0.7.0 engine did, which a type or name kept whole only when it holds neither a line feed nor
+    /// a final carriage return relies on.
+    func testTypesAndNamesWithEveryLineEndingMatchTheReference() throws {
+        let texts = ["plain", "a\nb", "a\r\nb", "a\r", "a\rb", "a\r\n", "\r", "\n", "a\n\rb\r", "é\r", "a\u{301}\r"]
+        guard case .entityRelationship(let built) = try MermaidDiagramReader.read("erDiagram\n  A {\n    string name\n  }\n", limits: .standard) else {
+            return XCTFail("not an entity relationship diagram")
+        }
+        var comparedCount = 0
+        for text in texts {
+            for source in ["erDiagram\n  A {\n    `\(text)` name PK\n  }\n", "erDiagram\n  A {\n    string `\(text)`\n  }\n"] {
+                guard case .entityRelationship(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else { continue }
+                comparedCount += 1
+                XCTAssertNil(Self.firstDifference(diagram, limits: .standard), "\(source.debugDescription)")
+            }
+            var diagram = built
+            diagram.entities[0].attributes = [EntityRelationshipAttribute(type: text, name: "name"), EntityRelationshipAttribute(type: "string", name: text)]
+            comparedCount += 1
+            XCTAssertNil(Self.firstDifference(diagram, limits: .standard), "\(text.debugDescription) set on the attribute")
+        }
+        XCTAssertGreaterThan(comparedCount, 25)
     }
 
     /// Budgets of layout points too small for some diagrams: both refuse the same ones alike.
