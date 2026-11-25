@@ -2,17 +2,19 @@
  * File: SequenceReadingPiecesEquivalenceTests.swift
  * -------------------------------------------------
  * Layer: Tests
- * Description: The pieces of the sequence reader that read on bytes or in short lists give what 0.7.0's gave: a text's
- *              wrap prefix told as Swift's characters told it, and each participant found at the index a dictionary of
- *              identifiers gave, for identifiers Swift holds equal however they are spelled, few and many.
+ * Description: The pieces of the sequence reader and layout that read on bytes, in short lists or in place give what
+ *              0.7.0's gave: a text's wrap prefix told as Swift's characters told it, each participant found at the index a
+ *              dictionary of identifiers gave, and each message moved where it stands as moving it into a new one moved it.
  *
  * Authors: Bahey Shalash
  * Version: 0.1
  * Date: 25/11/2026
  */
 
+import CoreGraphics
 import XCTest
 @testable import MermaidDiagrams
+@testable import MermaidDiagramsBenchmark
 
 final class SequenceReadingPiecesEquivalenceTests: XCTestCase {
     /// 0.7.0's `SequenceTextSyntax.withoutWrapPrefix`, frozen as main dad6fb8 has it.
@@ -82,5 +84,27 @@ final class SequenceReadingPiecesEquivalenceTests: XCTestCase {
         }
         XCTAssertEqual(diagram.participants.count, 2_000)
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+    }
+
+    /// Every message of every corpus sequence, moved where it stands, is the message `translated(by:)` makes, bit for bit,
+    /// for offsets of every size and sign.
+    func testMessagesMovedInPlaceAreThoseMovedIntoNewOnes() throws {
+        var random = Random(state: 0x70_7AB1E)
+        var compared = 0
+        for source in try OutputDigest.corpora().flatMap(\.sources) {
+            guard case .sequence(let diagram) = try? MermaidDiagramReader.read(source, limits: .standard),
+                  let layout = try? SequenceLayoutEngine.layout(diagram, typography: DiagramSceneSamples.typography) else { continue }
+            for message in layout.messages {
+                let offset = CGVector(dx: CGFloat(random.below(20_000)) / 7 - 1_000, dy: CGFloat(random.below(20_000)) / 3 - 3_000)
+                var moved = message
+                moved.translate(by: offset)
+                let expected = message.translated(by: offset)
+                XCTAssertEqual(moved, expected)
+                XCTAssertEqual(moved.path.start.x.bitPattern, expected.path.start.x.bitPattern)
+                XCTAssertEqual(moved.heads.map(\.tip.y.bitPattern), expected.heads.map(\.tip.y.bitPattern))
+                compared += 1
+            }
+        }
+        XCTAssertGreaterThan(compared, 100)
     }
 }
