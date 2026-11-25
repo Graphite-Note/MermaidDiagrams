@@ -3,11 +3,12 @@
  * --------------------------------------
  * Layer: Tests
  * Description: Class diagram namespaces as Pele nests and draws them: dotted names, titles, the flat option, the boxes,
- *              notes inside them, deep nesting and the node limit.
+ *              notes inside them, deep nesting, the node limit and
+ *              whether a written title is the name, on bytes as the Strings compare.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import XCTest
@@ -179,6 +180,25 @@ final class ClassDiagramNamespaceTests: XCTestCase {
             let insideBox = points.filter { point in point.y <= box.maxY + accuracy }
             XCTAssertTrue(insideBox.contains { point in abs(point.y - box.maxY) < accuracy }, "\(points)")
             for point in insideBox { XCTAssertEqual(point.x, start.x, accuracy: accuracy, "\(points)") }
+        }
+    }
+
+    /// A written title of one line is told apart from the name on its bytes when both are ASCII, and as Strings
+    /// otherwise: either way as 0.7.0 compared the joined title with the identifier and with its last part after a dot.
+    func testAWrittenTitleIsTheNameExactlyWhenItsStringsCompareEqual() {
+        let decomposed = "Cafe\u{301}"
+        let cases: [(identifier: String, title: String)] = [
+            ("Auth", "Auth"), ("Auth", "auth"), ("Company.Auth", "Auth"), ("Company.Auth", "Company.Auth"), ("Company.Auth", "y.Auth"),
+            ("CompanyAuth", "Auth"), ("Company.Auth", ".Auth"), ("Auth", ""), (".", ""), ("a.b", "b"), ("ab", "b"), ("a..b", ".b"),
+            ("Caf\u{E9}", decomposed), ("Shop.Caf\u{E9}", decomposed), ("Shop.\(decomposed)", "Caf\u{E9}"), ("Caf\u{E9}", "Caf\u{E9}"),
+            ("Shop.Café", "fé"), ("Shop.Café", "Shop.Café"), ("Auth", "Authentication Service"),
+        ]
+        for (identifier, title) in cases {
+            let label = DiagramLabel(title)
+            let declared = ClassDiagramNamespace(identifier: identifier, title: label)
+            let joined = label.lines.joined(separator: "\n")
+            let isName = joined == identifier || identifier.hasSuffix("." + joined)
+            XCTAssertEqual(ClassDiagramNamespaceTree.writtenTitle(of: declared), isName ? nil : label, "\(identifier) / \(title)")
         }
     }
 }

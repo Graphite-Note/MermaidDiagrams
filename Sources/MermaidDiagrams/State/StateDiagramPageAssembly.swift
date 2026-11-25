@@ -6,8 +6,8 @@
  *              the layout's spans, each list of the layout made once and moved into the padding where it stands.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -115,15 +115,17 @@ struct StateDiagramPageAssembly {
     }
 
     /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
-    /// title, and centered under the title when the title is wider. Each list is made once and moved where it stands.
-    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> StateDiagramLayout {
+    /// title, and centered under the title when the title is wider. Each list is made once and moved where it stands;
+    /// the transitions, composites and dividers are taken out of the assembly, so that each path is moved where it
+    /// stands rather than copied.
+    mutating func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> StateDiagramLayout {
         // A composite state is its box, not a state.
         var states: [StateDiagramLayoutState] = []
         states.reserveCapacity(diagram.states.count)
         for index in diagram.states.indices where clustered?.compositeOfState[index] == nil { states.append(placedState(at: index)) }
         var placedTransitions: [StateDiagramLayoutTransition] = []
         placedTransitions.reserveCapacity(transitions.count)
-        for transition in transitions { if let transition { placedTransitions.append(transition) } }
+        for index in transitions.indices { if let transition = transitions[index].take() { placedTransitions.append(transition) } }
         var placedNotes = notes()
         var bounds = StateDiagramLayoutBounds.union(states: states, transitions: placedTransitions, notes: placedNotes)
         for composite in composites { bounds = bounds.union(composite.frame) }
@@ -138,8 +140,10 @@ struct StateDiagramPageAssembly {
         for index in placedTransitions.indices { placedTransitions[index].translate(by: offset) }
         for index in placedNotes.indices { placedNotes[index].translate(by: offset) }
         var placedComposites = composites
+        composites = []
         for index in placedComposites.indices { placedComposites[index] = placedComposites[index].translated(by: offset) }
         var placedDividers = regionDividers
+        regionDividers = []
         for index in placedDividers.indices { placedDividers[index].translate(by: offset) }
         return StateDiagramLayout(size: size, font: font, states: states, transitions: placedTransitions, notes: placedNotes, title: placedTitle,
                                   composites: placedComposites, regionDividers: placedDividers)

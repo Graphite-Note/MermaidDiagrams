@@ -5,8 +5,8 @@
  * Description: Lays a user journey out as a column of cards, as Pele's vertical journey does.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -57,11 +57,11 @@ struct UserJourneyColumnPlacement<Measurer: DiagramTextMeasuring> {
         var steps: [UserJourneyColumnStep] = []
         var connectors: [DiagramPath] = []
         var previousHeading: DiagramLabel?
-        var isFirstTask = true
-        for (index, task) in diagram.tasks.enumerated() {
+        // The tasks with their actors' names, made once from the journey's records: the column writes each actor's name.
+        let tasks = diagram.tasks
+        for (index, task) in tasks.enumerated() {
             let heading = task.sectionIndex.map { sectionIndex in diagram.sections[sectionIndex] }
-            if isFirstTask || heading != previousHeading {
-                isFirstTask = false
+            if index == 0 || heading != previousHeading {
                 previousHeading = heading
                 if let head = placedHeading(heading, top: y, room: room) {
                     headings.append(head)
@@ -73,14 +73,14 @@ struct UserJourneyColumnPlacement<Measurer: DiagramTextMeasuring> {
             steps.append(step)
             let frame = step.frame
             y += frame.height
-            if index + 1 < diagram.tasks.count {
+            if index + 1 < tasks.count {
                 connectors.append(DiagramPath(start: CGPoint(x: frame.midX, y: y), segments: [.line(to: CGPoint(x: frame.midX, y: y + UserJourneyColumnGeometry.connectorLength))]))
             }
             y += UserJourneyColumnGeometry.connectorLength
             width = max(width, frame.width)
         }
         let pageWidth = (width + 2 * padding).rounded(.up)
-        let bottom = max(padding + (title?.size.height ?? 0), y - (diagram.tasks.isEmpty ? 0 : UserJourneyColumnGeometry.connectorLength))
+        let bottom = max(padding + (title?.size.height ?? 0), y - (tasks.isEmpty ? 0 : UserJourneyColumnGeometry.connectorLength))
         let titleHeight = title?.size.height ?? 0
         title?.center = CGPoint(x: pageWidth / 2, y: padding + titleHeight / 2)
         return UserJourneyColumnLayout(size: CGSize(width: pageWidth, height: (bottom + padding).rounded(.up)), font: font, headings: headings, steps: steps,

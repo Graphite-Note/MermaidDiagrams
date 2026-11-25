@@ -3,11 +3,12 @@
  * --------------------------------------
  * Layer: Core
  * Description: The path through a route that turns corners, as Pele's `routePath` draws it: an S between points not in
- *              line, a wide turn where the route turns from one way to the other, and a short straight run into a mark.
+ *              line, a wide turn where the route turns from one way to the other, and a short straight run into a mark;
+ *              the route and its axes arrays or spans of a scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -34,12 +35,20 @@ enum DiagramTurningRouteDrawing {
     ///     need it to; nil for its own mark's trim and the lead, or 0 without a mark.
     ///   - endReach: The same at its target.
     /// - Returns: The path, and the unit directions the edge leaves its source and arrives at its target in.
-    static func path(through route: [CGPoint], segmentsRunVertically: [Bool], startTrim: CGFloat, endTrim: CGFloat, startReach: CGFloat? = nil,
-                     endReach: CGFloat? = nil) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) {
+    ///
+    /// The route and the axes are any lists indexed from 0 (arrays, or spans of a layout's scratch arena): the route is
+    /// copied once, into the list the leads are put in.
+    static func path<Route: RandomAccessCollection<CGPoint>, Axes: RandomAccessCollection<Bool>>(
+        through route: Route, segmentsRunVertically: Axes, startTrim: CGFloat, endTrim: CGFloat, startReach: CGFloat? = nil, endReach: CGFloat? = nil
+    ) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) where Route.Index == Int, Axes.Index == Int {
+        precondition(route.count >= 2 && segmentsRunVertically.count >= route.count - 1, "a route of two points or more, an axis for each segment")
         let startReach = startReach ?? defaultReach(trim: startTrim)
         let endReach = endReach ?? defaultReach(trim: endTrim)
-        var points = route
-        var axes = [segmentsRunVertically[0]] + segmentsRunVertically
+        var points = Array(route)
+        var axes: [Bool] = []
+        axes.reserveCapacity(segmentsRunVertically.count + 3)
+        axes.append(segmentsRunVertically[segmentsRunVertically.startIndex])
+        axes.append(contentsOf: segmentsRunVertically)
         let startDirection = unit(points, 0, 1, isVertical: axes[1])
         let endDirection = unit(points, points.count - 2, points.count - 1, isVertical: axes[points.count - 1])
         points[0] = CGPoint(x: points[0].x + startDirection.dx * startTrim, y: points[0].y + startDirection.dy * startTrim)

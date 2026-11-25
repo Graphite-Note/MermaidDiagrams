@@ -6,8 +6,8 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -235,8 +235,15 @@ struct RequirementPageAssembly {
         var rowTop = divider + RequirementMeasurement.paddingAlong
         var fieldNames: [DiagramTextBlock] = []
         var fieldValues: [DiagramTextBlock] = []
-        fieldNames.reserveCapacity(box.rows.count)
-        fieldValues.reserveCapacity(box.rows.count)
+        // A field's name or value of several lines is drawn as a block for each line.
+        var nameLineCount = 0
+        var valueLineCount = 0
+        for row in box.rows {
+            nameLineCount += max(row.key.lineCount, 1)
+            valueLineCount += max(row.value.lineCount, 1)
+        }
+        fieldNames.reserveCapacity(nameLineCount)
+        fieldValues.reserveCapacity(valueLineCount)
         let keyLeft = frame.minX + RequirementMeasurement.paddingAcross
         for row in box.rows {
             appendStartingAt(row.key, left: keyLeft, top: rowTop, offset: offset, to: &fieldNames)

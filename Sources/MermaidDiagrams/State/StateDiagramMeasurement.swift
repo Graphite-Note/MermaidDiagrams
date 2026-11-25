@@ -5,8 +5,8 @@
  * Description: A state diagram's text measured and its shapes sized, Pele's, with the spans its transitions spread along.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -76,7 +76,8 @@ struct StateDiagramMeasurement {
             case .start, .end, .choice, .fork, .join:
                 names.append(nil)
                 details.append(nil)
-                stateSizes.append(Self.markSize(of: state.kind, transitionCount: transitionCounts[index], flowIsVertical: flowIsVertical))
+                stateSizes.append(Self.markSize(of: state.kind, transitionCount: transitionCounts.isEmpty ? 0 : transitionCounts[index],
+                                                 flowIsVertical: flowIsVertical))
             }
         }
         self.names = names
@@ -143,7 +144,9 @@ struct StateDiagramMeasurement {
     }
 
     /// For each state, the larger of how many transitions leave it and how many arrive.
+    /// Empty for a diagram without forks and joins, the only states whose size follows it.
     private static func busierSideTransitionCounts(_ diagram: StateDiagram) -> [Int] {
+        guard diagram.states.contains(where: { state in state.kind == .fork || state.kind == .join }) else { return [] }
         let stateCount = diagram.states.count
         var counts = [Int](repeating: 0, count: 2 * stateCount)
         for transition in diagram.transitions {

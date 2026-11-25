@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: Lays a graph out in swimlanes as Pele's `laneLayout` does, on the thread's scratch arena: every top-level
  *              group a lane the length of the diagram, ranks shared across lanes, each box kept in its lane, handoffs
- *              given simple routes of their own.
+ *              given simple routes of their own; the placement read where it lies in the arena or copied into lists.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -26,14 +26,19 @@ enum LaneLayout {
     static let roundCount = 3
 
     static func place(_ graph: LaneLayoutGraph, spacing: LayeredSpacing) -> LaneLayoutPlacement {
-        guard !graph.boxes.isEmpty else {
-            return LaneLayoutPlacement(size: .zero, frames: [], laneTitleDepth: 0, lanes: [], routes: graph.edges.map { _ in nil },
-                                       labelCenters: graph.edges.map { _ in .zero })
-        }
-        return DiagramScratchArena.withCurrentThread { arena in place(graph, spacing: spacing, arena: arena) }
+        withPlacement(graph, spacing: spacing) { placed in placed.placement }
     }
 
-    private static func place(_ graph: LaneLayoutGraph, spacing: LayeredSpacing, arena: DiagramScratchArena) -> LaneLayoutPlacement {
+    /// `body` given where the layout put everything, read from the routed pass in the calling thread's arena, which it
+    /// must not keep: a host that moves the boxes and routes onto its page in place needs no list of the placement.
+    static func withPlacement<Result>(_ graph: LaneLayoutGraph, spacing: LayeredSpacing, _ body: (LaneLayoutPlacedView) -> Result) -> Result {
+        DiagramScratchArena.withCurrentThread { arena in
+            guard !graph.boxes.isEmpty else { return body(LaneLayoutPlacedView(emptyWithEdgeCount: graph.edges.count, arena: arena)) }
+            return body(LaneLayoutPlacedView(place(graph, spacing: spacing, arena: arena)))
+        }
+    }
+
+    private static func place(_ graph: LaneLayoutGraph, spacing: LayeredSpacing, arena: DiagramScratchArena) -> LaneHandoffRouting {
         let setup = LaneLayoutItems(graph: graph, arena: arena)
         let isPlain = arena.span(count: setup.edges.count, repeating: false)
         let next = arena.span(count: setup.edges.count, repeating: false)
@@ -54,7 +59,7 @@ enum LaneLayout {
             arena.release(to: passStart)
             routed = pass(setup, spacing: spacing, isPlain: isPlain, keepsMargin: keepsMargin, arena: arena)
         }
-        return placement(of: routed)
+        return routed
     }
 
     private static func pass(_ setup: LaneLayoutItems, spacing: LayeredSpacing, isPlain: ScratchSpan<Bool>, keepsMargin: ScratchSpan<Bool>,
@@ -63,24 +68,66 @@ enum LaneLayout {
         return LaneHandoffRouting(placed: LanePlacedPass(pass: pass, bands: LaneBands(pass: pass, arena: arena), arena: arena), arena: arena)
     }
 
-    /// The routed pass as the layout's result: the routes' points with each segment's flow, and the size.
-    private static func placement(of routed: LaneHandoffRouting) -> LaneLayoutPlacement {
+}
+
+/// Where the lane layout put everything, on the page from the origin, read from the routed pass in the calling thread's
+/// arena (`LaneLayout.withPlacement`): what `LaneLayoutPlacement` copies into lists.
+struct LaneLayoutPlacedView {
+    let size: CGSize
+    /// Each box's frame.
+    let frames: ScratchSpan<CGRect>
+    let laneTitleDepth: CGFloat
+    /// The lanes, by box, in the order they are placed across the flow.
+    let lanes: ScratchSpan<Int>
+    /// For each edge, the center of its text.
+    let labelCenters: ScratchSpan<CGPoint>
+    private let placed: LanePlacedPass?
+
+    init(_ routed: LaneHandoffRouting) {
         let placed = routed.placed
-        let setup = placed.pass.setup
         let breadth = placed.pass.laneStarts[placed.pass.laneStarts.count - 1]
         let length = placed.bands.length
+        size = placed.runsAcross ? CGSize(width: length, height: breadth) : CGSize(width: breadth, height: length)
+        frames = placed.frames
+        laneTitleDepth = placed.pass.titleDepth
+        lanes = placed.pass.setup.lanes
+        labelCenters = placed.labelCenters
+        self.placed = placed
+    }
+
+    /// A graph without boxes: nothing placed, no edge routed.
+    init(emptyWithEdgeCount edgeCount: Int, arena: DiagramScratchArena) {
+        size = .zero
+        frames = .empty
+        laneTitleDepth = 0
+        lanes = .empty
+        labelCenters = arena.span(count: edgeCount, repeating: CGPoint.zero)
+        placed = nil
+    }
+
+    /// The points edge `edgeIndex` passes from where it leaves its source's box to where it reaches its target's, each
+    /// with the flow of the segment that arrives at it (`axis` 0 for a vertical flow); empty for an edge it gave no route
+    /// of two points or more, such as one from a box to itself.
+    func route(of edgeIndex: Int) -> ScratchSpan<LaneRoutePoint> {
+        guard let placed else { return .empty }
+        let route = placed.route(of: edgeIndex)
+        return route.count >= 2 ? route : .empty
+    }
+
+    /// The placement copied into lists: the routes' points with each segment's flow.
+    var placement: LaneLayoutPlacement {
         var routes: [LaneLayoutRoute?] = []
-        routes.reserveCapacity(setup.graphEdges.count)
-        for edgeIndex in 0..<setup.graphEdges.count {
-            let route = placed.route(of: edgeIndex)
+        routes.reserveCapacity(labelCenters.count)
+        for edgeIndex in 0..<labelCenters.count {
+            let route = route(of: edgeIndex)
             guard route.count >= 2 else {
                 routes.append(nil)
                 continue
             }
             routes.append(LaneLayoutRoute(points: route.map(\.point), segmentsRunVertically: route.dropFirst().map { point in point.axis == 0 }))
         }
-        return LaneLayoutPlacement(size: placed.runsAcross ? CGSize(width: length, height: breadth) : CGSize(width: breadth, height: length),
-                                   frames: Array(placed.frames), laneTitleDepth: placed.pass.titleDepth, lanes: Array(setup.lanes), routes: routes,
-                                   labelCenters: Array(placed.labelCenters))
+        return LaneLayoutPlacement(size: size, frames: Array(frames), laneTitleDepth: laneTitleDepth, lanes: Array(lanes), routes: routes,
+                                   labelCenters: Array(labelCenters))
     }
+
 }

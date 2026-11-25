@@ -4,11 +4,12 @@
  * Layer: Core
  * Description: A text measured into a layout's own list of lines: its first line there, how many, its size, its line
  *              height and its center; each line a range of the source's bytes, or of bytes the list derived when the
- *              text needed decoding, with its width and, for emphasis only, its runs.
+ *              text needed decoding, with its width and, for emphasis only, its runs; lines of bytes that do not
+ *              outlive the measuring copied into the derived bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -99,6 +100,20 @@ struct DiagramMeasuredLines: Sendable {
         }
         lines.append(line)
     }
+
+    /// The lines of `text` that are ranges of `source` copied into the derived bytes, for a text measured from bytes that
+    /// do not outlive the measuring (a String's).
+    mutating func deriveLines(of text: DiagramMeasuredText, source: UnsafeBufferPointer<UInt8>) {
+        for index in text.lineIndices where lines[index].start < Self.derivedOffset {
+            let line = lines[index]
+            let start = withBytes(from: line.start, to: line.end, source: source) { bytes in appendDerived(bytes) }
+            lines[index].start = start
+            lines[index].end = start + (line.end - line.start)
+        }
+    }
+
+    /// A source of no bytes, for texts whose lines are all derived bytes.
+    static var noSource: UnsafeBufferPointer<UInt8> { UnsafeBufferPointer(start: nil, count: 0) }
 
     private mutating func appendDerived(_ bytes: UnsafeBufferPointer<UInt8>) -> Int32 {
         precondition(derived.count + bytes.count < Int(Self.derivedOffset), "derived text too long for its offsets")

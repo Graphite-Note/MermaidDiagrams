@@ -4,52 +4,69 @@
  * Layer: Core
  * Description: Puts a placed use case diagram on the page as Pele's renderUsecase does: everything moved inside the
  *              padding below the title, the boundaries' titles clear of the lines, the lines' ends on the outlines,
- *              loops beside their nodes, and each node's texts placed.
+ *              loops beside their nodes, and each node's texts placed; the placed graph read from the thread's
+ *              scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
 import CoreGraphics
 
 extension UseCaseLayoutPass {
-    func assembled<Measurer>(_ placement: LayeredClusterPlacement, measurers: inout UseCaseTextMeasurers<Measurer>) -> UseCaseLayout {
+    /// The page from what the layout placed, in `arena`: everything moved inside the padding below the title, each
+    /// route's ends moved onto its nodes' outlines, the boundaries' titles clear of the lines, then the nodes and edges.
+    func assembled<Measurer>(_ placed: UseCasePlacedGraph, measurers: inout UseCaseTextMeasurers<Measurer>, arena: DiagramScratchArena) -> UseCaseLayout {
         let padding = UseCaseLayoutEngine.padding
         let titleMeasurer = measurers.measurer(size: fontSize, isBold: true)
         var title = diagram.title.flatMap { title in UseCaseTextLabel.titleBlock(title, measurer: titleMeasurer, room: UseCaseNodeMeasurement.titleRoom) }
         let titleSize = title?.size ?? .zero
         let titleHeight = titleSize.height > 0 ? titleSize.height + UseCaseLayoutEngine.titleGap : 0
-        let inner = max(placement.size.width, titleSize.width)
-        let offset = CGVector(dx: padding + (inner - placement.size.width) / 2, dy: padding + titleHeight)
-        let size = CGSize(width: (inner + 2 * padding).rounded(.up), height: (placement.size.height + titleHeight + 2 * padding).rounded(.up))
+        let inner = max(placed.size.width, titleSize.width)
+        let offset = CGVector(dx: padding + (inner - placed.size.width) / 2, dy: padding + titleHeight)
+        let size = CGSize(width: (inner + 2 * padding).rounded(.up), height: (placed.size.height + titleHeight + 2 * padding).rounded(.up))
         title?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        let centers = views.indices.map { place in
-            views[place].node.isGroup ? CGPoint.zero : placement.nodeCenters[layoutPlaces[place]].translated(by: offset)
+        let centers: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: views.count)
+        for place in views.indices {
+            centers[place] = views[place].node.isGroup ? CGPoint.zero : placed.nodeCenters[layoutPlaces[place]].translated(by: offset)
         }
-        let frames = placement.clusterFrames.map { frame in frame.offsetBy(dx: offset.dx, dy: offset.dy) }
-        var routes = placement.edgeRoutes.map { route in
-            LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
-        }
+        let frames = placed.clusterFrames
+        for cluster in 0..<frames.count { frames[cluster] = frames[cluster].offsetBy(dx: offset.dx, dy: offset.dy) }
+        let routes = placed.routes
+        for index in 0..<routes.points.count { routes.points[index] = routes.points[index].translated(by: offset) }
         // Where lines cross the page's rows matters only to the titles of boundaries.
-        let crossings = frames.isEmpty ? [:] : UseCaseBoundaryTitles.crossings(of: routes)
-        UseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
-        let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
+        let crossings = frames.isEmpty ? [:] : UseCaseBoundaryTitles.crossings(ofPoints: routes.points)
+        attachEnds(of: routes, centers: centers, arena: arena)
+        for route in 0..<placed.labelCenters.count where placed.hasLabelCenter[route] {
+            placed.labelCenters[route] = placed.labelCenters[route].translated(by: offset)
+        }
         var boundaries: [UseCaseLayoutBoundary] = []
         boundaries.reserveCapacity(frames.count)
         for place in views.indices where views[place].node.isGroup {
             boundaries.append(UseCaseBoundaryTitles.boundary(views[place], frame: frames[layoutPlaces[place]], crossings: crossings))
         }
-        let edges = placedEdges(routes: routes, labelCenters: labelCenters, centers: centers, boundaries: boundaries)
+        let edges = placedEdges(placed, centers: centers, boundaries: boundaries)
         var nodes: [UseCaseLayoutNode] = []
         nodes.reserveCapacity(views.count - boundaries.count)
         for place in views.indices where !views[place].node.isGroup { nodes.append(placedNode(views[place], center: centers[place])) }
         return UseCaseLayout(size: size, font: font, title: title, boundaries: boundaries, edges: edges, nodes: nodes)
     }
 
+    /// Each route's ends moved onto the outlines of its nodes (`UseCaseEdgeEnds`).
+    private func attachEnds(of routes: UseCaseRoutes, centers: ScratchSpan<CGPoint>, arena: DiagramScratchArena) {
+        let sources: ScratchSpan<Int> = arena.uninitializedSpan(count: laidOutEdges.count)
+        let targets: ScratchSpan<Int> = arena.uninitializedSpan(count: laidOutEdges.count)
+        for (route, drawn) in laidOutEdges.enumerated() {
+            sources[route] = drawn.source
+            targets[route] = drawn.target
+        }
+        var attached = routes
+        UseCaseEdgeEnds.attach(&attached, sources: sources, targets: targets, centers: centers, views: views)
+    }
+
     /// The edges in the order drawn: each routed one along its route, each loop beside its node.
-    private func placedEdges(routes: [LayeredClusterRoute], labelCenters: [CGPoint?], centers: [CGPoint],
-                             boundaries: [UseCaseLayoutBoundary]) -> [UseCaseLayoutEdge] {
+    private func placedEdges(_ placed: UseCasePlacedGraph, centers: ScratchSpan<CGPoint>, boundaries: [UseCaseLayoutBoundary]) -> [UseCaseLayoutEdge] {
         let fills = boundaries.filter { boundary in boundary.look.paintsFill }
         let fillFrames = fills.map(\.frame)
         var looks = self.looks
@@ -70,16 +87,17 @@ extension UseCaseLayoutPass {
                 line = UseCaseEdgeLine(path: loop.path, startTip: loop.startTip, startDirection: loop.startDirection, endTip: loop.endTip,
                                        endDirection: loop.endDirection, labelCenter: loop.labelCenter)
             } else {
-                let route = routes[routeIndex]
-                let labelCenter = labelCenters[routeIndex]
+                let route = routeIndex
                 routeIndex += 1
-                guard route.points.count >= 2 else { continue }
-                let path = DiagramRouteDrawing.path(through: route.points, segmentsRunVertically: route.segmentsRunVertically, startTrim: startTrim, endTrim: endTrim)
-                let first = route.points[0]
-                let last = route.points[route.points.count - 1]
+                let points = placed.routes.points(of: route)
+                guard points.count >= 2 else { continue }
+                let path = DiagramRouteDrawing.path(through: Array(points), segmentsRunVertically: placed.routes.axes(of: route),
+                                                    startTrim: startTrim, endTrim: endTrim)
+                let first = points[0]
+                let last = points[points.count - 1]
                 line = UseCaseEdgeLine(path: path.path, startTip: first, startDirection: CGVector(dx: -path.startDirection.dx, dy: -path.startDirection.dy),
                                        endTip: last, endDirection: path.endDirection,
-                                       labelCenter: labelCenter ?? CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2))
+                                       labelCenter: placed.hasLabelCenter[route] ? placed.labelCenters[route] : CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2))
             }
             edges.append(line.edge(edge, label: drawn.label, fills: fills, fillFrames: fillFrames, look: UseCaseLook.of(edge.styles, made: &looks)))
         }

@@ -6,8 +6,8 @@
  *              with their lines, and its limits.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import XCTest
@@ -135,29 +135,46 @@ final class RequirementReadingTests: XCTestCase {
         XCTAssertThrowsError(try RequirementParserTests.read("requirementDiagram\na - copies -> b\na - copies -> b\na - copies -> b\n", limits: limits)) { error in
             XCTAssertEqual(error as? MermaidDiagramReadError, .tooManyEdges(limit: 2))
         }
-        var builder = RequirementDiagramBuilder(limits: .standard)
-        try builder.addRequirement(named: "a", kind: .requirement)
-        try builder.defineClasses(names: ["c"], declarations: Array(repeating: "a:b", count: 1_000))
-        for _ in 0..<999 { try builder.setClasses(names: ["a"], classNames: ["c"]) }
-        XCTAssertThrowsError(try builder.setClasses(names: ["a"], classNames: ["c"])) { error in
-            XCTAssertEqual(error as? RequirementDiagramBuilder.Refusal, .tooManyStyleCopies)
+        try Self.withBuilder(names: ["a", "c"]) { builder, name in
+            try builder.addRequirement(named: name("a"), kind: .requirement, fields: RequirementBodyFields())
+            try builder.defineClasses(names: [name("c")], declarations: Array(repeating: "a:b", count: 1_000))
+            for _ in 0..<999 { try builder.setClasses(names: [name("a")], classNames: [name("c")]) }
+            XCTAssertThrowsError(try builder.setClasses(names: [name("a")], classNames: [name("c")])) { error in
+                XCTAssertEqual(error as? RequirementDiagramBuilder.Refusal, .tooManyStyleCopies)
+            }
         }
     }
 
     /// Mermaid's `requirementDb` spec: classes keep the declarations that set a color for text, and a class given before it
     /// is defined copies its declarations when it is.
     func testTheDatabaseSpecsClassesAndStyles() throws {
-        var builder = RequirementDiagramBuilder(limits: .standard)
-        try builder.addRequirement(named: "requirement", kind: .requirement)
-        try builder.addElement(named: "element")
-        try builder.setStyle(names: ["requirement"], declarations: ["color:red"])
-        try builder.setStyle(names: ["element"], declarations: ["stroke-width:4px", "stroke: yellow"])
-        try builder.defineClasses(names: ["myClass"], declarations: ["fill:#f9f,color:red"])
-        XCTAssertEqual(builder.diagram.requirements.first?.styleDeclarations, ["color:red"])
-        XCTAssertEqual(builder.diagram.elements.first?.styleDeclarations, ["stroke-width:4px", "stroke: yellow"])
-        XCTAssertEqual(builder.diagram.styleClasses.first?.textStyleDeclarations, ["bgFill:#f9f,color:red"])
-        try builder.setClasses(names: ["requirement", "element"], classNames: ["myClass"])
-        XCTAssertEqual(builder.diagram.requirements.first?.styleDeclarations, ["color:red", "fill:#f9f,color:red"])
-        XCTAssertEqual(builder.diagram.elements.first?.classNames, ["default", "myClass"])
+        try Self.withBuilder(names: ["requirement", "element", "myClass"]) { builder, name in
+            try builder.addRequirement(named: name("requirement"), kind: .requirement, fields: RequirementBodyFields())
+            try builder.addElement(named: name("element"), fields: RequirementBodyFields())
+            try builder.setStyle(names: [name("requirement")], declarations: ["color:red"])
+            try builder.setStyle(names: [name("element")], declarations: ["stroke-width:4px", "stroke: yellow"])
+            try builder.defineClasses(names: [name("myClass")], declarations: ["fill:#f9f,color:red"])
+            XCTAssertEqual(builder.diagram.requirements.first?.styleDeclarations, ["color:red"])
+            XCTAssertEqual(builder.diagram.elements.first?.styleDeclarations, ["stroke-width:4px", "stroke: yellow"])
+            XCTAssertEqual(builder.diagram.styleClasses.first?.textStyleDeclarations, ["bgFill:#f9f,color:red"])
+            try builder.setClasses(names: [name("requirement"), name("element")], classNames: [name("myClass")])
+            XCTAssertEqual(builder.diagram.requirements.first?.styleDeclarations, ["color:red", "fill:#f9f,color:red"])
+            XCTAssertEqual(builder.diagram.elements.first?.classNames, ["default", "myClass"])
+        }
+    }
+
+    /// Runs `body` with a builder over a text holding `names`, and a function that gives each name's range in it, as the
+    /// parser hands names to the builder.
+    static func withBuilder(names: [String], _ body: (inout RequirementDiagramBuilder, (String) -> Range<Int>) throws -> Void) throws {
+        var ranges: [String: Range<Int>] = [:]
+        var text: [UInt8] = []
+        for name in names {
+            ranges[name] = text.count..<(text.count + name.utf8.count)
+            text += Array(name.utf8) + [MermaidByte.space]
+        }
+        try text.withUnsafeBufferPointer { bytes in
+            var builder = RequirementDiagramBuilder(limits: .standard, bytes: bytes, isASCII: GraphDiagramNameTable.isASCII(bytes))
+            try body(&builder) { name in ranges[name] ?? 0..<0 }
+        }
     }
 }

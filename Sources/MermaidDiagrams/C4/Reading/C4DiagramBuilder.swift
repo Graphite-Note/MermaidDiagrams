@@ -8,8 +8,8 @@
  *              the text and every alias an interned name.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Builds a C4 diagram as Pele's `C4Db` does. A positional argument fills the field of its place; a named one fills the
@@ -36,15 +36,10 @@ struct C4DiagramBuilder {
     }
 
     /// Room for as many shapes, boundaries, relations and names as `kinds` holds macros, made once.
-    mutating func reserveCapacity(for kinds: [C4TokenKind]) {
-        var shapeCount = 0
-        var boundaryCount = 1
-        var relationCount = 0
-        for kind in kinds {
-            if kind >= .person, kind <= .externalComponentQueue { shapeCount += 1 }
-            if kind >= .enterpriseBoundary, kind <= .rightNode { boundaryCount += 1 }
-            if kind >= .relation, kind <= .relationIndex { relationCount += 1 }
-        }
+    mutating func reserveCapacity(for counts: (shapes: Int, boundaries: Int, relations: Int)) {
+        let shapeCount = counts.shapes
+        let boundaryCount = counts.boundaries + 1
+        let relationCount = counts.relations
         diagram.shapeRecords.reserveCapacity(shapeCount)
         diagram.boundaryRecords.reserveCapacity(boundaryCount)
         diagram.relationRecords.reserveCapacity(relationCount)
@@ -89,7 +84,7 @@ struct C4DiagramBuilder {
 
     /// `alias, label, ?descr, ?sprite, ?tags, $link` for people and systems; containers and components take `?techn`
     /// before `?descr`.
-    mutating func addShape(_ kind: C4ShapeKind, arguments: [C4ArgumentRecord]) throws(MermaidDiagramReadError) {
+    mutating func addShape(_ kind: C4ShapeKind, arguments: ScratchSpan<C4ArgumentRecord>) throws(MermaidDiagramReadError) {
         let index: Int
         let alias = arguments[0]
         let name = alias.isNamed ? -1 : self.name(of: alias.text)
@@ -121,7 +116,7 @@ struct C4DiagramBuilder {
 
     /// `alias, label, ?type, ?tags, $link` for boundaries, the enterprise, system and container ones with their kind
     /// written in as the third argument; `alias, label, ?type, ?descr, ?sprite, ?tags, $link` for deployment nodes.
-    mutating func addBoundary(_ macro: C4TokenKind, arguments: [C4ArgumentRecord]) throws(MermaidDiagramReadError) {
+    mutating func addBoundary(_ macro: C4TokenKind, arguments: ScratchSpan<C4ArgumentRecord>) throws(MermaidDiagramReadError) {
         let kindWord: C4Text? = switch macro {
         case .enterpriseBoundary: C4DerivedText.enterprise
         case .systemBoundary: C4DerivedText.systemWord
@@ -196,7 +191,7 @@ struct C4DiagramBuilder {
         }
     }
 
-    static func argument(_ arguments: [C4ArgumentRecord], _ place: Int) -> C4ArgumentRecord? {
+    static func argument(_ arguments: ScratchSpan<C4ArgumentRecord>, _ place: Int) -> C4ArgumentRecord? {
         place < arguments.count ? arguments[place] : nil
     }
 }

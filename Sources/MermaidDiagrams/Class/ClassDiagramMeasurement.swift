@@ -5,8 +5,8 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -165,16 +165,19 @@ struct ClassDiagramMeasurement {
         return CGFloat(side.count - 1) * gap + crowdedSideClearance
     }
 
-    /// For each node, the indexes of its edges to itself, in their order.
+    /// For each node, the indexes of its edges to itself, in their order; empty when no node has one.
     var selfLoopEdgeIndices: [[Int]] {
+        guard edges.contains(where: \.isSelfLoop) else { return [] }
         var loops = [[Int]](repeating: [], count: nodes.count)
         for (edgeIndex, edge) in edges.enumerated() where edge.isSelfLoop { loops[edge.source].append(edgeIndex) }
         return loops
     }
 
     /// Each node's size in its rank: its drawn size, widened on both sides by the room its loops take beside it.
+    /// `selfLoops` is empty for a diagram without loops.
     func layoutSizes(selfLoops: [[Int]]) -> [CGSize] {
-        sizes.enumerated().map { node, size in
+        guard !selfLoops.isEmpty else { return sizes }
+        return sizes.enumerated().map { node, size in
             let room = selfLoops[node].reduce(0) { room, edgeIndex in room + ClassDiagramSelfLoops.room(textWidth: edges[edgeIndex].text?.size.width) }
             return CGSize(width: size.width + 2 * room, height: size.height)
         }

@@ -7,8 +7,8 @@
  *              boundaries nested through a counter, not recursion; every argument a range of the text's bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Reads a C4 diagram from its keyword on. A statement is a title, an accessibility statement or a macro, each on its
@@ -31,30 +31,36 @@ struct C4Parser {
     private var builder: C4DiagramBuilder
 
     /// The arguments of the macro being read, the list kept from macro to macro.
-    private var arguments: [C4ArgumentRecord] = []
+    private var arguments: ScratchList<C4ArgumentRecord>
 
+    /// The diagram, read with its tokens and its macros' arguments in lists on the thread's scratch arena.
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> C4Diagram {
         let bytes = Array(cursor.bytes[(cursor.position - keyword.utf8.count)...])
-        var parser = C4Parser(bytes: bytes, firstLine: cursor.line, limits: limits)
-        try parser.readDiagram()
-        return parser.builder.finished
+        let read = DiagramScratchArena.withCurrentThread { arena in
+            Result { () throws(MermaidDiagramReadError) in
+                var parser = C4Parser(bytes: bytes, firstLine: cursor.line, limits: limits, arena: arena)
+                try parser.readDiagram()
+                return parser.builder.finished
+            }
+        }
+        return try read.get()
     }
 
-    private init(bytes: [UInt8], firstLine: Int, limits: MermaidDiagramLimits) {
+    private init(bytes: [UInt8], firstLine: Int, limits: MermaidDiagramLimits, arena: DiagramScratchArena) {
         self.bytes = bytes
         self.firstLine = firstLine
-        tokens = C4Lexer.tokens(of: bytes)
+        tokens = C4Lexer.tokens(of: bytes, arena: arena)
         builder = C4DiagramBuilder(source: bytes, limits: limits)
-        builder.reserveCapacity(for: tokens.kinds)
-        arguments.reserveCapacity(Self.typicalArgumentCount)
+        builder.reserveCapacity(for: tokens.macroCounts)
+        arguments = arena.list(capacity: Self.typicalArgumentCount)
     }
 
-    private var current: C4TokenKind { index < tokens.kinds.count ? tokens.kinds[index] : .end }
+    private var current: C4TokenKind { index < tokens.count ? tokens.kind(index) : .end }
 
     private mutating func readDiagram() throws(MermaidDiagramReadError) {
         let header = current
         guard header >= .context, header <= .deployment else { throw failure(expecting: .header) }
-        builder.diagram.level = C4DiagramLevel(rawValue: String(decoding: bytes[tokens.starts[index]..<tokens.ends[index]], as: UTF8.self)) ?? .context
+        builder.diagram.level = C4DiagramLevel(rawValue: String(decoding: bytes[tokens.start(index)..<tokens.end(index)], as: UTF8.self)) ?? .context
         index += 1
         try expect(.newline, .lineBreak)
         try readStatements()
@@ -136,6 +142,7 @@ struct C4Parser {
     private mutating func readMacro(_ token: C4TokenKind) throws(MermaidDiagramReadError) -> Bool {
         index += 1
         try readArguments()
+        let arguments = arguments.elements
         switch token {
         case .person ... .externalComponentQueue:
             try builder.addShape(Self.shapeKinds[token.rawValue - C4TokenKind.person.rawValue], arguments: arguments)
@@ -145,8 +152,8 @@ struct C4Parser {
             return true
         case .relation ... .relationIndex:
             // RelIndex takes a sequence number first, which Mermaid ignores.
-            if token == .relationIndex, !arguments.isEmpty { arguments.removeFirst() }
-            try builder.addRelation(Self.relationKinds[token.rawValue - C4TokenKind.relation.rawValue], arguments: arguments)
+            let written = token == .relationIndex && !arguments.isEmpty ? arguments.part(1..<arguments.count) : arguments
+            try builder.addRelation(Self.relationKinds[token.rawValue - C4TokenKind.relation.rawValue], arguments: written)
         case .updateElementStyle: builder.updateElementStyle(arguments)
         case .updateRelationStyle: builder.updateRelationStyle(arguments)
         default: builder.updateLayoutConfiguration(arguments)
@@ -171,7 +178,7 @@ struct C4Parser {
     /// One argument or more into `arguments`: quoted or bare text (trimmed), empty ones, and `$key="value"`, each a range
     /// of the text.
     private mutating func readArguments() throws(MermaidDiagramReadError) {
-        arguments.removeAll(keepingCapacity: true)
+        arguments.removeAll()
         while true {
             switch current {
             case .string:
@@ -201,22 +208,22 @@ struct C4Parser {
     /// The token's text without the white space at its ends, as JavaScript's `trim` leaves it: trimmed on its bytes,
     /// with the white space `C4Characters.trimmed` trims.
     private func trimmedText(at tokenIndex: Int) -> C4Text {
-        let trimmed = JavaScriptWhitespace.trimmed(bytes[tokens.starts[tokenIndex]..<tokens.ends[tokenIndex]])
+        let trimmed = JavaScriptWhitespace.trimmed(bytes[tokens.start(tokenIndex)..<tokens.end(tokenIndex)])
         return C4Text(start: trimmed.startIndex, end: trimmed.endIndex)
     }
 
     /// The text of a `title` or `accDescription` statement after its word and the one white space character after it,
     /// which may take more than one byte.
     private func text(at tokenIndex: Int, droppingWordAndSpaceOf wordLength: Int) -> C4Text {
-        let end = tokens.ends[tokenIndex]
-        let spaceStart = min(tokens.starts[tokenIndex] + wordLength, end)
+        let end = tokens.end(tokenIndex)
+        let spaceStart = min(tokens.start(tokenIndex) + wordLength, end)
         let start = min(spaceStart + JavaScriptWhitespace.length(in: bytes, at: spaceStart), end)
         return C4Text(start: start, end: end)
     }
 
     /// The line the token at `tokenIndex` starts on, in the whole text.
     private func line(at tokenIndex: Int) -> Int {
-        let offset = tokenIndex < tokens.starts.count ? tokens.starts[tokenIndex] : bytes.count
+        let offset = tokenIndex < tokens.count ? tokens.start(tokenIndex) : bytes.count
         return firstLine + bytes[..<min(offset, bytes.count)].count { byte in byte == MermaidByte.newline }
     }
 

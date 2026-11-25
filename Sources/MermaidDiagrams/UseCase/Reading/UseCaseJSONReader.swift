@@ -7,8 +7,8 @@
  *              that is not JSON the offset of the first character that is not.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// Reads JSON text on UTF-16 code units, as JavaScript reads it, into a `UseCaseJSONValue`. Nesting is kept on a stack
@@ -231,5 +231,12 @@ struct UseCaseJSONReader {
 
     private static func isHexadecimal(_ unit: UInt16) -> Bool {
         (unit >= 0x30 && unit <= 0x39) || (unit >= 0x41 && unit <= 0x46) || (unit >= 0x61 && unit <= 0x66)
+    }
+}
+
+extension UInt16 {
+    /// The code unit of an ASCII character, as `UInt8(ascii:)` gives its byte.
+    init(ascii scalar: Unicode.Scalar) {
+        self = UInt16(truncatingIfNeeded: scalar.value)
     }
 }

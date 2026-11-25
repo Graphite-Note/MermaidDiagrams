@@ -5,11 +5,16 @@
  * Description: An entity's box sized around its name and attribute table, Pele's, its rows placed when the box is.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// An entity's box measured: its size, its name placed from the box's top left corner, and its attribute table, whose
 /// rows are placed when the box is.
@@ -92,9 +97,19 @@ enum EntityRelationshipBoxMeasurement {
     /// carriage return is its one line, the label `DiagramLabel(lines:)` makes of it.
     private static func lines(of text: String) -> DiagramLabel {
         // A line feed, alone or after a carriage return, is byte 10; a final carriage return is byte 13.
-        if !text.utf8.contains(10), text.utf8.last != 13 { return DiagramLabel(lines: [text]) }
+        if !hasLineBreak(text) { return DiagramLabel(lines: [text]) }
         return DiagramLabel(lines: text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
             String(line.hasSuffix("\r") ? line.dropLast() : line)
         })
+    }
+
+    /// Whether a text holds a line feed or ends with a carriage return, found on its bytes at once when they are
+    /// contiguous (a native String's are).
+    private static func hasLineBreak(_ text: String) -> Bool {
+        let found = text.utf8.withContiguousStorageIfAvailable { bytes -> Bool in
+            guard let base = bytes.baseAddress, !bytes.isEmpty else { return false }
+            return bytes[bytes.count - 1] == 13 || memchr(base, 10, bytes.count) != nil
+        }
+        return found ?? (text.utf8.contains(10) || text.utf8.last == 13)
     }
 }

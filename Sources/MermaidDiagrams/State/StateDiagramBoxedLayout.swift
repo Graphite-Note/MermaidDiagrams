@@ -6,8 +6,8 @@
  *              layout's spans read on the page with no placement made in between.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -58,19 +58,27 @@ struct StateDiagramPlacedBoxes {
     @inline(__always)
     func center(of node: Int) -> CGPoint { CGPoint(x: compound.nodes[node].x, y: compound.nodes[node].y) }
 
-    /// The route of laid-out edge `edge`: its points, and for each segment whether the flow it follows runs vertically.
-    func route(of edge: Int) -> LayeredClusterRoute {
+    /// The points of laid-out edge `edge`'s route, with `border` before them (`isFirst`) or after them, and each
+    /// segment's flow, the border's segment's `runsVertically`, written over `segmentsRunVertically`.
+    func route(of edge: Int, border: (point: CGPoint, isFirst: Bool, runsVertically: Bool)?, segmentsRunVertically axes: inout [Bool]) -> [CGPoint] {
         let range = compound.routeRange(of: edge)
         var points: [CGPoint] = []
-        var segmentsRunVertically: [Bool] = []
-        points.reserveCapacity(range.count)
-        segmentsRunVertically.reserveCapacity(max(range.count - 1, 0))
+        points.reserveCapacity(range.count + 1)
+        axes.removeAll(keepingCapacity: true)
+        if let border, border.isFirst {
+            points.append(border.point)
+            axes.append(border.runsVertically)
+        }
         for index in range {
             let point = compound.routePoints[index]
             points.append(point.point)
-            if index > range.lowerBound { segmentsRunVertically.append(!point.runsHorizontally) }
+            if index > range.lowerBound { axes.append(!point.runsHorizontally) }
         }
-        return LayeredClusterRoute(points: points, segmentsRunVertically: segmentsRunVertically)
+        if let border, !border.isFirst {
+            points.append(border.point)
+            axes.append(border.runsVertically)
+        }
+        return points
     }
 
     /// The center of laid-out edge `edge`'s text, or nil for an edge without text (but one between a box and what it
@@ -113,27 +121,26 @@ extension StateDiagramPageAssembly {
             return StateDiagramRouteEnds.attached(end, next: next, center: boxes.center(of: node), layoutSize: clustered.graph.nodeSizes[node],
                                                   drawnSize: measured.stateSizes[state], isBar: kind == .fork || kind == .join)
         }
+        // Each segment's flow, in one list kept from transition to transition; each route's points in a list of its own,
+        // which its path takes.
+        var segmentAxes: [Bool] = []
         for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
-            let laidOut = boxes.route(of: layoutIndex)
-            var route = laidOut
-            let placedAnchor = transitionIndex < clustered.anchors.count ? clustered.anchors[transitionIndex] : nil
-            if let anchored = placedAnchor?.anchor {
-                route = Self.anchoredRoute(route, anchor: anchored, frame: boxes.frames[anchored.compositeIndex],
-                                           direction: clustered.compositeDirections[anchored.compositeIndex], title: clustered.titles[anchored.compositeIndex])
-            }
-            let isInward = placedAnchor?.anchor.isInward
+            let range = boxes.compound.routeRange(of: layoutIndex)
+            guard range.count >= 2 else { continue }
+            let firstLaidOut = boxes.compound.routePoints[range.lowerBound].point
+            let secondLaidOut = boxes.compound.routePoints[range.lowerBound + 1].point
+            let lastLaidOut = boxes.compound.routePoints[range.upperBound - 1].point
+            let beforeLastLaidOut = boxes.compound.routePoints[range.upperBound - 2].point
+            let border = Self.border(of: transitionIndex, boxes: boxes, firstPoint: firstLaidOut, lastPoint: lastLaidOut)
             let transition = diagram.transitions[transitionIndex]
-            let laidOutPoints = laidOut.points
-            guard laidOutPoints.count >= 2, let firstPoint = route.points.first, let lastPoint = route.points.last else { continue }
-            let sourcePoint = isInward == true ? firstPoint : attached(laidOutPoints[0], next: laidOutPoints[1], state: transition.sourceIndex)
-            let targetPoint = isInward == false ? lastPoint
-                : attached(laidOutPoints[laidOutPoints.count - 1], next: laidOutPoints[laidOutPoints.count - 2], state: transition.targetIndex)
-            var ended: [CGPoint] = []
-            ended.reserveCapacity(route.points.count)
-            ended.append(sourcePoint)
-            if route.points.count > 2 { ended.append(contentsOf: route.points[1..<(route.points.count - 1)]) }
-            ended.append(targetPoint)
-            let (points, segmentAxes) = Self.withoutPointsOnTheEnds(ended, segmentsRunVertically: route.segmentsRunVertically)
+            let sourcePoint = border?.isFirst == true ? border?.point ?? firstLaidOut
+                : attached(firstLaidOut, next: secondLaidOut, state: transition.sourceIndex)
+            let targetPoint = border?.isFirst == false ? border?.point ?? lastLaidOut
+                : attached(lastLaidOut, next: beforeLastLaidOut, state: transition.targetIndex)
+            var points = boxes.route(of: layoutIndex, border: border, segmentsRunVertically: &segmentAxes)
+            points[0] = sourcePoint
+            points[points.count - 1] = targetPoint
+            Self.removePointsOnTheEnds(&points, segmentsRunVertically: &segmentAxes)
             let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: 0,
                                                  endTrim: DiagramEdgeMark.lineTrim(for: .arrow))
             let textCenter = boxes.labelCenter(of: layoutIndex)
@@ -144,31 +151,37 @@ extension StateDiagramPageAssembly {
         }
     }
 
-    /// The route of a transition between a composite and a state inside it, drawn on from its point inside the composite
-    /// to the composite's border: below the title on the side the box's flow starts from when it leaves the composite,
-    /// on the side its flow ends at when it arrives, as Pele draws it.
-    private static func anchoredRoute(_ route: LayeredClusterRoute, anchor: StateDiagramCompositeAnchor, frame: CGRect, direction: FlowchartDirection,
-                                      title: DiagramTextBlock?) -> LayeredClusterRoute {
-        let titleBand = title.map { title in title.size.height + 12 } ?? 0
-        let anchorPoint = anchor.isInward ? route.points[0] : route.points[route.points.count - 1]
-        let border: CGPoint
-        switch (direction, anchor.isInward) {
-        case (.topToBottom, true), (.bottomToTop, false): border = CGPoint(x: anchorPoint.x, y: frame.minY + titleBand)
-        case (.topToBottom, false), (.bottomToTop, true): border = CGPoint(x: anchorPoint.x, y: frame.maxY)
-        case (.leftToRight, true), (.rightToLeft, false): border = CGPoint(x: frame.minX, y: anchorPoint.y)
-        case (.leftToRight, false), (.rightToLeft, true): border = CGPoint(x: frame.maxX, y: anchorPoint.y)
-        }
-        let runsVertically = !direction.runsAcross
-        return anchor.isInward
-            ? LayeredClusterRoute(points: [border] + route.points, segmentsRunVertically: [runsVertically] + route.segmentsRunVertically)
-            : LayeredClusterRoute(points: route.points + [border], segmentsRunVertically: route.segmentsRunVertically + [runsVertically])
+    /// A transition between a composite and a state inside it is drawn on to the composite's border, before its route
+    /// (`isFirst`) when it leaves the composite and after it when it arrives, the border's segment along the composite's
+    /// flow; nil for the other transitions. `firstPoint` and `lastPoint` are the ends of its laid-out route.
+    private static func border(of transitionIndex: Int, boxes: StateDiagramPlacedBoxes, firstPoint: CGPoint,
+                               lastPoint: CGPoint) -> (point: CGPoint, isFirst: Bool, runsVertically: Bool)? {
+        let clustered = boxes.clustered
+        guard transitionIndex < clustered.anchors.count, let anchor = clustered.anchors[transitionIndex]?.anchor else { return nil }
+        let direction = clustered.compositeDirections[anchor.compositeIndex]
+        let point = border(of: anchor, at: anchor.isInward ? firstPoint : lastPoint, frame: boxes.frames[anchor.compositeIndex], direction: direction,
+                           title: clustered.titles[anchor.compositeIndex])
+        return (point, anchor.isInward, !direction.runsAcross)
     }
 
-    /// The route without a passing point that lies on its end: where an unseen box around a composite has no room above or
-    /// below it, the point where a transition crosses that box's border is where it meets the composite.
-    private static func withoutPointsOnTheEnds(_ points: [CGPoint], segmentsRunVertically: [Bool]) -> ([CGPoint], [Bool]) {
-        var points = points
-        var axes = segmentsRunVertically
+    /// Where a transition between a composite and a state inside it meets the composite's border, from its point inside
+    /// the composite: below the title on the side the box's flow starts from when it leaves the composite, on the side
+    /// its flow ends at when it arrives, as Pele draws it.
+    private static func border(of anchor: StateDiagramCompositeAnchor, at anchorPoint: CGPoint, frame: CGRect, direction: FlowchartDirection,
+                               title: DiagramTextBlock?) -> CGPoint {
+        let titleBand = title.map { title in title.size.height + 12 } ?? 0
+        switch (direction, anchor.isInward) {
+        case (.topToBottom, true), (.bottomToTop, false): return CGPoint(x: anchorPoint.x, y: frame.minY + titleBand)
+        case (.topToBottom, false), (.bottomToTop, true): return CGPoint(x: anchorPoint.x, y: frame.maxY)
+        case (.leftToRight, true), (.rightToLeft, false): return CGPoint(x: frame.minX, y: anchorPoint.y)
+        case (.leftToRight, false), (.rightToLeft, true): return CGPoint(x: frame.maxX, y: anchorPoint.y)
+        }
+    }
+
+    /// The route without a passing point that lies on its end, where it stands: where an unseen box around a composite
+    /// has no room above or below it, the point where a transition crosses that box's border is where it meets the
+    /// composite.
+    private static func removePointsOnTheEnds(_ points: inout [CGPoint], segmentsRunVertically axes: inout [Bool]) {
         func coincide(_ first: CGPoint, _ second: CGPoint) -> Bool { abs(first.x - second.x) < 0.01 && abs(first.y - second.y) < 0.01 }
         while points.count > 2, axes.count > 1, coincide(points[points.count - 2], points[points.count - 1]) {
             points.remove(at: points.count - 2)
@@ -178,7 +191,6 @@ extension StateDiagramPageAssembly {
             points.remove(at: 1)
             axes.removeFirst()
         }
-        return (points, axes)
     }
 
     /// The composite states' boxes, each name in the band along its box's top, clear of the transitions' bends where it

@@ -5,8 +5,8 @@
  * Description: The tracks and levels the layered layout gives the pieces of one gap: a lone piece and two that cross.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 import XCTest
 @testable import MermaidDiagrams
@@ -21,7 +21,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     func testLonePieceOnStraightTracksTakesTheFirstTrackOneTrackHigh() {
         let arena = DiagramScratchArena()
         defer { arena.deallocate() }
-        var tracks = Self.tracks(arena: arena, from: [0, 40], to: [100, -60], rank: [0, 1], isCurved: false, room: [50, 50, 0])
+        let tracks = Self.tracks(arena: arena, from: [0, 40], to: [100, -60], rank: [0, 1], isCurved: false, room: [50, 50, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [0, 0])
         XCTAssertEqual(Array(tracks.pieces.levels), [1, 1])
@@ -34,7 +34,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     func testLoneCurveTakesNoLevelAndLeavesItsGapAsItWas() {
         let arena = DiagramScratchArena()
         defer { arena.deallocate() }
-        var tracks = Self.tracks(arena: arena, from: [0], to: [300], rank: [0], isCurved: true, room: [20, 0])
+        let tracks = Self.tracks(arena: arena, from: [0], to: [300], rank: [0], isCurved: true, room: [20, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [-1])
         XCTAssertEqual(Array(tracks.pieces.levels), [0])
@@ -47,7 +47,7 @@ final class LayeredFlatTrackLayingTests: XCTestCase {
     func testTwoCrossingPiecesTakeTracksOfTheirOwnInOneGroup() {
         let arena = DiagramScratchArena()
         defer { arena.deallocate() }
-        var tracks = Self.tracks(arena: arena, from: [0, 100], to: [100, 0], rank: [0, 0], isCurved: false, room: [50, 0])
+        let tracks = Self.tracks(arena: arena, from: [0, 100], to: [100, 0], rank: [0, 0], isCurved: false, room: [50, 0])
         tracks.assign()
         XCTAssertEqual(Array(tracks.pieces.track), [0, 1])
         XCTAssertEqual(Array(tracks.pieces.levels), [2, 2])

@@ -6,8 +6,8 @@
  *              annotations, name and members are placed.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -30,8 +30,9 @@ struct ClassDiagramBox {
     var size: CGSize
     private let annotations: [DiagramTextBlock]
     private let name: DiagramTextBlock
-    private let attributes: [ClassDiagramLayoutMember]
-    private let methods: [ClassDiagramLayoutMember]
+    /// The attributes then the methods, in one list; the first `attributeCount` are the attributes.
+    private let members: [ClassDiagramLayoutMember]
+    private let attributeCount: Int
     private let titleHeight: CGFloat
     private let attributesHeight: CGFloat
     private let markRowHeight: CGFloat
@@ -46,19 +47,23 @@ struct ClassDiagramBox {
             line("«" + ClassDiagramMemberSyntax.trimmed(DiagramLabelDecoder.decodingEntities(annotation)) + "»", measurers.marks)
         }
         name = DiagramTextBlock(label: declared.displayedName, measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
-        attributes = declared.attributes.map { member in ClassDiagramLayoutMember(text: line(member.text, measurers.members), classifier: member.classifier) }
-        methods = declared.methods.map { member in ClassDiagramLayoutMember(text: line(member.text, measurers.members), classifier: member.classifier) }
+        var members: [ClassDiagramLayoutMember] = []
+        members.reserveCapacity(declared.attributes.count + declared.methods.count)
+        for member in declared.attributes { members.append(ClassDiagramLayoutMember(text: line(member.text, measurers.members), classifier: member.classifier)) }
+        for member in declared.methods { members.append(ClassDiagramLayoutMember(text: line(member.text, measurers.members), classifier: member.classifier)) }
+        self.members = members
+        attributeCount = declared.attributes.count
+        let methodCount = members.count - attributeCount
         markRowHeight = measurers.markRowHeight
         memberLineHeight = measurers.members.lineHeight
         let nameHeight = max(name.size.height, (measurers.names.fontSize * Self.nameRowHeightRatio).rounded())
         titleHeight = 2 * Self.titlePadding + CGFloat(annotations.count) * markRowHeight + nameHeight
-        hasSections = !(hidesEmptySections && attributes.isEmpty && methods.isEmpty)
-        attributesHeight = hasSections ? Self.sectionHeight(lineCount: attributes.count, lineHeight: memberLineHeight) : 0
-        let methodsHeight = hasSections ? Self.sectionHeight(lineCount: methods.count, lineHeight: memberLineHeight) : 0
+        hasSections = !(hidesEmptySections && members.isEmpty)
+        attributesHeight = hasSections ? Self.sectionHeight(lineCount: attributeCount, lineHeight: memberLineHeight) : 0
+        let methodsHeight = hasSections ? Self.sectionHeight(lineCount: methodCount, lineHeight: memberLineHeight) : 0
         var widest = name.size.width
         for annotation in annotations { widest = max(widest, annotation.size.width) }
-        for member in attributes { widest = max(widest, member.text.size.width) }
-        for member in methods { widest = max(widest, member.text.size.width) }
+        for member in members { widest = max(widest, member.text.size.width) }
         size = CGSize(width: max(widest + 2 * Self.horizontalPadding, Self.minimumWidth), height: titleHeight + attributesHeight + methodsHeight)
     }
 
@@ -80,16 +85,16 @@ struct ClassDiagramBox {
         let titleBottom = frame.minY + titleHeight
         let placedName = centered(name, at: CGPoint(x: frame.midX, y: (y + titleBottom - Self.titlePadding) / 2).translated(by: offset))
         let methodsTop = titleBottom + attributesHeight
-        var members: [ClassDiagramLayoutMember] = []
-        members.reserveCapacity(attributes.count + methods.count)
-        appendLeftAligned(attributes, top: titleBottom, left: frame.minX, offset: offset, to: &members)
-        appendLeftAligned(methods, top: methodsTop, left: frame.minX, offset: offset, to: &members)
+        var placedMembers: [ClassDiagramLayoutMember] = []
+        placedMembers.reserveCapacity(members.count)
+        appendLeftAligned(members[..<attributeCount], top: titleBottom, left: frame.minX, offset: offset, to: &placedMembers)
+        appendLeftAligned(members[attributeCount...], top: methodsTop, left: frame.minX, offset: offset, to: &placedMembers)
         return ClassDiagramLayoutClass(frame: frame.offsetBy(dx: offset.dx, dy: offset.dy),
                                        dividerYs: hasSections ? [titleBottom + offset.dy, methodsTop + offset.dy] : [],
-                                       annotations: placedAnnotations, name: placedName, members: members)
+                                       annotations: placedAnnotations, name: placedName, members: placedMembers)
     }
 
-    private func appendLeftAligned(_ lines: [ClassDiagramLayoutMember], top: CGFloat, left: CGFloat, offset: CGVector,
+    private func appendLeftAligned(_ lines: ArraySlice<ClassDiagramLayoutMember>, top: CGFloat, left: CGFloat, offset: CGVector,
                                    to members: inout [ClassDiagramLayoutMember]) {
         for (index, member) in lines.enumerated() {
             let center = CGPoint(x: left + Self.horizontalPadding + member.text.size.width / 2,

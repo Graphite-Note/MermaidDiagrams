@@ -6,8 +6,8 @@
  *              positions.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -49,10 +49,10 @@ enum UseCaseReading {
 
     /// The tokens' Mermaid names and texts, up to the end, or nil when the lexer finds no token at a character.
     static func tokens(_ source: String) -> [(String, String)]? {
-        let text = UseCaseCharacters(units: Array(source.utf16))
+        let text = UseCaseBytes(text: Array(source.utf8), removedLineBreaks: [])
         guard let tokens = try? UseCaseLexer.tokens(of: text) else { return nil }
         return tokens.kinds.indices.filter { index in tokens.kinds[index] != .end }.map { index in
-            (tokens.kinds[index].mermaidName, text.text(from: tokens.starts[index], to: tokens.ends[index]))
+            (tokens.kinds[index].mermaidName, text.string(MermaidTextRange(start: tokens.starts[index], end: tokens.ends[index])))
         }
     }
 
