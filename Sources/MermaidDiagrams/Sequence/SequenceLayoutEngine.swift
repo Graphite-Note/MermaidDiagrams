@@ -6,7 +6,7 @@
  *              their lifelines, rows of events, the title and the padding.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 25/11/2026
  */
 
@@ -107,28 +107,32 @@ public enum SequenceLayoutEngine {
         let offset = CGVector(dx: SequenceSpacing.padding - rows.extents.minimumX, dy: SequenceSpacing.padding - topOfPage)
         let size = CGSize(width: (rows.extents.maximumX - rows.extents.minimumX + 2 * SequenceSpacing.padding).rounded(.up),
                           height: (lastRow + footerHeight + boxPadding - topOfPage + 2 * SequenceSpacing.padding).rounded(.up))
-        // The messages taken out of the rows, which then hold them no more, so that each is moved in its own lists.
+        // The messages and the other placed lists taken out of the rows, which then hold them no more, so that each is
+        // moved onto the page in its own lists, where it stands, instead of made again.
         var messages = rows.messages
         rows.messages = []
         for index in messages.indices { messages[index].translate(by: offset) }
-        return SequenceLayout(size: size, font: font, boxes: boxes(rows, bottom: lastRow + footerHeight).map { box in box.translated(by: offset) },
-                              participants: participants(rows, footerTop: lastRow).map { participant in participant.translated(by: offset) },
+        var placed = rows.takePlaced()
+        placed.highlights.reverse()
+        for index in placed.highlights.indices { placed.highlights[index].translate(by: offset) }
+        placed.activations.reverse()
+        for index in placed.activations.indices { placed.activations[index] = placed.activations[index].offsetBy(dx: offset.dx, dy: offset.dy) }
+        for index in placed.blocks.indices { placed.blocks[index].translate(by: offset) }
+        for index in placed.destructions.indices { placed.destructions[index] = placed.destructions[index].translated(by: offset) }
+        for index in placed.notes.indices { placed.notes[index].translate(by: offset) }
+        return SequenceLayout(size: size, font: font, boxes: boxes(rows, bottom: lastRow + footerHeight, offset: offset),
+                              participants: participants(rows, footerTop: lastRow, offset: offset),
                               lifelines: columns.centers.indices.map { index in
                                   SequenceLayoutLifeline(x: columns.centers[index], top: rows.lifelineStarts[index],
                                                          bottom: rows.lifelineEnds[index] ?? lastRow).translated(by: offset)
                               },
-                              highlights: rows.highlights.reversed().map { highlight in highlight.translated(by: offset) },
-                              activations: rows.activations.reversed().map { activation in activation.offsetBy(dx: offset.dx, dy: offset.dy) },
-                              blocks: rows.blocks.map { block in block.translated(by: offset) },
-                              messages: messages,
-                              destructions: rows.destructions.map { center in center.translated(by: offset) },
-                              notes: rows.notes.map { note in note.translated(by: offset) },
-                              title: placedTitle?.translated(by: offset))
+                              highlights: placed.highlights, activations: placed.activations, blocks: placed.blocks, messages: messages,
+                              destructions: placed.destructions, notes: placed.notes, title: placedTitle?.translated(by: offset))
     }
 
     /// Each participant above its lifeline, bottoms in line (a created one where its message put it), then each not
-    /// destroyed below it from `footerTop`.
-    private static func participants<Measurer>(_ rows: SequenceRows<Measurer>, footerTop: CGFloat) -> [SequenceLayoutParticipant] {
+    /// destroyed below it from `footerTop`, all moved by `offset` onto the page, into one list.
+    private static func participants<Measurer>(_ rows: SequenceRows<Measurer>, footerTop: CGFloat, offset: CGVector) -> [SequenceLayoutParticipant] {
         let columns = rows.columns
         let participants = rows.diagram.participants
         let boxes = rows.diagram.boxes
@@ -138,15 +142,21 @@ public enum SequenceLayoutEngine {
             let frame = CGRect(x: columns.centers[index] - size.width / 2, y: top, width: size.width, height: size.height)
             var text = columns.participantTexts[index]
             text.center = SequenceParticipantGeometry.textCenter(of: kind, in: frame, textHeight: text.size.height)
-            return SequenceLayoutParticipant(participantIndex: index, kind: kind, frame: frame, text: text,
-                                             boxColor: participants[index].boxIndex.flatMap { boxIndex in boxes[boxIndex].color })
+            var participant = SequenceLayoutParticipant(participantIndex: index, kind: kind, frame: frame, text: text,
+                                                        boxColor: participants[index].boxIndex.flatMap { boxIndex in boxes[boxIndex].color })
+            participant.translate(by: offset)
+            return participant
         }
-        let headers = participants.indices.map { index in placed(index, top: rows.participantTops[index]) }
-        return headers + participants.indices.filter { index in rows.lifelineEnds[index] == nil }.map { index in placed(index, top: footerTop) }
+        var placedParticipants: [SequenceLayoutParticipant] = []
+        placedParticipants.reserveCapacity(2 * participants.count)
+        for index in participants.indices { placedParticipants.append(placed(index, top: rows.participantTops[index])) }
+        for index in participants.indices where rows.lifelineEnds[index] == nil { placedParticipants.append(placed(index, top: footerTop)) }
+        return placedParticipants
     }
 
-    /// Each box run from the top of the page to a padding below `bottom`, its title centered at its top.
-    private static func boxes<Measurer>(_ rows: SequenceRows<Measurer>, bottom: CGFloat) -> [SequenceLayoutBox] {
+    /// Each box run from the top of the page to a padding below `bottom`, its title centered at its top, moved by `offset`
+    /// onto the page.
+    private static func boxes<Measurer>(_ rows: SequenceRows<Measurer>, bottom: CGFloat, offset: CGVector) -> [SequenceLayoutBox] {
         let columns = rows.columns
         return columns.boxRuns.runs.map { run in
             let edges = columns.boxRuns.edges(of: run, centers: columns.centers, sizes: columns.participantSizes)
@@ -154,8 +164,10 @@ public enum SequenceLayoutEngine {
             if let height = title?.size.height {
                 title?.center = CGPoint(x: (edges.left + edges.right) / 2, y: columns.boxRuns.padding / 2 + SequenceSpacing.boxTitleDepth + height / 2)
             }
-            return SequenceLayoutBox(frame: CGRect(x: edges.left, y: 0, width: edges.right - edges.left, height: bottom + columns.boxRuns.padding),
-                                     color: rows.diagram.boxes[run.boxIndex].color, title: title)
+            var box = SequenceLayoutBox(frame: CGRect(x: edges.left, y: 0, width: edges.right - edges.left, height: bottom + columns.boxRuns.padding),
+                                        color: rows.diagram.boxes[run.boxIndex].color, title: title)
+            box.translate(by: offset)
+            return box
         }
     }
 

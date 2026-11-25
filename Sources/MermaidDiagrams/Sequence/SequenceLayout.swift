@@ -6,7 +6,7 @@
  *              blocks, messages, destructions, notes and title, every position measured.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -46,8 +46,8 @@ public struct SequenceLayoutParticipant: Equatable, Sendable {
     public let participantIndex: Int
     public let kind: SequenceParticipantKind
     /// The shape around the text, or the figure and the text under it.
-    public let frame: CGRect
-    public let text: DiagramTextBlock
+    public internal(set) var frame: CGRect
+    public internal(set) var text: DiagramTextBlock
     /// The color of the box the participant is grouped in, or nil when it is in none or in one of the default shade.
     public let boxColor: SequenceHighlightColor?
 }
@@ -60,35 +60,35 @@ public struct SequenceLayoutLifeline: Equatable, Sendable {
 }
 
 public struct SequenceLayoutHighlight: Equatable, Sendable {
-    public let frame: CGRect
+    public internal(set) var frame: CGRect
     /// The color the `rect` names, or nil for the default shade.
     public let color: SequenceHighlightColor?
 }
 
 public struct SequenceLayoutBlock: Equatable, Sendable {
-    public let frame: CGRect
+    public internal(set) var frame: CGRect
     /// The tab in the frame's top left corner, which holds the keyword.
-    public let tab: CGRect
+    public internal(set) var tab: CGRect
     /// `loop`, `alt`, `opt`, `par`, `critical` or `break`, drawn bold in the tab.
-    public let keyword: DiagramTextBlock
+    public internal(set) var keyword: DiagramTextBlock
     /// The block's text in brackets beside the tab, or nil.
-    public let title: DiagramTextBlock?
+    public internal(set) var title: DiagramTextBlock?
     /// The color of the `rect` or box the title sits on, when Pele colors the title for it (`SequenceLayoutMessage`'s
     /// `lineBackground` says how), or nil.
     public let titleBackground: SequenceHighlightColor?
     /// Each section after the first (`else`, `and`, `option`): a dashed line across the frame and its text.
-    public let sections: [SequenceLayoutBlockSection]
+    public internal(set) var sections: [SequenceLayoutBlockSection]
     /// The patches of the background behind texts a lifeline would run through.
-    public let textPatches: [CGRect]
+    public internal(set) var textPatches: [CGRect]
 }
 
 public struct SequenceLayoutBlockSection: Equatable, Sendable {
     /// Where the dashed line runs across the frame.
-    public let lineY: CGFloat
+    public internal(set) var lineY: CGFloat
     /// The section's text in brackets under the line, or nil.
-    public let text: DiagramTextBlock?
+    public internal(set) var text: DiagramTextBlock?
     /// The color of the `rect` or box the text sits on, when Pele colors the text for it, or nil.
-    public let textBackground: SequenceHighlightColor?
+    public internal(set) var textBackground: SequenceHighlightColor?
 }
 
 public struct SequenceLayoutMessage: Equatable, Sendable {
@@ -134,14 +134,20 @@ public struct SequenceLayoutNumber: Equatable, Sendable {
 }
 
 public struct SequenceLayoutNote: Equatable, Sendable {
-    public let frame: CGRect
-    public let text: DiagramTextBlock
+    public internal(set) var frame: CGRect
+    public internal(set) var text: DiagramTextBlock
 }
 
 extension SequenceLayoutParticipant {
     func translated(by offset: CGVector) -> SequenceLayoutParticipant {
         SequenceLayoutParticipant(participantIndex: participantIndex, kind: kind, frame: frame.offsetBy(dx: offset.dx, dy: offset.dy),
                                   text: text.translated(by: offset), boxColor: boxColor)
+    }
+
+    /// Moved by `offset` where it stands, as `translated(by:)` moves it.
+    mutating func translate(by offset: CGVector) {
+        frame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
+        text = text.translated(by: offset)
     }
 }
 
@@ -155,6 +161,11 @@ extension SequenceLayoutHighlight {
     func translated(by offset: CGVector) -> SequenceLayoutHighlight {
         SequenceLayoutHighlight(frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), color: color)
     }
+
+    /// Moved by `offset` where it stands, as `translated(by:)` moves it.
+    mutating func translate(by offset: CGVector) {
+        frame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
+    }
 }
 
 extension SequenceLayoutBlock {
@@ -166,6 +177,20 @@ extension SequenceLayoutBlock {
                                                            textBackground: section.textBackground)
                             },
                             textPatches: textPatches.map { patch in patch.offsetBy(dx: offset.dx, dy: offset.dy) })
+    }
+
+    /// Moved by `offset` where it stands, each part as `translated(by:)` moves it, in the block's own lists: a block
+    /// the layout alone holds is moved without making its sections and patches again.
+    mutating func translate(by offset: CGVector) {
+        frame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
+        tab = tab.offsetBy(dx: offset.dx, dy: offset.dy)
+        keyword = keyword.translated(by: offset)
+        title = title?.translated(by: offset)
+        for index in sections.indices {
+            sections[index].lineY += offset.dy
+            sections[index].text = sections[index].text?.translated(by: offset)
+        }
+        for index in textPatches.indices { textPatches[index] = textPatches[index].offsetBy(dx: offset.dx, dy: offset.dy) }
     }
 }
 
@@ -203,5 +228,11 @@ extension SequenceLayoutMessage {
 extension SequenceLayoutNote {
     func translated(by offset: CGVector) -> SequenceLayoutNote {
         SequenceLayoutNote(frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset))
+    }
+
+    /// Moved by `offset` where it stands, as `translated(by:)` moves it.
+    mutating func translate(by offset: CGVector) {
+        frame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
+        text = text.translated(by: offset)
     }
 }

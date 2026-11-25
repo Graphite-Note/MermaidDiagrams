@@ -7,8 +7,8 @@
  *              lifelines end.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -55,11 +55,18 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
         self.columns = columns
         self.extents = extents
         self.measurers = measurers
-        let created = Set(diagram.events.compactMap { event -> Int? in
-            guard case .message(let message) = event, message.createsTarget else { return nil }
-            return message.targetIndex
-        })
-        let rowHeight = columns.participantSizes.enumerated().filter { index, _ in !created.contains(index) }.map { _, size in size.height }.max() ?? 0
+        // Whether each participant is created by a message, in one list instead of a set of their indices.
+        var isCreated = [Bool](repeating: false, count: columns.participantSizes.count)
+        for event in diagram.events {
+            if case .message(let message) = event, message.createsTarget, isCreated.indices.contains(message.targetIndex) {
+                isCreated[message.targetIndex] = true
+            }
+        }
+        var tallest: CGFloat?
+        for (index, size) in columns.participantSizes.enumerated() where !isCreated[index] {
+            tallest = tallest.map { height in max(height, size.height) } ?? size.height
+        }
+        let rowHeight = tallest ?? 0
         headerBottom = columns.boxRuns.topRoom + rowHeight
         participantTops = columns.participantSizes.map { size in columns.boxRuns.topRoom + rowHeight - size.height }
         lifelineStarts = Array(repeating: headerBottom, count: diagram.participants.count)
@@ -218,11 +225,27 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
             title?.center = center
             if let patch = textPatch(around: center, size: size) { frameTextPatches[frameIndex].append(patch) }
         }
-        let sections = frameSections[frameIndex].map { section in
-            SequenceLayoutBlockSection(lineY: section.lineY, text: section.text, textBackground: section.text.flatMap(backgroundOfBlockText))
-        }
+        // The block's sections and patches are taken out of the lists kept for it, which it is the last to read.
+        var sections: [SequenceLayoutBlockSection] = []
+        swap(&sections, &frameSections[frameIndex])
+        for index in sections.indices { sections[index].textBackground = sections[index].text.flatMap(backgroundOfBlockText) }
+        var textPatches: [CGRect] = []
+        swap(&textPatches, &frameTextPatches[frameIndex])
         blocks.append(SequenceLayoutBlock(frame: frame, tab: tab, keyword: keyword, title: title, titleBackground: title.flatMap(backgroundOfBlockText),
-                                          sections: sections, textPatches: frameTextPatches[frameIndex]))
+                                          sections: sections, textPatches: textPatches))
+    }
+
+    /// What the rows placed, taken out of them, which then hold none of it, so that the layout moves each list onto the
+    /// page where it stands: the activations, highlights, blocks, notes and destructions, in the order they closed.
+    mutating func takePlaced() -> SequencePlacedEvents {
+        defer {
+            activations = []
+            highlights = []
+            blocks = []
+            notes = []
+            destructions = []
+        }
+        return SequencePlacedEvents(activations: activations, highlights: highlights, blocks: blocks, notes: notes, destructions: destructions)
     }
 
     // MARK: Colors under texts and lines
@@ -266,4 +289,13 @@ struct SequenceRows<Measurer: DiagramTextMeasuring> {
         }
         return low < centers.count && centers[low] < right
     }
+}
+
+/// The events the rows placed, as `SequenceRows.takePlaced()` hands them over, in the order they closed.
+struct SequencePlacedEvents {
+    var activations: [CGRect]
+    var highlights: [SequenceLayoutHighlight]
+    var blocks: [SequenceLayoutBlock]
+    var notes: [SequenceLayoutNote]
+    var destructions: [CGPoint]
 }
