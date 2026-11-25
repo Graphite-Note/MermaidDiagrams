@@ -6,8 +6,8 @@
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -65,9 +65,10 @@ struct SwimlanePageAssembly {
 
     /// How far from each side of each box the edges that meet it start to turn, as Pele's `sideReach` sets it: as far as the
     /// largest mark there needs, with the lead, for every edge on that side, so that none turns sooner than its neighbour and
-    /// crosses it. Keyed by box and side; an edge to itself or one not drawn counts for none.
-    private func sideReaches() -> [Int: CGFloat] {
-        var reaches: [Int: CGFloat] = [:]
+    /// crosses it. By box and side (`sideKey`), 0 for a side no edge with a mark meets; an edge to itself or one not drawn
+    /// counts for none.
+    private func sideReaches() -> [CGFloat] {
+        var reaches = [CGFloat](repeating: 0, count: 4 * placement.frames.count)
         for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() where edge.stroke != .invisible {
             guard let route = placement.routes[edgeIndex], route.points.count >= 2 else { continue }
             let ends = [(route.points[0], graph.nodeBoxes[edge.sourceIndex], edge.sourceArrowhead),
@@ -75,15 +76,15 @@ struct SwimlanePageAssembly {
             for (point, box, arrowhead) in ends {
                 let trim = DiagramEdgeMark.lineTrim(for: arrowhead)
                 guard trim > 0, let key = sideKey(at: point, box: box) else { continue }
-                reaches[key] = max(reaches[key] ?? 0, DiagramTurningRouteDrawing.defaultReach(trim: trim))
+                reaches[key] = max(reaches[key], DiagramTurningRouteDrawing.defaultReach(trim: trim))
             }
         }
         return reaches
     }
 
     /// The reach of the side of `box` that `point` is on, 0 for a point on no side, as Pele's `sideReach` gives it.
-    private func reach(at point: CGPoint, box: Int, in reaches: [Int: CGFloat]) -> CGFloat {
-        sideKey(at: point, box: box).flatMap { key in reaches[key] } ?? 0
+    private func reach(at point: CGPoint, box: Int, in reaches: [CGFloat]) -> CGFloat {
+        sideKey(at: point, box: box).map { key in reaches[key] } ?? 0
     }
 
     private func sideKey(at point: CGPoint, box: Int) -> Int? {

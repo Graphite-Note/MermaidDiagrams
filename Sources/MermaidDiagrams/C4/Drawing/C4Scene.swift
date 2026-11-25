@@ -7,8 +7,8 @@
  *              every path recorded into lanes of the thread's scene workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -21,7 +21,13 @@ extension DiagramScene {
     /// on a patch of the page's color, its technology in italic. A style's fill, border and text colors replace these, and
     /// text on a fill the style sets takes the dark or light text color that reads on it.
     public init(layout: C4Layout) {
-        self = DiagramSceneWorkspace.withRecording { workspace in
+        self.init(layout: layout, limits: .standard)
+    }
+
+    /// The scene recorded into lanes of at most `DiagramSceneWorkspace.elementLimit(for: limits)` elements: one past
+    /// it marks the scene (`exceededPathElementLimit`), which the preparation refuses.
+    init(layout: C4Layout, limits: MermaidDiagramLimits) {
+        self = DiagramSceneWorkspace.withRecording(limits: limits) { workspace in
             var builder = DiagramSceneBuilder(workspace: workspace)
             builder.title(layout.title)
             for boundary in layout.boundaries { C4ScenePainting.add(boundary, to: &builder, workspace: workspace) }

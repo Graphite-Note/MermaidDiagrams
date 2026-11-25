@@ -6,8 +6,8 @@
  *              boxes of the layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -89,6 +89,8 @@ struct UseCaseLayoutPass {
     var layoutPlaces: [Int] = []
     /// The drawn edges between two different nodes, which the layout routes, in the order drawn.
     private(set) var laidOutEdges: [(edge: Int, source: Int, target: Int, label: DiagramTextBlock)] = []
+    /// The looks the nodes' styles gave, which the edges' styles look up too (`UseCaseLook.of(_:made:)`).
+    var looks: [(styles: [String], look: UseCaseLook)] = []
 
     init<Measurer>(diagram: UseCaseDiagram, measurers: inout UseCaseTextMeasurers<Measurer>) {
         self.diagram = diagram
@@ -99,7 +101,7 @@ struct UseCaseLayoutPass {
         views.reserveCapacity(graph.nodes.count)
         layoutSizes.reserveCapacity(graph.nodes.count)
         for node in graph.nodes {
-            let view = UseCaseNodeMeasurement.view(of: node, size: fontSize, measurers: &measurers)
+            let view = UseCaseNodeMeasurement.view(of: node, look: UseCaseLook.of(node.styles, made: &looks), size: fontSize, measurers: &measurers)
             layoutSizes.append(view.size)
             views.append(view)
         }

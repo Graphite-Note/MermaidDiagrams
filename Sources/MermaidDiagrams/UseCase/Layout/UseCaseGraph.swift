@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: A read use case diagram as what is drawn, as Pele's buildUsecaseGraph ports Mermaid's getData: every
  *              actor, use case, note, JSON table and boundary as a node with its class styles, and every relationship
- *              and note connector as an edge with its marks.
+ *              and note connector as an edge with its marks; Mermaid's class names made only when read.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -42,8 +42,8 @@ struct UseCaseGraphNode {
     let labelType: UseCaseLabelType
     let shape: UseCaseNodeShape
     let padding: CGFloat
-    /// Mermaid's classes of the node (`default usecase-actor usecase-actor-normal`).
-    let classNames: String
+    /// What Mermaid's classes of the node are made of, which no drawing reads: `classNames` joins them when read.
+    let classNameParts: UseCaseNodeClassNames
     /// The styles of its classes, then its own.
     let styles: [String]
     var actorType: UseCaseActorType?
@@ -54,6 +54,34 @@ struct UseCaseGraphNode {
     var boundaryType: UseCaseBoundaryType?
 
     var isGroup: Bool { shape == .systemBoundary }
+
+    /// Mermaid's classes of the node (`default usecase-actor usecase-actor-normal`).
+    var classNames: String { classNameParts.joined }
+}
+
+/// The parts of a node's class names, kept without joining them: the kind (`usecase-actor`), the variant's prefix and
+/// name (`usecase-actor-` and `normal`), whether it is a business element, and the classes written.
+struct UseCaseNodeClassNames {
+    let kind: String
+    let variantPrefix: String
+    let variant: String?
+    let isBusiness: Bool
+    let classes: [String]
+
+    /// The names that are not empty, `default` first, a space between each two.
+    var joined: String {
+        var joined = "default"
+        func add(_ name: String) {
+            guard !name.isEmpty else { return }
+            joined += " "
+            joined += name
+        }
+        add(kind)
+        if let variant { add(variantPrefix + variant) }
+        if isBusiness { add("usecase-business") }
+        for name in classes { add(name) }
+        return joined
+    }
 }
 
 struct UseCaseGraphEdge {
@@ -67,7 +95,10 @@ struct UseCaseGraphEdge {
     let endMarker: UseCaseMarker
     let label: String?
     let labelType: UseCaseLabelType?
-    let classNames: String
+    /// The classes written, and the animation's class (`edge-animation-fast`) for an animated relationship: Mermaid's class
+    /// names, which no drawing reads, are made from them when read.
+    let classes: [String]
+    let animationClass: UseCaseAnimation?
     let styles: [String]
     let isAnimated: Bool
     let minimumLength: Int
@@ -76,6 +107,17 @@ struct UseCaseGraphEdge {
 
     /// `include` and `extend`, labelled with their kind.
     var isSemantic: Bool { relationshipType == .include || relationshipType == .extend }
+
+    /// Mermaid's classes of the edge (`default relationship relationship-include`).
+    var classNames: String {
+        var joined = "default relationship relationship-" + (relationshipType?.rawValue ?? "note")
+        for name in classes {
+            joined += " "
+            joined += name
+        }
+        if let animationClass { joined += " edge-animation-" + animationClass.rawValue }
+        return joined
+    }
 }
 
 /// The nodes in Pele's order (actors, use cases, notes, JSON tables, boundaries) and the edges (relationships, then
@@ -95,19 +137,22 @@ struct UseCaseGraph {
         for useCase in diagram.useCases { nodes.append(Self.node(of: useCase, styles: styles)) }
         for note in diagram.notes {
             nodes.append(UseCaseGraphNode(identifier: note.identifier, label: note.label, labelType: note.labelType, shape: .note, padding: 10,
-                                          classNames: "default usecase-note", styles: styles.compiled([])))
+                                          classNameParts: UseCaseNodeClassNames(kind: "usecase-note", variantPrefix: "", variant: nil, isBusiness: false, classes: []),
+                                          styles: styles.compiled([])))
         }
         for json in diagram.jsonNodes {
             var node = UseCaseGraphNode(identifier: json.identifier, label: json.identifier, labelType: .text, shape: .jsonTable, padding: 10,
-                                        classNames: Self.classNames("default", "usecase-json-table", nil, nil, json.classes),
+                                        classNameParts: UseCaseNodeClassNames(kind: "usecase-json-table", variantPrefix: "", variant: nil, isBusiness: false,
+                                                                              classes: json.classes),
                                         styles: styles.compiled(json.classes) + json.styles)
             node.jsonRows = UseCaseJSONRow.rows(of: json.value)
             nodes.append(node)
         }
         for boundary in diagram.systemBoundaries {
             var node = UseCaseGraphNode(identifier: boundary.identifier, label: boundary.label, labelType: boundary.labelType, shape: .systemBoundary,
-                                        padding: 20, classNames: Self.classNames("default", "system-boundary", "system-boundary-\(boundary.type.rawValue)",
-                                                                                 nil, boundary.classes),
+                                        padding: 20,
+                                        classNameParts: UseCaseNodeClassNames(kind: "system-boundary", variantPrefix: "system-boundary-",
+                                                                              variant: boundary.type.rawValue, isBusiness: false, classes: boundary.classes),
                                         styles: styles.compiled(boundary.classes) + boundary.styles)
             node.boundaryType = boundary.type
             nodes.append(node)
@@ -116,9 +161,8 @@ struct UseCaseGraph {
         for relationship in diagram.relationships { edges.append(Self.edge(of: relationship, styles: styles)) }
         for note in diagram.notes {
             edges.append(UseCaseGraphEdge(identifier: note.identifier + "-edge", start: note.identifier, end: note.target, relationshipType: nil, isDotted: true,
-                                          startMarker: .none, endMarker: .none, label: nil, labelType: nil,
-                                          classNames: "default relationship relationship-note", styles: styles.compiled([]), isAnimated: false,
-                                          minimumLength: 1))
+                                          startMarker: .none, endMarker: .none, label: nil, labelType: nil, classes: [], animationClass: nil,
+                                          styles: styles.compiled([]), isAnimated: false, minimumLength: 1))
         }
     }
 
@@ -133,8 +177,8 @@ struct UseCaseGraph {
 
     private static func node(of actor: UseCaseActor, styles: UseCaseClassStyles) -> UseCaseGraphNode {
         var node = UseCaseGraphNode(identifier: actor.identifier, label: actor.label, labelType: actor.labelType, shape: shape(of: actor.type), padding: 10,
-                                    classNames: classNames("default", "usecase-actor", "usecase-actor-\(actor.type.rawValue)",
-                                                           actor.isBusiness ? "usecase-business" : nil, actor.classes),
+                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-actor", variantPrefix: "usecase-actor-", variant: actor.type.rawValue,
+                                                                          isBusiness: actor.isBusiness, classes: actor.classes),
                                     styles: styles.compiled(actor.classes) + actor.styles)
         node.actorType = actor.type
         node.isBusiness = actor.isBusiness
@@ -147,8 +191,8 @@ struct UseCaseGraph {
         let isEllipse = useCase.shape == .ellipse
         var node = UseCaseGraphNode(identifier: useCase.identifier, label: useCase.label, labelType: useCase.labelType,
                                     shape: !isEllipse ? .rectangle : useCase.isBusiness ? .businessEllipse : .ellipse, padding: isEllipse ? 20 : 10,
-                                    classNames: classNames("default", "usecase-element", "usecase-\(useCase.shape.rawValue)",
-                                                           useCase.isBusiness ? "usecase-business" : nil, useCase.classes),
+                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-element", variantPrefix: "usecase-", variant: useCase.shape.rawValue,
+                                                                          isBusiness: useCase.isBusiness, classes: useCase.classes),
                                     styles: styles.compiled(useCase.classes) + useCase.styles)
         node.isBusiness = useCase.isBusiness
         node.stereotype = useCase.stereotype.flatMap { stereotype in stereotype.isEmpty ? nil : stereotype }
@@ -164,37 +208,15 @@ struct UseCaseGraph {
         case .include, .extend: arrowMarkers[UseCaseArrow.solidArrow.rawValue]
         }
         let isAnimated = relationship.isAnimated || relationship.animation != nil
-        var classNames = "default relationship relationship-" + relationship.type.rawValue
-        for name in relationship.classes {
-            classNames += " "
-            classNames += name
-        }
-        if isAnimated { classNames += " edge-animation-" + (relationship.animation ?? .fast).rawValue }
         // Include and extend are labelled with their kind, whatever label the relationship carries.
         let label = isSemantic ? relationship.type.rawValue : relationship.type == .association ? relationship.label : nil
         let labelType: UseCaseLabelType? = isSemantic ? .text : relationship.type == .association ? relationship.labelType : nil
         return UseCaseGraphEdge(identifier: relationship.identifier, start: relationship.source, end: relationship.target,
                                 relationshipType: relationship.type, isDotted: isSemantic, startMarker: markers.0, endMarker: markers.1,
-                                label: label, labelType: labelType,
-                                classNames: classNames,
+                                label: label, labelType: labelType, classes: relationship.classes,
+                                animationClass: isAnimated ? relationship.animation ?? .fast : nil,
                                 styles: styles.compiled(relationship.classes) + relationship.styles, isAnimated: relationship.isAnimated,
                                 minimumLength: relationship.minimumLength)
-    }
-
-    /// The names that are not empty, a space between each two.
-    private static func classNames(_ first: String, _ second: String, _ third: String?, _ business: String?, _ classes: [String]) -> String {
-        var joined = ""
-        func add(_ name: String) {
-            guard !name.isEmpty else { return }
-            if !joined.isEmpty { joined += " " }
-            joined += name
-        }
-        add(first)
-        add(second)
-        if let third { add(third) }
-        if let business { add(business) }
-        for name in classes { add(name) }
-        return joined
     }
 }
 
@@ -202,12 +224,19 @@ struct UseCaseGraph {
 /// first took, as Pele's `compiled` gives them; the class `default` applies to everything.
 struct UseCaseClassStyles {
     private var stylesByClass: [String: [String]] = [:]
+    /// The styles of an element without classes, those of `default`: most elements', compiled once.
+    private var stylesWithoutClasses: [String] = []
 
     init(_ definitions: [UseCaseClassDefinition]) {
         for definition in definitions { stylesByClass[definition.identifier] = definition.styles }
+        stylesWithoutClasses = compiling([])
     }
 
     func compiled(_ classes: [String]) -> [String] {
+        classes.isEmpty ? stylesWithoutClasses : compiling(classes)
+    }
+
+    private func compiling(_ classes: [String]) -> [String] {
         // With no class defined, no class has a style: nothing to look up.
         guard !stylesByClass.isEmpty else { return [] }
         var properties: [String] = []

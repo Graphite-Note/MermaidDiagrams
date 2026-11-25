@@ -6,8 +6,8 @@
  *              on a patch, and how it is painted over the boundaries a style fills, as Pele's renderUsecase paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -31,13 +31,14 @@ struct UseCaseEdgeLine {
     /// The relationship `edge` along this line, with `label`, painted over the filled boundaries `fills`: in the color
     /// Pele's ink picks for the fill it lies in, or cased where it crosses a border, or inside a fill it has no ink for
     /// or when its style sets a stroke.
-    func edge(_ edge: UseCaseGraphEdge, label: DiagramTextBlock, fills: [UseCaseLayoutBoundary]) -> UseCaseLayoutEdge {
-        // An edge without styles has the look of none, made once.
-        let look = edge.styles.isEmpty ? UseCaseLook.none : UseCaseLook(styles: edge.styles)
+    /// `fillFrames` are the frames of `fills`, and `look` the look of `edge`'s styles.
+    func edge(_ edge: UseCaseGraphEdge, label: DiagramTextBlock, fills: [UseCaseLayoutBoundary], fillFrames: [CGRect], look: UseCaseLook) -> UseCaseLayoutEdge {
         var inkOverFill: DiagramColor?
         var fillUnderMarks: DiagramColor?
         var isCased = false
-        switch DiagramFillPlacement.placement(of: path, tips: [startTip, endTip], among: fills.map(\.frame)) {
+        // A line lies on no fill when no boundary is filled, which needs no list of its tips.
+        let placement = fillFrames.isEmpty ? .onNone : DiagramFillPlacement.placement(of: path, tips: [startTip, endTip], among: fillFrames)
+        switch placement {
         case .onNone: break
         case .acrossBorder: isCased = true
         case .inside(let place):

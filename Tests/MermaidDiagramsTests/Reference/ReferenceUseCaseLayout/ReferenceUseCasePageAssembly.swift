@@ -8,8 +8,8 @@
  *              loops beside their nodes, and each node's texts placed.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -34,7 +34,7 @@ extension ReferenceUseCaseLayoutPass {
             LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
         }
         let crossings = UseCaseBoundaryTitles.crossings(of: routes)
-        UseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
+        ReferenceUseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
         let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
         var boundaries: [UseCaseLayoutBoundary] = []
         boundaries.reserveCapacity(frames.count)
