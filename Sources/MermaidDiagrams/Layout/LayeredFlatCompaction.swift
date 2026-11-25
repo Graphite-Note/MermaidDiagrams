@@ -6,13 +6,15 @@
  *              of working spans of the scratch arena that the four reuse.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 /// The working spans of one alignment and its compaction, taken once from the arena and refilled for each of the four.
 /// Every index is a vertex, a block edge (at most one per vertex) or a place in a list of vertices, all below the vertex
-/// count the spans were made for.
+/// count the spans were made for. A loop over every vertex reads the spans made as long unchecked; an index read from a
+/// span is checked. Each pass reads the spans it uses into constants first: the graph's live in the arena, where a store
+/// to another span could be to them as far as the compiler knows, so that it would read them again after every store.
 struct LayeredPositioningWork {
     let vertexCount: Int
     /// Each vertex's block root and the vertex it is aligned to.
@@ -22,7 +24,6 @@ struct LayeredPositioningWork {
     let shift: ScratchSpan<Double>
     /// The blocks as a graph: an edge from each block to the next in every rank, as wide as the room the two vertices
     /// need, and each block's edges out. A rank of n vertices gives n - 1 edges: at most one edge per vertex.
-    private var edgeCount = 0
     private let edgeFrom: ScratchSpan<Int>
     private let edgeTo: ScratchSpan<Int>
     private let edgeWidth: ScratchSpan<Double>
@@ -95,21 +96,45 @@ struct LayeredPositioningWork {
 
     /// Every vertex a block of its own.
     private func resetAlignment() {
+        let root = root, align = align, shift = shift
         for vertex in 0..<vertexCount {
-            root[vertex] = vertex
-            align[vertex] = vertex
-            shift[vertex] = 0
+            root[unchecked: vertex] = vertex
+            align[unchecked: vertex] = vertex
+            shift[unchecked: vertex] = 0
         }
     }
 
     /// The positions of the present alignment, written to `results` from `base`: its block graph laid out longest path
     /// first, then each block pulled towards its successors.
-    mutating func compact(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool, into results: ScratchSpan<Double>, at base: Int) {
+    func compact(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool, into results: ScratchSpan<Double>, at base: Int) {
+        precondition(base >= 0 && results.count - base >= vertexCount, "Room for a layout of every vertex")
         buildBlockGraph(graph, gap: gap, isRightward: isRightward)
+        let topologicalCount = layOutLongestPathFirst()
+        let root = root, shift = shift, across = across, topological = topological
+        let outStart = outStart, outEdges = outEdges, edgeTo = edgeTo, edgeWidth = edgeWidth
+        for block in topological.part(0..<topologicalCount).reversed() {
+            var least = Double.infinity
+            for position in outStart[block]..<outStart[block + 1] {
+                let edge = outEdges[position]
+                least = min(least, across[edgeTo[edge]] - edgeWidth[edge])
+            }
+            if least != .infinity && least > across[block] { across[block] = least }
+        }
+        for vertex in 0..<vertexCount {
+            let block = root[unchecked: vertex]
+            results[unchecked: base + vertex] = (isRightward ? -across[block] : across[block]) + shift[unchecked: vertex]
+        }
+    }
+
+    /// Each block as far across as its predecessors push it, the blocks visited in topological order, which
+    /// `topological` keeps; returns how many blocks it holds.
+    private func layOutLongestPathFirst() -> Int {
+        let root = root, across = across, remainingIn = remainingIn, topological = topological
+        let outStart = outStart, outEdges = outEdges, edgeTo = edgeTo, edgeWidth = edgeWidth
         var topologicalCount = 0
         for vertex in 0..<vertexCount {
-            across[vertex] = 0
-            if root[vertex] == vertex && remainingIn[vertex] == 0 {
+            across[unchecked: vertex] = 0
+            if root[unchecked: vertex] == vertex && remainingIn[unchecked: vertex] == 0 {
                 topological[topologicalCount] = vertex
                 topologicalCount += 1
             }
@@ -129,29 +154,22 @@ struct LayeredPositioningWork {
                 }
             }
         }
-        for block in topological.part(0..<topologicalCount).reversed() {
-            var least = Double.infinity
-            for position in outStart[block]..<outStart[block + 1] {
-                let edge = outEdges[position]
-                least = min(least, across[edgeTo[edge]] - edgeWidth[edge])
-            }
-            if least != .infinity && least > across[block] { across[block] = least }
-        }
-        for vertex in 0..<vertexCount {
-            results[base + vertex] = (isRightward ? -across[root[vertex]] : across[root[vertex]]) + shift[vertex]
-        }
+        return topologicalCount
     }
 
     /// The block graph of the present alignment: an edge from each block to the next in every rank.
-    private mutating func buildBlockGraph(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool) {
-        edgeCount = 0
-        for vertex in 0..<vertexCount { remainingIn[vertex] = 0 }
-        for vertex in 0...vertexCount { outStart[vertex] = 0 }
+    private func buildBlockGraph(_ graph: LayeredFlatGraph, gap: ScratchSpan<Double>, isRightward: Bool) {
+        let root = root, shift = shift, remainingIn = remainingIn, outStart = outStart, outFill = outFill, outEdges = outEdges
+        let edgeFrom = edgeFrom, edgeTo = edgeTo, edgeWidth = edgeWidth
+        let rankStart = graph.rankStart, order = graph.order
+        var edgeCount = 0
+        for vertex in 0..<vertexCount { remainingIn[unchecked: vertex] = 0 }
+        for vertex in 0...vertexCount { outStart[unchecked: vertex] = 0 }
         for rank in 0...graph.maximumRank {
-            let end = graph.rankStart[rank + 1]
-            for index in (graph.rankStart[rank] + 1)..<max(graph.rankStart[rank] + 1, end) {
-                let first = isRightward ? graph.order[index] : graph.order[index - 1]
-                let second = isRightward ? graph.order[index - 1] : graph.order[index]
+            let end = rankStart[rank + 1]
+            for index in (rankStart[rank] + 1)..<max(rankStart[rank] + 1, end) {
+                let first = isRightward ? order[index] : order[index - 1]
+                let second = isRightward ? order[index - 1] : order[index]
                 let separation = gap[first] + gap[second]
                 edgeFrom[edgeCount] = root[first]
                 edgeTo[edgeCount] = root[second]
@@ -162,8 +180,8 @@ struct LayeredPositioningWork {
             }
         }
         for vertex in 0..<vertexCount {
-            outStart[vertex + 1] += outStart[vertex]
-            outFill[vertex] = outStart[vertex]
+            outStart[unchecked: vertex + 1] += outStart[unchecked: vertex]
+            outFill[unchecked: vertex] = outStart[unchecked: vertex]
         }
         for edge in 0..<edgeCount {
             outEdges[outFill[edgeFrom[edge]]] = edge

@@ -5,15 +5,14 @@
  * Description: Keeps each group of Pele's layered layout contiguous in its ranks, ordering groups by their mean key.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 extension LayeredFlatCrossingReduction {
     /// The groups' depths, and each rank arranged by its present positions so that every group is contiguous.
-    mutating func prepareGroups() {
+    func prepareGroups() {
         let groupTotal = graph.parentOfGroup.count
-        groupDepth = arena.span(count: groupTotal, repeating: 0)
         for group in 0..<groupTotal {
             var parent = group
             while parent >= 0 {
@@ -21,9 +20,6 @@ extension LayeredFlatCrossingReduction {
                 parent = graph.parentOfGroup[parent]
             }
         }
-        groupSum = arena.span(count: groupTotal, repeating: 0)
-        groupCount = arena.span(count: groupTotal, repeating: 0)
-        groupFirst = arena.span(count: groupTotal, repeating: 0)
         let mark = arena.mark()
         defer { arena.release(to: mark) }
         let keys = arena.span(count: graph.vertexCount, repeating: 0.0)

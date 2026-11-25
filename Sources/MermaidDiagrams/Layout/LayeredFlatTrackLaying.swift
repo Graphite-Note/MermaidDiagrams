@@ -5,15 +5,15 @@
  * Description: Lays the pieces of one gap of Pele's layered layout on tracks, and finds the curves that need levels.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 extension LayeredFlatTracks {
     /// Gives the pieces of one gap their tracks, each the number its group takes, counting from the group's first in
     /// curves; returns the number of tracks. The pieces reaching furthest go first, so that those of one fan nest: `list`
     /// is sorted so in place.
-    mutating func lay(_ list: ScratchSpan<Int>) -> Int {
+    func lay(_ list: ScratchSpan<Int>) -> Int {
         // No piece takes no track; one piece takes the first, a group of its own one track high.
         if list.isEmpty { return 0 }
         if list.count == 1 {
@@ -44,7 +44,7 @@ extension LayeredFlatTracks {
     }
 
     /// The tracks of a gap few enough to weigh which piece goes above which; returns the number of tracks.
-    private mutating func layWeighed(_ list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind) -> Int {
+    private func layWeighed(_ list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind) -> Int {
         let pairs = nearPairs(list).elements
         // Each pair that clashes is a link both ways, in the order of the pairs.
         var keys = arena.list(capacity: pairs.count, of: Int.self)
@@ -62,7 +62,7 @@ extension LayeredFlatTracks {
     }
 
     /// Each piece's group's number of tracks, and in curves each track counted from its group's first.
-    private mutating func writeLevels(of list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind, rows: Int) {
+    private func writeLevels(of list: ScratchSpan<Int>, groups: inout LayeredSpanUnionFind, rows: Int) {
         let count = list.count
         let firstTrack = arena.span(count: count, repeating: rows)
         let lastTrack = arena.span(count: count, repeating: -1)
@@ -124,7 +124,7 @@ extension LayeredFlatTracks {
     /// Each piece of a weighed gap on the first track below those that should be above it that no piece it clashes
     /// with has taken. Every piece starts without a track, so the piece placed k-th takes a track no higher than k: the
     /// tracks taken are marked in one span of flags as long as the list, instead of a set.
-    private mutating func placeOnWeighedTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>, above: LayeredLinkLists,
+    private func placeOnWeighedTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>, above: LayeredLinkLists,
                                                clashes: LayeredLinkLists) -> Int {
         let isTaken = arena.span(count: list.count + 1, repeating: false)
         var rows = 0
@@ -142,7 +142,7 @@ extension LayeredFlatTracks {
     }
 
     /// Each piece of a gap of too many pieces to weigh on the first track where it clashes with none already there.
-    private mutating func placeOnTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>) -> Int {
+    private func placeOnTracks(_ list: ScratchSpan<Int>, sequence: ScratchSpan<Int>) -> Int {
         // Only gaps of more than `maximumWeighedPieces` pieces come here: the tracks' own lists are arrays.
         var onTrack: [[Int]] = []
         var rows = 0
@@ -160,7 +160,7 @@ extension LayeredFlatTracks {
 
     /// The levels of one gap of curves: the pieces that turn onto levels, with the short pieces that could cross them,
     /// unless the curves mostly cross each other, when the gap grows instead.
-    mutating func assignLevels(rank: Int, all: ScratchSpan<Int>) {
+    func assignLevels(rank: Int, all: ScratchSpan<Int>) {
         // A lone piece has none to be told apart from: it turns onto no level and leaves the gap as it is.
         if all.count < 2 { return }
         let mark = arena.mark()
@@ -201,7 +201,7 @@ extension LayeredFlatTracks {
 
     /// Marks in `isLevel` the pieces that turn onto levels: first those that run far across and have another such
     /// piece to be told apart from, then any two that would pass too near each other as plain curves. Returns how many.
-    private mutating func markLevelPieces(rank: Int, all: ScratchSpan<Int>, pairs: ScratchSpan<Int>) -> Int {
+    private func markLevelPieces(rank: Int, all: ScratchSpan<Int>, pairs: ScratchSpan<Int>) -> Int {
         var far = arena.list(capacity: all.count, of: Int.self)
         for piece in all where pieces.isWide[piece] { far.append(piece) }
         _ = lay(far.elements)

@@ -5,7 +5,7 @@
  * Description: A fixed run of plain values in a scratch arena, read and written in place through any copy of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -13,7 +13,7 @@
 /// all see and change the same values, so it is passed and kept freely, with no copy on write and no reference
 /// counting, and changed through a `let` (its setter does not mutate the span itself). Where code relied on an array
 /// staying as it was while another copy changed, it takes `DiagramScratchArena.copy(of:)` instead. A span is valid
-/// until the arena is released past it. Every index is checked, as an array's is.
+/// until the arena is released past it. Every index is checked, as an array's is, but for `subscript(unchecked:)`.
 struct ScratchSpan<Element: BitwiseCopyable>: RandomAccessCollection {
     let start: UnsafeMutablePointer<Element>
     let count: Int
@@ -43,6 +43,21 @@ struct ScratchSpan<Element: BitwiseCopyable>: RandomAccessCollection {
         }
     }
 
+    /// The value at `index`, where the loop reading it keeps it within the span by its own bounds (a loop over
+    /// `0..<count` of a span made `count` long, or of spans whose lengths a precondition checked at the function's start):
+    /// only debug builds check it. An index read from a span, from the graph or from input takes the checked subscript.
+    @inline(__always)
+    subscript(unchecked index: Int) -> Element {
+        unsafeAddress {
+            assert(index >= 0 && index < count, "Index out of range of a scratch span")
+            return UnsafePointer(start + index)
+        }
+        nonmutating unsafeMutableAddress {
+            assert(index >= 0 && index < count, "Index out of range of a scratch span")
+            return start + index
+        }
+    }
+
     /// The span's values from `range`, in the same memory.
     @inline(__always)
     func part(_ range: Range<Int>) -> ScratchSpan<Element> {
@@ -56,14 +71,14 @@ struct ScratchSpan<Element: BitwiseCopyable>: RandomAccessCollection {
     /// Every value set to `value`.
     @inline(__always)
     func fill(with value: Element) {
-        start.update(repeating: value, count: count)
+        ScratchShortRuns.fill(start, count: count, with: value)
     }
 
     /// The values of `source`, which is as long, copied in.
     @inline(__always)
     func copyElements(from source: ScratchSpan<Element>) {
         precondition(source.count == count, "Copying between scratch spans of different lengths")
-        start.update(from: source.start, count: count)
+        ScratchShortRuns.copy(from: source.start, to: start, count: count)
     }
 
     /// The values of `range` in reverse order. The range is checked once; the swaps inside it are not checked again

@@ -5,8 +5,8 @@
  * Description: Cuts the edges of Pele's layered layout into segments and gives every rank its first order.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// The vertices and segments a layout is ordered on, built as layout/layered.ts builds them.
@@ -86,8 +86,9 @@ extension LayeredFlatLayout {
     }
 
     /// The rank of an edge's label: halfway along; for an edge that passes ranks of nodes, in one of those beside the
-    /// nodes, the one nearer the node it starts from; between two neighbouring ranks, in the rank between them.
-    private func labelRank(upperRank: Int, lowerRank: Int, isReversed: Bool) -> Int {
+    /// nodes, the one nearer the node it starts from; between two neighbouring ranks, in the rank between them. `step`
+    /// is the layout's.
+    private static func labelRank(upperRank: Int, lowerRank: Int, isReversed: Bool, step: Int) -> Int {
         var rank = upperRank + ((lowerRank - upperRank) >> 1)
         if step == 2 && lowerRank - upperRank >= 4 {
             if rank & 1 == 1 { rank += isReversed ? 1 : -1 }
@@ -116,9 +117,10 @@ extension LayeredFlatLayout {
         return segments
     }
 
-    /// One edge cut into a segment per rank it passes, with a bend or its label in each rank between its ends.
-    private func cutEdge(_ edgeIndex: Int, into segments: inout LayeredSegmentList, nextVertex: inout Int, widths: ScratchSpan<Double>,
-                         kinds: ScratchSpan<LayeredVertexKind>, ranks: ScratchSpan<Int>) {
+    /// One edge cut into a segment per rank it passes, with a bend or its label in each rank between its ends. Mutating,
+    /// as it writes the layout's spans of the edge: `cutEdges` calls it for every edge without copying the layout.
+    private mutating func cutEdge(_ edgeIndex: Int, into segments: inout LayeredSegmentList, nextVertex: inout Int,
+                                  widths: ScratchSpan<Double>, kinds: ScratchSpan<LayeredVertexKind>, ranks: ScratchSpan<Int>) {
         let edge = edges[edgeIndex]
         let upper = edge.isReversed ? edge.head : edge.tail
         let lower = edge.isReversed ? edge.tail : edge.head
@@ -127,7 +129,7 @@ extension LayeredFlatLayout {
         if upperOffset != 0 || lowerOffset != 0 { segments.hasOffsets = true }
         let upperRank = ranks[upper]
         let lowerRank = ranks[lower]
-        let rankOfLabel = edge.labelWidth > 0 ? labelRank(upperRank: upperRank, lowerRank: lowerRank, isReversed: edge.isReversed) : -1
+        let rankOfLabel = edge.labelWidth > 0 ? Self.labelRank(upperRank: upperRank, lowerRank: lowerRank, isReversed: edge.isReversed, step: step) : -1
         if lowerRank - upperRank > 1 { firstBend[edgeIndex] = nextVertex }
         firstSegment[edgeIndex] = segments.from.count
         let firstEnd: LayeredSegmentEnd = edge.isReversed ? (edge.isHeadHeld ? .held : .arrives) : (edge.isTailHeld ? .held : .leaves)
