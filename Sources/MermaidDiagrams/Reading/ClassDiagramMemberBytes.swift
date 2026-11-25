@@ -7,7 +7,7 @@
  *              each piece.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -18,6 +18,13 @@ enum ClassDiagramMemberBytes {
     static func member(from bytes: UnsafeBufferPointer<UInt8>) -> (member: ClassDiagramMember, isMethod: Bool) {
         var shown: [UInt8] = []
         shown.reserveCapacity(bytes.count + 8)
+        return member(from: bytes, shownInto: &shown)
+    }
+
+    /// `member(from:)`, its shown text written into `shown`, a list kept from member to member so that its room is
+    /// made once.
+    static func member(from bytes: UnsafeBufferPointer<UInt8>, shownInto shown: inout [UInt8]) -> (member: ClassDiagramMember, isMethod: Bool) {
+        shown.removeAll(keepingCapacity: true)
         if let classifier = appendMethod(bytes, to: &shown) { return (ClassDiagramMember(text: displayed(shown), classifier: classifier), true) }
         shown.removeAll(keepingCapacity: true)
         guard let first = bytes.first, let last = bytes.last else { return (ClassDiagramMember(text: ""), false) }

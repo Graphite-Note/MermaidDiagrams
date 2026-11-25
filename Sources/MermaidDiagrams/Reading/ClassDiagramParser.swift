@@ -2,11 +2,12 @@
  * File: ClassDiagramParser.swift
  * ------------------------------
  * Layer: Core
- * Description: Reads a class diagram's statements after its keyword.
+ * Description: Reads a class diagram's statements after its keyword, on the text's borrowed bytes, its names byte
+ *              ranges until the diagram keeps them and each error's line counted only when it is reported.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 /// Reads a class diagram's statements after its `classDiagram` or `classDiagram-v2` keyword: classes with their
@@ -15,15 +16,18 @@
 /// accessibility text, and the statements that only style the diagram or make it clickable, which are counted and
 /// left. A statement ends at a line break; `%%` starts a comment.
 struct ClassDiagramParser {
-    private var cursor: MermaidTextCursor
+    private var cursor: GraphDiagramBytes
     private var builder: ClassDiagramBuilder
 
-    /// Reads the class diagram whose keyword ends at the cursor.
+    /// Reads the class diagram whose keyword ends at the cursor, on the cursor's bytes, borrowed.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> ClassDiagram {
-        var parser = ClassDiagramParser(cursor: cursor, builder: ClassDiagramBuilder(limits: limits))
-        try parser.expectStatementEnd()
-        try parser.readStatements()
-        var diagram = parser.builder.finished()
+        var diagram = try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            let bytes = GraphDiagramBytes(buffer, position: cursor.position)
+            var parser = ClassDiagramParser(cursor: bytes, builder: ClassDiagramBuilder(limits: limits, bytes: bytes))
+            try parser.expectStatementEnd()
+            try parser.readStatements()
+            return parser.builder.finished()
+        }
         let options = MermaidConfigurationOptions(section: "class", in: cursor).values
         if case .boolean(false) = options["hierarchicalNamespaces"] { diagram.hierarchicalNamespaces = false }
         if case .boolean(true) = options["hideEmptyMembersBox"] { diagram.hidesEmptyMemberBoxes = true }
@@ -34,7 +38,7 @@ struct ClassDiagramParser {
         while true {
             cursor.skipWhitespace()
             if cursor.isAtEnd { return }
-            if cursor.hasPrefix(Self.commentStart) {
+            if cursor.isAtCommentStart {
                 cursor.skipToEndOfLine()
                 continue
             }
@@ -44,32 +48,35 @@ struct ClassDiagramParser {
     }
 
     private mutating func readStatement() throws(MermaidDiagramReadError) {
-        if cursor.hasPrefix(Self.annotationStart) { return try readAnnotationStatement() }
-        guard let keyword = keywordAtCursor() else { return try readNameStatement() }
-        cursor.advance(by: keyword.utf8.count)
+        if cursor.isAt(MermaidByte.lessThan, MermaidByte.lessThan) { return try readAnnotationStatement() }
+        guard let (keyword, length) = keywordAtCursor() else { return try readNameStatement() }
+        cursor.advance(by: length)
         switch keyword {
-        case "class": _ = try readClassStatement()
-        case "namespace": try readNamespace()
-        case "note": try readNote()
-        case "direction": readDirection()
-        case "accTitle": builder.setAccessibilityTitle(readAccessibilityLine())
-        case "accDescr": builder.setAccessibilityDescription(try readAccessibilityDescription())
-        default:
+        case .classStatement: _ = try readClassStatement()
+        case .namespace: try readNamespace()
+        case .note: try readNote()
+        case .direction: readDirection()
+        case .accessibilityTitle: builder.setAccessibilityTitle(readAccessibilityLine())
+        case .accessibilityDescription: builder.setAccessibilityDescription(try readAccessibilityDescription())
+        case .unapplied:
             // `style`, `classDef`, `cssClass`, `click`, `link` and `callback`.
             cursor.skipToEndOfLine()
             builder.countUnappliedStatement()
         }
     }
 
-    /// The keyword at the cursor, when a word of `keywords` starts there and no identifier character follows it.
-    /// `accTitle` and `accDescr` count only before their `:` or `{`, so that a class may bear another word's name.
-    private func keywordAtCursor() -> String? {
+    /// The keyword at the cursor and its length, when one of the statements' keywords starts there, as written, and no
+    /// identifier character follows it. `accTitle` and `accDescr` count only before their `:` or `{`, so that a class
+    /// may bear another word's name.
+    private func keywordAtCursor() -> (ClassDiagramKeyword, Int)? {
         var lookahead = cursor
-        guard let word = lookahead.readWord(), Self.keywords.contains(word) else { return nil }
+        let word = lookahead.readWord()
+        guard let keyword = ClassDiagramKeyword(word, in: cursor.buffer) else { return nil }
         if let next = lookahead.peek(), MermaidByte.isIdentifierByte(next) { return nil }
-        guard word == "accTitle" || word == "accDescr" else { return word }
+        guard keyword == .accessibilityTitle || keyword == .accessibilityDescription else { return (keyword, word.count) }
         lookahead.skipSpaces()
-        return lookahead.peek() == MermaidByte.colon || (word == "accDescr" && lookahead.peek() == MermaidByte.openingBrace) ? word : nil
+        let opens = lookahead.peek() == MermaidByte.colon || (keyword == .accessibilityDescription && lookahead.peek() == MermaidByte.openingBrace)
+        return opens ? (keyword, word.count) : nil
     }
 
     // MARK: Classes
@@ -83,13 +90,13 @@ struct ClassDiagramParser {
         cursor.skipSpaces()
         if cursor.peek() == MermaidByte.openingBracket { builder.setLabel(try readBracketedLabel(), ofClassAt: index) }
         cursor.skipSpaces()
-        if cursor.hasPrefix(Self.styleSeparator) {
-            cursor.advance(by: Self.styleSeparator.count)
-            _ = cursor.readIdentifier()
+        if cursor.isAt(MermaidByte.colon, MermaidByte.colon, MermaidByte.colon) {
+            cursor.advance(by: 3)
+            Self.skipIdentifier(&cursor)
             builder.countUnappliedStatement()
             cursor.skipSpaces()
         }
-        if cursor.hasPrefix(Self.annotationStart) {
+        if cursor.isAt(MermaidByte.lessThan, MermaidByte.lessThan) {
             builder.addAnnotation(try readAnnotation(), toClassAt: index)
             cursor.skipSpaces()
         }
@@ -97,35 +104,51 @@ struct ClassDiagramParser {
         return index
     }
 
+    /// Moves past a run of identifier bytes, a `-` kept only where an identifier byte follows it
+    /// (`MermaidTextCursor.readIdentifier`).
+    private static func skipIdentifier(_ cursor: inout GraphDiagramBytes) {
+        let start = cursor.position
+        while let byte = cursor.peek() {
+            if MermaidByte.isIdentifierByte(byte) {
+                cursor.advance()
+            } else if byte == MermaidByte.hyphen, cursor.position > start, let next = cursor.peek(1), MermaidByte.isIdentifierByte(next) {
+                cursor.advance()
+            } else {
+                break
+            }
+        }
+    }
+
     /// `["Label"]`, the label quoted inside square brackets.
     private mutating func readBracketedLabel() throws(MermaidDiagramReadError) -> DiagramLabel {
-        let openingLine = cursor.line
+        let opening = cursor.position
         cursor.advance()
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.quotationMark else { throw .invalidSyntax(line: cursor.line, problem: .expectedQuotedText) }
         let text = try readQuotedText()
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.closingBracket else {
-            throw .invalidSyntax(line: openingLine, problem: .unclosedShape(closingText: "]"))
+            throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedShape(closingText: "]"))
         }
         cursor.advance()
-        return DiagramLabelDecoder.label(from: text, form: .plain)
+        return DiagramLabelDecoder.label(from: cursor.text(text), form: .plain)
     }
 
     /// `{` members, one per line, `}`. A `{` inside is an error, as in Mermaid; a line that starts with `%%` is a comment.
-    private mutating func readClassBody(ofClassAt index: Int, identifier: String) throws(MermaidDiagramReadError) {
-        let openingLine = cursor.line
+    private mutating func readClassBody(ofClassAt index: Int, identifier: MermaidTextRange) throws(MermaidDiagramReadError) {
+        let opening = cursor.position
         cursor.advance()
         while true {
             cursor.skipSpaces()
-            if cursor.hasPrefix(Self.commentStart) { cursor.skipToEndOfLine() }
+            if cursor.isAtCommentStart { cursor.skipToEndOfLine() }
             let start = cursor.position
             while let byte = cursor.peek(), byte != MermaidByte.newline, byte != MermaidByte.openingBrace, byte != MermaidByte.closingBrace {
                 cursor.advance()
             }
-            builder.addMember(cursor.trimmedText(from: start, to: cursor.position), toClassAt: index)
+            let member = cursor.trimmed(from: start, to: cursor.position)
+            builder.addMember(at: member, toClassAt: index)
             guard let byte = cursor.peek() else {
-                throw .invalidSyntax(line: openingLine, problem: .unclosedClassBody(identifier: identifier))
+                throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedClassBody(identifier: cursor.text(identifier)))
             }
             if byte == MermaidByte.openingBrace { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
             cursor.advance()
@@ -143,15 +166,17 @@ struct ClassDiagramParser {
 
     /// `<<text>>` on one line: the text, trimmed.
     private mutating func readAnnotation() throws(MermaidDiagramReadError) -> String {
-        let line = cursor.line
-        cursor.advance(by: Self.annotationStart.count)
+        let opening = cursor.position
+        cursor.advance(by: 2)
         let start = cursor.position
-        while !cursor.isAtEnd, !cursor.hasPrefix(Self.annotationEnd), cursor.peek() != MermaidByte.newline { cursor.advance() }
-        guard cursor.hasPrefix(Self.annotationEnd) else { throw .invalidSyntax(line: line, problem: .unclosedAnnotation) }
-        let annotation = cursor.trimmedText(from: start, to: cursor.position)
-        cursor.advance(by: Self.annotationEnd.count)
-        guard !annotation.isEmpty else { throw .invalidSyntax(line: line, problem: .unexpectedText("<<>>")) }
-        return annotation
+        while !cursor.isAtEnd, !cursor.isAt(MermaidByte.greaterThan, MermaidByte.greaterThan), cursor.peek() != MermaidByte.newline { cursor.advance() }
+        guard cursor.isAt(MermaidByte.greaterThan, MermaidByte.greaterThan) else {
+            throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedAnnotation)
+        }
+        let annotation = cursor.trimmed(from: start, to: cursor.position)
+        cursor.advance(by: 2)
+        guard !annotation.isEmpty else { throw .invalidSyntax(line: cursor.line(at: opening), problem: .unexpectedText("<<>>")) }
+        return cursor.text(annotation)
     }
 
     // MARK: Members and relations
@@ -159,15 +184,15 @@ struct ClassDiagramParser {
     /// A statement that starts with a class's name: `Name : member`, a relation, or the name alone, which Mermaid
     /// reads and adds nothing for.
     private mutating func readNameStatement() throws(MermaidDiagramReadError) {
-        let line = cursor.line
         guard let name = try ClassDiagramNameSyntax.read(&cursor) else {
-            throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt()))
+            throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
         }
         cursor.skipSpaces()
-        if cursor.peek() == MermaidByte.colon, !cursor.hasPrefix(Self.styleSeparator) {
+        if cursor.peek() == MermaidByte.colon, !cursor.isAt(MermaidByte.colon, MermaidByte.colon, MermaidByte.colon) {
             cursor.advance()
             cursor.skipSpaces()
-            builder.addMember(cursor.readRestOfLine(), toClassAt: try builder.classIndex(for: name))
+            let member = cursor.readRestOfLineRange()
+            builder.addMember(at: member, toClassAt: try builder.classIndex(for: name))
             return
         }
         if isAtStatementEnd { return }
@@ -201,7 +226,7 @@ struct ClassDiagramParser {
     /// `"1"` at the cursor: its text trimmed with entity codes read, nil when it is empty or there is none.
     private mutating func readCardinality() throws(MermaidDiagramReadError) -> String? {
         guard cursor.peek() == MermaidByte.quotationMark else { return nil }
-        let text = ClassDiagramMemberSyntax.trimmed(DiagramLabelDecoder.decodingEntities(try readQuotedText()))
+        let text = ClassDiagramMemberSyntax.trimmed(DiagramLabelDecoder.decodingEntities(cursor.text(try readQuotedText())))
         return text.isEmpty ? nil : text
     }
 
@@ -210,16 +235,16 @@ struct ClassDiagramParser {
     /// `note "text"` or `note for Name "text"`.
     private mutating func readNote() throws(MermaidDiagramReadError) {
         cursor.skipSpaces()
-        var classIdentifier: String?
-        if cursor.hasPrefix(Self.forWord), let next = cursor.peek(Self.forWord.count), MermaidByte.isSpace(next) {
-            cursor.advance(by: Self.forWord.count)
+        var classIdentifier: MermaidTextRange?
+        if cursor.hasPrefix("for"), let next = cursor.peek(3), MermaidByte.isSpace(next) {
+            cursor.advance(by: 3)
             cursor.skipSpaces()
             guard let name = try ClassDiagramNameSyntax.read(&cursor) else { throw .invalidSyntax(line: cursor.line, problem: .expectedName) }
             classIdentifier = name.identifier
             cursor.skipSpaces()
         }
         guard cursor.peek() == MermaidByte.quotationMark else { throw .invalidSyntax(line: cursor.line, problem: .expectedQuotedText) }
-        try builder.addNote(DiagramLabelDecoder.label(from: try readQuotedText(), form: .markdown), forClassIdentifiedBy: classIdentifier)
+        try builder.addNote(DiagramLabelDecoder.label(from: cursor.text(try readQuotedText()), form: .markdown), forClassIdentifiedBy: classIdentifier)
     }
 
     /// `namespace Name["Title"] { … }` with the classes, notes and namespaces inside it, read with the builder's
@@ -234,16 +259,16 @@ struct ClassDiagramParser {
                 builder.closeNamespace()
                 continue
             }
-            if cursor.hasPrefix(Self.commentStart) {
+            if cursor.isAtCommentStart {
                 cursor.skipToEndOfLine()
                 continue
             }
             let keyword = keywordAtCursor()
-            cursor.advance(by: keyword?.utf8.count ?? 0)
-            switch keyword ?? "" {
-            case "class": builder.addToInnermostNamespace(classAt: try readClassStatement())
-            case "note": try readNote()
-            case "namespace": try openNamespace()
+            cursor.advance(by: keyword?.1 ?? 0)
+            switch keyword?.0 {
+            case .classStatement: builder.addToInnermostNamespace(classAt: try readClassStatement())
+            case .note: try readNote()
+            case .namespace: try openNamespace()
             default: throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
             }
             cursor.skipSpaces()
@@ -260,15 +285,15 @@ struct ClassDiagramParser {
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.openingBrace else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         cursor.advance()
-        try builder.openNamespace(named: name.identifier, title: title)
+        try builder.openNamespace(named: cursor.text(name.identifier), title: title)
     }
 
     /// `direction TB`, `BT`, `LR` or `RL`. Mermaid reads any other word after `direction` as part of a class's name
     /// that adds nothing, so the line is left without an error.
     private mutating func readDirection() {
         cursor.skipSpaces()
-        let word = cursor.readWord() ?? ""
-        if Self.directionKeywords.contains(word), let direction = FlowchartDirection(keyword: word) { builder.setDirection(direction) }
+        let word = cursor.readWord()
+        if let direction = Self.direction(spelledBy: word, in: cursor) { builder.setDirection(direction) }
         cursor.skipToEndOfLine()
     }
 
@@ -284,11 +309,11 @@ struct ClassDiagramParser {
     private mutating func readAccessibilityDescription() throws(MermaidDiagramReadError) -> String {
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.openingBrace else { return readAccessibilityLine() }
-        let openingLine = cursor.line
+        let opening = cursor.position
         cursor.advance()
         let start = cursor.position
         while let byte = cursor.peek(), byte != MermaidByte.closingBrace { cursor.advance() }
-        guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedAccessibilityDescription) }
+        guard !cursor.isAtEnd else { throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedAccessibilityDescription) }
         let description = cursor.text(from: start, to: cursor.position)
         cursor.advance()
         return DiagramLabelDecoder.label(from: description, form: .plain).lines.filter { line in !line.isEmpty }.joined(separator: " ")
@@ -296,14 +321,14 @@ struct ClassDiagramParser {
 
     // MARK: Text and statement ends
 
-    /// The text between quotation marks at the cursor, which may hold anything but a quotation mark; moves past it.
-    private mutating func readQuotedText() throws(MermaidDiagramReadError) -> String {
-        let openingLine = cursor.line
+    /// The bytes between quotation marks at the cursor, which may hold anything but a quotation mark; moves past them.
+    private mutating func readQuotedText() throws(MermaidDiagramReadError) -> MermaidTextRange {
+        let opening = cursor.position
         cursor.advance()
         let start = cursor.position
         while let byte = cursor.peek(), byte != MermaidByte.quotationMark { cursor.advance() }
-        guard !cursor.isAtEnd else { throw .invalidSyntax(line: openingLine, problem: .unclosedQuotation) }
-        let text = cursor.text(from: start, to: cursor.position)
+        guard !cursor.isAtEnd else { throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedQuotation) }
+        let text = MermaidTextRange(start: start, end: cursor.position)
         cursor.advance()
         return text
     }
@@ -313,7 +338,7 @@ struct ClassDiagramParser {
         var lookahead = cursor
         lookahead.skipSpaces()
         guard let byte = lookahead.peek() else { return true }
-        return byte == MermaidByte.newline || byte == MermaidByte.carriageReturn || lookahead.hasPrefix(Self.commentStart)
+        return byte == MermaidByte.newline || byte == MermaidByte.carriageReturn || lookahead.isAtCommentStart
     }
 
     /// A statement ends at a line break, a comment or the end of the text; anything else is an error.
@@ -325,12 +350,15 @@ struct ClassDiagramParser {
         cursor.skipToEndOfLine()
     }
 
-    private static let keywords: Set<String> = ["class", "namespace", "note", "direction", "accTitle", "accDescr", "style", "classDef", "cssClass",
-                                                "click", "link", "callback"]
-    private static let directionKeywords: Set<String> = ["TB", "BT", "LR", "RL"]
-    private static let commentStart = Array("%%".utf8)
-    private static let annotationStart = Array("<<".utf8)
-    private static let annotationEnd = Array(">>".utf8)
-    private static let styleSeparator = Array(":::".utf8)
-    private static let forWord = Array("for".utf8)
+    /// The direction `TB`, `BT`, `LR` or `RL`, in upper case, spells, or nil.
+    private static func direction(spelledBy word: MermaidTextRange, in bytes: GraphDiagramBytes) -> FlowchartDirection? {
+        guard word.count == 2 else { return nil }
+        switch (bytes.buffer[word.lowerBound], bytes.buffer[word.lowerBound + 1]) {
+        case (UInt8(ascii: "T"), UInt8(ascii: "B")): return .topToBottom
+        case (UInt8(ascii: "B"), UInt8(ascii: "T")): return .bottomToTop
+        case (UInt8(ascii: "L"), UInt8(ascii: "R")): return .leftToRight
+        case (UInt8(ascii: "R"), UInt8(ascii: "L")): return .rightToLeft
+        default: return nil
+        }
+    }
 }

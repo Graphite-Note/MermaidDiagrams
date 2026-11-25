@@ -37,11 +37,16 @@ extension GraphDiagramBytes {
     /// The text from the position to the end of its line, without the line break and trailing spaces; moves past it
     /// (`MermaidTextCursor.readRestOfLine`).
     mutating func readRestOfLine() -> String {
+        text(readRestOfLineRange())
+    }
+
+    /// The bytes `readRestOfLine` reads, without making their text.
+    mutating func readRestOfLineRange() -> MermaidTextRange {
         let start = position
         skipToEndOfLine()
         var end = position
         while end > start, MermaidByte.isSpace(buffer[end - 1]) || buffer[end - 1] == MermaidByte.carriageReturn { end -= 1 }
-        return text(from: start, to: end)
+        return MermaidTextRange(start: start, end: end)
     }
 
     /// The 1-based line of `offset`, counted only when an error asks for it.
