@@ -8,8 +8,8 @@
  *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.13
- * Date: 24/11/2026
+ * Version: 0.14
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -41,7 +41,8 @@ struct MermaidDiagramsBenchmark {
     /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
     /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`); `--readme-pictures` paints
     /// the README's pictures of every type (`ReadmePictures`); `--flat-text` times the flat text measuring against the text
-    /// block (`FlatTextMeasuringBenchmark`).
+    /// block (`FlatTextMeasuringBenchmark`); `--measured-scene-text` times texts taken to a scene as blocks against
+    /// measured texts (`MeasuredSceneTextBenchmark`).
     static func main() async throws {
         let typography = DiagramTypography(font: font)
         if let profileIndex = CommandLine.arguments.firstIndex(of: "--profile") {
@@ -55,6 +56,9 @@ struct MermaidDiagramsBenchmark {
         }
         if let flatTextIndex = CommandLine.arguments.firstIndex(of: "--flat-text") {
             return try FlatTextMeasuringBenchmark.run(arguments: Array(CommandLine.arguments[(flatTextIndex + 1)...]))
+        }
+        if let measuredSceneTextIndex = CommandLine.arguments.firstIndex(of: "--measured-scene-text") {
+            return try MeasuredSceneTextBenchmark.run(arguments: Array(CommandLine.arguments[(measuredSceneTextIndex + 1)...]))
         }
         if let picturesIndex = CommandLine.arguments.firstIndex(of: "--readme-pictures") {
             return try ReadmePictures.run(arguments: Array(CommandLine.arguments[(picturesIndex + 1)...]), typography: typography)

@@ -5,11 +5,12 @@
  * Description: Collects a scene's items back to front, leaving out what paints nothing, merging a shape into the one
  *              before it when both are painted alike, opaque and apart, and a fill and the stroke of its path into one;
  *              it records into the thread's blocks and makes the scene's storage once, at the end, the paintings and texts
- *              lists of its own that the scene takes, and says when a lane went past its element limit.
+ *              lists of its own that the scene takes, and says when a lane went past its element limit; texts come as
+ *              blocks, or as texts measured from their source's bytes (DiagramSceneBuilderMeasuredText.swift).
  *
  * Authors: Bahey Shalash
- * Version: 0.9
- * Date: 24/11/2026
+ * Version: 0.10
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -105,6 +106,18 @@ struct DiagramSceneBuilder: ~Copyable {
     mutating func text(_ block: DiagramTextBlock?, _ paint: DiagramPaint, isBold: Bool = false, isItalic: Bool = false, isMonospaced: Bool = false,
                        rotation: CGFloat? = nil, outline: DiagramTextOutline? = nil, part: DiagramScenePart) {
         guard let block, block.lineCount > 0 else { return }
+        #if DEBUG
+        if let substitution = DiagramSceneTextSubstitution.measuredText, let substituted = substitution(block) {
+            let made = substituted.source.withUnsafeBufferPointer { source in DiagramTextBlock(substituted.text, of: substituted.lines, source: source) }
+            return addText(made, paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced, rotation: rotation, outline: outline, part: part)
+        }
+        #endif
+        addText(block, paint, isBold: isBold, isItalic: isItalic, isMonospaced: isMonospaced, rotation: rotation, outline: outline, part: part)
+    }
+
+    /// `block`, of at least one line, added after the items so far: what every text the builder is given becomes.
+    mutating func addText(_ block: DiagramTextBlock, _ paint: DiagramPaint, isBold: Bool, isItalic: Bool, isMonospaced: Bool, rotation: CGFloat?,
+                          outline: DiagramTextOutline?, part: DiagramScenePart) {
         finishRun()
         buffers.appendRecord(kind: .text, part: part, index: texts.count)
         if texts.isEmpty { texts.reserveCapacity(Self.firstListCapacity) }

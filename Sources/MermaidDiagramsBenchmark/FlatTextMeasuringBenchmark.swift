@@ -7,8 +7,8 @@
  *              on the C4 shapes' kind names; or repeats one of them for a sampler.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -89,7 +89,7 @@ enum FlatTextMeasuringBenchmark {
 
     /// Every text the C4 layout measures, as the documentation examples write it: elements' labels, types, descriptions
     /// and technologies, relations' labels and technologies, titles.
-    private static func c4Texts() throws -> [String] {
+    static func c4Texts() throws -> [String] {
         var texts: [String] = []
         for source in try C4Corpus.documentationExamples() {
             guard case .c4(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { continue }

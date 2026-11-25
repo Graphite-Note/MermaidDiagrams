@@ -3,11 +3,11 @@
  * -------------------------------
  * Layer: Core
  * Description: The path through an edge's route as Pele draws it: an S between two points out of line,
- *              a straight segment between two in line.
+ *              a straight segment between two in line; the route an array or a span of a scratch arena.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -25,6 +25,21 @@ enum DiagramRouteDrawing {
     static func path(through points: consuming [CGPoint], flowIsVertical: Bool, startTrim: CGFloat,
                      endTrim: CGFloat) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) {
         path(through: points, segmentsRunVertically: repeatElement(flowIsVertical, count: points.count - 1), startTrim: startTrim, endTrim: endTrim)
+    }
+
+    /// The path through `points`, any list of them indexed from 0 (a span of a layout's scratch arena), copied once into
+    /// the list the trims are made in, as `path(through:flowIsVertical:startTrim:endTrim:)` draws an array of them.
+    static func path<Points: RandomAccessCollection<CGPoint>>(through points: Points, flowIsVertical: Bool, startTrim: CGFloat, endTrim: CGFloat)
+        -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) where Points.Index == Int {
+        path(through: Array(points), flowIsVertical: flowIsVertical, startTrim: startTrim, endTrim: endTrim)
+    }
+
+    /// The path through `points`, any list of them indexed from 0, whose segments follow flows of their own, as
+    /// `path(through:segmentsRunVertically:startTrim:endTrim:)` draws an array of them.
+    static func path<Points: RandomAccessCollection<CGPoint>, Axes: RandomAccessCollection<Bool>>(
+        through points: Points, segmentsRunVertically: Axes, startTrim: CGFloat, endTrim: CGFloat
+    ) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) where Points.Index == Int, Axes.Index == Int {
+        path(through: Array(points), segmentsRunVertically: segmentsRunVertically, startTrim: startTrim, endTrim: endTrim)
     }
 
     /// The path through a route whose segments follow flows of their own, as an edge does that crosses into a box
