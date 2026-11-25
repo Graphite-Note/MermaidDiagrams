@@ -9,8 +9,8 @@
  *              are the document's.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -102,6 +102,36 @@ final class DiagramSVGWriterIdentityTests: XCTestCase {
                                                                       painting: .fill(.accent), part: part))])
             XCTAssertTrue(DiagramSVGWriter().document(of: scene, diagramType: "x").contains("<path class=\"pele-\(part.rawValue)\" d="), "\(part)")
         }
+    }
+
+    /// The root element repeats what it wrote first (the type's escaped name in its role's description, the width and
+    /// height after the view box) and takes its style and font size from the thread's scratch: on one thread, fonts of
+    /// every size in turn (sizes one bit apart, not finite), types that need escaping and pages of every number kind
+    /// give the 0.7.0 writer's documents, in both color modes.
+    func testTheRootElementIsThe070WritersForEachFontTypeAndSizeInTurn() {
+        let sizes: [CGFloat] = [16, 12, 16, 16.000000000000004, 0, -3, .nan, .infinity, 16]
+        let types = ["flowchart", "a&b<\"c\">", "", "gitGraph", "\u{1}x\u{FFFE}é"]
+        let pages = [CGSize(width: 199, height: 40), CGSize(width: 12_345.678, height: -0.004), CGSize(width: .nan, height: 1e13),
+                     CGSize(width: 0.005, height: 9_998.995)]
+        let writers = [(DiagramSVGWriter(), ReferenceSVGWriter()),
+                       (DiagramSVGWriter(colors: .palette(DiagramScenePaletteSamples.dark)), ReferenceSVGWriter(colors: .palette(DiagramScenePaletteSamples.dark)))]
+        var documentCount = 0
+        for (index, size) in sizes.enumerated() {
+            for postScriptName in [nil, "Menlo-Regular"] {
+                let page = pages[(index + documentCount) % pages.count]
+                let scene = DiagramScene(size: page, font: DiagramFont(postScriptName: postScriptName, size: size),
+                                         items: [.shape(DiagramSceneShape(path: CGPath(rect: CGRect(x: 0, y: 0, width: 1, height: 1), transform: nil),
+                                                                          painting: .fill(.accent), part: .node))])
+                for type in types {
+                    for (writer, reference) in writers {
+                        XCTAssertEqual(writer.document(of: scene, diagramType: type, title: "T", description: nil),
+                                       reference.document(of: scene, diagramType: type, title: "T", description: nil), "\(size) \(type)")
+                        documentCount += 1
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(documentCount, sizes.count * 2 * types.count * writers.count)
     }
 }
 

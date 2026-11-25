@@ -9,8 +9,8 @@
  *              written as 0.7.0 wrote them; a shape's view kept after its scene still reads its elements.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -187,9 +187,8 @@ final class DiagramSceneStorageTests: XCTestCase {
     func testScenesBuiltOnManyThreadsAtOnceAreThoseBuiltAlone() throws {
         var sources: [String] = []
         for (_, corpus) in try OutputDigest.corpora() { sources += corpus.prefix(6) }
-        let typography = DiagramSceneSamples.typography
-        func document(_ source: String) -> String? {
-            (try? MermaidDiagramPreparation.prepare(source: source, typography: typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
+        @Sendable func document(_ source: String) -> String? {
+            (try? MermaidDiagramPreparation.prepare(source: source, typography: DiagramSceneSamples.typography, narrowestColumnWidth: nil, now: GanttChartCorpus.now,
                                                     timeZone: GanttChartCorpus.timeZone)).map { prepared in prepared.svgDocument() }
         }
         let expected = sources.map(document)

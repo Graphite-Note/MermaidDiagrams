@@ -157,6 +157,16 @@ struct DiagramSVGBuffer: ~Copyable {
         count &+= bytes.count
     }
 
+    /// The bytes written at `range` once more, at the end, within the room reserved: what the document repeats (its
+    /// width and height after its view box).
+    @inline(__always)
+    mutating func writeCopy(ofWritten range: Range<Int>) {
+        precondition(range.lowerBound >= 0 && range.upperBound <= count, "a copy of bytes written before")
+        assertReserved(range.count)
+        cursor.initialize(from: start + range.lowerBound, count: range.count)
+        count &+= range.count
+    }
+
     /// `part`'s class (`pele-node`), its entry copied whole: room for `DiagramSVGClassNames.entryByteCount` is reserved.
     @inline(__always)
     mutating func write(classOf part: DiagramScenePart) {
@@ -232,6 +242,13 @@ struct DiagramSVGBuffer: ~Copyable {
     mutating func append(_ bytes: UnsafeBufferPointer<UInt8>) {
         reserve(bytes.count)
         write(bytes)
+    }
+
+    /// The bytes written at `range` once more, at the end: what the document repeats (its type in its role's
+    /// description).
+    mutating func appendCopy(ofWritten range: Range<Int>) {
+        reserve(range.count)
+        writeCopy(ofWritten: range)
     }
 
     mutating func append(byte: UInt8) {
