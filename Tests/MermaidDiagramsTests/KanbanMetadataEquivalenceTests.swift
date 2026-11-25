@@ -8,7 +8,7 @@
  *              specification's texts, mutated texts and random boards; long and many-entried metadata stays linear.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -65,6 +65,32 @@ final class KanbanMetadataEquivalenceTests: XCTestCase {
             if KanbanCardFields.fieldsOnBytes(text) != nil { readOnBytes += 1 }
         }
         XCTAssertGreaterThan(readOnBytes, 8_000, "the texts the bytes reader takes")
+    }
+
+    /// Plain values that open with a YAML indicator (anchor, alias, tag, reserved, block scalar, sequence entry, key),
+    /// hold a colon, a quotation mark, a line break other than the line feed, a byte order mark or a number, boolean or
+    /// null of YAML's other spellings, and repeated and odd keys: the bytes reader gives 0.7.0's fields or its refusal.
+    func testIndicatorsOddScalarsAndRepeatedKeysAreReadAsZeroSevenReadThem() {
+        let values = ["&a x", "*a", "!t x", "!!str 5", "@x", "`x", "%x", "|", ">", "- x", "-", "? x", "?", ":x", ": x", "x:", "x :y", "a:b",
+                      "x: y", "'a'", "\"a\"", "'", "\"", "a'b", "a\"b", "a\rb", "a\u{0B}b", "a\u{0C}b", "\u{0C}x", "x\u{0C}", "\u{85}x", "x \u{85}",
+                      "a\u{2028}b", "\u{FEFF}x", "x\u{FEFF}", ".nan", "-.inf", "+1", "0o7", "0b11", "1_000", "1:30", "2001-12-14", "Yes", "NO", "on",
+                      "Off", "y", "N", "NULL", "Null", "TRUE", "True", "=", "<<", "\u{7F}", "\u{0}", "a\tb", "a  b", "1.", ".5", "1e", "0x", "--", "---",
+                      "...", "a ...", "a --- b", "\u{1}x", "a\u{2029}", "\u{1F600}", "1e400", "-0", "0.0", "00", "09", "+.5", "1__0"]
+        var texts: [String] = []
+        for value in values {
+            for prefix in [" label: ", "label: ", " ticket: ", "priority: "] {
+                for suffix in ["", " ", ", icon: s", " ,shape: rect"] { texts.append(prefix + value + suffix) }
+            }
+        }
+        texts += ["label: a, label: b", "ticket: 1, other: 2, ticket: 3", "a: 1, a: 2", "label: x,", "label: x, ", "label: x ,", " , label: x",
+                  "label: x,,", "label:  ", "label: ''", "label: \"\"", "label: 'a' ", "label: 'a',icon: b", "-a: 1", "_: 1", "1: x", "label : x",
+                  "label\t: x"]
+        var readOnBytes = 0
+        for text in texts {
+            XCTAssertEqual(bytesFields(text), referenceFields(text), text.debugDescription)
+            if KanbanCardFields.fieldsOnBytes(text) != nil { readOnBytes += 1 }
+        }
+        XCTAssertGreaterThan(readOnBytes, 1_000, "the texts the bytes reader takes")
     }
 
     func testDocumentationMetadataIsReadOnItsBytesAsZeroSevenReadIt() throws {
