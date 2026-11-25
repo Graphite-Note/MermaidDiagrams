@@ -4,8 +4,8 @@
  * Layer: Tests
  * Description: Charts, block diagrams, Ishikawa diagrams and Wardley maps prepared on many threads at once are those
  *              prepared alone: each thread reads a block diagram in its own scratch arena, keeps each Ishikawa diagram's
- *              and quadrant chart's ranges of its own text, finds each Sankey diagram's names in its own table, and
- *              records every scene into its own lanes.
+ *              and quadrant chart's ranges of its own text, finds each Sankey diagram's names in its own table, makes
+ *              its own radar entry lists and Git commit ids, and records every scene into its own lanes.
  *
  * Authors: Bahey Shalash
  * Version: 0.3
@@ -19,7 +19,7 @@ import XCTest
 
 final class ChartThreadTests: XCTestCase {
     private static let corpusNames = ["block-docs", "pie-docs", "radar-docs", "quadrant-docs", "xychart-docs", "sankey-docs", "treemap-docs",
-                                      "packet-docs", "venn-docs", "ishikawa-docs", "wardley-docs"]
+                                      "packet-docs", "venn-docs", "ishikawa-docs", "wardley-docs", "git-docs"]
 
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow widths:
     /// every SVG, narrow SVG and spoken text is the one prepared alone, before the threads start.
@@ -32,6 +32,10 @@ final class ChartThreadTests: XCTestCase {
         // Sankey diagrams whose names grow the name table past its first slots, in ASCII and beyond it.
         sources.append("sankey\n" + (0..<80).map { index in "node \(index),node \((index * 7 + 1) % 80),\(index + 1)" }.joined(separator: "\n"))
         sources.append("sankey\n" + (0..<40).map { index in "nœud \(index),\"nœud \(index + 1)\",\(index + 1)" }.joined(separator: "\n"))
+        // A radar chart whose curves name more entries than are searched, and a Git graph of made-up ids on many branches.
+        sources.append("radar-beta\naxis " + (0..<20).map { index in "a\(index)" }.joined(separator: ", ") + "\ncurve c{"
+            + (0..<20).map { index in "a\(19 - index): \(index % 7).5" }.joined(separator: ", ") + "}")
+        sources.append("gitGraph\n" + (0..<30).map { index in "branch b\(index)\ncommit\ncommit tag: \"t\(index)\"\n" }.joined())
         XCTAssertGreaterThan(sources.count, 70)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }

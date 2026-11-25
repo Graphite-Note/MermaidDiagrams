@@ -5,8 +5,8 @@
  * Description: Reads a radar chart's statements after its `radar-beta` keyword: axes, curves, options and titles.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
- * Date: 23/11/2026
+ * Version: 0.7
+ * Date: 25/11/2026
  */
 
 /// Reads the statements after the `radar-beta` keyword (and an optional `:`) as Mermaid's grammar does: `axis id["Label"],
@@ -20,20 +20,27 @@ struct RadarChartParser {
     private var chart = RadarChart()
     private var statements = MermaidTitleStatements()
     private var writtenCurves: [WrittenCurve] = []
+    /// Every curve's entries, one after another: each entry's axis name ("" in a curve of numbers) and value.
+    private var entryNames: [String] = []
+    private var entryValues: [Double] = []
     private var entryCount = 0
     private let limits: MermaidDiagramLimits
 
-    /// A curve as written: its values, or its values by axis name.
+    /// A curve as written: where its entries are in the parser's lists, and whether they name their axes.
     struct WrittenCurve {
         let name: String
         let label: DiagramLabel
         let line: Int
-        let entries: [(axisName: String?, value: Double)]
+        let entries: Range<Int>
+        let isNamed: Bool
     }
 
     private init(cursor: MermaidTextCursor, limits: MermaidDiagramLimits) {
         self.cursor = cursor
         self.limits = limits
+        // Room for the entries of a few curves, made once.
+        entryNames.reserveCapacity(Self.reservedEntryCount)
+        entryValues.reserveCapacity(Self.reservedEntryCount)
     }
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RadarChart {
@@ -63,13 +70,11 @@ struct RadarChartParser {
                 try MermaidTitleStatements.expectLineEnd(&cursor)
                 continue
             }
-            let line = cursor.line
-            let word = RadarChartWords.name(in: cursor) ?? ""
-            switch word {
-            case "axis": try readAxes()
-            case "curve": try readCurves()
-            case _ where RadarChartWords.options.contains(word): try readOptions()
-            default: throw .invalidSyntax(line: line, problem: .unexpectedText(cursor.excerpt()))
+            switch RadarChartWords.word(in: cursor)?.kept {
+            case .axis?: try readAxes()
+            case .curve?: try readCurves()
+            case let kept? where kept.startsOption: try readOptions()
+            default: throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
             }
         }
     }
@@ -83,7 +88,7 @@ struct RadarChartParser {
 
     /// `axis` and one or more axes joined by commas.
     private mutating func readAxes() throws(MermaidDiagramReadError) {
-        cursor.advance(by: RadarChartWords.axis.count)
+        cursor.advance(by: 4)
         repeat {
             try checkRoomForOneMore()
             let name = try readName()
@@ -94,7 +99,7 @@ struct RadarChartParser {
 
     /// `curve` and one or more curves joined by commas.
     private mutating func readCurves() throws(MermaidDiagramReadError) {
-        cursor.advance(by: RadarChartWords.curve.count)
+        cursor.advance(by: 5)
         repeat {
             try checkRoomForOneMore()
             let line = cursor.line
@@ -102,22 +107,24 @@ struct RadarChartParser {
             let label = try readOptionalLabel()
             guard cursor.peek() == MermaidByte.openingBrace else { throw problem(.expectedOpeningBrace) }
             cursor.advance()
-            let entries = try readEntries()
-            writtenCurves.append(WrittenCurve(name: name, label: label ?? DiagramLabelDecoder.label(from: name, form: .plain), line: line, entries: entries))
+            let firstEntry = entryValues.count
+            let isNamed = try readEntries()
+            writtenCurves.append(WrittenCurve(name: name, label: label ?? DiagramLabelDecoder.label(from: name, form: .plain), line: line,
+                                              entries: firstEntry..<entryValues.count, isNamed: isNamed))
         } while acceptComma()
     }
 
     /// The entries of a curve after its `{` to its `}`: numbers, or axis names each with a number (and an optional colon);
-    /// never both. Line breaks may come after the `{`, after a comma and before the `}`, not before a comma.
-    private mutating func readEntries() throws(MermaidDiagramReadError) -> [(axisName: String?, value: Double)] {
+    /// never both. Line breaks may come after the `{`, after a comma and before the `}`, not before a comma. The entries
+    /// go into the parser's lists; whether they name their axes is returned.
+    private mutating func readEntries() throws(MermaidDiagramReadError) -> Bool {
         skipLineBreaks()
-        let isNamed = RadarChartWords.isName(RadarChartWords.name(in: cursor))
+        let isNamed = RadarChartWords.word(in: cursor)?.isName == true
         guard isNamed || cursor.peek().map(MermaidByte.isDigit) == true else { throw problem(.expectedName) }
-        var entries: [(axisName: String?, value: Double)] = []
         while true {
             guard entryCount < limits.maximumEdgeCount else { throw .tooManyChartValues(limit: limits.maximumEdgeCount) }
             entryCount += 1
-            var axisName: String?
+            var axisName = ""
             if isNamed {
                 axisName = try readName()
                 cursor.skipSpaces()
@@ -126,7 +133,9 @@ struct RadarChartParser {
                     cursor.skipSpaces()
                 }
             }
-            entries.append((axisName, try readNumber()))
+            let value = try readNumber()
+            entryNames.append(axisName)
+            entryValues.append(value)
             // The comma follows the entry on its line; line breaks may come after it, or before the `}`.
             guard acceptComma() else {
                 skipLineBreaks()
@@ -136,7 +145,7 @@ struct RadarChartParser {
         }
         guard cursor.peek() == MermaidByte.closingBrace else { throw problem(.expectedClosingBrace) }
         cursor.advance()
-        return entries
+        return isNamed
     }
 
     // MARK: Options
@@ -146,47 +155,38 @@ struct RadarChartParser {
         try readOption()
         while acceptComma() {
             cursor.skipSpaces()
-            guard let word = RadarChartWords.name(in: cursor), RadarChartWords.options.contains(word) else { throw problem(.expectedOption) }
+            guard RadarChartWords.word(in: cursor)?.kept?.startsOption == true else { throw problem(.expectedOption) }
             try readOption()
         }
     }
 
     private mutating func readOption() throws(MermaidDiagramReadError) {
-        let word = RadarChartWords.name(in: cursor) ?? ""
-        cursor.advance(by: word.utf8.count)
+        let word = RadarChartWords.word(in: cursor)
+        cursor.advance(by: word?.length ?? 0)
         cursor.skipSpaces()
-        switch word {
-        case "showLegend":
-            chart.options.showsLegend = try readWord(from: ["true", "false"], problem: .expectedBoolean) == "true"
-        case "graticule":
-            chart.options.graticule = RadarGraticule(rawValue: try readWord(from: ["circle", "polygon"], problem: .expectedGraticule)) ?? .circle
-        case "ticks": chart.options.tickCount = min(try readNumber(), RadarChartOptions.largestTickCount)
-        case "max": chart.options.maximum = try readNumber()
+        switch word?.kept {
+        case .showLegend?: chart.options.showsLegend = try readEitherWord("true", "false", problem: .expectedBoolean)
+        case .graticule?: chart.options.graticule = try readEitherWord("circle", "polygon", problem: .expectedGraticule) ? .circle : .polygon
+        case .ticks?: chart.options.tickCount = min(try readNumber(), RadarChartOptions.largestTickCount)
+        case .max?: chart.options.maximum = try readNumber()
         default: chart.options.minimum = try readNumber()
         }
     }
 
-    /// One of `words` at the cursor, taken whatever follows it (`falsecurve` is `false` and a `curve`), as Mermaid's lexer
-    /// takes the value of an option.
-    private mutating func readWord(from words: [String], problem expected: RadarSyntaxProblem) throws(MermaidDiagramReadError) -> String {
-        for word in words where Self.isWritten(word, at: cursor) {
-            cursor.advance(by: word.utf8.count)
-            return word
+    /// `first` or `second` at the cursor, taken whatever follows it (`falsecurve` is `false` and a `curve`), as Mermaid's
+    /// lexer takes the value of an option: true for `first`.
+    private mutating func readEitherWord(_ first: StaticString, _ second: StaticString,
+                                         problem expected: RadarSyntaxProblem) throws(MermaidDiagramReadError) -> Bool {
+        if RadarChartWords.isWritten(first, in: cursor) {
+            cursor.advance(by: first.utf8CodeUnitCount)
+            return true
         }
-        throw problem(expected)
+        guard RadarChartWords.isWritten(second, in: cursor) else { throw problem(expected) }
+        cursor.advance(by: second.utf8CodeUnitCount)
+        return false
     }
 
     // MARK: Pieces
-
-    /// Whether the bytes at the cursor are `word`'s, compared without making an array of them.
-    private static func isWritten(_ word: String, at cursor: MermaidTextCursor) -> Bool {
-        var offset = 0
-        for byte in word.utf8 {
-            guard cursor.peek(offset) == byte else { return false }
-            offset += 1
-        }
-        return true
-    }
 
     private func problem(_ problem: RadarSyntaxProblem) -> MermaidDiagramReadError {
         .invalidSyntax(line: cursor.line, problem: .radar(problem))
@@ -210,8 +210,9 @@ struct RadarChartParser {
     /// the grammar keeps.
     private mutating func readName() throws(MermaidDiagramReadError) -> String {
         cursor.skipSpaces()
-        guard let name = RadarChartWords.name(in: cursor), RadarChartWords.isName(name) else { throw problem(.expectedName) }
-        cursor.advance(by: name.utf8.count)
+        guard let word = RadarChartWords.word(in: cursor), word.isName else { throw problem(.expectedName) }
+        let name = cursor.text(from: cursor.position, to: cursor.position + word.length)
+        cursor.advance(by: word.length)
         return name
     }
 
@@ -251,19 +252,25 @@ struct RadarChartParser {
     }
 
     /// The values of a curve of numbers as written; of a curve of named entries, one per axis, the first entry of an axis
-    /// winning.
+    /// winning: found by a search of the curve's entries when it has a few, in a table made once when it has more.
     private func values(of written: WrittenCurve) throws(MermaidDiagramReadError) -> [Double] {
-        guard written.entries.first?.axisName != nil else { return written.entries.map(\.value) }
+        guard written.isNamed else { return Array(entryValues[written.entries]) }
         guard !chart.axes.isEmpty else { throw .invalidSyntax(line: written.line, problem: .radar(.entriesNamedBeforeAxes(curve: written.name))) }
         var byAxis: [String: Double] = [:]
-        for entry in written.entries {
-            if let name = entry.axisName, byAxis[name] == nil { byAxis[name] = entry.value }
+        if written.entries.count > Self.largestSearchedEntryCount {
+            for entry in written.entries where byAxis[entryNames[entry]] == nil { byAxis[entryNames[entry]] = entryValues[entry] }
         }
         return try chart.axes.map { axis throws(MermaidDiagramReadError) in
-            guard let value = byAxis[axis.name] else {
+            let value = written.entries.count > Self.largestSearchedEntryCount
+                ? byAxis[axis.name] : written.entries.first { entry in entryNames[entry] == axis.name }.map { entry in entryValues[entry] }
+            guard let value else {
                 throw .invalidSyntax(line: written.line, problem: .radar(.missingEntry(curve: written.name, axis: axis.label.spokenText)))
             }
             return value
         }
     }
+
+    private static let reservedEntryCount = 32
+    /// The most entries a curve's values are found by searching them, axis by axis.
+    private static let largestSearchedEntryCount = 16
 }

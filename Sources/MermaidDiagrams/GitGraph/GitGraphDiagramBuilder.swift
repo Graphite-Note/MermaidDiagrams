@@ -6,8 +6,8 @@
  *              merges and cherry-picks, each checked in Mermaid's order.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Plays a Git graph's statements as Mermaid's Git graph database does (Pele's port of it): a commit goes on the
@@ -66,15 +66,19 @@ struct GitGraphDiagramBuilder {
     }
 
     /// The commits, and the branches in the order their lanes are drawn: by order, then in the order they were
-    /// created. Each commit's `branchIndex` is its branch's place in that order.
-    func played() -> (commits: [GitGraphCommit], branches: [GitGraphBranch]) {
+    /// created. Each commit's `branchIndex` is its branch's place in that order, set in place: the builder hands its
+    /// commits over and keeps none.
+    mutating func played() -> (commits: [GitGraphCommit], branches: [GitGraphBranch]) {
         let laneOrder = branches.indices.sorted { left, right in (branches[left].order, left) < (branches[right].order, right) }
         var laneByCreation = [Int](repeating: 0, count: branches.count)
         for (lane, branchIndex) in laneOrder.enumerated() { laneByCreation[branchIndex] = lane }
         let lanes = laneOrder.map { index in
             GitGraphBranch(name: branches[index].name, label: DiagramLabelDecoder.label(from: branches[index].name, form: .literal))
         }
-        return (commits.map { commit in commit.moved(toBranch: laneByCreation[commit.branchIndex]) }, lanes)
+        var played = commits
+        commits = []
+        for index in played.indices { played[index].branchIndex = laneByCreation[played[index].branchIndex] }
+        return (played, lanes)
     }
 
     /// `merge`, checked as Mermaid checks it, in its order.
@@ -121,9 +125,19 @@ struct GitGraphDiagramBuilder {
         let commitIdentifier = written ?? GitGraphCommitIdentifier.generated(sequenceNumber: index) { candidate in commitIndexByIdentifier[candidate] != nil }
         commits.append(GitGraphCommit(identifier: commitIdentifier, hasWrittenIdentifier: written != nil, kind: kind, type: type, message: message,
                                       tags: labels, branchIndex: currentBranchIndex,
-                                      parentIndices: [branches[currentBranchIndex].lastCommitIndex, secondParentIndex].compactMap { parent in parent }))
+                                      parentIndices: Self.parentIndices(branches[currentBranchIndex].lastCommitIndex, secondParentIndex)))
         commitIndexByIdentifier[commitIdentifier] = index
         branches[currentBranchIndex].lastCommitIndex = index
+    }
+
+    /// The parents that are there of `first` and `second`, in that order, in one list made once.
+    private static func parentIndices(_ first: Int?, _ second: Int?) -> [Int] {
+        switch (first, second) {
+        case (let first?, let second?): [first, second]
+        case (let first?, nil): [first]
+        case (nil, let second?): [second]
+        case (nil, nil): []
+        }
     }
 
     /// Refuses an id `id:` gives that a commit made before has, which Mermaid refuses for a merge. For a commit,
@@ -152,13 +166,5 @@ struct GitGraphDiagramBuilder {
 
     private static func problem(_ problem: GitGraphSyntaxProblem, _ line: Int) -> MermaidDiagramReadError {
         .invalidSyntax(line: line, problem: .gitGraph(problem))
-    }
-}
-
-extension GitGraphCommit {
-    /// The same commit on the branch at `branchIndex`.
-    func moved(toBranch branchIndex: Int) -> GitGraphCommit {
-        GitGraphCommit(identifier: identifier, hasWrittenIdentifier: hasWrittenIdentifier, kind: kind, type: type, message: message, tags: tags,
-                       branchIndex: branchIndex, parentIndices: parentIndices)
     }
 }
