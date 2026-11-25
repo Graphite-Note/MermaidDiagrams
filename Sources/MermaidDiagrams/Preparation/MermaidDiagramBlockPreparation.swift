@@ -6,7 +6,7 @@
  *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -49,8 +49,11 @@ extension MermaidDiagramAccessibility {
 }
 
 extension BlockDiagram {
-    /// Whether the root reaches no block but spaces: nothing is drawn.
+    /// Whether the root reaches no block but spaces: nothing is drawn. A block of the root's own, as most diagrams have,
+    /// answers at once; otherwise every block the root reaches is looked at.
     var drawsNoBlock: Bool {
-        !reachableBlockIndices.dropFirst().contains { index in model.blocks[index].kind != .space }
+        let root = model.blocks[Self.rootIndex]
+        for child in model.childIndices[root.children.range] where model.blocks[Int(child)].kind != .space { return false }
+        return !reachableBlockIndices.dropFirst().contains { index in model.blocks[index].kind != .space }
     }
 }
