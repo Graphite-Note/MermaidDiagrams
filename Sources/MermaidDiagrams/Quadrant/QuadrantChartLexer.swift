@@ -8,7 +8,7 @@
  *              lines counted only where a token starts.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 25/11/2026
  */
 
@@ -29,6 +29,11 @@ struct QuadrantChartLexer {
     /// A cursor over the same bytes, moved forward to the offset only when a statement or an error is read with it.
     private var followingCursor: MermaidTextCursor
     private var output = QuadrantChartTokens()
+    /// The ends of the runs the look-aheads for a keyword and for a point's colon and bracket step over, remembered so
+    /// that a run is stepped once and not again from each of its bytes.
+    private var spacesBeforeKeyword = QuadrantChartRunEnd(isPointWhitespace: false)
+    private var whitespaceBeforeColon = QuadrantChartRunEnd(isPointWhitespace: true)
+    private var whitespaceAfterColon = QuadrantChartRunEnd(isPointWhitespace: true)
 
     /// The tokens of the statements after the cursor, which is just past the `quadrantChart` keyword, each holding the
     /// ranges of the bytes of its text.
@@ -131,8 +136,7 @@ struct QuadrantChartLexer {
     /// `>`, each taking the spaces after it too. Nil, with the offset where it was, when none is there.
     private mutating func readKeywordWithSpaces() -> QuadrantChartTokenKind? {
         guard let byte = byte(at: 0), Self.canStartKeyword(byte) else { return nil }
-        var offset = 0
-        while self.byte(at: offset) == MermaidByte.space { offset += 1 }
+        var offset = spacesBeforeKeyword.end(from: position, in: bytes) - position
         guard let (kind, length) = keyword(at: offset) else { return nil }
         offset += length
         while self.byte(at: offset) == MermaidByte.space { offset += 1 }
@@ -271,11 +275,9 @@ extension QuadrantChartLexer {
     /// error.
     private mutating func readPoint() throws(MermaidDiagramReadError) -> (x: MermaidTextRange, y: MermaidTextRange)? {
         guard let first = byte(at: 0), first == MermaidByte.colon || QuadrantChartPointSyntax.isWhitespace(first) else { return nil }
-        var offset = 0
-        while let next = byte(at: offset), QuadrantChartPointSyntax.isWhitespace(next) { offset += 1 }
+        var offset = whitespaceBeforeColon.end(from: position, in: bytes) - position
         guard byte(at: offset) == MermaidByte.colon else { return nil }
-        offset += 1
-        while let next = byte(at: offset), QuadrantChartPointSyntax.isWhitespace(next) { offset += 1 }
+        offset = whitespaceAfterColon.end(from: position + offset + 1, in: bytes) - position
         guard byte(at: offset) == MermaidByte.openingBracket else { return nil }
         advance(by: offset + 1)
         skipPointWhitespace()
