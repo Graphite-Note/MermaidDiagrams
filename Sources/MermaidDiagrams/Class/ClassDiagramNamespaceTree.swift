@@ -5,8 +5,8 @@
  * Description: A class diagram's namespaces as the nested boxes Pele draws, and the box each class and note sits in.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// The namespaces of a class diagram as Pele's class database and graph make them (`class/db.ts` addNamespace,
@@ -83,10 +83,27 @@ struct ClassDiagramNamespaceTree {
     }
 
     /// The title the text gives a namespace (`namespace Auth["Authentication Service"]`), or nil when its title is its name.
-    private static func writtenTitle(of declared: ClassDiagramNamespace) -> DiagramLabel? {
+    static func writtenTitle(of declared: ClassDiagramNamespace) -> DiagramLabel? {
+        if declared.title.lineCount == 1 {
+            // A title of one line of ASCII is compared on its bytes, which compare as its Characters do: no String of it
+            // is made. Other text is compared as Strings, which are equal when they are canonically equivalent.
+            var identifier = declared.identifier
+            let isName = identifier.withUTF8 { identifierBytes in
+                declared.title.withUTF8(ofLine: 0) { titleBytes in isName(titleBytes, of: identifierBytes) }
+            }
+            if let isName { return isName ? nil : declared.title }
+        }
         let title = declared.title.lines.joined(separator: "\n")
         let isName = title == declared.identifier || declared.identifier.hasSuffix("." + title)
         return isName ? nil : declared.title
+    }
+
+    /// Whether a title's bytes are the identifier's, or its last part after a dot; nil when either is not all ASCII.
+    private static func isName(_ title: UnsafeBufferPointer<UInt8>, of identifier: UnsafeBufferPointer<UInt8>) -> Bool? {
+        guard !title.contains(where: { byte in byte >= 0x80 }), !identifier.contains(where: { byte in byte >= 0x80 }) else { return nil }
+        if title.elementsEqual(identifier) { return true }
+        guard identifier.count > title.count, identifier[identifier.count - title.count - 1] == UInt8(ascii: ".") else { return false }
+        return identifier[(identifier.count - title.count)...].elementsEqual(title)
     }
 
     /// Pele's `hierarchicalNamespaces: false`: each class and note in its nearest declared namespace, the others gone, every box

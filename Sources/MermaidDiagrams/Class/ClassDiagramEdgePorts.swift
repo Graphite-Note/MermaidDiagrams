@@ -6,8 +6,8 @@
  *              where their routes go next and spaced for their cardinalities.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -72,7 +72,7 @@ struct ClassDiagramEdgePorts {
     }
 
     /// The side an end is on, numbered by node and side.
-    private static func slot(of end: End) -> Int { end.node * DiagramSide.allCases.count + sideNumber(end.side) }
+    private static func slot(of end: End) -> Int { end.node * 4 + sideNumber(end.side) }
 
     /// Each end's distance from the middle of its side, in their order along it, appended to `offsets`.
     private static func offsets(of ends: ArraySlice<End>, sideLength: CGFloat, markRowHeight: CGFloat, into offsets: inout [CGFloat]) {
