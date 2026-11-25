@@ -5,8 +5,8 @@
  * Description: Reads a sequence diagram's statements after its keyword, as Mermaid's sequence grammar does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 /// Reads a sequence diagram's statements after its `sequenceDiagram` keyword, as Mermaid's sequence grammar does:
@@ -23,13 +23,6 @@ struct SequenceParser {
         var parser = SequenceParser(cursor: cursor, builder: SequenceDiagramBuilder(limits: limits))
         try parser.readStatements()
         return try parser.builder.finished()
-    }
-
-    /// The words that start a statement, lowercased.
-    private enum Keyword: String {
-        case participant, actor, create, destroy, box, loop, rect, opt, alt, `else`, par, parOver = "par_over", and, critical, option, `break`, end
-        case note, activate, deactivate, autonumber, title, accessibilityTitle = "acctitle", accessibilityDescription = "accdescr"
-        case link, links, properties, details
     }
 
     private mutating func readStatements() throws(MermaidDiagramReadError) {
@@ -307,7 +300,7 @@ struct SequenceParser {
         let start = cursor.position
         while let byte = cursor.peek(), MermaidByte.isLetter(byte) || byte == MermaidByte.underscore { cursor.advance() }
         guard cursor.position > start, cursor.peek().map(MermaidByte.isDigit) != true else { return nil }
-        return Keyword(rawValue: cursor.text(from: start, to: cursor.position).lowercased())
+        return Keyword.spelled(in: cursor.bytes, from: start, to: cursor.position)
     }
 
     /// Whether a keyword starts a statement where it stands. `title` needs text after it, and `link`, `links`,

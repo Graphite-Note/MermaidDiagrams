@@ -7,8 +7,8 @@
  *              grids measured and placed, and the XY chart's numbers written.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import XCTest
@@ -229,7 +229,7 @@ final class TypeLayoutEquivalenceTests: XCTestCase {
             let views = BlockViews(diagram, measurers: BlockReading.measurers, gap: 8, wrappingWidth: 200, titleWidth: 300)
             let reference = BlockViewsReference(diagram, measurers: BlockReading.measurers, gap: 8, wrappingWidth: 200, titleWidth: 300)
             XCTAssertEqual(views.parentIndices, reference.parentIndices)
-            XCTAssertEqual(views.cellIndicesByIdentifier, reference.cellIndicesByIdentifier)
+            XCTAssertEqual(views.cellIndicesByIdentifier(in: diagram), reference.cellIndicesByIdentifier)
             assertSameCells(views.cells, reference.cells)
             assertSameViews(views.views, reference.views)
             var placement = BlockPlacement(views, gap: 8)

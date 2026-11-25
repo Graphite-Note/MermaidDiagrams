@@ -6,8 +6,8 @@
  *              block.jison: strings, shapes, arrows, links and their text, classes and styles to the end of their line.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// A token of a block diagram, Pele's `T` (`tokens.ts`).
@@ -25,11 +25,37 @@ enum BlockTokenKind: Equatable {
     case finished
 }
 
-/// One token: its kind, its text and where it starts in the text's bytes.
-struct BlockToken {
+/// The text of a token that its bytes do not hold: `columns auto`'s `-1`, a lone `space`'s `1`, a block arrow's closing
+/// `]>`; `none` for a token whose text is its bytes.
+enum BlockTokenLiteral: UInt8, BitwiseCopyable {
+    case none, minusOne, one, arrowEnd
+
+    var text: StaticString? {
+        switch self {
+        case .none: nil
+        case .minusOne: "-1"
+        case .one: "1"
+        case .arrowEnd: "]>"
+        }
+    }
+}
+
+/// One token: its kind, where it starts in the text's bytes, and its text, a range of those bytes or a literal. No token
+/// holds a String: the parser reads a token's text as a run of the bytes.
+struct BlockToken: BitwiseCopyable {
     let kind: BlockTokenKind
-    let text: String
+    let literal: BlockTokenLiteral
     let start: Int
+    let textStart: Int
+    let textEnd: Int
+
+    init(kind: BlockTokenKind, start: Int, textStart: Int, textEnd: Int, literal: BlockTokenLiteral = .none) {
+        self.kind = kind
+        self.literal = literal
+        self.start = start
+        self.textStart = textStart
+        self.textEnd = textEnd
+    }
 }
 
 /// Pele's block lexer (`lexer.ts`) over UTF-8 bytes: a state machine whose states are Mermaid's, entered and left on a
@@ -45,12 +71,14 @@ struct BlockLexer {
     let bytes: [UInt8]
     var position: Int
     var state = State.initial
-    var stack: [State] = []
-    var tokens: [BlockToken] = []
+    var stack: ScratchList<State>
+    var tokens: ScratchList<BlockToken>
 
-    /// The tokens of `bytes` from `start`, ending with `endOfText` and `finished`, or with `unrecognized` and `finished`.
-    static func tokens(of bytes: [UInt8], from start: Int) -> [BlockToken] {
-        var lexer = BlockLexer(bytes: bytes, position: start)
+    /// The tokens of `bytes` from `start`, ending with `endOfText` and `finished`, or with `unrecognized` and `finished`,
+    /// in a list of `arena`.
+    static func tokens(of bytes: [UInt8], from start: Int, in arena: DiagramScratchArena) -> ScratchList<BlockToken> {
+        var lexer = BlockLexer(bytes: bytes, position: start, stack: arena.list(capacity: 8),
+                               tokens: arena.list(capacity: min(bytes.count - min(start, bytes.count), 1 << 16) / 4 + 8))
         lexer.run()
         return lexer.tokens
     }
@@ -58,15 +86,15 @@ struct BlockLexer {
     private mutating func run() {
         while true {
             guard position < bytes.count else {
-                if let kind = endOfTextKind { put(kind, "", end: bytes.count) }
+                if let kind = endOfTextKind { put(kind, from: position, to: position, end: bytes.count) }
                 break
             }
             if !step(bytes[position]) {
-                tokens.append(BlockToken(kind: .unrecognized, text: "", start: position))
+                tokens.append(BlockToken(kind: .unrecognized, start: position, textStart: position, textEnd: position))
                 break
             }
         }
-        tokens.append(BlockToken(kind: .finished, text: "", start: bytes.count))
+        tokens.append(BlockToken(kind: .finished, start: bytes.count, textStart: bytes.count, textEnd: bytes.count))
     }
 
     /// The token the text's end gives in the current state, Pele's table at `p >= n`.
@@ -148,19 +176,22 @@ struct BlockLexer {
         return end
     }
 
-    func text(from start: Int, to end: Int) -> String {
-        String(decoding: bytes[start..<end], as: UTF8.self)
+    /// Pele's `put`: a token whose text is the bytes from `textStart` to `textEnd`, starting at the position, which then
+    /// moves to `end`.
+    mutating func put(_ kind: BlockTokenKind, from textStart: Int, to textEnd: Int, end: Int) {
+        tokens.append(BlockToken(kind: kind, start: position, textStart: textStart, textEnd: textEnd))
+        position = end
     }
 
-    /// Pele's `put`: a token of `text` starting at the position, which then moves to `end`.
-    mutating func put(_ kind: BlockTokenKind, _ text: String, end: Int) {
-        tokens.append(BlockToken(kind: kind, text: text, start: position))
+    /// Pele's `put` of a text not written: `literal`.
+    mutating func put(_ kind: BlockTokenKind, literal: BlockTokenLiteral, end: Int) {
+        tokens.append(BlockToken(kind: kind, start: position, textStart: position, textEnd: position, literal: literal))
         position = end
     }
 
     /// Pele's `emit`: a token of the text from the position to `end`.
     mutating func emit(_ kind: BlockTokenKind, end: Int) {
-        put(kind, text(from: position, to: end), end: end)
+        put(kind, from: position, to: end, end: end)
     }
 
     mutating func push(_ next: State) {

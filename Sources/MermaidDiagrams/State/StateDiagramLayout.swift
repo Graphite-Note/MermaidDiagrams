@@ -1,3 +1,15 @@
+/**
+ * File: StateDiagramLayout.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: A state diagram laid out on the page: its states, transitions, notes, composite boxes and the lines
+ *              between regions, moved as a whole or where they stand.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// A state diagram laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing
@@ -45,18 +57,18 @@ public struct StateDiagramLayoutState: Equatable, Sendable {
 
 public struct StateDiagramLayoutTransition: Equatable, Sendable {
     /// The line, which stops where the arrow begins.
-    public let path: DiagramPath
-    public let arrow: DiagramEdgeMark
+    public internal(set) var path: DiagramPath
+    public internal(set) var arrow: DiagramEdgeMark
     /// The transition's text, drawn on a patch of the background, or nil.
-    public let text: DiagramTextBlock?
+    public internal(set) var text: DiagramTextBlock?
 }
 
 public struct StateDiagramLayoutNote: Equatable, Sendable {
     /// The note's sheet, whose top right corner is folded.
-    public let frame: CGRect
-    public let text: DiagramTextBlock
+    public internal(set) var frame: CGRect
+    public internal(set) var text: DiagramTextBlock
     /// The dashed line from the note's state to the note.
-    public let connector: DiagramPath
+    public internal(set) var connector: DiagramPath
 }
 
 extension StateDiagramLayoutState {
@@ -70,11 +82,25 @@ extension StateDiagramLayoutTransition {
     func translated(by offset: CGVector) -> StateDiagramLayoutTransition {
         StateDiagramLayoutTransition(path: path.translated(by: offset), arrow: arrow.translated(by: offset), text: text?.translated(by: offset))
     }
+
+    /// Moved by `offset` where it stands: its path's points are changed in their own list.
+    mutating func translate(by offset: CGVector) {
+        path.translate(by: offset)
+        arrow = arrow.translated(by: offset)
+        text = text?.translated(by: offset)
+    }
 }
 
 extension StateDiagramLayoutNote {
     func translated(by offset: CGVector) -> StateDiagramLayoutNote {
         StateDiagramLayoutNote(frame: frame.offsetBy(dx: offset.dx, dy: offset.dy), text: text.translated(by: offset),
                                connector: connector.translated(by: offset))
+    }
+
+    /// Moved by `offset` where it stands: its line's points are changed in their own list.
+    mutating func translate(by offset: CGVector) {
+        frame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
+        text = text.translated(by: offset)
+        connector.translate(by: offset)
     }
 }

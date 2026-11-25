@@ -6,8 +6,8 @@
  *              an arrow's directions, a link whole or around its text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 extension BlockLexer {
@@ -58,14 +58,14 @@ extension BlockLexer {
         if current == PlaneMapByte.closingParenthesis {
             pop()
             pop()
-            put(.arrowEnd, "]>", end: skippingWhitespace(from: position + 1))
+            put(.arrowEnd, literal: .arrowEnd, end: skippingWhitespace(from: position + 1))
             return true
         }
         let afterComma = current == PlaneMapByte.comma
         let from = skippingWhitespace(from: afterComma ? position + 1 : position)
         for direction in Self.arrowDirections where hasPrefix(direction, at: from) {
             let end = skippingWhitespace(from: from + direction.utf8.count)
-            put(.direction, text(from: afterComma ? from : position, to: end), end: end)
+            put(.direction, from: afterComma ? from : position, to: end, end: end)
             return true
         }
         return false

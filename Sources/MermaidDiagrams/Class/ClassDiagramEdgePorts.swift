@@ -1,3 +1,15 @@
+/**
+ * File: ClassDiagramEdgePorts.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: The ends of a class diagram's relations spread along the sides of the boxes they meet, ordered by
+ *              where their routes go next and spaced for their cardinalities.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
 /// Where relations meet their boxes, as Pele spreads them on a class: the ends that meet one side spread along it in
@@ -34,40 +46,61 @@ struct ClassDiagramEdgePorts {
     init(ends: [End], edgeCount: Int, nodeCenters: [CGPoint], sizes: [CGSize], markRowHeight: CGFloat) {
         sourcePoints = Array(repeating: nil, count: edgeCount)
         targetPoints = Array(repeating: nil, count: edgeCount)
-        var endsBySide = [[End]](repeating: [], count: nodeCenters.count * DiagramSide.allCases.count)
-        for end in ends { endsBySide[end.node * DiagramSide.allCases.count + Self.sideNumber(end.side)].append(end) }
-        for sideEnds in endsBySide where !sideEnds.isEmpty {
-            let ordered = sideEnds.sorted { first, second in (first.neighborAlongSide, first.edgeIndex) < (second.neighborAlongSide, second.edgeIndex) }
-            let node = ordered[0].node
-            let side = ordered[0].side
-            let offsets = Self.offsets(of: ordered, sideLength: side.isHorizontal ? sizes[node].width : sizes[node].height, markRowHeight: markRowHeight)
-            for (end, offset) in zip(ordered, offsets) {
+        guard !ends.isEmpty else { return }
+        // The ends sorted by their side, each side's then by where its next point is and by edge: each side's ends
+        // together, in the order they take along it.
+        var ordered = ends
+        ordered.sort { first, second in
+            (Self.slot(of: first), first.neighborAlongSide, first.edgeIndex) < (Self.slot(of: second), second.neighborAlongSide, second.edgeIndex)
+        }
+        var first = 0
+        var offsets: [CGFloat] = []
+        while first < ordered.count {
+            var end = first + 1
+            while end < ordered.count, Self.slot(of: ordered[end]) == Self.slot(of: ordered[first]) { end += 1 }
+            let node = ordered[first].node
+            let side = ordered[first].side
+            offsets.removeAll(keepingCapacity: true)
+            Self.offsets(of: ordered[first..<end], sideLength: side.isHorizontal ? sizes[node].width : sizes[node].height, markRowHeight: markRowHeight,
+                         into: &offsets)
+            for (end, offset) in zip(ordered[first..<end], offsets) {
                 let point = Self.sidePoint(center: nodeCenters[node], size: sizes[node], side: side, offset: offset)
                 if end.isSourceEnd { sourcePoints[end.edgeIndex] = point } else { targetPoints[end.edgeIndex] = point }
             }
+            first = end
         }
     }
 
-    /// Each end's distance from the middle of its side, in their order along it.
-    private static func offsets(of ends: [End], sideLength: CGFloat, markRowHeight: CGFloat) -> [CGFloat] {
-        guard ends.count > 1, let side = ends.first?.side else { return Array(repeating: 0, count: ends.count) }
-        let textExtent = { (end: End) in side.isHorizontal ? end.cardinalityWidth : markRowHeight + cardinalityClearance }
-        let gaps = zip(ends, ends.dropFirst()).map { before, after in
+    /// The side an end is on, numbered by node and side.
+    private static func slot(of end: End) -> Int { end.node * DiagramSide.allCases.count + sideNumber(end.side) }
+
+    /// Each end's distance from the middle of its side, in their order along it, appended to `offsets`.
+    private static func offsets(of ends: ArraySlice<End>, sideLength: CGFloat, markRowHeight: CGFloat, into offsets: inout [CGFloat]) {
+        guard ends.count > 1, let side = ends.first?.side else {
+            offsets.append(contentsOf: repeatElement(0, count: ends.count))
+            return
+        }
+        func textExtent(_ end: End) -> CGFloat { side.isHorizontal ? end.cardinalityWidth : markRowHeight + cardinalityClearance }
+        func gap(between before: End, and after: End) -> CGFloat {
             var gap = side.isHorizontal ? horizontalSideGap : verticalSideGap
             if before.cardinalityWidth > 0, before.isTextAfter { gap += textExtent(before) }
             if after.cardinalityWidth > 0, !after.isTextAfter { gap += textExtent(after) }
             return gap
         }
-        let total = gaps.reduce(0, +)
+        // The gaps summed from the first as `reduce(0, +)` sums them.
+        var total: CGFloat = 0
+        for index in ends.indices.dropLast() { total += gap(between: ends[index], and: ends[index + 1]) }
         let scale = min(1, (sideLength - sideClearance) / total)
-        guard scale > 0 else { return Array(repeating: 0, count: ends.count) }
+        guard scale > 0 else {
+            offsets.append(contentsOf: repeatElement(0, count: ends.count))
+            return
+        }
         var offset = -total * scale / 2
-        var offsets = [offset]
-        for gap in gaps {
-            offset += gap * scale
+        offsets.append(offset)
+        for index in ends.indices.dropLast() {
+            offset += gap(between: ends[index], and: ends[index + 1]) * scale
             offsets.append(offset)
         }
-        return offsets
     }
 
     /// The point of a box's side `offset` from its middle (rightward or downward).

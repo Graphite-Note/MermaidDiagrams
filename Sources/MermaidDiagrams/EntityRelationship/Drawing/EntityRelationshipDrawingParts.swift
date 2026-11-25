@@ -2,11 +2,12 @@
  * File: EntityRelationshipDrawingParts.swift
  * ------------------------------------------
  * Layer: Core
- * Description: A laid-out entity relationship diagram's geometry grouped by how it is painted.
+ * Description: A laid-out entity relationship diagram's geometry grouped by how it is painted, as Core Graphics paths
+ *              or in any kind a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -59,35 +60,16 @@ public struct EntityRelationshipDrawingParts {
 
     public init(layout: EntityRelationshipLayout) {
         subgraphs = FlowchartClusterDrawingParts(clusters: layout.subgraphs)
-        let identifyingLines = CGMutablePath()
-        let nonIdentifyingLines = CGMutablePath()
-        let markFills = CGMutablePath()
-        let markOutlines = CGMutablePath()
-        let labelPatches = CGMutablePath()
-        for relationship in layout.relationships {
-            let line = DiagramEdgeDrawing.path(relationship.path)
-            switch relationship.identification {
-            case .identifying: identifyingLines.addPath(line)
-            case .nonIdentifying: nonIdentifyingLines.addPath(line)
-            }
-            for mark in [relationship.firstEntityMark, relationship.secondEntityMark] {
-                EntityRelationshipCardinalityDrawing.addMark(mark, fills: markFills, outlines: markOutlines)
-            }
-            if let label = relationship.label {
-                labelPatches.addPath(CGPath(roundedRect: label.frame.insetBy(dx: -Self.labelPatchExtraWidth / 2, dy: 0),
-                                            cornerWidth: Self.labelPatchCornerRadius, cornerHeight: Self.labelPatchCornerRadius, transform: nil))
-            }
-        }
-        self.identifyingLines = identifyingLines
-        self.nonIdentifyingLines = nonIdentifyingLines
-        self.markFills = markFills
-        self.markOutlines = markOutlines
-        self.labelPatches = labelPatches
+        let paths = EntityRelationshipPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        identifyingLines = paths.identifyingLines.path
+        nonIdentifyingLines = paths.nonIdentifyingLines.path
+        markFills = paths.markFills.path
+        markOutlines = paths.markOutlines.path
+        labelPatches = paths.labelPatches.path
         labels = layout.relationships.compactMap(\.label)
-        let boxes = BoxPaths(entities: layout.entities)
-        boxFills = boxes.fills
-        rowStripes = boxes.stripes
-        boxOutlines = boxes.outlines
+        boxFills = paths.boxFills.path
+        rowStripes = paths.rowStripes.path
+        boxOutlines = paths.boxOutlines.path
         entityTexts = layout.entities.flatMap { entity in [entity.name] + entity.rows.flatMap { row in Self.texts(of: row, inMutedColor: false) } }
         attributeDetails = layout.entities.flatMap { entity in entity.rows.flatMap { row in Self.texts(of: row, inMutedColor: true) } }
         title = layout.title
@@ -95,42 +77,83 @@ public struct EntityRelationshipDrawingParts {
 
     /// The row's attribute name (`inMutedColor` false), or its type, keys and comment.
     private static func texts(of row: EntityRelationshipLayoutRow, inMutedColor: Bool) -> [DiagramTextBlock] {
-        row.texts.filter { cell in
-            switch cell.column {
-            case .name: !inMutedColor
-            case .type, .keys, .comment: inMutedColor
+        row.texts.filter { cell in isInMutedColor(cell.column) == inMutedColor }.map(\.text)
+    }
+
+    /// Whether a column's text is drawn in the muted color: a type, keys and a comment are; a name is not.
+    static func isInMutedColor(_ column: EntityRelationshipColumn) -> Bool {
+        switch column {
+        case .name: false
+        case .type, .keys, .comment: true
+        }
+    }
+}
+
+/// The paths of `EntityRelationshipDrawingParts` in any kind a drawing records: Core Graphics paths or lanes of the
+/// scene's workspace. A shape made whole (a box, a relationship's line, a rounded stripe) is made for a moment, added where
+/// it is painted and given back.
+struct EntityRelationshipPaths<Path: DiagramPathRecording> {
+    let identifyingLines: Path
+    let nonIdentifyingLines: Path
+    let markFills: Path
+    let markOutlines: Path
+    let labelPatches: Path
+    let boxFills: Path
+    let rowStripes: Path
+    let boxOutlines: Path
+
+    init<Maker: DiagramPathMaking>(layout: EntityRelationshipLayout, making maker: Maker) where Maker.Path == Path {
+        identifyingLines = maker.makePath()
+        nonIdentifyingLines = maker.makePath()
+        markFills = maker.makePath()
+        markOutlines = maker.makePath()
+        labelPatches = maker.makePath()
+        for relationship in layout.relationships {
+            let madeCount = maker.madePathCount
+            let line = maker.makePath()
+            DiagramEdgeDrawing.record(relationship.path, into: line)
+            switch relationship.identification {
+            case .identifying: identifyingLines.addPath(line)
+            case .nonIdentifying: nonIdentifyingLines.addPath(line)
             }
-        }.map(\.text)
+            EntityRelationshipCardinalityDrawing.addMark(relationship.firstEntityMark, fills: markFills, outlines: markOutlines)
+            EntityRelationshipCardinalityDrawing.addMark(relationship.secondEntityMark, fills: markFills, outlines: markOutlines)
+            if let label = relationship.label {
+                let radius = EntityRelationshipDrawingParts.labelPatchCornerRadius
+                labelPatches.addPath(maker.roundedRectangle(label.frame.insetBy(dx: -EntityRelationshipDrawingParts.labelPatchExtraWidth / 2, dy: 0),
+                                                            cornerWidth: radius, cornerHeight: radius))
+            }
+            maker.givePathsBack(downTo: madeCount)
+        }
+        boxFills = maker.makePath()
+        rowStripes = maker.makePath()
+        boxOutlines = maker.makePath()
+        Self.addBoxes(of: layout.entities, fills: boxFills, stripes: rowStripes, outlines: boxOutlines, making: maker)
     }
 
     /// The boxes to fill, the rows striped over them, and their outlines and header dividers.
-    private struct BoxPaths {
-        let fills = CGMutablePath()
-        let stripes = CGMutablePath()
-        let outlines = CGMutablePath()
-
-        init(entities: [EntityRelationshipLayoutEntity]) {
-            let radius = EntityRelationshipDrawingParts.boxCornerRadius
-            for entity in entities {
-                let box = CGPath(roundedRect: entity.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
-                fills.addPath(box)
-                outlines.addPath(box)
-                if let firstRow = entity.rows.first {
-                    outlines.move(to: CGPoint(x: entity.frame.minX, y: firstRow.frame.minY))
-                    outlines.addLine(to: CGPoint(x: entity.frame.maxX, y: firstRow.frame.minY))
-                }
-                for (index, row) in entity.rows.enumerated() where index.isMultiple(of: 2) {
-                    addStripe(row.frame, isLast: index == entity.rows.count - 1)
-                }
+    private static func addBoxes<Maker: DiagramPathMaking>(of entities: [EntityRelationshipLayoutEntity], fills: Path, stripes: Path, outlines: Path,
+                                                           making maker: Maker) where Maker.Path == Path {
+        let radius = EntityRelationshipDrawingParts.boxCornerRadius
+        for entity in entities {
+            let madeCount = maker.madePathCount
+            defer { maker.givePathsBack(downTo: madeCount) }
+            fills.addPath(maker.roundedRectangle(entity.frame, cornerWidth: radius, cornerHeight: radius), alsoTo: outlines)
+            if let firstRow = entity.rows.first {
+                outlines.move(to: CGPoint(x: entity.frame.minX, y: firstRow.frame.minY))
+                outlines.addLine(to: CGPoint(x: entity.frame.maxX, y: firstRow.frame.minY))
             }
-        }
-
-        /// A row's band; the last one follows the box's rounded bottom corners: a rounded rectangle, squared off on top.
-        private func addStripe(_ frame: CGRect, isLast: Bool) {
-            guard isLast else { return stripes.addRect(frame) }
-            let radius = min(EntityRelationshipDrawingParts.boxCornerRadius, frame.height / 2)
-            stripes.addPath(CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil))
-            stripes.addRect(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height / 2))
+            for (index, row) in entity.rows.enumerated() where index.isMultiple(of: 2) {
+                let frame = row.frame
+                guard index == entity.rows.count - 1 else {
+                    stripes.addRect(frame)
+                    continue
+                }
+                // The last band follows the box's rounded bottom corners: a rounded rectangle, squared off on top.
+                let stripeRadius = min(radius, frame.height / 2)
+                stripes.addPath(maker.roundedRectangle(frame, cornerWidth: stripeRadius, cornerHeight: stripeRadius))
+                stripes.addRect(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height / 2))
+            }
         }
     }
 }

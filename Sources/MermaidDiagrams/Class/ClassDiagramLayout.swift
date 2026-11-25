@@ -5,8 +5,8 @@
  * Description: A class diagram laid out on a page, with its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -64,15 +64,15 @@ public struct ClassDiagramLayoutNote: Equatable, Sendable {
 public struct ClassDiagramLayoutEdge: Equatable, Sendable {
     public let line: ClassDiagramLineStyle
     /// The line, which stops where a mark begins.
-    public let path: DiagramPath
-    public let sourceMark: ClassDiagramRelationMark?
-    public let targetMark: ClassDiagramRelationMark?
+    public internal(set) var path: DiagramPath
+    public internal(set) var sourceMark: ClassDiagramRelationMark?
+    public internal(set) var targetMark: ClassDiagramRelationMark?
     /// The relation's text, drawn on a patch of the background, or nil.
-    public let text: DiagramTextBlock?
+    public internal(set) var text: DiagramTextBlock?
     /// The cardinality beside the source end, drawn small in the muted color, or nil.
-    public let sourceCardinality: DiagramTextBlock?
+    public internal(set) var sourceCardinality: DiagramTextBlock?
     /// The cardinality beside the target end, or nil.
-    public let targetCardinality: DiagramTextBlock?
+    public internal(set) var targetCardinality: DiagramTextBlock?
 }
 
 /// The mark at an end of a relation: its kind, the point it touches what it marks, and the unit direction it points
@@ -104,6 +104,18 @@ extension ClassDiagramLayoutEdge {
         ClassDiagramLayoutEdge(line: line, path: path.translated(by: offset), sourceMark: sourceMark?.translated(by: offset),
                                targetMark: targetMark?.translated(by: offset), text: text?.translated(by: offset),
                                sourceCardinality: sourceCardinality?.translated(by: offset), targetCardinality: targetCardinality?.translated(by: offset))
+    }
+}
+
+extension ClassDiagramLayoutEdge {
+    /// Moved by `offset` where it stands, each point as `translated(by:)` moves it: its path's points in their own list.
+    mutating func translate(by offset: CGVector) {
+        path.translate(by: offset)
+        sourceMark = sourceMark?.translated(by: offset)
+        targetMark = targetMark?.translated(by: offset)
+        text = text?.translated(by: offset)
+        sourceCardinality = sourceCardinality?.translated(by: offset)
+        targetCardinality = targetCardinality?.translated(by: offset)
     }
 }
 

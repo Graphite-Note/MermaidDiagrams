@@ -6,8 +6,8 @@
  *              on a patch, and how it is painted over the boundaries a style fills, as Pele's renderUsecase paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -32,7 +32,8 @@ struct UseCaseEdgeLine {
     /// Pele's ink picks for the fill it lies in, or cased where it crosses a border, or inside a fill it has no ink for
     /// or when its style sets a stroke.
     func edge(_ edge: UseCaseGraphEdge, label: DiagramTextBlock, fills: [UseCaseLayoutBoundary]) -> UseCaseLayoutEdge {
-        let look = UseCaseLook(styles: edge.styles)
+        // An edge without styles has the look of none, made once.
+        let look = edge.styles.isEmpty ? UseCaseLook.none : UseCaseLook(styles: edge.styles)
         var inkOverFill: DiagramColor?
         var fillUnderMarks: DiagramColor?
         var isCased = false

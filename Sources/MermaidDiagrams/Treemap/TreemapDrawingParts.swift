@@ -2,11 +2,12 @@
  * File: TreemapDrawingParts.swift
  * -------------------------------
  * Layer: Core
- * Description: A laid-out treemap's geometry grouped by how it is painted.
+ * Description: A laid-out treemap's geometry grouped by how it is painted, each box's paints and texts worked out as
+ *              its scene works them out.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -58,28 +59,15 @@ public struct TreemapDrawingParts {
         var leafNames: [TreemapTextParts] = []
         var leafValues: [TreemapTextParts] = []
         for box in layout.boxes {
-            let style = box.style
-            // Pele's ink on a fill a class sets (none for a fill whose color is not read), else on the box's series color
-            // where the theme variables set it.
-            let setsFill = style.fill != nil || box.textStyle.setsFill == true
-            let contrast = setsFill ? TreemapInk.paint(onFill: style.fill) : layout.seriesColors.ink(ofSeries: box.seriesIndex).map(DiagramPaint.color)
-            let isBold = box.textStyle.isBold ?? false
-            let isItalic = box.textStyle.isItalic ?? false
+            let texts = Self.texts(of: box, seriesColors: layout.seriesColors)
             if box.isSection {
-                if box.hasHeader { sectionBoxes.append(Self.sectionBox(box)) }
-                let namePaint = style.textColor.map(DiagramPaint.color) ?? contrast ?? .foreground
-                if let name = box.name {
-                    sectionNames.append(TreemapTextParts(block: name, paint: namePaint, isBold: box.textStyle.isBold ?? true, isItalic: isItalic))
-                }
-                if let value = box.value {
-                    sectionValues.append(TreemapTextParts(block: value, paint: style.textColor.map(DiagramPaint.color) ?? contrast ?? .muted, isBold: isBold,
-                                                          isItalic: isItalic))
-                }
+                if box.hasHeader { sectionBoxes.append(Self.boxParts(path: Self.roundedPath(box), look: Self.sectionLook(box))) }
+                if let name = texts.name { sectionNames.append(name) }
+                if let value = texts.value { sectionValues.append(value) }
             } else {
-                leafBoxes.append(Self.leafBox(box))
-                let paint = style.textColor.map(DiagramPaint.color) ?? contrast ?? .background
-                if let name = box.name { leafNames.append(TreemapTextParts(block: name, paint: paint, isBold: isBold, isItalic: isItalic)) }
-                if let value = box.value { leafValues.append(TreemapTextParts(block: value, paint: paint, isBold: isBold, isItalic: isItalic)) }
+                leafBoxes.append(Self.boxParts(path: Self.roundedPath(box), look: Self.leafLook(box)))
+                if let name = texts.name { leafNames.append(name) }
+                if let value = texts.value { leafValues.append(value) }
             }
         }
         self.sectionBoxes = sectionBoxes
@@ -91,17 +79,48 @@ public struct TreemapDrawingParts {
         title = layout.title
     }
 
+    /// How a box is painted: its fill and its outline's paint, either nil for none, and its outline's stroke.
+    typealias BoxLook = (fill: DiagramPaint?, outline: DiagramPaint?, stroke: DiagramStroke)
+
+    /// A box's name and value with their paints, weights and slants: on a fill a class sets, Pele's ink for that fill
+    /// (none for a fill whose color is not read), else the ink the theme variables set on the box's series color; a
+    /// section's name bold unless its class sets a lighter weight, its total muted, a leaf's texts in the background color.
+    static func texts(of box: TreemapLayoutBox, seriesColors: DiagramSeriesColors) -> (name: TreemapTextParts?, value: TreemapTextParts?) {
+        let style = box.style
+        let setsFill = style.fill != nil || box.textStyle.setsFill == true
+        let contrast = setsFill ? TreemapInk.paint(onFill: style.fill) : seriesColors.ink(ofSeries: box.seriesIndex).map(DiagramPaint.color)
+        let isBold = box.textStyle.isBold ?? false
+        let isItalic = box.textStyle.isItalic ?? false
+        let written = style.textColor.map(DiagramPaint.color)
+        guard box.isSection else {
+            let paint = written ?? contrast ?? .background
+            return (box.name.map { name in TreemapTextParts(block: name, paint: paint, isBold: isBold, isItalic: isItalic) },
+                    box.value.map { value in TreemapTextParts(block: value, paint: paint, isBold: isBold, isItalic: isItalic) })
+        }
+        return (box.name.map { name in
+            TreemapTextParts(block: name, paint: written ?? contrast ?? .foreground, isBold: box.textStyle.isBold ?? true, isItalic: isItalic)
+        }, box.value.map { value in TreemapTextParts(block: value, paint: written ?? contrast ?? .muted, isBold: isBold, isItalic: isItalic) })
+    }
+
     /// A section's box: a tint of its series color and an outline in it, unless its class gives a fill or an outline.
-    private static func sectionBox(_ box: TreemapLayoutBox) -> TreemapBoxParts {
+    static func sectionLook(_ box: TreemapLayoutBox) -> BoxLook {
         let series = DiagramPaint.series(box.seriesIndex)
-        return TreemapBoxParts(path: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? series.atOpacity(sectionFillOpacity),
-                               outline: box.style.stroke.map(DiagramPaint.color) ?? series, stroke: stroke(of: box.style))
+        return (box.style.fill.map(DiagramPaint.color) ?? series.atOpacity(sectionFillOpacity), box.style.stroke.map(DiagramPaint.color) ?? series,
+                stroke(of: box.style))
     }
 
     /// A leaf's box: its series color, with an outline only where its class gives one.
-    private static func leafBox(_ box: TreemapLayoutBox) -> TreemapBoxParts {
-        TreemapBoxParts(path: roundedPath(box), fill: box.style.fill.map(DiagramPaint.color) ?? .series(box.seriesIndex),
-                        outline: box.style.stroke.map(DiagramPaint.color), stroke: stroke(of: box.style))
+    static func leafLook(_ box: TreemapLayoutBox) -> BoxLook {
+        (box.style.fill.map(DiagramPaint.color) ?? .series(box.seriesIndex), box.style.stroke.map(DiagramPaint.color), stroke(of: box.style))
+    }
+
+    /// The corner radius of a box: its own, at most half its sides.
+    static func cornerRadius(of box: TreemapLayoutBox) -> CGFloat {
+        min(box.cornerRadius, box.frame.width / 2, box.frame.height / 2)
+    }
+
+    private static func boxParts(path: CGPath, look: BoxLook) -> TreemapBoxParts {
+        TreemapBoxParts(path: path, fill: look.fill, outline: look.outline, stroke: look.stroke)
     }
 
     private static func stroke(of style: DiagramElementStyle) -> DiagramStroke {
@@ -109,7 +128,7 @@ public struct TreemapDrawingParts {
     }
 
     private static func roundedPath(_ box: TreemapLayoutBox) -> CGPath {
-        let radius = min(box.cornerRadius, box.frame.width / 2, box.frame.height / 2)
+        let radius = cornerRadius(of: box)
         return CGPath(roundedRect: box.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
     }
 }

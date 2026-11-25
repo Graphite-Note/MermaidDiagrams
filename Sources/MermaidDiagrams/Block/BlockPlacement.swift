@@ -6,8 +6,8 @@
  *              from the blocks' own widths, each block's drawn size, and what edges and their text must stay clear of.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -52,6 +52,7 @@ struct BlockPlacement {
         outlines.removeAll(keepingCapacity: true)
         outlines.reserveCapacity(cells.count)
         obstacleIndices.removeAll(keepingCapacity: true)
+        obstacleIndices.reserveCapacity(cells.count)
         titles.removeAll(keepingCapacity: true)
         for index in cells.indices {
             let cell = cells[index]

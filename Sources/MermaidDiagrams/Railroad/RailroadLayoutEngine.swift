@@ -6,8 +6,8 @@
  *              to a dot, one rule below the other, in the measurements of the diagram's options and Pele's defaults.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -56,16 +56,17 @@ public enum RailroadLayoutEngine {
             let start = padding + 2 * options.markerRadius
             let left = start + lead
             let end = left + box.width + lead
-            var placement = RailroadTrackPlacement(metrics: metrics)
+            var placement = RailroadTrackPlacement(metrics: metrics, displacement: halfPoint)
             placement.line(from: start, to: left, at: baseline)
             placement.line(from: left + box.width, to: end, at: baseline)
             placement.place(box, left: left, baseline: baseline)
             let name = EventModelText.block([RailroadText.shown(rule.name)], measurer: headText)
-            let markers = options.markerRadius > 0 ? [CGPoint(x: padding + options.markerRadius, y: baseline), CGPoint(x: end + options.markerRadius, y: baseline)] : []
+            let markers = options.markerRadius > 0 ? [CGPoint(x: padding + options.markerRadius, y: baseline).translated(by: halfPoint),
+                                                      CGPoint(x: end + options.markerRadius, y: baseline).translated(by: halfPoint)] : []
             rules.append(RailroadLayoutRule(
-                name: EventModelText.placed(name, center: CGPoint(x: padding + name.size.width / 2, y: top + headHeight / 2)),
-                track: placement.track.finishedPaths, arrows: placement.arrows, markerCenters: markers, boxes: placement.boxes,
-                counts: placement.counts).translated(by: halfPoint))
+                name: EventModelText.placed(name, center: CGPoint(x: padding + name.size.width / 2, y: top + headHeight / 2).translated(by: halfPoint)),
+                track: placement.takeTrack(), arrows: placement.arrows, markerCenters: markers, boxes: placement.boxes,
+                counts: placement.counts))
             width = max(width, end + 2 * options.markerRadius - padding, name.size.width)
             bottom = baseline + box.down
             top = bottom + metrics.separation + ruleGap
@@ -116,18 +117,5 @@ struct RailroadResolvedOptions {
         RailroadMetrics(terminalText: typography.measurer(size: size, isMonospaced: true), nameText: typography.measurer(size: size),
                         specialText: typography.measurer(size: size, isItalic: true), countText: typography.measurer(size: RailroadMetrics.countSize),
                         padding: padding, height: height, gap: gap, separation: separation, arc: arc)
-    }
-}
-
-extension RailroadLayoutRule {
-    func translated(by offset: CGVector) -> RailroadLayoutRule {
-        RailroadLayoutRule(name: name.translated(by: offset), track: track.map { path in path.translated(by: offset) },
-                           arrows: arrows.map { arrow in RailroadLayoutArrow(points: arrow.points.map { point in point.translated(by: offset) }) },
-                           markerCenters: markerCenters.map { center in center.translated(by: offset) },
-                           boxes: boxes.map { box in
-                               RailroadLayoutBox(kind: box.kind, frame: box.frame.offsetBy(dx: offset.dx, dy: offset.dy), text: box.text.translated(by: offset),
-                                                 questionMarks: box.questionMarks.map { mark in mark.translated(by: offset) })
-                           },
-                           counts: counts.map { count in count.translated(by: offset) })
     }
 }

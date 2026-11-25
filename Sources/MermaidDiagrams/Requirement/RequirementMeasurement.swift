@@ -6,8 +6,8 @@
  *              stereotype, the bold name and the rows of fields of each box, and each relation's text.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -68,48 +68,54 @@ struct RequirementMeasurement {
 
     init<Measurer: DiagramTextMeasuring>(diagram: RequirementDiagram, measurers: RequirementTextMeasurers<Measurer>) {
         var styles = RequirementStyleResolution()
+        var texts = RequirementConstantTexts(measurers: measurers)
         var boxes: [RequirementMeasuredBox] = []
+        boxes.reserveCapacity(diagram.requirements.count + diagram.elements.count)
         var boxIndices: [String: Int] = [:]
+        boxIndices.reserveCapacity(diagram.requirements.count + diagram.elements.count)
         for requirement in diagram.requirements {
             if boxIndices[requirement.name] == nil { boxIndices[requirement.name] = boxes.count }
-            let fields = [("ID", requirement.identifier), ("Text", requirement.text), ("Risk", requirement.risk?.rawValue ?? ""),
-                          ("Verification", requirement.verificationMethod?.rawValue ?? "")]
-            boxes.append(Self.box(isRequirement: true, kind: requirement.kind.rawValue, name: requirement.name, fields: fields,
-                                  style: styles.style(of: requirement.styleDeclarations), measurers: measurers))
+            let fields: [(RequirementFieldKey, String)] = [(.identifier, requirement.identifier), (.text, requirement.text),
+                                                           (.risk, requirement.risk?.rawValue ?? ""),
+                                                           (.verification, requirement.verificationMethod?.rawValue ?? "")]
+            boxes.append(Self.box(isRequirement: true, stereotype: texts.stereotype(of: requirement.kind), name: requirement.name, fields: fields,
+                                  style: styles.style(of: requirement.styleDeclarations), texts: &texts, measurers: measurers))
         }
         // A requirement and an element may share a name; relations then go to the requirement.
         for element in diagram.elements {
             if boxIndices[element.name] == nil { boxIndices[element.name] = boxes.count }
-            boxes.append(Self.box(isRequirement: false, kind: "Element", name: element.name,
-                                  fields: [("Type", element.type), ("Doc Ref", element.documentReference)],
-                                  style: styles.style(of: element.styleDeclarations), measurers: measurers))
+            boxes.append(Self.box(isRequirement: false, stereotype: texts.elementStereotype(), name: element.name,
+                                  fields: [(.type, element.type), (.documentReference, element.documentReference)],
+                                  style: styles.style(of: element.styleDeclarations), texts: &texts, measurers: measurers))
         }
         self.boxes = boxes
         var edges: [RequirementMeasuredEdge] = []
+        edges.reserveCapacity(diagram.relations.count)
         var selfLoops = [[Int]](repeating: [], count: boxes.count)
         for (relationIndex, relation) in diagram.relations.enumerated() {
             guard let source = boxIndices[relation.source], let target = boxIndices[relation.target] else { continue }
             if source == target { selfLoops[source].append(edges.count) }
-            let text = DiagramTextBlock(label: DiagramLabel("«\(relation.kind.rawValue)»"), measurer: measurers.body, maximumWidth: Self.unwrapped)
-            edges.append(RequirementMeasuredEdge(relationIndex: relationIndex, kind: relation.kind, source: source, target: target, text: text))
+            edges.append(RequirementMeasuredEdge(relationIndex: relationIndex, kind: relation.kind, source: source, target: target,
+                                                 text: texts.relationText(of: relation.kind)))
         }
         self.edges = edges
         selfLoopEdgeIndices = selfLoops
     }
 
     /// A box's texts and size, as Pele's `draw` measures a node.
-    private static func box<Measurer: DiagramTextMeasuring>(isRequirement: Bool, kind: String, name: String, fields: [(String, String)],
-                                                            style: DiagramElementStyle?, measurers: RequirementTextMeasurers<Measurer>) -> RequirementMeasuredBox {
-        let stereotype = DiagramTextBlock(label: DiagramLabelDecoder.label(from: "«\(kind)»", form: .plain), measurer: measurers.body,
-                                          maximumWidth: unwrapped)
+    private static func box<Measurer: DiagramTextMeasuring>(isRequirement: Bool, stereotype: DiagramTextBlock, name: String,
+                                                            fields: [(RequirementFieldKey, String)], style: DiagramElementStyle?,
+                                                            texts: inout RequirementConstantTexts<Measurer>,
+                                                            measurers: RequirementTextMeasurers<Measurer>) -> RequirementMeasuredBox {
         let nameText = DiagramTextBlock(label: DiagramLabelDecoder.label(from: name, form: .markdown), measurer: measurers.names,
                                         maximumWidth: nameWrappingWidth)
         var rows: [(key: DiagramTextBlock, value: DiagramTextBlock, height: CGFloat)] = []
+        rows.reserveCapacity(fields.count)
         var keyWidth: CGFloat = 0
         var valueWidth: CGFloat = 0
         var bodyHeight: CGFloat = 0
         for (key, value) in fields where !value.isEmpty {
-            let keyText = DiagramTextBlock(label: DiagramLabel(key), measurer: measurers.body, maximumWidth: unwrapped)
+            let keyText = texts.key(key)
             let valueText = DiagramTextBlock(label: DiagramLabelDecoder.label(from: value, form: .markdown), measurer: measurers.body,
                                              maximumWidth: valueWrappingWidth)
             let height = max(keyText.size.height, valueText.size.height)
@@ -137,6 +143,73 @@ struct RequirementMeasurement {
             }
             return size
         }
+    }
+}
+
+/// A field a box shows, by its name.
+enum RequirementFieldKey: Int, CaseIterable {
+    case identifier
+    case text
+    case risk
+    case verification
+    case type
+    case documentReference
+
+    /// The name drawn before the field's value.
+    var name: String {
+        switch self {
+        case .identifier: "ID"
+        case .text: "Text"
+        case .risk: "Risk"
+        case .verification: "Verification"
+        case .type: "Type"
+        case .documentReference: "Doc Ref"
+        }
+    }
+}
+
+/// The texts of a closed set a diagram's boxes and relations draw again and again, each measured once a diagram, the
+/// first time it is drawn: the stereotypes (`«Requirement»`, `«Element»`), the fields' names and the relations' kinds
+/// (`«contains»`). A block measured once is the block measuring its text again gives.
+struct RequirementConstantTexts<Measurer: DiagramTextMeasuring> {
+    let measurers: RequirementTextMeasurers<Measurer>
+    private var stereotypes = [DiagramTextBlock?](repeating: nil, count: RequirementKind.allCases.count + 1)
+    private var keys = [DiagramTextBlock?](repeating: nil, count: RequirementFieldKey.allCases.count)
+    private var relationTexts = [DiagramTextBlock?](repeating: nil, count: RequirementRelationKind.allCases.count)
+
+    init(measurers: RequirementTextMeasurers<Measurer>) {
+        self.measurers = measurers
+    }
+
+    mutating func stereotype(of kind: RequirementKind) -> DiagramTextBlock {
+        stereotype(at: RequirementKind.allCases.firstIndex(of: kind) ?? 0, kind: kind.rawValue)
+    }
+
+    mutating func elementStereotype() -> DiagramTextBlock {
+        stereotype(at: RequirementKind.allCases.count, kind: "Element")
+    }
+
+    private mutating func stereotype(at slot: Int, kind: String) -> DiagramTextBlock {
+        if let measured = stereotypes[slot] { return measured }
+        let measured = DiagramTextBlock(label: DiagramLabelDecoder.label(from: "«\(kind)»", form: .plain), measurer: measurers.body,
+                                        maximumWidth: RequirementMeasurement.unwrapped)
+        stereotypes[slot] = measured
+        return measured
+    }
+
+    mutating func key(_ key: RequirementFieldKey) -> DiagramTextBlock {
+        if let measured = keys[key.rawValue] { return measured }
+        let measured = DiagramTextBlock(label: DiagramLabel(key.name), measurer: measurers.body, maximumWidth: RequirementMeasurement.unwrapped)
+        keys[key.rawValue] = measured
+        return measured
+    }
+
+    mutating func relationText(of kind: RequirementRelationKind) -> DiagramTextBlock {
+        let slot = RequirementRelationKind.allCases.firstIndex(of: kind) ?? 0
+        if let measured = relationTexts[slot] { return measured }
+        let measured = DiagramTextBlock(label: DiagramLabel("«\(kind.rawValue)»"), measurer: measurers.body, maximumWidth: RequirementMeasurement.unwrapped)
+        relationTexts[slot] = measured
+        return measured
     }
 }
 

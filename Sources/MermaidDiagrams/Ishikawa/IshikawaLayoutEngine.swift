@@ -6,7 +6,7 @@
  *              the spine, or for a narrow column an indented list down the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -83,6 +83,8 @@ struct IshikawaFishbone {
         for index in arrangements.indices { arrangements[index].rise = max(arrangements[index].rise, headHeight / 2 + 14) }
         // Categories meet the spine in pairs, each pair as far toward the tail from the one before as the wider needs.
         var meetings: [CGFloat] = []
+        meetings.reserveCapacity(arrangements.count + 1)
+        categories.reserveCapacity(arrangements.count)
         var meeting = -IshikawaLayoutEngine.headGap
         for first in stride(from: 0, to: arrangements.count, by: 2) {
             if first > 0 {
@@ -93,7 +95,8 @@ struct IshikawaFishbone {
                 }
                 meeting -= room + IshikawaLayoutEngine.pairGap
             }
-            meetings += [meeting, meeting]
+            meetings.append(meeting)
+            meetings.append(meeting)
         }
         let tailEnd = arrangements.isEmpty ? -IshikawaLayoutEngine.headGap : meeting - IshikawaLayoutEngine.tail
         var extent = (minX: tailEnd, maxX: headWidth, minY: -headHeight / 2, maxY: headHeight / 2)
@@ -116,7 +119,9 @@ struct IshikawaFishbone {
         // The bone stops short of the spine to leave its arrowhead a clean point.
         let trim = DiagramEdgeMark.arrowLength - 1
         var bones = [DiagramPath(start: CGPoint(x: meeting - slant / length * trim, y: sign * trim / length), segments: [.line(to: end)])]
+        bones.reserveCapacity(arrangement.bones.count + 1)
         var causes: [IshikawaLayoutCause] = []
+        causes.reserveCapacity(arrangement.bones.count)
         for bone in arrangement.bones {
             let rowY = sign * bone.rise
             if bone.depth % 2 == 0 {

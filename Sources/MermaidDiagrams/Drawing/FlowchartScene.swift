@@ -6,7 +6,7 @@
  *              back to front in the colors' roles, as Pele paints it, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 24/11/2026
  */
 
@@ -137,7 +137,7 @@ enum FlowchartSceneRecording {
     }
 
     /// The boxes behind everything: their fills depth by depth, their outlines and the titles no edge crosses.
-    private static func addBoxes(of clusters: FlowchartClusterPaths<DiagramPathLane>, to builder: inout DiagramSceneBuilder) {
+    static func addBoxes(of clusters: FlowchartClusterPaths<DiagramPathLane>, to builder: inout DiagramSceneBuilder) {
         for depthFill in clusters.fillsByDepth { builder.fill(depthFill, FlowchartClusterDrawingParts.boxPaint, part: .cluster) }
         builder.stroke(clusters.outlines, .border, .rounded(lineWidth: FlowchartDrawingParts.lineWidth), part: .cluster)
         builder.texts(clusters.titles, .muted, part: .clusterLabel)
@@ -145,7 +145,7 @@ enum FlowchartSceneRecording {
 
     /// The titles edges run through, over the edges, each on a patch painted as its box is where it sits: the background,
     /// then the box's paint once for each box it is inside and its own.
-    private static func addCrossedTitles(of clusters: FlowchartClusterPaths<DiagramPathLane>, to builder: inout DiagramSceneBuilder) {
+    static func addCrossedTitles(of clusters: FlowchartClusterPaths<DiagramPathLane>, to builder: inout DiagramSceneBuilder) {
         for (depth, patches) in clusters.crossedTitlePatchesByDepth.enumerated() where !patches.isEmpty {
             builder.fill(patches, .background, part: .labelBackground)
             for _ in 0...depth { builder.fill(patches, FlowchartClusterDrawingParts.boxPaint, part: .labelBackground) }
@@ -158,8 +158,8 @@ extension FlowchartClusterDrawingParts {
     /// Each box's inside: the alternate surface at `fillOpacity`.
     static let boxPaint = DiagramPaint.alternateSurface.atOpacity(fillOpacity)
 
-    /// The boxes as Core Graphics paths, for the state, class and entity relationship diagrams that draw their groups as
-    /// a flowchart draws its own and do not record into lanes yet: as `FlowchartSceneRecording` adds them.
+    /// The boxes as Core Graphics paths, as `FlowchartSceneRecording` adds them from lanes: for a scene made from the
+    /// public drawing parts' Core Graphics paths.
     func addBoxes(to builder: inout DiagramSceneBuilder) {
         for depthFill in fillsByDepth { builder.fill(depthFill, Self.boxPaint, part: .cluster) }
         builder.stroke(outlines, .border, .rounded(lineWidth: FlowchartDrawingParts.lineWidth), part: .cluster)

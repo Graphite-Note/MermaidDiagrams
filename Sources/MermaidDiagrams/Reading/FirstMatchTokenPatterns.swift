@@ -2,155 +2,110 @@
  * File: FirstMatchTokenPatterns.swift
  * -----------------------------------
  * Layer: Core
- * Description: The patterns the token rules of Mermaid's Langium grammars share, each read once over the bytes as its
- *              regular expression would match them: literals, keywords, names, strings, comments, front matter fences
- *              and directives.
+ * Description: The patterns the token rules of Mermaid's Langium grammars share, as matchers a tokenizer compiles into
+ *              flat records and reads once over the bytes as their regular expressions would match them: literals,
+ *              keywords, names, strings, comments, front matter fences and directives.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
-/// How a token rule's pattern matches at a position, by the regular expression Mermaid's grammars give it.
+/// How a type's own token pattern matches at a position, for the few rules no shared matcher covers.
 typealias FirstMatchTokenPattern = @Sendable (inout FirstMatchTokenizerText, Int) -> FirstMatchTokenMatch
 
-enum FirstMatchTokenPatterns {
+/// The bytes a name's first byte or its next ones may be, as the grammars' character classes write them.
+enum FirstMatchByteClass: UInt8, Sendable {
+    /// `[A-Za-z]`.
+    case letter = 1
+    /// `[A-Z_a-z]`.
+    case letterOrUnderscore = 2
+    /// `[0-9]`.
+    case digit = 4
+    /// `\w`: a letter, a digit or an underscore.
+    case word = 8
+    /// `[\w-]`.
+    case wordOrHyphen = 16
+    /// `[A-Za-z0-9-]`.
+    case letterDigitOrHyphen = 32
+
+    /// Each byte's classes, as bits.
+    private static let classesOfBytes: [UInt8] = (0..<256).map { value in
+        let byte = UInt8(value)
+        let isLetter = MermaidByte.isLetter(byte)
+        let isDigit = MermaidByte.isDigit(byte)
+        let isWord = isLetter || isDigit || byte == MermaidByte.underscore
+        var classes: UInt8 = 0
+        if isLetter { classes |= letter.rawValue }
+        if isLetter || byte == MermaidByte.underscore { classes |= letterOrUnderscore.rawValue }
+        if isDigit { classes |= digit.rawValue }
+        if isWord { classes |= word.rawValue }
+        if isWord || byte == MermaidByte.hyphen { classes |= wordOrHyphen.rawValue }
+        if isLetter || isDigit || byte == MermaidByte.hyphen { classes |= letterDigitOrHyphen.rawValue }
+        return classes
+    }
+
+    @inline(__always)
+    func contains(_ byte: UInt8) -> Bool {
+        Self.classesOfBytes[Int(byte)] & rawValue != 0
+    }
+}
+
+/// How a token rule's pattern matches at a position, by the regular expression Mermaid's grammars give it.
+enum FirstMatchTokenMatcher: Sendable {
     /// The text itself, compared exactly.
-    static func literal(_ text: String) -> FirstMatchTokenPattern {
-        let literal = Array(text.utf8)
-        return { text, position in
-            starts(text.bytes, at: position, with: literal) ? .matched(end: position + literal.count) : .none
-        }
-    }
-
+    case literal([UInt8])
     /// A diagram's keyword, which Mermaid ends only at whitespace, a comment or the end of the text.
-    static func keyword(_ word: String) -> FirstMatchTokenPattern {
-        let literal = Array(word.utf8)
-        return { text, position in
-            let end = position + literal.count
-            guard starts(text.bytes, at: position, with: literal), isAtEndOfWord(text.bytes, end) else { return .none }
-            return .matched(end: end)
-        }
-    }
-
-    /// A first byte `first` allows, then any number that `rest` allows.
-    static func name(first: @escaping @Sendable (UInt8) -> Bool, rest: @escaping @Sendable (UInt8) -> Bool) -> FirstMatchTokenPattern {
-        { text, position in
-            guard first(text.bytes[position]) else { return .none }
-            var end = position + 1
-            while end < text.bytes.count, rest(text.bytes[end]) { end += 1 }
-            return .matched(end: end)
-        }
-    }
-
+    case keyword([UInt8])
+    /// A first byte of one class, then any number of another's.
+    case name(first: FirstMatchByteClass, rest: FirstMatchByteClass)
     /// `"…"` or `'…'`, a backslash taking the character after it (other than a line break) whatever it is.
-    static let quoted: FirstMatchTokenPattern = { text, position in
-        let bytes = text.bytes
-        let quote = bytes[position]
-        guard quote == MermaidByte.quotationMark || quote == apostrophe else { return .none }
-        var index = position + 1
-        while index < bytes.count {
-            let byte = bytes[index]
-            if byte == quote { return .matched(end: index + 1) }
-            if byte == backslash {
-                guard index + 1 < bytes.count, lineTerminatorLength(bytes, index + 1) == 0 else { return .none }
-                index += 1
-            }
-            index += 1
-        }
-        return .none
-    }
-
+    case quoted
     /// `[\t ]*%%` and the rest of the line.
-    static let percentComment: FirstMatchTokenPattern = { text, position in
-        let start = endOfBlanks(text.bytes, from: position)
-        guard starts(text.bytes, at: start, with: percentSigns) else { return .none }
-        return .matched(end: endOfLine(text.bytes, from: start))
-    }
-
+    case percentComment
     /// `[\t ]*%%{`, then the first `}%%` that a line break, whitespace or the end follows, the line break taken too.
-    static let directive: FirstMatchTokenPattern = { text, position in
-        let start = endOfBlanks(text.bytes, from: position)
-        guard starts(text.bytes, at: start, with: directiveOpening) else { return .none }
-        var from = start + directiveOpening.count
-        while let closing = text.firstOccurrence(of: directiveClosing, from: from) {
-            if let end = endAfterClosingFence(text.bytes, closing + directiveClosing.count) { return .matched(end: end) }
-            from = closing + 1
-        }
-        return .noneFurtherOn
-    }
-
+    case directive
     /// Front matter written where it is not read: `---`, blanks and a line break, then the first line that is `---`,
     /// which a line break, whitespace or the end follows.
-    static let frontMatterFence: FirstMatchTokenPattern = { text, position in
-        let bytes = text.bytes
-        guard starts(bytes, at: position, with: fence) else { return .none }
-        var index = endOfBlanks(bytes, from: position + fence.count)
-        if index < bytes.count, bytes[index] == MermaidByte.carriageReturn { index += 1 }
-        guard index < bytes.count, bytes[index] == MermaidByte.newline else { return .none }
-        var lineStart = index + 1
-        while true {
-            if starts(bytes, at: lineStart, with: fence), let end = endAfterClosingFence(bytes, lineStart + fence.count) { return .matched(end: end) }
-            guard let lineBreak = text.firstOccurrence(of: [MermaidByte.newline], from: lineStart) else { return .noneFurtherOn }
-            lineStart = lineBreak + 1
-        }
-    }
-
-    /// `opening`, then everything up to the first `closing`.
-    static func blockComment(opening: String, closing: String) -> FirstMatchTokenPattern {
-        let opening = Array(opening.utf8)
-        let closing = Array(closing.utf8)
-        return { text, position in
-            guard starts(text.bytes, at: position, with: opening) else { return .none }
-            guard let end = text.firstOccurrence(of: closing, from: position + opening.count) else { return .noneFurtherOn }
-            return .matched(end: end + closing.count)
-        }
-    }
-
-    /// `opening` and the rest of the line (`//`, `#`).
-    static func lineComment(opening: String) -> FirstMatchTokenPattern {
-        let opening = Array(opening.utf8)
-        return { text, position in
-            starts(text.bytes, at: position, with: opening) ? .matched(end: endOfLine(text.bytes, from: position)) : .none
-        }
-    }
-
+    case frontMatterFence
+    /// The opening, then everything up to the first closing.
+    case blockComment(opening: [UInt8], closing: [UInt8])
+    /// The opening and the rest of the line (`//`, `#`).
+    case lineComment(opening: [UInt8])
     /// A run of whitespace: JavaScript's (`\s+`) when `isJavaScriptWhitespace`, else tabs, spaces and line breaks.
-    static func whitespace(isJavaScriptWhitespace: Bool) -> FirstMatchTokenPattern {
-        { text, position in
-            if isJavaScriptWhitespace { return .matched(end: JavaScriptWhitespace.endOfRun(in: text.bytes, from: position)) }
-            var end = position
-            while end < text.bytes.count, MermaidByte.isWhitespace(text.bytes[end]) { end += 1 }
-            return .matched(end: end)
-        }
-    }
-
+    case whitespace(isJavaScriptWhitespace: Bool)
     /// A statement's keyword followed by the rest of its line: a blank, then text up to `%%` or the end of the line;
-    /// or, when `allowsBare`, the keyword alone where no byte `continuesName` allows follows it.
-    static func lineStatement(_ keyword: String, leadingBlanks: Bool, continuesName: @escaping @Sendable (UInt8) -> Bool) -> FirstMatchTokenPattern {
-        let keyword = Array(keyword.utf8)
-        return { text, position in
-            let bytes = text.bytes
-            let start = leadingBlanks ? endOfBlanks(bytes, from: position) : position
-            guard starts(bytes, at: start, with: keyword) else { return .none }
-            let afterKeyword = start + keyword.count
-            if afterKeyword < bytes.count, MermaidByte.isSpace(bytes[afterKeyword]) { return .matched(end: endBeforeComment(bytes, from: afterKeyword)) }
-            if afterKeyword < bytes.count, continuesName(bytes[afterKeyword]) { return .none }
-            return .matched(end: afterKeyword)
-        }
+    /// or the keyword alone where no byte of `continuesName` follows it.
+    case lineStatement(keyword: [UInt8], leadingBlanks: Bool, continuesName: FirstMatchByteClass)
+    /// `accTitle`, blanks, `:`, then the rest of the line up to `%%`.
+    case accessibilityTitle(leadingBlanks: Bool)
+    /// A type's own pattern.
+    case custom(FirstMatchTokenPattern)
+}
+
+/// The shared matchers' builders, under the names the grammars' rules have always used, and the scanning helpers
+/// the matchers and the types' own patterns share.
+enum FirstMatchTokenPatterns {
+    static func literal(_ text: String) -> FirstMatchTokenMatcher { .literal(Array(text.utf8)) }
+    static func keyword(_ word: String) -> FirstMatchTokenMatcher { .keyword(Array(word.utf8)) }
+    static func name(first: FirstMatchByteClass, rest: FirstMatchByteClass) -> FirstMatchTokenMatcher { .name(first: first, rest: rest) }
+    static let quoted = FirstMatchTokenMatcher.quoted
+    static let percentComment = FirstMatchTokenMatcher.percentComment
+    static let directive = FirstMatchTokenMatcher.directive
+    static let frontMatterFence = FirstMatchTokenMatcher.frontMatterFence
+
+    static func blockComment(opening: String, closing: String) -> FirstMatchTokenMatcher {
+        .blockComment(opening: Array(opening.utf8), closing: Array(closing.utf8))
     }
 
-    /// `accTitle`, blanks, `:`, then the rest of the line up to `%%`.
-    static func accessibilityTitle(leadingBlanks: Bool) -> FirstMatchTokenPattern {
-        { text, position in
-            let bytes = text.bytes
-            let start = leadingBlanks ? endOfBlanks(bytes, from: position) : position
-            guard starts(bytes, at: start, with: accessibilityTitleKeyword) else { return .none }
-            let colon = endOfBlanks(bytes, from: start + accessibilityTitleKeyword.count)
-            guard colon < bytes.count, bytes[colon] == MermaidByte.colon else { return .none }
-            return .matched(end: endBeforeComment(bytes, from: colon + 1))
-        }
+    static func lineComment(opening: String) -> FirstMatchTokenMatcher { .lineComment(opening: Array(opening.utf8)) }
+    static func whitespace(isJavaScriptWhitespace: Bool) -> FirstMatchTokenMatcher { .whitespace(isJavaScriptWhitespace: isJavaScriptWhitespace) }
+
+    static func lineStatement(_ keyword: String, leadingBlanks: Bool, continuesName: FirstMatchByteClass) -> FirstMatchTokenMatcher {
+        .lineStatement(keyword: Array(keyword.utf8), leadingBlanks: leadingBlanks, continuesName: continuesName)
     }
+
+    static func accessibilityTitle(leadingBlanks: Bool) -> FirstMatchTokenMatcher { .accessibilityTitle(leadingBlanks: leadingBlanks) }
 
     static func starts(_ bytes: [UInt8], at position: Int, with literal: [UInt8]) -> Bool {
         guard position + literal.count <= bytes.count else { return false }
@@ -212,8 +167,8 @@ enum FirstMatchTokenPatterns {
     static let apostrophe = UInt8(ascii: "'")
     static let backslash = UInt8(ascii: "\\")
     static let percentSigns = Array("%%".utf8)
-    private static let directiveOpening = Array("%%{".utf8)
-    private static let directiveClosing = Array("}%%".utf8)
-    private static let fence = Array("---".utf8)
-    private static let accessibilityTitleKeyword = Array("accTitle".utf8)
+    static let directiveOpening = Array("%%{".utf8)
+    static let directiveClosing = Array("}%%".utf8)
+    static let fence = Array("---".utf8)
+    static let accessibilityTitleKeyword = Array("accTitle".utf8)
 }

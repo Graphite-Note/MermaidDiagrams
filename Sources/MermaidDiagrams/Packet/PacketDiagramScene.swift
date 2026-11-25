@@ -2,28 +2,32 @@
  * File: PacketDiagramScene.swift
  * ------------------------------
  * Layer: Core
- * Description: A laid-out packet diagram's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
+ * Description: A laid-out packet diagram's scene: the fields' boxes recorded into a lane of the thread's scene workspace
+ *              and added back to front in the colors' roles, as Pele paints them, without a Core Graphics path.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
+
+import CoreGraphics
 
 extension DiagramScene {
     /// The packet diagram's painting: the fields' boxes in the surface and border colors, their labels, the bit numbers
     /// in the muted color, the title.
     public init(layout: PacketDiagramLayout) {
-        var builder = DiagramSceneBuilder()
-        PacketDiagramDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
-    }
-}
-
-extension PacketDiagramDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        builder.fillAndStroke(fieldBoxes, fill: .surface, stroke: .border, DiagramStroke(lineWidth: Self.lineWidth), part: .node)
-        builder.texts(fieldLabels, .foreground, part: .label)
-        builder.texts(bitNumbers, .muted, part: .bitNumber)
-        builder.title(title)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            let boxes = workspace.makeLane()
+            for field in layout.fields {
+                let radius = min(PacketDiagramLayoutEngine.cornerRadius, field.frame.width / 2, field.frame.height / 2)
+                boxes.addRoundedRect(in: field.frame, cornerWidth: radius, cornerHeight: radius)
+            }
+            builder.fillAndStroke(boxes, fill: .surface, stroke: .border, DiagramStroke(lineWidth: PacketDiagramDrawingParts.lineWidth), part: .node)
+            for field in layout.fields { builder.text(field.label, .foreground, part: .label) }
+            builder.texts(layout.bitNumbers, .muted, part: .bitNumber)
+            builder.title(layout.title)
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }

@@ -6,8 +6,8 @@
  *              coordinates in percent, nodes merged by identifier, pipelines, links resolved by identifier or label.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 /// Mermaid's `populateDb`: the size and the stages, then anchors, components, notes, pipelines, links, evolutions, the
@@ -135,7 +135,7 @@ struct WardleyMapBuilder {
             indexByIdentifier[name] != nil ? name : identifierByLabel[name] ?? name
         }
         for link in links {
-            let isDashed = link.arrow.map { arrow in arrow.contains("-.->") || arrow.contains(".-.") } ?? false
+            let isDashed = link.arrow.map { arrow in PlaneMapText.contains(arrow, "-.->") || PlaneMapText.contains(arrow, ".-.") } ?? false
             let fromArrow = Self.flowAndLabel(of: link.arrow)
             let flow = Self.flow(ofPort: link.fromPort) ?? Self.flow(ofPort: link.toPort) ?? fromArrow.flow
             map.links.append(WardleyMapLink(source: resolved(link.from), target: resolved(link.to), isDashed: isDashed, label: fromArrow.label ?? link.label,
@@ -172,9 +172,9 @@ struct WardleyMapBuilder {
         if afterPlus.first == "'", let closing = afterPlus.dropFirst().firstIndex(of: "'") {
             label = String(afterPlus[afterPlus.index(after: afterPlus.startIndex)..<closing])
         }
-        if arrow.contains("<>") { return (.bidirectional, label) }
-        if arrow.contains("<") { return (.backward, label) }
-        if arrow.contains(">") { return (.forward, label) }
+        if PlaneMapText.contains(arrow, "<>") { return (.bidirectional, label) }
+        if PlaneMapText.contains(arrow, "<") { return (.backward, label) }
+        if PlaneMapText.contains(arrow, ">") { return (.forward, label) }
         return (nil, label)
     }
 }

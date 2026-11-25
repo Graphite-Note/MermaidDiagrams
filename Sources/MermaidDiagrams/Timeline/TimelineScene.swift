@@ -5,8 +5,8 @@
  * Description: A laid-out timeline's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -14,32 +14,44 @@ import CoreGraphics
 extension DiagramScene {
     /// The timeline's painting: the axis and its arrow in the line color, the lines to the events in the border color,
     /// per color the section and period boxes, the event boxes and the dots, the text on the boxes in the background
-    /// color, the events' text and the title.
+    /// color, the events' text and the title. The paths are recorded into lanes of the thread's scene workspace.
     public init(layout: TimelineLayout) {
-        var builder = DiagramSceneBuilder()
-        TimelineDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            TimelineSceneRecording.add(layout, to: &builder, workspace: workspace)
+            return builder.scene(size: layout.size, font: layout.font, seriesColors: layout.seriesColors)
+        }
+    }
+}
+
+/// Adds a timeline's painting to a scene, its paths recorded into lanes of `workspace`, grouped as
+/// `TimelineDrawingParts` groups them.
+enum TimelineSceneRecording {
+    static func add(_ layout: TimelineLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let paths = TimelineDrawingPaths(layout: layout, making: workspace)
+        let line = DiagramStroke(lineWidth: TimelineDrawingParts.lineWidth)
+        builder.stroke(paths.axis, .line, line, part: .axis)
+        builder.fill(paths.axisArrow, .line, part: .axis)
+        builder.stroke(paths.connectors, .border, line, part: .edge)
+        for group in paths.colorGroups {
+            let paint = TimelineDrawingParts.paint(group.color)
+            builder.fill(group.boxes, paint, part: .node)
+            builder.fill(group.eventBoxes, paint.atOpacity(TimelineDrawingParts.eventFillOpacity), part: .node)
+            builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: TimelineDrawingParts.dotOutlineWidth),
+                                  part: .marker)
+        }
+        for section in layout.sections {
+            builder.text(section.text, TimelineDrawingParts.ink(.series(section.sectionIndex), of: layout), isBold: true, part: .clusterLabel)
+        }
+        for period in layout.periods { builder.text(period.text, TimelineDrawingParts.ink(period.color, of: layout), part: .label) }
+        for period in layout.periods {
+            for event in period.events { builder.text(event.text, .foreground, part: .label) }
+        }
+        builder.title(layout.title)
     }
 }
 
 extension TimelineDrawingParts {
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke(lineWidth: Self.lineWidth)
-        builder.stroke(axis, .line, line, part: .axis)
-        builder.fill(axisArrow, .line, part: .axis)
-        builder.stroke(connectors, .border, line, part: .edge)
-        for group in colorGroups {
-            let paint = Self.paint(group.color)
-            builder.fill(group.boxes, paint, part: .node)
-            builder.fill(group.eventBoxes, paint.atOpacity(Self.eventFillOpacity), part: .node)
-            builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: Self.dotOutlineWidth), part: .marker)
-        }
-        for (text, paint) in zip(sectionTexts, sectionTextPaints) { builder.text(text, paint, isBold: true, part: .clusterLabel) }
-        for (text, paint) in zip(periodTexts, periodTextPaints) { builder.text(text, paint, part: .label) }
-        builder.texts(eventTexts, .foreground, part: .label)
-        builder.title(title)
-    }
-
     static func paint(_ color: TimelineColor) -> DiagramPaint {
         switch color {
         case .series(let index): .series(index)

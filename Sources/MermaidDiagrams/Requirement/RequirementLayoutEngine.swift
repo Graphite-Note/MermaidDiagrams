@@ -6,7 +6,7 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 24/11/2026
  */
 
@@ -34,27 +34,62 @@ public enum RequirementLayoutEngine {
                                                        font: DiagramFont, limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> RequirementLayout {
         let measured = RequirementMeasurement(diagram: diagram, measurers: measurers)
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let layeredEdgeIndices = measured.edges.indices.filter { edgeIndex in !measured.edges[edgeIndex].isSelfLoop }
-        let graph = LayeredGraph(nodeSizes: measured.layoutSizes(flowIsVertical: flowAxes.flowIsVertical).map(flowAxes.flowSize(of:)),
-                                 edges: layeredEdgeIndices.map { edgeIndex in
-                                     let edge = measured.edges[edgeIndex]
-                                     let room = RequirementMeasurement.edgeTextRoom
-                                     let labelSize = flowAxes.flowSize(of: CGSize(width: edge.text.size.width + room.width,
-                                                                                  height: edge.text.size.height + room.height))
-                                     return LayeredEdge(source: edge.source, target: edge.target, minimumRankSpan: 1, labelSize: labelSize)
-                                 })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        let placed = DiagramScratchArena.withCurrentThread { arena in
+            rankedPage(diagram, measured: measured, flowAxes: flowAxes, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
         }
-        var page = RequirementPageAssembly(measured: measured,
-                                           axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: placement.extent.height),
-                                           flowCenters: placement.nodeCenters)
-        page.placeRelations(layeredEdgeIndices: layeredEdgeIndices, placement: placement)
-        page.placeSelfLoops()
+        guard let (page, extent) = placed else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: titleText, maximumWidth: RequirementMeasurement.unwrapped) }
-        let extent = flowAxes.flowIsVertical ? placement.extent : CGSize(width: placement.extent.height, height: placement.extent.width)
-        return page.finished(extent: extent, font: font, title: title)
+        return page.finished(extent: flowAxes.flowIsVertical ? extent : CGSize(width: extent.height, height: extent.width), font: font, title: title)
     }
+
+    /// The boxes and the relations between two different boxes as one flat layered graph written straight into the flat
+    /// layout's spans, the placed spans read on the page, with the layout's extent in flow space; nil when the graph would
+    /// need more than `maximumPointCount` nodes and passing points.
+    private static func rankedPage(_ diagram: RequirementDiagram, measured: RequirementMeasurement, flowAxes: FlowchartFlowAxes, maximumPointCount: Int,
+                                   arena: DiagramScratchArena) -> (page: RequirementPageAssembly, extent: CGSize)? {
+        let layoutSizes = measured.layoutSizes(flowIsVertical: flowAxes.flowIsVertical)
+        let nodes: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: layoutSizes.count)
+        for node in 0..<layoutSizes.count {
+            let size = flowAxes.flowSize(of: layoutSizes[node])
+            nodes[node] = LayeredFlatNode(width: Double(size.across), height: Double(size.along))
+        }
+        var layered = arena.list(capacity: measured.edges.count, of: Int.self)
+        for edgeIndex in measured.edges.indices where !measured.edges[edgeIndex].isSelfLoop { layered.append(edgeIndex) }
+        let edges: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: layered.count)
+        for layeredIndex in 0..<layered.count {
+            let edge = measured.edges[layered[layeredIndex]]
+            let room = RequirementMeasurement.edgeTextRoom
+            let labelSize = flowAxes.flowSize(of: CGSize(width: edge.text.size.width + room.width, height: edge.text.size.height + room.height))
+            edges[layeredIndex] = LayeredSpanEdge(tail: edge.source, head: edge.target, minimumLength: 1, labelWidth: Double(labelSize.across),
+                                                  labelHeight: Double(labelSize.along), tailOffset: 0, headOffset: 0)
+        }
+        #if DEBUG
+        record(nodes: nodes, edges: edges, maximumPointCount: maximumPointCount)
+        #endif
+        var points = arena.list(capacity: 4 * edges.count, of: CGPoint.self)
+        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredLayout.options(spacing),
+                                                  maximumVertexCount: maximumPointCount, arena: arena) else {
+            return nil
+        }
+        var page = RequirementPageAssembly(measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: CGFloat(size.height)),
+                                           flowNodes: nodes)
+        page.placeRelations(layeredEdgeIndices: layered.elements, nodes: nodes, edges: edges, points: points.elements)
+        page.placeSelfLoops()
+        return (page, CGSize(width: size.width, height: size.height))
+    }
+
+    #if DEBUG
+    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
+    private static func record(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, maximumPointCount: Int) {
+        guard let recording = LayeredLayoutRecording.current else { return }
+        let placed = LayeredGraph(nodeSizes: nodes.map { node in LayeredSize(across: CGFloat(node.width), along: CGFloat(node.height)) },
+                                  edges: edges.map { edge in
+                                      LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
+                                                  labelSize: LayeredSize(across: CGFloat(edge.labelWidth), along: CGFloat(edge.labelHeight)))
+                                  })
+        recording.placements.append(.init(graph: placed, spacing: spacing, maximumPointCount: maximumPointCount))
+    }
+    #endif
 }
 
 /// Puts a placed requirement diagram on the page: the boxes at their centers, the relations from side to side through
@@ -67,35 +102,75 @@ struct RequirementPageAssembly {
     /// By the measurement's edge index; nil until placed.
     private var relations: [RequirementLayoutRelation?]
 
-    init(measured: RequirementMeasurement, axes: FlowchartFlowAxes, flowCenters: [CGPoint]) {
+    init(measured: RequirementMeasurement, axes: FlowchartFlowAxes, flowNodes: ScratchSpan<LayeredFlatNode>) {
         self.measured = measured
         self.axes = axes
-        centers = flowCenters.map(axes.pagePoint)
+        var centers: [CGPoint] = []
+        centers.reserveCapacity(flowNodes.count)
+        for node in flowNodes { centers.append(axes.pagePoint(CGPoint(x: node.x, y: node.y))) }
+        self.centers = centers
         relations = Array(repeating: nil, count: measured.edges.count)
     }
 
-    /// The relations between two boxes, along their routes; `layeredEdgeIndices[i]` is the edge of the `i`-th route.
-    mutating func placeRelations(layeredEdgeIndices: [Int], placement: LayeredPlacement) {
+    /// The relations between two boxes, along their routes; `layeredEdgeIndices[i]` is the edge of the flat layout's
+    /// `i`-th edge, whose route runs from its source's center to its target's through its path's inner points.
+    mutating func placeRelations(layeredEdgeIndices: ScratchSpan<Int>, nodes: ScratchSpan<LayeredFlatNode>, edges laidOut: ScratchSpan<LayeredSpanEdge>,
+                                 points: ScratchSpan<CGPoint>) {
+        let routes = RankedRoutes(nodes: nodes, edges: laidOut, points: points, axes: axes)
         var ends: [RequirementEdgePorts.End] = []
-        for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
-            let route = placement.edgeRoutes[layeredIndex].map(axes.pagePoint)
+        ends.reserveCapacity(2 * layeredEdgeIndices.count)
+        for layeredIndex in 0..<layeredEdgeIndices.count {
+            let edgeIndex = layeredEdgeIndices[layeredIndex]
+            let count = routes.count(of: layeredIndex)
             let edge = measured.edges[edgeIndex]
-            ends.append(end(of: edgeIndex, isSourceEnd: true, box: edge.source, at: route[0], next: route[1]))
-            ends.append(end(of: edgeIndex, isSourceEnd: false, box: edge.target, at: route[route.count - 1], next: route[route.count - 2]))
+            ends.append(end(of: edgeIndex, isSourceEnd: true, box: edge.source, at: routes.point(0, count: count, of: layeredIndex),
+                            next: routes.point(1, count: count, of: layeredIndex)))
+            ends.append(end(of: edgeIndex, isSourceEnd: false, box: edge.target, at: routes.point(count - 1, count: count, of: layeredIndex),
+                            next: routes.point(count - 2, count: count, of: layeredIndex)))
         }
-        let ports = RequirementEdgePorts(ends: ends, edgeCount: measured.edges.count, centers: centers, sizes: measured.boxes.map(\.size))
-        for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
+        var sizes: [CGSize] = []
+        sizes.reserveCapacity(measured.boxes.count)
+        for box in measured.boxes { sizes.append(box.size) }
+        let ports = RequirementEdgePorts(ends: ends, edgeCount: measured.edges.count, centers: centers, sizes: sizes)
+        for layeredIndex in 0..<layeredEdgeIndices.count {
+            let edgeIndex = layeredEdgeIndices[layeredIndex]
             guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
-            let route = placement.edgeRoutes[layeredIndex].map(axes.pagePoint)
+            let count = routes.count(of: layeredIndex)
+            var routePoints: [CGPoint] = []
+            routePoints.reserveCapacity(count)
+            routePoints.append(sourcePort)
+            for index in 1..<(count - 1) { routePoints.append(routes.point(index, count: count, of: layeredIndex)) }
+            routePoints.append(targetPort)
             let edge = measured.edges[edgeIndex]
-            let drawn = DiagramRouteDrawing.path(through: [sourcePort] + route.dropFirst().dropLast() + [targetPort], flowIsVertical: axes.flowIsVertical,
+            let drawn = DiagramRouteDrawing.path(through: routePoints, flowIsVertical: axes.flowIsVertical,
                                                  startTrim: edge.isContainment ? 2 * RequirementLayoutEngine.containmentRadius : 0, endTrim: 0)
             let mark: RequirementRelationMark = edge.isContainment
                 ? .containment(point: sourcePort, towardBox: CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy))
                 : .arrow(tip: targetPort, direction: drawn.endDirection)
-            let textCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint)
-                ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
+            let laidOutEdge = laidOut[layeredIndex]
+            let textCenter = laidOutEdge.labelWidth > 0 ? axes.pagePoint(laidOutEdge.labelCenter)
+                : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
             relations[edgeIndex] = RequirementLayoutRelation(kind: edge.kind, path: drawn.path, mark: mark, text: Self.centered(edge.text, at: textCenter))
+        }
+    }
+
+    /// The flat layout's routes on the page, each from its source's center to its target's through its path's inner points.
+    private struct RankedRoutes {
+        let nodes: ScratchSpan<LayeredFlatNode>
+        let edges: ScratchSpan<LayeredSpanEdge>
+        let points: ScratchSpan<CGPoint>
+        let axes: FlowchartFlowAxes
+
+        func count(of layeredIndex: Int) -> Int {
+            let edge = edges[layeredIndex]
+            return edge.pointStart >= 0 && edge.pointCount > 2 ? edge.pointCount : 2
+        }
+
+        /// The route's point `index` on the page, of `count`: the centers at its ends, the path's inner points between.
+        func point(_ index: Int, count: Int, of layeredIndex: Int) -> CGPoint {
+            let edge = edges[layeredIndex]
+            let node = index == 0 ? edge.tail : index == count - 1 ? edge.head : -1
+            return axes.pagePoint(node >= 0 ? CGPoint(x: nodes[node].x, y: nodes[node].y) : points[edge.pointStart + index])
         }
     }
 
@@ -131,38 +206,58 @@ struct RequirementPageAssembly {
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (extent.height + titleHeight + 2 * padding).rounded(.up))
         var placedTitle = title.flatMap { title in title.lineCount == 0 ? nil : title }
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        let boxes = measured.boxes.indices.map { box in Self.placedBox(measured.boxes[box], at: centers[box]).translated(by: offset) }
-        return RequirementLayout(size: size, font: font, boxes: boxes, relations: relations.compactMap { relation in relation?.translated(by: offset) },
-                                 title: placedTitle)
+        var boxes: [RequirementLayoutBox] = []
+        boxes.reserveCapacity(measured.boxes.count)
+        for box in measured.boxes.indices { boxes.append(Self.placedBox(measured.boxes[box], at: centers[box], offset: offset)) }
+        var placedRelations: [RequirementLayoutRelation] = []
+        placedRelations.reserveCapacity(relations.count)
+        for relation in relations {
+            guard var placed = relation else { continue }
+            placed.translate(by: offset)
+            placedRelations.append(placed)
+        }
+        return RequirementLayout(size: size, font: font, boxes: boxes, relations: placedRelations, title: placedTitle)
     }
 
-    /// A box with its texts placed around `center`.
-    private static func placedBox(_ box: RequirementMeasuredBox, at center: CGPoint) -> RequirementLayoutBox {
+    /// A box with its texts placed around `center`, then moved by `offset`: each place found around `center` and moved as
+    /// `translated(by:)` moves it.
+    private static func placedBox(_ box: RequirementMeasuredBox, at center: CGPoint, offset: CGVector) -> RequirementLayoutBox {
         let frame = CGRect(x: center.x - box.size.width / 2, y: center.y - box.size.height / 2, width: box.size.width, height: box.size.height)
         let headTop = frame.minY + RequirementMeasurement.paddingAlong
-        let stereotype = centered(box.stereotype, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height / 2))
-        let name = centered(box.name, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height + box.name.size.height / 2))
+        let stereotype = centered(box.stereotype, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height / 2).translated(by: offset))
+        let name = centered(box.name, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height + box.name.size.height / 2).translated(by: offset))
+        let movedFrame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
         guard !box.rows.isEmpty else {
-            return RequirementLayoutBox(frame: frame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: nil, fieldNames: [],
-                                        fieldValues: [], style: box.style)
+            return RequirementLayoutBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: nil,
+                                        fieldNames: [], fieldValues: [], style: box.style)
         }
         let divider = frame.minY + box.headHeight
         var rowTop = divider + RequirementMeasurement.paddingAlong
         var fieldNames: [DiagramTextBlock] = []
         var fieldValues: [DiagramTextBlock] = []
+        fieldNames.reserveCapacity(box.rows.count)
+        fieldValues.reserveCapacity(box.rows.count)
         let keyLeft = frame.minX + RequirementMeasurement.paddingAcross
         for row in box.rows {
-            fieldNames += startingAt(row.key, left: keyLeft, top: rowTop)
-            fieldValues += startingAt(row.value, left: keyLeft + box.keyWidth + RequirementMeasurement.columnGap, top: rowTop)
+            appendStartingAt(row.key, left: keyLeft, top: rowTop, offset: offset, to: &fieldNames)
+            appendStartingAt(row.value, left: keyLeft + box.keyWidth + RequirementMeasurement.columnGap, top: rowTop, offset: offset, to: &fieldValues)
             rowTop += row.height + RequirementMeasurement.rowGap
         }
-        return RequirementLayoutBox(frame: frame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: divider,
-                                    fieldNames: fieldNames, fieldValues: fieldValues, style: box.style)
+        return RequirementLayoutBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name,
+                                    dividerY: divider + offset.dy, fieldNames: fieldNames, fieldValues: fieldValues, style: box.style)
     }
 
-    /// The text's lines, each starting at `left`, the first line's box starting at `top`, as Pele writes a field.
-    private static func startingAt(_ text: DiagramTextBlock, left: CGFloat, top: CGFloat) -> [DiagramTextBlock] {
-        centered(text, at: CGPoint(x: left + text.size.width / 2, y: top + text.size.height / 2)).leftAlignedLines()
+    /// The text's lines, each starting at `left`, the first line's box starting at `top`, as Pele writes a field, moved by
+    /// `offset` (`DiagramTextBlock.leftAlignedLines()`, each line's place then moved).
+    private static func appendStartingAt(_ text: DiagramTextBlock, left: CGFloat, top: CGFloat, offset: CGVector, to lines: inout [DiagramTextBlock]) {
+        let placed = centered(text, at: CGPoint(x: left + text.size.width / 2, y: top + text.size.height / 2))
+        guard placed.lineCount > 1 else { return lines.append(placed.translated(by: offset)) }
+        let lineLeft = placed.center.x - placed.size.width / 2
+        let lineTop = placed.center.y - placed.size.height / 2
+        for index in 0..<placed.lineCount {
+            let center = CGPoint(x: lineLeft + placed.lineWidth(at: index) / 2, y: lineTop + (CGFloat(index) + 0.5) * placed.lineHeight)
+            lines.append(placed.lineBlock(at: index, center: center).translated(by: offset))
+        }
     }
 
     private static func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {

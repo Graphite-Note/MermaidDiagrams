@@ -7,8 +7,8 @@
  *              title and padding.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -57,7 +57,8 @@ enum UseCaseNodeMeasurement {
     static func stereotypeSize(_ size: CGFloat) -> CGFloat { (size * 0.8125).rounded() }
 
     static func view<Measurer>(of node: UseCaseGraphNode, size: CGFloat, measurers: inout UseCaseTextMeasurers<Measurer>) -> UseCaseNodeView {
-        let look = UseCaseLook(styles: node.styles)
+        // A node without styles has the look of none, made once.
+        let look = node.styles.isEmpty ? UseCaseLook.none : UseCaseLook(styles: node.styles)
         let fontSize = look.fontSize ?? size
         let stereotypeMeasurer = measurers.measurer(size: stereotypeSize(size), isBold: look.isBold, isItalic: look.isItalic)
         let stereotype = UseCaseTextLabel.block(node.stereotype.map { stereotype in "«\(stereotype)»" }, measurer: stereotypeMeasurer, room: stereotypeRoom)
