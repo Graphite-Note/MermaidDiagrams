@@ -65,4 +65,27 @@ final class RailroadTextEquivalenceTests: XCTestCase {
             XCTAssertEqual(Array((shown + "\\t").unicodeScalars), Array(scalarByScalar.unicodeScalars), text.debugDescription)
         }
     }
+
+    /// A notation's keyword, told on the bytes of an ASCII keyword, is the one Unicode's lowering and Swift's characters
+    /// tell, for keywords of every case, cut short, run on, and with characters beyond ASCII.
+    func testNotationsAreToldAsUnicodesLoweringTellsThem() {
+        let pieces = ["railroad", "RAILROAD", "Railroad", "-", "beta", "BETA", "ebnf", "EBNF", "abnf", "peg", "PEG", "-beta", "x", "İ", "ß", "\u{301}", ""]
+        var state: UInt64 = 0x2A11_2040
+        func below(_ bound: Int) -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int((state >> 33) % UInt64(bound))
+        }
+        func reference(_ keyword: String) -> RailroadNotation? {
+            let lowercased = keyword.lowercased()
+            return RailroadNotation.allCases.first { notation in lowercased.hasPrefix(notation.keyword) }
+        }
+        for _ in 0..<20_000 {
+            let keyword = (0..<below(6)).map { _ in pieces[below(pieces.count)] }.joined()
+            XCTAssertEqual(RailroadNotation(typeKeyword: keyword), reference(keyword), keyword.debugDescription)
+        }
+        for notation in RailroadNotation.allCases {
+            XCTAssertEqual(RailroadNotation(typeKeyword: notation.keyword), notation)
+            XCTAssertEqual(RailroadNotation(typeKeyword: notation.keyword.uppercased() + "x"), notation)
+        }
+    }
 }

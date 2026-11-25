@@ -6,8 +6,8 @@
  *              in: its rules, each a tree of sequences, choices, optionals and repetitions of terminals and names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 /// A Mermaid railroad diagram (`railroad-beta`, `railroad-ebnf-beta`, `railroad-abnf-beta` or `railroad-peg-beta`): the
@@ -53,17 +53,48 @@ public enum RailroadNotation: String, Equatable, Sendable, CaseIterable {
 
     /// The keyword that declares the notation.
     public var keyword: String {
-        self == .railroad ? "railroad-beta" : "railroad-\(rawValue)-beta"
+        switch self {
+        case .railroad: "railroad-beta"
+        case .extendedBackusNaurForm: "railroad-ebnf-beta"
+        case .augmentedBackusNaurForm: "railroad-abnf-beta"
+        case .parsingExpressionGrammar: "railroad-peg-beta"
+        }
     }
 
     /// The notation whose keyword starts `typeKeyword` without regard to case, as Mermaid's detectors find it; nil for
     /// any other keyword. The keyword itself is read in its own case afterwards, so `RAILROAD-BETA` is a railroad
     /// diagram whose syntax is broken.
     init?(typeKeyword: String) {
+        if let notation = typeKeyword.utf8.withContiguousStorageIfAvailable(Self.asciiNotation), let notation {
+            guard let notation else { return nil }
+            self = notation
+            return
+        }
         let lowercased = typeKeyword.lowercased()
         guard let notation = Self.allCases.first(where: { notation in lowercased.hasPrefix(notation.keyword) }) else { return nil }
         self = notation
     }
+
+    /// The notation of an ASCII keyword, its bytes lowered and compared with each notation's: nil within for none; nil
+    /// without for a keyword with a byte beyond ASCII, which Unicode's lowering reads.
+    private static func asciiNotation(_ bytes: UnsafeBufferPointer<UInt8>) -> RailroadNotation?? {
+        guard bytes.allSatisfy({ byte in byte < 0x80 }) else { return nil }
+        for (notation, keyword) in keywordBytes where bytes.count >= keyword.count {
+            var matches = true
+            for (offset, expected) in keyword.enumerated() {
+                let byte = bytes[offset]
+                let lowered = byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z") ? byte + 0x20 : byte
+                if lowered != expected {
+                    matches = false
+                    break
+                }
+            }
+            if matches { return .some(notation) }
+        }
+        return .some(nil)
+    }
+
+    private static let keywordBytes = allCases.map { notation in (notation, Array(notation.keyword.utf8)) }
 }
 
 /// A rule of a railroad diagram: its name and what it stands for.
