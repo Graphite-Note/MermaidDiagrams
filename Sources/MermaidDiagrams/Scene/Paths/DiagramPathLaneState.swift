@@ -7,8 +7,8 @@
  *              Graphics' rules, and paths added to it as Core Graphics adds them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,8 +18,11 @@ import CoreGraphics
 /// on an empty lane does nothing, and a shape added to an empty lane is held whole (`held`) as Core Graphics holds it, its
 /// elements made only when they are read or the lane grows. Its memory is two blocks it grows, kept by the workspace
 /// between scenes; past `elementLimit` verbs the lane is emptied and marked `hasOverflowed`, which its scene refuses,
-/// instead of growing without bound. The lane's handle (`DiagramPathLane`) points at it, so it is never copied.
-struct DiagramPathLaneState {
+/// instead of growing without bound. The lane's handle (`DiagramPathLane`) points at it, so it is never copied: the state
+/// cannot be copied, another lane is given by its address, and what reads the state beyond a stored property or two is
+/// `mutating`, so that Swift passes the state where it lies instead of a copy of its 288 bytes, which it makes to pass a
+/// state it reads through a pointer, or reads while changing it.
+struct DiagramPathLaneState: ~Copyable {
     private(set) var verbs: UnsafeMutablePointer<DiagramPathVerb>
     private(set) var points: UnsafeMutablePointer<CGPoint>
     private(set) var verbCount = 0
@@ -113,15 +116,15 @@ struct DiagramPathLaneState {
     /// The point the next line starts from: the last point, or the subpath's start after a close; for a held shape, the
     /// point Core Graphics works out from its transform (`DiagramPathPrimitive.currentPoint`).
     var currentPoint: CGPoint {
-        @inline(__always) get {
-            if holdsShape { return heldShapeCurrentPoint }
+        @inline(__always) mutating get {
+            if holdsShape { return heldShapeCurrentPoint() }
             guard verbCount > 0, verbs[verbCount &- 1] != .close, pointCount > 0 else { return subpathStart }
             return points[pointCount &- 1]
         }
     }
 
     @inline(never)
-    private var heldShapeCurrentPoint: CGPoint {
+    private mutating func heldShapeCurrentPoint() -> CGPoint {
         heldShape.currentPoint
     }
 
@@ -182,6 +185,26 @@ struct DiagramPathLaneState {
     private mutating func push(_ point: CGPoint) {
         points[pointCount] = point
         pointCount &+= 1
+    }
+
+    /// One element of a single point, a line or a move, after the lane's elements, which hold no shape whole.
+    @inline(__always)
+    mutating func appendElement(_ verb: DiagramPathVerb, _ point: CGPoint) {
+        assert(!holdsShape, "a held shape is made into elements before others follow it")
+        reserve(verbs: 1, points: 1)
+        push(verb)
+        push(point)
+    }
+
+    /// A cubic curve's three points after the lane's elements, which hold no shape whole.
+    @inline(__always)
+    mutating func appendElement(_ control1: CGPoint, _ control2: CGPoint, _ end: CGPoint) {
+        assert(!holdsShape, "a held shape is made into elements before others follow it")
+        reserve(verbs: 1, points: 3)
+        push(.cubicCurve)
+        push(control1)
+        push(control2)
+        push(end)
     }
 
     // MARK: Elements
@@ -289,7 +312,7 @@ struct DiagramPathLaneState {
     }
 
     /// Calls `body` with the lane's held shape made into elements in blocks lent for the moment; the lane is unchanged.
-    func withHeldShapeExpanded<Result>(_ body: (inout DiagramPathLaneState) -> Result) -> Result {
+    mutating func withHeldShapeExpanded<Result>(_ body: (inout DiagramPathLaneState) -> Result) -> Result {
         withUnsafeTemporaryAllocation(of: DiagramPathVerb.self, capacity: DiagramPathPrimitive.largestElementCount) { verbBlock in
             withUnsafeTemporaryAllocation(of: CGPoint.self, capacity: DiagramPathPrimitive.largestPointCount) { pointBlock in
                 var expanded = DiagramPathLaneState(borrowingVerbs: verbBlock, points: pointBlock)
@@ -305,46 +328,41 @@ struct DiagramPathLaneState {
     /// held shape is added again as its shape, its first move replacing a move this lane ends with; any other lane's
     /// elements are copied as they are. `other` is not this lane (`DiagramPathLane.addPath` copies a lane added to itself
     /// first).
-    mutating func addPath(_ other: borrowing DiagramPathLaneState) {
-        guard !other.isEmpty else { return }
+    mutating func addPath(_ other: UnsafeMutablePointer<DiagramPathLaneState>) {
+        guard !other.pointee.isEmpty else { return }
         guard !isEmpty else { return copyContents(of: other) }
         expandHeldShape()
-        if other.holdsShape { return other.heldShape.appendElements(to: &self) }
+        if other.pointee.holdsShape { return other.pointee.heldShape.appendElements(to: &self) }
         appendElements(of: other)
     }
 
     /// Copies `other`'s elements and held shape into this empty lane.
-    mutating func copyContents(of other: borrowing DiagramPathLaneState) {
+    mutating func copyContents(of other: UnsafeMutablePointer<DiagramPathLaneState>) {
         appendElements(of: other)
-        holdsShape = other.holdsShape
-        heldShape = other.heldShape
-        subpathStart = other.subpathStart
-        cachedBounds = other.cachedBounds
+        holdsShape = other.pointee.holdsShape
+        heldShape = other.pointee.heldShape
+        subpathStart = other.pointee.subpathStart
+        hasCachedBounds = other.pointee.hasCachedBounds
+        cachedBoundsValue = other.pointee.cachedBoundsValue
     }
 
     /// `other`'s elements, copied as they are, after this lane's.
-    mutating func appendElements(of other: borrowing DiagramPathLaneState) {
-        guard other.verbCount > 0 else { return }
-        reserve(verbs: other.verbCount, points: other.pointCount)
-        (verbs + verbCount).initialize(from: other.verbs, count: other.verbCount)
-        (points + pointCount).initialize(from: other.points, count: other.pointCount)
-        verbCount &+= other.verbCount
-        pointCount &+= other.pointCount
-        subpathStart = other.subpathStart
+    mutating func appendElements(of other: UnsafeMutablePointer<DiagramPathLaneState>) {
+        appendElements(of: other, fromVerb: 0, point: 0)
     }
 
     /// `other`'s elements from its verb `verbStart` and its point `pointStart` on, copied as they are after this lane's,
     /// its subpath starting where `other`'s does.
-    mutating func appendElements(of other: borrowing DiagramPathLaneState, fromVerb verbStart: Int, point pointStart: Int) {
-        let addedVerbCount = other.verbCount - verbStart
-        let addedPointCount = other.pointCount - pointStart
+    mutating func appendElements(of other: UnsafeMutablePointer<DiagramPathLaneState>, fromVerb verbStart: Int, point pointStart: Int) {
+        let addedVerbCount = other.pointee.verbCount - verbStart
+        let addedPointCount = other.pointee.pointCount - pointStart
         guard addedVerbCount > 0 else { return }
         reserve(verbs: addedVerbCount, points: addedPointCount)
-        (verbs + verbCount).initialize(from: other.verbs + verbStart, count: addedVerbCount)
-        (points + pointCount).initialize(from: other.points + pointStart, count: addedPointCount)
+        (verbs + verbCount).initialize(from: other.pointee.verbs + verbStart, count: addedVerbCount)
+        (points + pointCount).initialize(from: other.pointee.points + pointStart, count: addedPointCount)
         verbCount &+= addedVerbCount
         pointCount &+= addedPointCount
-        subpathStart = other.subpathStart
+        subpathStart = other.pointee.subpathStart
     }
 
     /// One element copied as Core Graphics gives it out, for a lane read from a Core Graphics path: a move starts a
@@ -362,7 +380,7 @@ struct DiagramPathLaneState {
 
     /// Calls `body` with each element and its points as the lane holds them, which Core Graphics bounds and adds to other
     /// paths: a held shape made into its elements.
-    func forEachStoredElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) -> Void) {
+    mutating func forEachStoredElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) -> Void) {
         guard !holdsShape else { return withHeldShapeExpanded { expanded in expanded.forEachStoredElement(body) } }
         var point = UnsafePointer(points)
         for index in 0..<verbCount {
@@ -374,7 +392,7 @@ struct DiagramPathLaneState {
 
     /// Calls `body` with each element as Core Graphics gives a path's elements out (`CGPathApply`): a held arc's last
     /// curve as it works that out from the arc's stored sine, cosine and tangent.
-    func forEachElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) -> Void) {
+    mutating func forEachElement(_ body: (DiagramPathVerb, UnsafePointer<CGPoint>) -> Void) {
         guard holdsShape else { return forEachStoredElement(body) }
         let shape = heldShape
         withHeldShapeExpanded { expanded in

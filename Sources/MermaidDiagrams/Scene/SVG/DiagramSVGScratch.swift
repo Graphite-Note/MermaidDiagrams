@@ -7,26 +7,29 @@
  *              another is written on the thread gets a block of its own.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
+import CoreGraphics
 import Darwin
 
 /// The bytes a thread's SVG documents are written into (`withThreadScratch`): the block is lent to each document's
 /// buffer and given back, grown if it had to grow, so that a thread writing document after document allocates nothing
 /// once its block holds its largest document. A block grown past `largestKeptByteCount` is freed when it comes back.
-/// The root style and font family a document writes (escaped, Pele's variables or none, `font-family:` and the font's
-/// family) are kept with the font and colors they are of, since a host writes the same few again and again.
+/// The root style and font a document writes (escaped, Pele's variables or none, `font-family:` and the font's family,
+/// `;font-size:` and its size) are kept with the font and colors they are of, since a host writes the same few again and
+/// again.
 final class DiagramSVGScratch {
     private var block: UnsafeMutablePointer<UInt8>?
     private var blockCapacity = 0
     private var isLent = false
 
-    /// The escaped root style and font family last written, and what they are of.
+    /// The escaped root style and font last written, and what they are of.
     private(set) var rootStyle: [UInt8] = []
     private var rootStyleIsPeleVariables = false
     private var rootStylePostScriptName: String?
+    private var rootStyleFontSize: CGFloat = 0
     private var hasRootStyle = false
 
     /// The bytes a block is made with, enough for most documents.
@@ -87,16 +90,18 @@ final class DiagramSVGScratch {
     var keptByteCount: Int { blockCapacity }
     var blockAddress: UnsafeMutablePointer<UInt8>? { block }
 
-    /// Whether `rootStyle` is the root style and font family of these colors and this font.
-    func hasRootStyle(isPeleVariables: Bool, postScriptName: String?) -> Bool {
-        hasRootStyle && rootStyleIsPeleVariables == isPeleVariables && rootStylePostScriptName == postScriptName
+    /// Whether `rootStyle` is the root style and font of these colors and this font: the same size to the bit.
+    func hasRootStyle(isPeleVariables: Bool, postScriptName: String?, fontSize: CGFloat) -> Bool {
+        hasRootStyle && rootStyleIsPeleVariables == isPeleVariables && rootStyleFontSize.bitPattern == fontSize.bitPattern
+            && rootStylePostScriptName == postScriptName
     }
 
-    /// Keeps `bytes` as the root style and font family of these colors and this font.
-    func keepRootStyle(_ bytes: [UInt8], isPeleVariables: Bool, postScriptName: String?) {
+    /// Keeps `bytes` as the root style and font of these colors and this font.
+    func keepRootStyle(_ bytes: [UInt8], isPeleVariables: Bool, postScriptName: String?, fontSize: CGFloat) {
         rootStyle = bytes
         rootStyleIsPeleVariables = isPeleVariables
         rootStylePostScriptName = postScriptName
+        rootStyleFontSize = fontSize
         hasRootStyle = true
     }
 }

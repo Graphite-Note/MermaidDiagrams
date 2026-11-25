@@ -7,8 +7,8 @@
  *              to a host as those bytes or made a String once.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
- * Date: 24/11/2026
+ * Version: 0.8
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -82,40 +82,48 @@ public struct DiagramSVGWriter: Sendable {
     private func appendRootOpening(of scene: DiagramScene, diagramType: String, colors: DiagramSVGColors, scratch: DiagramSVGScratch,
                                    isLabelled: (byTitle: Bool, byDescription: Bool), into document: inout DiagramSVGBuffer) {
         document.append("<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" class=\"pele pele-")
+        let diagramTypeStart = document.count
         document.appendEscaped(diagramType)
+        let diagramTypeBytes = diagramTypeStart..<document.count
         document.reserve(64 + 4 * DiagramSVGNumberWriting.largestNumberByteCount)
         document.write("\" viewBox=\"0 0 ")
-        writeSize(of: scene, separator: " ", into: &document)
+        let widthStart = document.count
+        document.write(number: scene.size.width)
+        let widthBytes = widthStart..<document.count
+        document.write(byte: UInt8(ascii: " "))
+        let heightStart = document.count
+        document.write(number: scene.size.height)
+        let heightBytes = heightStart..<document.count
         document.write("\" width=\"")
-        writeSize(of: scene, separator: "\" height=\"", into: &document)
+        document.writeCopy(ofWritten: widthBytes)
+        document.write("\" height=\"")
+        document.writeCopy(ofWritten: heightBytes)
         document.write("\" style=\"")
-        appendRootStyleAndFontFamily(scene.font, colors: colors, scratch: scratch, into: &document)
-        document.reserve(16 + DiagramSVGNumberWriting.largestNumberByteCount)
-        document.write(";font-size:")
-        document.write(number: scene.font.size)
-        document.write("px")
+        appendRootStyle(scene.font, colors: colors, scratch: scratch, into: &document)
         if case .peleVariables = colors { appendSeriesDeclarations(scene.seriesColors, into: &document) }
         document.append("\" role=\"graphics-document document\" aria-roledescription=\"")
-        document.appendEscaped(diagramType)
+        document.appendCopy(ofWritten: diagramTypeBytes)
         document.append("\"")
         if isLabelled.byTitle { appendIdentifierAttribute(" aria-labelledby=\"", suffix: "-title\"", into: &document) }
         if isLabelled.byDescription { appendIdentifierAttribute(" aria-describedby=\"", suffix: "-desc\"", into: &document) }
         document.append(">")
     }
 
-    /// The colors' root style and `font-family:` with the font's family, escaped, as 0.7.0 wrote them piece by piece
-    /// (which escapes them as their joined text would be): made once for these colors and this font and kept in the
-    /// thread's scratch, as a host writes the same few again and again.
-    private func appendRootStyleAndFontFamily(_ font: DiagramFont, colors: DiagramSVGColors, scratch: DiagramSVGScratch,
-                                              into document: inout DiagramSVGBuffer) {
+    /// The colors' root style, `font-family:` with the font's family, escaped, as 0.7.0 wrote them piece by piece (which
+    /// escapes them as their joined text would be), and `;font-size:` with the font's size: made once for these colors
+    /// and this font and kept in the thread's scratch, as a host writes the same few again and again.
+    private func appendRootStyle(_ font: DiagramFont, colors: DiagramSVGColors, scratch: DiagramSVGScratch, into document: inout DiagramSVGBuffer) {
         let isPeleVariables: Bool
         if case .peleVariables = colors { isPeleVariables = true } else { isPeleVariables = false }
-        if !scratch.hasRootStyle(isPeleVariables: isPeleVariables, postScriptName: font.postScriptName) {
+        if !scratch.hasRootStyle(isPeleVariables: isPeleVariables, postScriptName: font.postScriptName, fontSize: font.size) {
             var style = DiagramSVGBuffer(reservingCapacity: 1_024)
             style.appendEscaped(colors.rootStyle)
             style.append("font-family:")
             style.appendEscaped(Self.fontFamily(font, isPeleVariables: isPeleVariables))
-            scratch.keepRootStyle(Array(style.bytes), isPeleVariables: isPeleVariables, postScriptName: font.postScriptName)
+            style.append(";font-size:")
+            style.appendNumber(font.size)
+            style.append("px")
+            scratch.keepRootStyle(Array(style.bytes), isPeleVariables: isPeleVariables, postScriptName: font.postScriptName, fontSize: font.size)
         }
         scratch.rootStyle.withUnsafeBufferPointer { bytes in document.append(bytes) }
     }
@@ -123,8 +131,9 @@ public struct DiagramSVGWriter: Sendable {
     /// `DiagramSeriesColors.styleDeclarations`, escaped, written piece by piece: `;--pele-series-N:<color>` for each slot
     /// set.
     private func appendSeriesDeclarations(_ seriesColors: DiagramSeriesColors, into document: inout DiagramSVGBuffer) {
-        for (slot, color) in seriesColors.colors.enumerated() {
-            guard let color else { continue }
+        let colors = seriesColors.colors
+        for slot in colors.indices {
+            guard let color = colors[slot] else { continue }
             document.reserve(16 + DiagramSVGNumberWriting.largestNumberByteCount)
             document.write(";--pele-series-")
             document.write(number: CGFloat(slot + 1))
@@ -181,9 +190,11 @@ public struct DiagramSVGWriter: Sendable {
         return isPeleVariables ? "var(--pele-font,\(family))" : family
     }
 
-    /// `prefix` when it is made of identifier characters only, else `pele`.
+    /// `prefix` when it is made of identifier characters only, else `pele`: Pele's own, which nearly every document is
+    /// written with, is known to be.
     private static func safeIdentifierPrefix(_ prefix: String) -> String {
-        !prefix.isEmpty && prefix.unicodeScalars.allSatisfy(isIdentifierCharacter) ? prefix : "pele"
+        if prefix == "pele" { return prefix }
+        return !prefix.isEmpty && prefix.unicodeScalars.allSatisfy(isIdentifierCharacter) ? prefix : "pele"
     }
 
     /// Letters, digits, `-` and `_` of ASCII: what an SVG id is made of here.
