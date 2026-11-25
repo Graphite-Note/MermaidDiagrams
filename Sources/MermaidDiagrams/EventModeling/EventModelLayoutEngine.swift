@@ -7,8 +7,8 @@
  *              notes and specifications listed below.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -55,6 +55,7 @@ public enum EventModelLayoutEngine {
     /// The text of each note's card and each specification's, by kind, heading and rows: `Note · 01 Name`, or `Given /
     /// When / Then · 01 Name` and its rows `Given  A, B`, `When  C` (only when it has a `when`), `Then  D`.
     static func cardTexts(of diagram: EventModelDiagram) -> [(isSpecification: Bool, heading: String, rows: [String])] {
+        guard !diagram.notes.isEmpty || !diagram.specifications.isEmpty else { return [] }
         var names: [String: String] = [:]
         for frame in diagram.frames { names[frame.identifier] = frame.name }
         func heading(_ kind: String, _ frame: String) -> String {
@@ -155,7 +156,9 @@ private struct EventModelAcrossLayout {
     /// halfway along it, at most 80 points back from its end) and never over its own lane's last box.
     private func placedAlongLanes() -> [Box] {
         var boxes: [Box] = []
-        var laneRights: [Int: CGFloat] = [:]
+        boxes.reserveCapacity(diagram.frames.count)
+        // Each lane's right end so far, nil before its first box.
+        var laneRights = [CGFloat?](repeating: nil, count: diagram.lanes.count)
         for (index, frame) in diagram.frames.enumerated() {
             let name = Engine.label(frame.name, measurers.name)
             let data = frame.data.map { data in EventModelText.hardWrapped(data, columns: Engine.dataColumns) } ?? []

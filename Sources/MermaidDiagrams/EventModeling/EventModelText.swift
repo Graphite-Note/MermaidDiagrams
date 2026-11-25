@@ -6,8 +6,8 @@
  *              number of characters or of a width, and lines that start at a left edge.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,6 +18,37 @@ enum EventModelText {
     /// The text's entity codes decoded, split at its line breaks, each line longer than `columns` characters cut into
     /// pieces of `columns` characters.
     static func hardWrapped(_ text: String, columns: Int) -> [String] {
+        if let lines = text.utf8.withContiguousStorageIfAvailable({ bytes in asciiHardWrapped(bytes, columns: columns) }), let lines { return lines }
+        return hardWrappedScalarByScalar(text, columns: columns)
+    }
+
+    /// `hardWrapped` of ASCII text without a semicolon, which holds no entity code, nor a carriage return, which Swift
+    /// would join to a line feed after it: cut on its bytes, a byte a character. Nil for any other text.
+    private static func asciiHardWrapped(_ bytes: UnsafeBufferPointer<UInt8>, columns: Int) -> [String]? {
+        var combined: UInt8 = 0
+        for byte in bytes {
+            if byte == UInt8(ascii: ";") || byte == MermaidByte.carriageReturn { return nil }
+            combined |= byte
+        }
+        guard combined < 0x80, columns > 0 else { return nil }
+        var lines: [String] = []
+        var lineStart = 0
+        while true {
+            var lineEnd = lineStart
+            while lineEnd < bytes.count, bytes[lineEnd] != MermaidByte.newline { lineEnd += 1 }
+            var pieceStart = lineStart
+            repeat {
+                let pieceEnd = min(lineEnd, pieceStart + columns)
+                lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[pieceStart..<pieceEnd]), as: UTF8.self))
+                pieceStart = pieceEnd
+            } while pieceStart < lineEnd
+            guard lineEnd < bytes.count else { return lines }
+            lineStart = lineEnd + 1
+        }
+    }
+
+    /// `hardWrapped` read scalar by scalar, for any text.
+    static func hardWrappedScalarByScalar(_ text: String, columns: Int) -> [String] {
         DiagramLabelDecoder.decodingEntities(text).split(separator: "\n", omittingEmptySubsequences: false).flatMap { line -> [String] in
             let scalars = Array(line.unicodeScalars)
             guard scalars.count > columns else { return [String(line)] }

@@ -116,6 +116,25 @@ final class EventModelReadingEquivalenceTests: XCTestCase {
         }
     }
 
+    /// A frame's data and a card's rows are cut into lines on their bytes, for ASCII without a semicolon or a carriage
+    /// return, as they are scalar by scalar.
+    func testDataIsCutIntoLinesAsScalarByScalar() {
+        let pieces = ["a", "key: value", "\n", "\n\n", " ", String(repeating: "x", count: 47), String(repeating: "y", count: 49), "&amp;", "#59;",
+                      ";", "\r", "\r\n", "é", "中", "\t"]
+        var state: UInt64 = 0xDA7A_C07
+        func below(_ bound: Int) -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int((state >> 33) % UInt64(bound))
+        }
+        for _ in 0..<10_000 {
+            let text = (0..<below(8)).map { _ in pieces[below(pieces.count)] }.joined()
+            for columns in [1, 3, 48, 80] {
+                XCTAssertEqual(EventModelText.hardWrapped(text, columns: columns), EventModelText.hardWrappedScalarByScalar(text, columns: columns),
+                               text.debugDescription)
+            }
+        }
+    }
+
     /// Mermaid's event modeling documentation and the grammar's corners.
     static let specificationTexts = [
         "eventmodeling\n\ntf 01 ui CartUI\ntf 02 cmd AddItem\ntf 03 evt ItemAdded\n",

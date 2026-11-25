@@ -34,16 +34,7 @@ enum EventModelDiagramBuilder {
             entities.append(entity)
             laneIndices.append(lanes.laneIndex(of: entity.kind, namespace: entity.namespace))
         }
-        var relations: [EventModelRelation] = []
-        relations.reserveCapacity(written.count)
-        var sources: [Int] = []
-        for index in written.indices {
-            Self.sources(of: written[index], at: index, laneIndices: laneIndices, frameNumbers: frameNumbers, into: &sources)
-            for source in sources {
-                guard relations.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-                relations.append(EventModelRelation(sourceFrameIndex: source, targetFrameIndex: index))
-            }
-        }
+        let relations = try relations(of: written, laneIndices: laneIndices, frameNumbers: frameNumbers, limits: limits)
         var dataByName: [String: String] = [:]
         for dataBlock in statements.dataBlocks where dataByName[dataBlock.name] == nil { dataByName[dataBlock.name] = dataBlock.block }
         let sorted = lanes.sortedLanes()
@@ -62,6 +53,22 @@ enum EventModelDiagramBuilder {
             accessibilityDescription: statements.accessibilityDescription.map(FirstMatchStatementValues.accessibilityDescription),
             frames: frames, lanes: sorted.lanes, relations: relations, notes: statements.notes, specifications: statements.specifications,
             entities: statements.entities)
+    }
+
+    /// Which frame feeds which, for each frame in turn, the frames that feed it in frame order; past the edge limit, an error.
+    private static func relations(of written: [EventModelWrittenFrame], laneIndices: [Int], frameNumbers: EventModelFrameNumbers,
+                                  limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> [EventModelRelation] {
+        var relations: [EventModelRelation] = []
+        relations.reserveCapacity(written.count)
+        var sources: [Int] = []
+        for index in written.indices {
+            Self.sources(of: written[index], at: index, laneIndices: laneIndices, frameNumbers: frameNumbers, into: &sources)
+            for source in sources {
+                guard relations.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+                relations.append(EventModelRelation(sourceFrameIndex: source, targetFrameIndex: index))
+            }
+        }
+        return relations
     }
 
     /// The frame's data: of the data block it names, when one of that name was written, else its own written data.
