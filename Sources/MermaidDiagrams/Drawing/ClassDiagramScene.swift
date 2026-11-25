@@ -3,11 +3,11 @@
  * -----------------------------
  * Layer: Core
  * Description: A laid-out class diagram's scene: its drawing parts back to front in the colors' roles, as Pele paints
- *              them.
+ *              them, its paths recorded into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -19,40 +19,53 @@ extension DiagramScene {
     /// Annotations and cardinalities are in the muted role and notes on the alternate surface, the colors
     /// `ClassDiagramPalette` names `muted` and `noteSurface`.
     public init(layout: ClassDiagramLayout) {
-        var builder = DiagramSceneBuilder()
-        ClassDiagramDrawingParts(layout: layout).addScene(to: &builder)
-        self = builder.scene(size: layout.size, font: layout.font)
+        self = DiagramSceneWorkspace.withRecording { workspace in
+            var builder = DiagramSceneBuilder(workspace: workspace)
+            ClassDiagramSceneRecording.add(layout, to: &builder, workspace: workspace)
+            return builder.scene(size: layout.size, font: layout.font)
+        }
     }
 }
 
-extension ClassDiagramDrawingParts {
+/// Adds a class diagram's painting to a scene, its paths recorded into lanes of `workspace`, grouped as
+/// `ClassDiagramDrawingParts` groups them.
+enum ClassDiagramSceneRecording {
     /// Every line is drawn with round caps and joins.
-    func addScene(to builder: inout DiagramSceneBuilder) {
-        let line = DiagramStroke.rounded(lineWidth: Self.lineWidth)
-        namespaces.addBoxes(to: &builder)
-        builder.stroke(solidLines, .line, line, part: .edge)
-        builder.stroke(dashedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dashedDashLengths), part: .edge)
-        builder.stroke(dottedLines, .line, .rounded(lineWidth: Self.lineWidth, dashLengths: Self.dottedDashLengths), part: .edge)
-        builder.fill(filledMarks, .line, part: .marker)
-        builder.stroke(strokedMarks, .line, line, part: .marker)
-        namespaces.addCrossedTitles(to: &builder)
-        builder.fill(edgeTextPatches, .background, part: .labelBackground)
-        builder.texts(edgeTexts, .foreground, part: .edgeLabel)
-        builder.texts(cardinalities, .muted, part: .edgeLabel)
-        builder.fill(classFills, .surface, part: .node)
-        builder.fill(noteFills, .alternateSurface, part: .note)
-        builder.stroke(outlines, .border, line, part: .node)
-        builder.texts(annotations, .muted, part: .label)
-        builder.texts(names, .foreground, isBold: true, part: .label)
-        for member in members {
-            switch member.classifier {
-            case .plain, .static: builder.text(member.text, .foreground, part: .label)
-            case .abstract: builder.text(member.text, .foreground, isItalic: true, part: .label)
+    static func add(_ layout: ClassDiagramLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        let lineWidth = ClassDiagramDrawingParts.lineWidth
+        let line = DiagramStroke.rounded(lineWidth: lineWidth)
+        let namespaces = FlowchartClusterPaths(clusters: layout.namespaces, making: workspace)
+        FlowchartSceneRecording.addBoxes(of: namespaces, to: &builder)
+        let paths = ClassDiagramPaths(layout: layout, making: workspace)
+        builder.stroke(paths.solidLines, .line, line, part: .edge)
+        builder.stroke(paths.dashedLines, .line, .rounded(lineWidth: lineWidth, dashLengths: ClassDiagramDrawingParts.dashedDashLengths), part: .edge)
+        builder.stroke(paths.dottedLines, .line, .rounded(lineWidth: lineWidth, dashLengths: ClassDiagramDrawingParts.dottedDashLengths), part: .edge)
+        builder.fill(paths.filledMarks, .line, part: .marker)
+        builder.stroke(paths.strokedMarks, .line, line, part: .marker)
+        FlowchartSceneRecording.addCrossedTitles(of: namespaces, to: &builder)
+        builder.fill(paths.edgeTextPatches, .background, part: .labelBackground)
+        for edge in layout.relations { builder.text(edge.text, .foreground, part: .edgeLabel) }
+        for edge in layout.relations {
+            builder.text(edge.sourceCardinality, .muted, part: .edgeLabel)
+            builder.text(edge.targetCardinality, .muted, part: .edgeLabel)
+        }
+        builder.fill(paths.classFills, .surface, part: .node)
+        builder.fill(paths.noteFills, .alternateSurface, part: .note)
+        builder.stroke(paths.outlines, .border, line, part: .node)
+        for box in layout.classes { builder.texts(box.annotations, .muted, part: .label) }
+        for box in layout.classes { builder.text(box.name, .foreground, isBold: true, part: .label) }
+        for box in layout.classes {
+            for member in box.members {
+                switch member.classifier {
+                case .plain, .static: builder.text(member.text, .foreground, part: .label)
+                case .abstract: builder.text(member.text, .foreground, isItalic: true, part: .label)
+                }
             }
         }
-        builder.stroke(memberUnderlines, .foreground, line, part: .label)
-        builder.texts(noteTexts, .foreground, part: .note)
-        builder.title(title)
+        builder.stroke(paths.memberUnderlines, .foreground, line, part: .label)
+        for note in layout.notes { builder.text(note.text, .foreground, part: .note) }
+        builder.texts(layout.interfaces, .foreground, part: .note)
+        builder.title(layout.title)
     }
 }
 

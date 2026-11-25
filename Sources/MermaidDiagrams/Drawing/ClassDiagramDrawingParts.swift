@@ -2,11 +2,12 @@
  * File: ClassDiagramDrawingParts.swift
  * ------------------------------------
  * Layer: Core
- * Description: A laid-out class diagram's geometry grouped by how it is painted.
+ * Description: A laid-out class diagram's geometry grouped by how it is painted, as Core Graphics paths or in any kind
+ *              a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -66,102 +67,129 @@ public struct ClassDiagramDrawingParts {
 
     public init(layout: ClassDiagramLayout) {
         namespaces = FlowchartClusterDrawingParts(clusters: layout.namespaces)
-        let lines = LinePaths(edges: layout.relations + layout.noteLinks)
-        solidLines = lines.solid
-        dashedLines = lines.dashed
-        dottedLines = lines.dotted
-        filledMarks = lines.filledMarks
-        strokedMarks = lines.strokedMarks
-        edgeTextPatches = lines.textPatches
+        let paths = ClassDiagramPaths(layout: layout, making: DiagramCoreGraphicsPaths())
+        solidLines = paths.solidLines.path
+        dashedLines = paths.dashedLines.path
+        dottedLines = paths.dottedLines.path
+        filledMarks = paths.filledMarks.path
+        strokedMarks = paths.strokedMarks.path
+        edgeTextPatches = paths.edgeTextPatches.path
         edgeTexts = layout.relations.compactMap(\.text)
         cardinalities = layout.relations.flatMap { edge in [edge.sourceCardinality, edge.targetCardinality].compactMap { cardinality in cardinality } }
-        let boxes = BoxPaths(classes: layout.classes, notes: layout.notes)
-        classFills = boxes.classFills
-        noteFills = boxes.noteFills
-        outlines = boxes.outlines
+        classFills = paths.classFills.path
+        noteFills = paths.noteFills.path
+        outlines = paths.outlines.path
         annotations = layout.classes.flatMap(\.annotations)
         names = layout.classes.map(\.name)
         members = layout.classes.flatMap(\.members)
-        memberUnderlines = Self.underlines(of: members)
+        memberUnderlines = paths.memberUnderlines.path
         noteTexts = layout.notes.map(\.text) + layout.interfaces
         title = layout.title
     }
+}
 
-    /// A line under each static member's text, from its first character to its last.
-    private static func underlines(of members: [ClassDiagramLayoutMember]) -> CGPath {
-        let path = CGMutablePath()
-        for member in members {
-            switch member.classifier {
-            case .static:
-                let text = member.text
-                let y = text.center.y + text.fontSize * (DiagramTextDrawing.baselineShiftRatio + underlineDropRatio)
-                path.move(to: CGPoint(x: text.frame.minX, y: y))
-                path.addLine(to: CGPoint(x: text.frame.maxX, y: y))
-            case .plain, .abstract:
-                continue
+/// The paths of `ClassDiagramDrawingParts` in any kind a drawing records: Core Graphics paths or lanes of the scene's
+/// workspace. A shape made whole (a box, a relation's line, a diamond) is made for a moment, added where it is painted
+/// and given back.
+struct ClassDiagramPaths<Path: DiagramPathRecording> {
+    let solidLines: Path
+    let dashedLines: Path
+    let dottedLines: Path
+    let filledMarks: Path
+    let strokedMarks: Path
+    let edgeTextPatches: Path
+    let classFills: Path
+    let noteFills: Path
+    let outlines: Path
+    let memberUnderlines: Path
+
+    init<Maker: DiagramPathMaking>(layout: ClassDiagramLayout, making maker: Maker) where Maker.Path == Path {
+        solidLines = maker.makePath()
+        dashedLines = maker.makePath()
+        dottedLines = maker.makePath()
+        filledMarks = maker.makePath()
+        strokedMarks = maker.makePath()
+        edgeTextPatches = maker.makePath()
+        let lines = LinePaths(solid: solidLines, dashed: dashedLines, dotted: dottedLines, filledMarks: filledMarks, strokedMarks: strokedMarks,
+                              textPatches: edgeTextPatches)
+        for edge in layout.relations { lines.addLine(of: edge, making: maker) }
+        for edge in layout.noteLinks { lines.addLine(of: edge, making: maker) }
+        classFills = maker.makePath()
+        noteFills = maker.makePath()
+        outlines = maker.makePath()
+        Self.addBoxes(of: layout, fills: classFills, noteFills: noteFills, outlines: outlines, making: maker)
+        memberUnderlines = maker.makePath()
+        Self.addUnderlines(of: layout, to: memberUnderlines)
+    }
+
+    /// The classes' boxes and the notes, filled and outlined, with the lines between compartments and the notes' folds.
+    private static func addBoxes<Maker: DiagramPathMaking>(of layout: ClassDiagramLayout, fills classFills: Path, noteFills: Path, outlines: Path,
+                                                           making maker: Maker) where Maker.Path == Path {
+        for box in layout.classes {
+            let madeCount = maker.madePathCount
+            let outline = maker.roundedRectangle(box.frame, cornerWidth: ClassDiagramDrawingParts.boxCornerRadius,
+                                                 cornerHeight: ClassDiagramDrawingParts.boxCornerRadius)
+            classFills.addPath(outline, alsoTo: outlines)
+            maker.givePathsBack(downTo: madeCount)
+            for y in box.dividerYs {
+                outlines.move(to: CGPoint(x: box.frame.minX, y: y))
+                outlines.addLine(to: CGPoint(x: box.frame.maxX, y: y))
             }
         }
-        return path
+        for note in layout.notes {
+            let frame = note.frame
+            let fold = ClassDiagramDrawingParts.noteFold
+            let madeCount = maker.madePathCount
+            let outline = maker.makePath()
+            outline.addLines(between: [CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX - fold, y: frame.minY),
+                                       CGPoint(x: frame.maxX, y: frame.minY + fold), CGPoint(x: frame.maxX, y: frame.maxY),
+                                       CGPoint(x: frame.minX, y: frame.maxY)])
+            outline.closeSubpath()
+            noteFills.addPath(outline, alsoTo: outlines)
+            maker.givePathsBack(downTo: madeCount)
+            outlines.addLines(between: [CGPoint(x: frame.maxX - fold, y: frame.minY), CGPoint(x: frame.maxX - fold, y: frame.minY + fold),
+                                        CGPoint(x: frame.maxX, y: frame.minY + fold)])
+        }
+    }
+
+    /// A line under each static member's text, from its first character to its last.
+    private static func addUnderlines(of layout: ClassDiagramLayout, to memberUnderlines: Path) {
+        for box in layout.classes {
+            for member in box.members where member.classifier == .static {
+                let text = member.text
+                let y = text.center.y + text.fontSize * (DiagramTextDrawing.baselineShiftRatio + ClassDiagramDrawingParts.underlineDropRatio)
+                memberUnderlines.move(to: CGPoint(x: text.frame.minX, y: y))
+                memberUnderlines.addLine(to: CGPoint(x: text.frame.maxX, y: y))
+            }
+        }
     }
 
     /// The lines by stroke, their marks, and the patches behind relation text.
     private struct LinePaths {
-        let solid = CGMutablePath()
-        let dashed = CGMutablePath()
-        let dotted = CGMutablePath()
-        let filledMarks = CGMutablePath()
-        let strokedMarks = CGMutablePath()
-        let textPatches = CGMutablePath()
+        let solid: Path
+        let dashed: Path
+        let dotted: Path
+        let filledMarks: Path
+        let strokedMarks: Path
+        let textPatches: Path
 
-        init(edges: [ClassDiagramLayoutEdge]) {
-            for edge in edges {
-                let line = DiagramEdgeDrawing.path(edge.path)
-                switch edge.line {
-                case .solid: solid.addPath(line)
-                case .dashed: dashed.addPath(line)
-                case .dotted: dotted.addPath(line)
-                }
-                for mark in [edge.sourceMark, edge.targetMark].compactMap({ mark in mark }) {
-                    ClassDiagramMarkDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks)
-                }
-                if let text = edge.text {
-                    textPatches.addPath(CGPath(roundedRect: text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
-                                               cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
-                                               cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius, transform: nil))
-                }
+        /// A relation's or a note's line by its stroke, its marks, and the patch behind its text.
+        func addLine<Maker: DiagramPathMaking>(of edge: ClassDiagramLayoutEdge, making maker: Maker) where Maker.Path == Path {
+            let madeCount = maker.madePathCount
+            defer { maker.givePathsBack(downTo: madeCount) }
+            let line = maker.makePath()
+            DiagramEdgeDrawing.record(edge.path, into: line)
+            switch edge.line {
+            case .solid: solid.addPath(line)
+            case .dashed: dashed.addPath(line)
+            case .dotted: dotted.addPath(line)
             }
-        }
-    }
-
-    /// The boxes and notes to fill, and every outline and inner line to stroke.
-    private struct BoxPaths {
-        let classFills = CGMutablePath()
-        let noteFills = CGMutablePath()
-        let outlines = CGMutablePath()
-
-        init(classes: [ClassDiagramLayoutClass], notes: [ClassDiagramLayoutNote]) {
-            for box in classes {
-                let outline = CGPath(roundedRect: box.frame, cornerWidth: ClassDiagramDrawingParts.boxCornerRadius,
-                                     cornerHeight: ClassDiagramDrawingParts.boxCornerRadius, transform: nil)
-                classFills.addPath(outline)
-                outlines.addPath(outline)
-                for y in box.dividerYs {
-                    outlines.move(to: CGPoint(x: box.frame.minX, y: y))
-                    outlines.addLine(to: CGPoint(x: box.frame.maxX, y: y))
-                }
-            }
-            for note in notes {
-                let frame = note.frame
-                let fold = ClassDiagramDrawingParts.noteFold
-                let outline = CGMutablePath()
-                outline.addLines(between: [CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX - fold, y: frame.minY),
-                                           CGPoint(x: frame.maxX, y: frame.minY + fold), CGPoint(x: frame.maxX, y: frame.maxY),
-                                           CGPoint(x: frame.minX, y: frame.maxY)])
-                outline.closeSubpath()
-                noteFills.addPath(outline)
-                outlines.addPath(outline)
-                outlines.addLines(between: [CGPoint(x: frame.maxX - fold, y: frame.minY), CGPoint(x: frame.maxX - fold, y: frame.minY + fold),
-                                            CGPoint(x: frame.maxX, y: frame.minY + fold)])
+            if let mark = edge.sourceMark { ClassDiagramMarkDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks, making: maker) }
+            if let mark = edge.targetMark { ClassDiagramMarkDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks, making: maker) }
+            if let text = edge.text {
+                textPatches.addPath(maker.roundedRectangle(text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
+                                                           cornerWidth: FlowchartDrawingParts.edgeTextPatchCornerRadius,
+                                                           cornerHeight: FlowchartDrawingParts.edgeTextPatchCornerRadius))
             }
         }
     }

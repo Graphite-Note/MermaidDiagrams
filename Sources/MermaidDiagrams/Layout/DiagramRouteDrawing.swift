@@ -1,3 +1,15 @@
+/**
+ * File: DiagramRouteDrawing.swift
+ * -------------------------------
+ * Layer: Core
+ * Description: The path through an edge's route as Pele draws it: an S between two points out of line,
+ *              a straight segment between two in line.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 import Foundation
 
@@ -10,7 +22,7 @@ enum DiagramRouteDrawing {
     ///   - startTrim: How much of the line the source's mark takes.
     ///   - endTrim: How much of the line the target's mark takes.
     /// - Returns: The path, and the unit directions the edge leaves its source and arrives at its target in.
-    static func path(through points: [CGPoint], flowIsVertical: Bool, startTrim: CGFloat,
+    static func path(through points: consuming [CGPoint], flowIsVertical: Bool, startTrim: CGFloat,
                      endTrim: CGFloat) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector) {
         path(through: points, segmentsRunVertically: repeatElement(flowIsVertical, count: points.count - 1), startTrim: startTrim, endTrim: endTrim)
     }
@@ -18,10 +30,10 @@ enum DiagramRouteDrawing {
     /// The path through a route whose segments follow flows of their own, as an edge does that crosses into a box
     /// laid out in another direction: each S leaves and arrives along its own segment's flow.
     /// - Parameter segmentsRunVertically: For each segment, whether the flow it follows runs vertically.
-    static func path<Axes: RandomAccessCollection<Bool>>(through points: [CGPoint], segmentsRunVertically: Axes, startTrim: CGFloat,
+    static func path<Axes: RandomAccessCollection<Bool>>(through points: consuming [CGPoint], segmentsRunVertically: Axes, startTrim: CGFloat,
                                                          endTrim: CGFloat) -> (path: DiagramPath, startDirection: CGVector, endDirection: CGVector)
         where Axes.Index == Int {
-        var points = points
+        var points = consume points
         let firstAxis = segmentsRunVertically[segmentsRunVertically.startIndex]
         let lastAxis = segmentsRunVertically[segmentsRunVertically.endIndex - 1]
         let startDirection = direction(from: points[0], to: points[1], flowIsVertical: firstAxis)
@@ -30,6 +42,7 @@ enum DiagramRouteDrawing {
         let last = points.count - 1
         points[last] = CGPoint(x: points[last].x - endDirection.dx * endTrim, y: points[last].y - endDirection.dy * endTrim)
         var segments: [DiagramPathSegment] = []
+        segments.reserveCapacity(points.count - 1)
         for index in 1..<points.count {
             let from = points[index - 1]
             let to = points[index]

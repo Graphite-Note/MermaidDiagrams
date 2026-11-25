@@ -6,8 +6,8 @@
  *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -56,60 +56,22 @@ public enum StateDiagramLayoutEngine {
         let measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
                                                wrappingWidth: wrappingWidth, noteWrappingWidth: noteWrappingWidth)
         let surroundings = StateDiagramSurroundings(diagram: diagram, measured: measured, axes: flowAxes)
-        guard diagram.composites.isEmpty else {
-            return try layoutInBoxes(diagram, measured: measured, surroundings: surroundings, nameText: nameText, font: font, limits: limits)
-        }
-        let order = flowOrder(of: diagram)
-        var positionOfState = [Int](repeating: 0, count: order.count)
-        for (position, state) in order.enumerated() { positionOfState[state] = position }
-        let layeredTransitionIndices = diagram.transitions.indices.filter { transitionIndex in
-            diagram.transitions[transitionIndex].sourceIndex != diagram.transitions[transitionIndex].targetIndex
-        }
-        let graph = LayeredGraph(nodeSizes: order.map { state in surroundings.placeSizes[state] },
-                                 edges: layeredTransitionIndices.map { transitionIndex in
-                                     let transition = diagram.transitions[transitionIndex]
-                                     let labelSize = measured.transitionTexts[transitionIndex].map { text in
-                                         flowAxes.flowSize(of: CGSize(width: text.size.width + transitionTextRoom.width,
-                                                                      height: text.size.height + transitionTextRoom.height))
-                                     }
-                                     return LayeredEdge(source: positionOfState[transition.sourceIndex], target: positionOfState[transition.targetIndex],
-                                                        minimumRankSpan: 1, labelSize: labelSize)
-                                 },
-                                 nodeSideSpans: order.map { state in measured.sideSpan(of: state, in: diagram, flowIsVertical: flowAxes.flowIsVertical) })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
-        }
-        var page = StateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings,
-                                            axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: placement.extent.height))
-        page.placeStates(flowCenters: diagram.states.indices.map { state in placement.nodeCenters[positionOfState[state]] })
-        page.placeTransitions(layeredTransitionIndices: layeredTransitionIndices, placement: placement)
-        page.placeSelfLoops()
+        let clustered = diagram.composites.isEmpty ? nil
+            : try StateDiagramClusterGraph(diagram: diagram, measured: measured, surroundings: surroundings, flowIsVertical: flowAxes.flowIsVertical,
+                                           titleText: nameText)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
-    }
-
-    /// A diagram with composite states: each composite a box laid out on its own and placed in the box around it, its
-    /// concurrent regions boxes side by side inside it (`StateDiagramClusterGraph`, `LayeredClusterLayout`). What is not
-    /// laid out fails with `compositeStatesNotLaidOut`.
-    private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: StateDiagram, measured: StateDiagramMeasurement,
-                                                                      surroundings: StateDiagramSurroundings, nameText: Measurer, font: DiagramFont,
-                                                                      limits: MermaidDiagramLimits) throws(StateDiagramLayoutError) -> StateDiagramLayout {
-        let axes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let clustered = try StateDiagramClusterGraph(diagram: diagram, measured: measured, surroundings: surroundings,
-                                                     flowIsVertical: axes.flowIsVertical, titleText: nameText)
-        let placement: LayeredClusterPlacement
-        do {
-            placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
-        } catch {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        let laidOut = DiagramScratchArena.withCurrentThread { arena in
+            guard let clustered else {
+                return StateDiagramRankedLayout.layout(diagram, measured: measured, surroundings: surroundings, title: title, font: font,
+                                                       maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
+            }
+            // Each composite a box laid out on its own and placed in the box around it, its concurrent regions boxes side by
+            // side inside it; what is not laid out fails with `compositeStatesNotLaidOut`.
+            return StateDiagramBoxedLayout.layout(diagram, clustered: clustered, measured: measured, surroundings: surroundings, title: title,
+                                                  font: font, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
         }
-        var page = StateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings, axes: axes)
-        page.placeStates(clustered: clustered, placement: placement)
-        page.placeTransitions(clustered: clustered, placement: placement)
-        page.placeSelfLoops()
-        page.placeComposites(clustered: clustered, placement: placement)
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
-        return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
+        guard let laidOut else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        return laidOut
     }
 
     /// The states in the order the layout takes them, Pele's: starts first, then the others in the order transitions

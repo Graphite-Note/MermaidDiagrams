@@ -5,8 +5,8 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -29,16 +29,16 @@ struct ClassDiagramPageAssembly {
     let measured: ClassDiagramMeasurement
     let markRowHeight: CGFloat
     let axes: FlowchartFlowAxes
-    private(set) var nodeCenters: [CGPoint] = []
+    var nodeCenters: [CGPoint] = []
     /// By the index of the measurement's edge; nil until the edge is placed.
-    private var edges: [ClassDiagramLayoutEdge?]
+    var edges: [ClassDiagramLayoutEdge?]
     /// The namespaces' boxes, for a diagram laid out in them.
-    private var namespaces: [FlowchartLayoutCluster] = []
+    var namespaces: [FlowchartLayoutCluster] = []
     /// For each relation placed through boxes, the points it passes: where it crosses a namespace's top.
     private var edgePoints: [[CGPoint]] = []
     /// The namespace each node sits in and the one each namespace is in, for a diagram laid out in them.
-    private var nodeNamespaces: [Int?] = []
-    private var namespaceParents: [Int?] = []
+    var nodeNamespaces: [Int?] = []
+    var namespaceParents: [Int?] = []
 
     init(measured: ClassDiagramMeasurement, markRowHeight: CGFloat, axes: FlowchartFlowAxes) {
         self.measured = measured
@@ -47,48 +47,71 @@ struct ClassDiagramPageAssembly {
         edges = Array(repeating: nil, count: measured.edges.count)
     }
 
-    mutating func placeNodes(flowCenters: [CGPoint]) {
-        nodeCenters = flowCenters.map(axes.pagePoint)
+    /// The nodes of a diagram laid out in ranks, at their flat nodes' centers.
+    mutating func placeNodes(flowNodes: ScratchSpan<LayeredFlatNode>) {
+        nodeCenters.reserveCapacity(flowNodes.count)
+        for node in flowNodes { nodeCenters.append(axes.pagePoint(CGPoint(x: node.x, y: node.y))) }
     }
 
-    /// The edges between two different nodes, along their routes. `layeredEdgeIndices[i]` is the edge of the
-    /// placement's `i`-th route.
-    mutating func placeEdges(layeredEdgeIndices: [Int], placement: LayeredPlacement) {
-        let ends = layeredEdgeIndices.enumerated().flatMap { layeredIndex, edgeIndex in
-            routeEnds(of: edgeIndex, route: placement.edgeRoutes[layeredIndex])
+    /// The edges between two different nodes, along their routes. `layeredEdgeIndices[i]` is the edge of the flat
+    /// layout's `i`-th edge, whose route runs from its source's center to its target's through its path's inner points.
+    mutating func placeEdges(layeredEdgeIndices: ScratchSpan<Int>, nodes: ScratchSpan<LayeredFlatNode>, edges laidOut: ScratchSpan<LayeredSpanEdge>,
+                             points: ScratchSpan<CGPoint>) {
+        func route(of layeredIndex: Int) -> RankedRoute {
+            let edge = laidOut[layeredIndex]
+            let path = edge.pointStart >= 0 ? points.part(edge.pointStart..<(edge.pointStart + edge.pointCount)) : .empty
+            return RankedRoute(source: CGPoint(x: nodes[edge.tail].x, y: nodes[edge.tail].y), target: CGPoint(x: nodes[edge.head].x, y: nodes[edge.head].y),
+                               path: path)
         }
+        var ends: [ClassDiagramEdgePorts.End] = []
+        ends.reserveCapacity(2 * layeredEdgeIndices.count)
+        for layeredIndex in 0..<layeredEdgeIndices.count { appendRouteEnds(of: layeredEdgeIndices[layeredIndex], route: route(of: layeredIndex), to: &ends) }
         let ports = ClassDiagramEdgePorts(ends: ends, edgeCount: measured.edges.count, nodeCenters: nodeCenters, sizes: measured.sizes,
                                           markRowHeight: markRowHeight)
-        var endsByEdge = [(source: ClassDiagramEdgePorts.End?, target: ClassDiagramEdgePorts.End?)](repeating: (nil, nil), count: measured.edges.count)
-        for end in ends {
-            if end.isSourceEnd { endsByEdge[end.edgeIndex].source = end } else { endsByEdge[end.edgeIndex].target = end }
+        for layeredIndex in 0..<layeredEdgeIndices.count {
+            let edgeIndex = layeredEdgeIndices[layeredIndex]
+            // The two ends of a laid-out edge are its source's then its target's.
+            guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
+            let route = route(of: layeredIndex)
+            let laidOutEdge = laidOut[layeredIndex]
+            let textCenter = laidOutEdge.labelWidth > 0 ? axes.pagePoint(laidOutEdge.labelCenter)
+                : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
+            var routePoints: [CGPoint] = []
+            routePoints.reserveCapacity(route.count + 2)
+            routePoints.append(sourcePort)
+            for index in 1..<(route.count - 1) { routePoints.append(axes.pagePoint(route[index])) }
+            routePoints.append(targetPort)
+            edges[edgeIndex] = edgeAlong(routePoints, edgeIndex: edgeIndex, ends: (ends[2 * layeredIndex], ends[2 * layeredIndex + 1]),
+                                         textCenter: textCenter)
         }
-        for (layeredIndex, edgeIndex) in layeredEdgeIndices.enumerated() {
-            guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex],
-                  let sourceEnd = endsByEdge[edgeIndex].source, let targetEnd = endsByEdge[edgeIndex].target else { continue }
-            let route = placement.edgeRoutes[layeredIndex]
-            let textCenter = placement.edgeLabelCenters[layeredIndex].map(axes.pagePoint)
-                ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
-            edges[edgeIndex] = edgeAlong([sourcePort] + route.dropFirst().dropLast().map(axes.pagePoint) + [targetPort], edgeIndex: edgeIndex,
-                                         ends: (sourceEnd, targetEnd), textCenter: textCenter)
+    }
+
+    /// A laid-out edge's route in flow space, from its source's center to its target's through its path's inner points.
+    private struct RankedRoute {
+        let source: CGPoint
+        let target: CGPoint
+        let path: ScratchSpan<CGPoint>
+
+        var count: Int { path.count > 2 ? path.count : 2 }
+
+        subscript(index: Int) -> CGPoint {
+            index == 0 ? source : index == count - 1 ? target : path[index]
         }
     }
 
     /// The two ends of a route on the sides of their nodes facing it, with what orders and spaces them.
-    private func routeEnds(of edgeIndex: Int, route: [CGPoint]) -> [ClassDiagramEdgePorts.End] {
+    private func appendRouteEnds(of edgeIndex: Int, route: RankedRoute, to ends: inout [ClassDiagramEdgePorts.End]) {
         let edge = measured.edges[edgeIndex]
         let last = route.count - 1
         // In a flow that runs down, an end's text goes right of its line when the line bends right or runs straight.
         func isTextAfter(bend: CGFloat) -> Bool { axes.flowIsVertical ? bend >= 0 : bend > 0 }
-        return [
-            ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: true, node: edge.source,
-                                      side: route[1].y > route[0].y ? axes.downstreamSide : axes.upstreamSide, neighborAlongSide: route[1].x,
-                                      cardinalityWidth: edge.sourceCardinality?.size.width ?? 0, isTextAfter: isTextAfter(bend: route[1].x - route[0].x)),
-            ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: false, node: edge.target,
-                                      side: route[last - 1].y < route[last].y ? axes.upstreamSide : axes.downstreamSide,
-                                      neighborAlongSide: route[last - 1].x, cardinalityWidth: edge.targetCardinality?.size.width ?? 0,
-                                      isTextAfter: isTextAfter(bend: route[last - 1].x - route[last].x)),
-        ]
+        ends.append(ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: true, node: edge.source,
+                                              side: route[1].y > route[0].y ? axes.downstreamSide : axes.upstreamSide, neighborAlongSide: route[1].x,
+                                              cardinalityWidth: edge.sourceCardinality?.size.width ?? 0, isTextAfter: isTextAfter(bend: route[1].x - route[0].x)))
+        ends.append(ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: false, node: edge.target,
+                                              side: route[last - 1].y < route[last].y ? axes.upstreamSide : axes.downstreamSide,
+                                              neighborAlongSide: route[last - 1].x, cardinalityWidth: edge.targetCardinality?.size.width ?? 0,
+                                              isTextAfter: isTextAfter(bend: route[last - 1].x - route[last].x)))
     }
 
     /// The edge through `ports`; `segmentsRunVertically` gives each segment's flow for a route through boxes, else every
@@ -145,23 +168,46 @@ struct ClassDiagramPageAssembly {
     /// The relations of a diagram laid out in namespaces' boxes, along their routes on the page: each end on the side its
     /// route leaves or arrives by, spread along it with the others there, running straight to its namespace's border
     /// where that is close (`ClassDiagramBorderRuns`); each segment an S along its own flow.
-    mutating func placeEdges(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
-        let ends = clustered.layoutEdgeIndices.enumerated().flatMap { layoutIndex, edgeIndex in
-            pageRouteEnds(of: edgeIndex, route: placement.edgeRoutes[layoutIndex])
+    mutating func placeEdges(clustered: ClassDiagramClusterGraph, compound: LayeredCompoundLayout, clusterFrames: [CGRect]) {
+        var routes: [LayeredClusterRoute] = []
+        routes.reserveCapacity(clustered.layoutEdgeIndices.count)
+        var ends: [ClassDiagramEdgePorts.End] = []
+        ends.reserveCapacity(2 * clustered.layoutEdgeIndices.count)
+        for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
+            let route = Self.route(of: layoutIndex, in: compound)
+            routes.append(route)
+            ends += pageRouteEnds(of: edgeIndex, route: route)
         }
         let ports = ClassDiagramEdgePorts(ends: ends, edgeCount: measured.edges.count, nodeCenters: nodeCenters, sizes: measured.sizes,
                                           markRowHeight: markRowHeight)
-        let borderRuns = ClassDiagramBorderRuns(graph: clustered.graph, clusterFrames: placement.clusterFrames, ends: ends)
+        let borderRuns = ClassDiagramBorderRuns(graph: clustered.graph, clusterFrames: clusterFrames, ends: ends)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
-            let route = placement.edgeRoutes[layoutIndex]
+            let route = routes[layoutIndex]
             guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
             let points = borderRuns.straightened([sourcePort] + route.points.dropFirst().dropLast() + [targetPort],
                                                  source: ends[2 * layoutIndex], target: ends[2 * layoutIndex + 1])
             edgePoints.append(points)
-            let textCenter = placement.edgeLabelCenters[layoutIndex] ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
+            let laidOut = compound.edges[layoutIndex]
+            let textCenter = laidOut.labelWidth > 0 || compound.isStray(layoutIndex) ? laidOut.labelCenter
+                : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
                                          segmentsRunVertically: route.segmentsRunVertically)
         }
+    }
+
+    /// Laid-out edge `edge`'s route: its points, and for each segment whether the flow it follows runs vertically.
+    private static func route(of edge: Int, in compound: LayeredCompoundLayout) -> LayeredClusterRoute {
+        let range = compound.routeRange(of: edge)
+        var points: [CGPoint] = []
+        var segmentsRunVertically: [Bool] = []
+        points.reserveCapacity(range.count)
+        segmentsRunVertically.reserveCapacity(max(range.count - 1, 0))
+        for index in range {
+            let point = compound.routePoints[index]
+            points.append(point.point)
+            if index > range.lowerBound { segmentsRunVertically.append(!point.runsHorizontally) }
+        }
+        return LayeredClusterRoute(points: points, segmentsRunVertically: segmentsRunVertically)
     }
 
     /// The two ends of a route on the page, each on the side its first or last segment leaves or arrives by.
@@ -183,11 +229,11 @@ struct ClassDiagramPageAssembly {
     }
 
     /// The namespaces' boxes, each title along its box's top, clear of the relations where it can be.
-    mutating func placeNamespaces(clustered: ClassDiagramClusterGraph, placement: LayeredClusterPlacement) {
+    mutating func placeNamespaces(clustered: ClassDiagramClusterGraph, clusterFrames: [CGRect]) {
         nodeNamespaces = clustered.nodeNamespaces
         namespaceParents = clustered.namespaceParents
         let crossings = FlowchartRoutePointIndex(edgePoints)
-        namespaces = placement.clusterFrames.enumerated().map { index, frame in
+        namespaces = clusterFrames.enumerated().map { index, frame in
             let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
             return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: clustered.depths[index], isTitleCrossed: title?.isCrossed ?? false)
         }
@@ -240,80 +286,9 @@ struct ClassDiagramPageAssembly {
         text.map { text in centered(text, at: center) }
     }
 
-    private func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {
+    func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {
         var placed = text
         placed.center = center
         return placed
-    }
-
-    /// The finished layout: everything moved so that the drawing starts `padding` from the top left, below the
-    /// title, and centered under the title when the title is wider.
-    /// The diagram's parts that nothing joins set in rows `rowWidth` wide, `gap` apart, as Pele's `wrapComponents` sets
-    /// them for a diagram wider than its container (`ClassDiagramComponentRows`), with the size of the rows; nil when
-    /// nothing moves.
-    func wrappedInRows(rowWidth: CGFloat, gap: CGFloat) -> (page: ClassDiagramPageAssembly, size: CGSize)? {
-        let frames = nodeCenters.indices.map { node in
-            CGRect(x: nodeCenters[node].x - measured.sizes[node].width / 2, y: nodeCenters[node].y - measured.sizes[node].height / 2,
-                   width: measured.sizes[node].width, height: measured.sizes[node].height)
-        }
-        let placedEdges = measured.edges.indices.map { index in
-            edges[index].map { placed in ClassDiagramComponentRows.Edge(source: measured.edges[index].source, target: measured.edges[index].target, placed: placed) }
-        }
-        guard let rows = ClassDiagramComponentRows.placement(namespaceFrames: namespaces.map(\.frame), namespaceParents: namespaceParents,
-                                                             nodeFrames: frames,
-                                                             nodeNamespaces: nodeNamespaces.isEmpty ? Array(repeating: nil, count: frames.count) : nodeNamespaces,
-                                                             edges: placedEdges, rowWidth: rowWidth, gap: gap) else { return nil }
-        var wrapped = self
-        wrapped.nodeCenters = zip(nodeCenters, rows.nodeOffsets).map { center, offset in center.translated(by: offset) }
-        wrapped.edges = zip(edges, rows.edgeOffsets).map { edge, offset in edge?.translated(by: offset) }
-        wrapped.namespaces = zip(namespaces, rows.namespaceOffsets).map { namespace, offset in namespace.translated(by: offset) }
-        return (wrapped, rows.size)
-    }
-
-    /// `drawingBounds`: the rectangle the drawing is taken to cover, when it is set in rows; else the union of its parts.
-    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat, drawingBounds: CGRect? = nil) -> ClassDiagramLayout {
-        let (classes, notes, interfaces) = placedNodes()
-        var relations: [ClassDiagramLayoutEdge] = []
-        var noteLinks: [ClassDiagramLayoutEdge] = []
-        for (edgeIndex, edge) in measured.edges.enumerated() {
-            guard let placed = edges[edgeIndex] else { continue }
-            if edge.relationIndex == nil { noteLinks.append(placed) } else { relations.append(placed) }
-        }
-        let bounds = drawingBounds
-            ?? ClassDiagramLayoutBounds.union(frames: classes.map(\.frame) + notes.map(\.frame) + interfaces.map(\.frame) + namespaces.map(\.frame),
-                                              edges: relations + noteLinks)
-        let titleSize = title?.size ?? .zero
-        let innerWidth = max(bounds.width, titleSize.width)
-        let titleHeight = title == nil ? 0 : titleSize.height + titleGap
-        let offset = CGVector(dx: padding + (innerWidth - bounds.width) / 2 - bounds.minX, dy: padding + titleHeight - bounds.minY)
-        let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (bounds.height + titleHeight + 2 * padding).rounded(.up))
-        var placedTitle = title
-        placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        return ClassDiagramLayout(size: size, font: font, classes: classes.map { box in box.translated(by: offset) },
-                                  notes: notes.map { note in note.translated(by: offset) },
-                                  interfaces: interfaces.map { text in text.translated(by: offset) },
-                                  relations: relations.map { edge in edge.translated(by: offset) },
-                                  noteLinks: noteLinks.map { edge in edge.translated(by: offset) }, title: placedTitle,
-                                  namespaces: namespaces.map { namespace in namespace.translated(by: offset) })
-    }
-
-    /// The classes' boxes, the notes and the interfaces' names at their nodes' centers.
-    private func placedNodes() -> ([ClassDiagramLayoutClass], [ClassDiagramLayoutNote], [DiagramTextBlock]) {
-        var classes: [ClassDiagramLayoutClass] = []
-        var notes: [ClassDiagramLayoutNote] = []
-        var interfaces: [DiagramTextBlock] = []
-        for (node, kind) in measured.nodes.enumerated() {
-            let center = nodeCenters[node]
-            switch kind {
-            case .classBox(let boxIndex): classes.append(measured.boxes[boxIndex].placed(at: center))
-            case .note(let noteIndex):
-                let size = measured.sizes[node]
-                notes.append(ClassDiagramLayoutNote(frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width,
-                                                                  height: size.height),
-                                                    text: centered(measured.noteTexts[noteIndex], at: center)))
-            case .interface(let interfaceIndex): interfaces.append(centered(measured.interfaceTexts[interfaceIndex], at: center))
-            }
-        }
-        return (classes, notes, interfaces)
     }
 }

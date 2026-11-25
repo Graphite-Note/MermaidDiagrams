@@ -5,8 +5,8 @@
  * Description: Where a composite state's name sits in the band along its box's top, as Pele's state diagram places it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -25,9 +25,13 @@ struct StateDiagramCompositeTitles {
     /// `Math.round` rounds it; a transition's two ends are left out, as Pele leaves them out.
     private var bendsByRoundedHeight: [Int: [CGFloat]] = [:]
 
-    init(routes: [[CGPoint]]) {
-        for route in routes where route.count > 2 {
-            for point in route[1..<(route.count - 1)] {
+    /// The bends of every route of a compound layout: each route's points but its two ends.
+    init(compound: LayeredCompoundLayout) {
+        for edge in 0..<compound.edges.count {
+            let range = compound.routeRange(of: edge)
+            guard range.count > 2 else { continue }
+            for index in (range.lowerBound + 1)..<(range.upperBound - 1) {
+                let point = compound.routePoints[index].point
                 guard let key = Self.roundedHeight(point.y) else { continue }
                 bendsByRoundedHeight[key, default: []].append(point.x)
             }

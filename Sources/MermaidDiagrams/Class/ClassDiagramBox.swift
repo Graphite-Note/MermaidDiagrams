@@ -6,8 +6,8 @@
  *              annotations, name and members are placed.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -55,7 +55,10 @@ struct ClassDiagramBox {
         hasSections = !(hidesEmptySections && attributes.isEmpty && methods.isEmpty)
         attributesHeight = hasSections ? Self.sectionHeight(lineCount: attributes.count, lineHeight: memberLineHeight) : 0
         let methodsHeight = hasSections ? Self.sectionHeight(lineCount: methods.count, lineHeight: memberLineHeight) : 0
-        let widest = (annotations.map(\.size.width) + [name.size.width] + (attributes + methods).map(\.text.size.width)).max() ?? 0
+        var widest = name.size.width
+        for annotation in annotations { widest = max(widest, annotation.size.width) }
+        for member in attributes { widest = max(widest, member.text.size.width) }
+        for member in methods { widest = max(widest, member.text.size.width) }
         size = CGSize(width: max(widest + 2 * Self.horizontalPadding, Self.minimumWidth), height: titleHeight + attributesHeight + methodsHeight)
     }
 
@@ -63,27 +66,35 @@ struct ClassDiagramBox {
         lineCount > 0 ? 2 * sectionPadding + CGFloat(lineCount) * lineHeight : emptySectionHeight
     }
 
-    /// The box at `center`: annotations centered from the top padding down, the name centered in the rest of the
-    /// title, and each member left-aligned in its row.
-    func placed(at center: CGPoint) -> ClassDiagramLayoutClass {
+    /// The box at `center`, moved by `offset`: annotations centered from the top padding down, the name centered in the
+    /// rest of the title, and each member left-aligned in its row; each place found as at `center` and then moved.
+    func placed(at center: CGPoint, offset: CGVector) -> ClassDiagramLayoutClass {
         let frame = CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
         var y = frame.minY + Self.titlePadding
-        let placedAnnotations = annotations.map { annotation in
-            defer { y += markRowHeight }
-            return centered(annotation, at: CGPoint(x: frame.midX, y: y + markRowHeight / 2))
+        var placedAnnotations: [DiagramTextBlock] = []
+        placedAnnotations.reserveCapacity(annotations.count)
+        for annotation in annotations {
+            placedAnnotations.append(centered(annotation, at: CGPoint(x: frame.midX, y: y + markRowHeight / 2).translated(by: offset)))
+            y += markRowHeight
         }
         let titleBottom = frame.minY + titleHeight
-        let placedName = centered(name, at: CGPoint(x: frame.midX, y: (y + titleBottom - Self.titlePadding) / 2))
+        let placedName = centered(name, at: CGPoint(x: frame.midX, y: (y + titleBottom - Self.titlePadding) / 2).translated(by: offset))
         let methodsTop = titleBottom + attributesHeight
-        let members = leftAligned(attributes, top: titleBottom, left: frame.minX) + leftAligned(methods, top: methodsTop, left: frame.minX)
-        return ClassDiagramLayoutClass(frame: frame, dividerYs: hasSections ? [titleBottom, methodsTop] : [], annotations: placedAnnotations, name: placedName, members: members)
+        var members: [ClassDiagramLayoutMember] = []
+        members.reserveCapacity(attributes.count + methods.count)
+        appendLeftAligned(attributes, top: titleBottom, left: frame.minX, offset: offset, to: &members)
+        appendLeftAligned(methods, top: methodsTop, left: frame.minX, offset: offset, to: &members)
+        return ClassDiagramLayoutClass(frame: frame.offsetBy(dx: offset.dx, dy: offset.dy),
+                                       dividerYs: hasSections ? [titleBottom + offset.dy, methodsTop + offset.dy] : [],
+                                       annotations: placedAnnotations, name: placedName, members: members)
     }
 
-    private func leftAligned(_ lines: [ClassDiagramLayoutMember], top: CGFloat, left: CGFloat) -> [ClassDiagramLayoutMember] {
-        lines.enumerated().map { index, member in
+    private func appendLeftAligned(_ lines: [ClassDiagramLayoutMember], top: CGFloat, left: CGFloat, offset: CGVector,
+                                   to members: inout [ClassDiagramLayoutMember]) {
+        for (index, member) in lines.enumerated() {
             let center = CGPoint(x: left + Self.horizontalPadding + member.text.size.width / 2,
                                  y: top + Self.sectionPadding + (CGFloat(index) + 0.5) * memberLineHeight)
-            return ClassDiagramLayoutMember(text: centered(member.text, at: center), classifier: member.classifier)
+            members.append(ClassDiagramLayoutMember(text: centered(member.text, at: center.translated(by: offset)), classifier: member.classifier))
         }
     }
 

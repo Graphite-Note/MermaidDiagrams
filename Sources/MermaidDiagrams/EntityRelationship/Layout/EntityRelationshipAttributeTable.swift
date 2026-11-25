@@ -6,7 +6,7 @@
  *              as its tallest cell, every cell's lines starting at its column's left edge.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 24/11/2026
  */
 
@@ -19,53 +19,86 @@ import CoreGraphics
 struct EntityRelationshipAttributeTable {
     static let columnGap: CGFloat = 16
     static let rowPadding: CGFloat = 9
+    /// A row's cells: type, name, keys, comment.
+    static let cellsPerRow = EntityRelationshipColumn.allCases.count
 
-    /// For each row, its four cells: type, name, keys, comment.
-    let cells: [[DiagramTextBlock]]
+    /// The rows' cells, `cellsPerRow` of them for each row in column order.
+    let cells: [DiagramTextBlock]
     let columnWidths: [CGFloat]
     let rowHeights: [CGFloat]
     /// The height of one line of the rows' text, which every cell's first line is centered on.
     let rowLineHeight: CGFloat
 
-    init(cells: [[DiagramTextBlock]], rowLineHeight: CGFloat) {
+    init(cells: [DiagramTextBlock], rowLineHeight: CGFloat) {
         self.cells = cells
         self.rowLineHeight = rowLineHeight
-        var columnWidths = [CGFloat](repeating: 0, count: EntityRelationshipColumn.allCases.count)
-        for row in cells {
-            for (column, cell) in row.enumerated() { columnWidths[column] = max(columnWidths[column], cell.size.width) }
+        var columnWidths = [CGFloat](repeating: 0, count: Self.cellsPerRow)
+        var rowHeights: [CGFloat] = []
+        rowHeights.reserveCapacity(cells.count / Self.cellsPerRow)
+        var rowStart = 0
+        while rowStart + Self.cellsPerRow <= cells.count {
+            // The tallest cell as `max()` of the row's heights finds it, 0 for none.
+            var tallest = cells[rowStart].size.height
+            for column in 0..<Self.cellsPerRow {
+                let cell = cells[rowStart + column]
+                columnWidths[column] = max(columnWidths[column], cell.size.width)
+                tallest = max(tallest, cell.size.height)
+            }
+            rowHeights.append(max(rowLineHeight, tallest) + Self.rowPadding)
+            rowStart += Self.cellsPerRow
         }
         self.columnWidths = columnWidths
-        rowHeights = cells.map { row in max(rowLineHeight, row.map(\.size.height).max() ?? 0) + Self.rowPadding }
+        self.rowHeights = rowHeights
     }
 
     /// The width of the filled columns and the gaps between them.
     var filledWidth: CGFloat {
-        let filled = columnWidths.filter { width in width > 0 }
-        return filled.reduce(0, +) + CGFloat(max(filled.count - 1, 0)) * Self.columnGap
+        var total: CGFloat = 0
+        var filledCount = 0
+        for width in columnWidths where width > 0 {
+            total += width
+            filledCount += 1
+        }
+        return total + CGFloat(max(filledCount - 1, 0)) * Self.columnGap
     }
 
     var height: CGFloat {
         rowHeights.reduce(0, +)
     }
 
-    /// The rows placed in a box `width` wide from `top`, the columns starting `inset` from its left side.
+    /// The rows placed in a box `width` wide from `top`, the columns starting `inset` from its left side, then moved by
+    /// `firstOffset` and by `secondOffset`, each place found and moved as `translated(by:)` moves it.
     /// - Parameter rowFontSize: The size of the rows' text, whose baseline the smaller keys share.
-    func rows(top: CGFloat, width: CGFloat, inset: CGFloat, rowFontSize: CGFloat) -> [EntityRelationshipLayoutRow] {
+    func rows(top: CGFloat, width: CGFloat, inset: CGFloat, rowFontSize: CGFloat, movedBy firstOffset: CGVector,
+              then secondOffset: CGVector) -> [EntityRelationshipLayoutRow] {
         let lefts = columnLefts(width: width, inset: inset)
         var rowTop = top
-        return cells.enumerated().map { rowIndex, rowCells in
+        var rows: [EntityRelationshipLayoutRow] = []
+        rows.reserveCapacity(rowHeights.count)
+        for rowIndex in rowHeights.indices {
+            var lineCount = 0
+            for column in 0..<Self.cellsPerRow { lineCount += cells[rowIndex * Self.cellsPerRow + column].lineCount }
             var texts: [EntityRelationshipLayoutCellText] = []
-            for (column, cell) in zip(EntityRelationshipColumn.allCases, rowCells) {
+            texts.reserveCapacity(lineCount)
+            for (columnIndex, column) in EntityRelationshipColumn.allCases.enumerated() {
+                let cell = cells[rowIndex * Self.cellsPerRow + columnIndex]
                 let baselineShift = (rowFontSize - cell.fontSize) * DiagramTextDrawing.baselineShiftRatio
                 let firstLineCenterY = rowTop + Self.rowPadding / 2 + rowLineHeight / 2 + baselineShift
-                texts += cell.leftAlignedLines(left: lefts[columnIndex(column)], firstLineCenterY: firstLineCenterY).map { line in
-                    EntityRelationshipLayoutCellText(column: column, text: line)
+                let left = lefts[columnIndex]
+                // Each line as a block of its own that starts at the column's left edge, the first centered on the row's
+                // first line and each next one a line lower.
+                for index in 0..<cell.lineCount {
+                    let center = CGPoint(x: left + cell.lineWidth(at: index) / 2, y: firstLineCenterY + CGFloat(index) * cell.lineHeight)
+                    texts.append(EntityRelationshipLayoutCellText(column: column, text: cell.plainLineBlock(at: index, center: center
+                        .translated(by: firstOffset).translated(by: secondOffset))))
                 }
             }
-            let row = EntityRelationshipLayoutRow(frame: CGRect(x: 0, y: rowTop, width: width, height: rowHeights[rowIndex]), texts: texts)
+            let frame = CGRect(x: 0, y: rowTop, width: width, height: rowHeights[rowIndex])
+            rows.append(EntityRelationshipLayoutRow(frame: frame.offsetBy(dx: firstOffset.dx, dy: firstOffset.dy).offsetBy(dx: secondOffset.dx, dy: secondOffset.dy),
+                                                    texts: texts))
             rowTop += rowHeights[rowIndex]
-            return row
         }
+        return rows
     }
 
     /// Each column's left edge: the spare width beyond the filled columns is shared between them.
@@ -77,25 +110,6 @@ struct EntityRelationshipAttributeTable {
             let columnLeft = left
             if columnWidth > 0 { left += columnWidth + spare + Self.columnGap }
             return columnLeft
-        }
-    }
-
-    private func columnIndex(_ column: EntityRelationshipColumn) -> Int {
-        switch column {
-        case .type: 0
-        case .name: 1
-        case .keys: 2
-        case .comment: 3
-        }
-    }
-}
-
-private extension DiagramTextBlock {
-    /// Each line as a block of its own that starts at `left`, the first centered on `firstLineCenterY` and each next
-    /// one a line lower.
-    func leftAlignedLines(left: CGFloat, firstLineCenterY: CGFloat) -> [DiagramTextBlock] {
-        (0..<lineCount).map { index in
-            plainLineBlock(at: index, center: CGPoint(x: left + lineWidth(at: index) / 2, y: firstLineCenterY + CGFloat(index) * lineHeight))
         }
     }
 }

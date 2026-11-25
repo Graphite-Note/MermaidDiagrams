@@ -6,8 +6,8 @@
  *              or spread along it in the order of where they head when several share it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 24/11/2026
  */
 
 import CoreGraphics
@@ -36,22 +36,33 @@ struct RequirementEdgePorts {
     init(ends: [End], edgeCount: Int, centers: [CGPoint], sizes: [CGSize]) {
         sourcePoints = Array(repeating: nil, count: edgeCount)
         targetPoints = Array(repeating: nil, count: edgeCount)
-        var endsBySide: [Int: [(order: Int, end: End)]] = [:]
-        for (order, end) in ends.enumerated() { endsBySide[end.box * 4 + Self.sideNumber(end.side), default: []].append((order, end)) }
-        for sideEnds in endsBySide.values {
-            // JavaScript's sort is stable: ends heading to one place keep the order they were listed in.
-            let ordered = sideEnds.sorted { first, second in (first.end.toward, first.order) < (second.end.toward, second.order) }.map(\.end)
-            let box = ordered[0].box
-            let side = ordered[0].side
+        // The ends sorted by their side, then by where they head and the order they were listed in, as JavaScript's
+        // stable sort orders them: each side's ends together, in the order they take along it.
+        var ordered = Array(ends.indices)
+        ordered.sort { first, second in
+            (Self.slot(of: ends[first]), ends[first].toward, first) < (Self.slot(of: ends[second]), ends[second].toward, second)
+        }
+        var first = 0
+        while first < ordered.count {
+            var last = first + 1
+            while last < ordered.count, Self.slot(of: ends[ordered[last]]) == Self.slot(of: ends[ordered[first]]) { last += 1 }
+            let box = ends[ordered[first]].box
+            let side = ends[ordered[first]].side
+            let count = last - first
             let span = (side.isHorizontal ? sizes[box].width : sizes[box].height) - 2 * Self.endMargin
-            let step = ordered.count > 1 ? max(0, min(Self.endStep, span / CGFloat(ordered.count - 1))) : 0
-            for (position, end) in ordered.enumerated() {
-                let offset = (CGFloat(position) - CGFloat(ordered.count - 1) / 2) * step
+            let step = count > 1 ? max(0, min(Self.endStep, span / CGFloat(count - 1))) : 0
+            for position in 0..<count {
+                let end = ends[ordered[first + position]]
+                let offset = (CGFloat(position) - CGFloat(count - 1) / 2) * step
                 let point = ClassDiagramEdgePorts.sidePoint(center: centers[box], size: sizes[box], side: side, offset: offset)
                 if end.isSourceEnd { sourcePoints[end.edgeIndex] = point } else { targetPoints[end.edgeIndex] = point }
             }
+            first = last
         }
     }
+
+    /// The side an end is on, numbered by box and side.
+    private static func slot(of end: End) -> Int { end.box * 4 + sideNumber(end.side) }
 
     private static func sideNumber(_ side: DiagramSide) -> Int {
         switch side {

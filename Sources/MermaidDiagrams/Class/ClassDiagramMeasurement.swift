@@ -5,7 +5,7 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 24/11/2026
  */
 
@@ -82,6 +82,13 @@ struct ClassDiagramMeasurement {
     private(set) var edges: [Edge] = []
 
     init<Measurer: DiagramTextMeasuring>(diagram: ClassDiagram, measurers: ClassDiagramTextMeasurers<Measurer>) {
+        // Each relation may name an interface of its own.
+        let nodeCapacity = diagram.classes.count + diagram.notes.count + diagram.relations.count
+        nodes.reserveCapacity(nodeCapacity)
+        sizes.reserveCapacity(nodeCapacity)
+        boxes.reserveCapacity(diagram.classes.count)
+        noteTexts.reserveCapacity(diagram.notes.count)
+        edges.reserveCapacity(diagram.notes.count + diagram.relations.count)
         for declared in diagram.classes {
             let box = ClassDiagramBox(declared, measurers: measurers, hidesEmptySections: diagram.hidesEmptyMemberBoxes)
             nodes.append(.classBox(boxes.count))

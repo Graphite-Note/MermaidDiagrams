@@ -1,6 +1,18 @@
+/**
+ * File: StateDiagramShapeDrawing.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: The outlines of a state diagram's shapes, Pele's, in a frame: as Core Graphics paths, or in any kind a
+ *              drawing records (lanes of the scene's workspace).
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 24/11/2026
+ */
+
 import CoreGraphics
 
-/// The outlines of a state diagram's shapes, Pele's, as Core Graphics paths in a frame.
+/// The outlines of a state diagram's shapes, Pele's, in a frame: as Core Graphics paths, or in any kind a drawing records.
 enum StateDiagramShapeDrawing {
     /// The largest corner radius of a state's box: Pele's.
     static let boxCornerRadius: CGFloat = 10
@@ -15,35 +27,54 @@ enum StateDiagramShapeDrawing {
     static let ruleGap: CGFloat = 6
 
     /// A box, rounded at most `boxCornerRadius`.
-    static func box(in frame: CGRect) -> CGPath {
+    static func box(in frame: CGRect) -> CGPath { box(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    static func diamond(in frame: CGRect) -> CGPath { diamond(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    static func bar(in frame: CGRect) -> CGPath { bar(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    static func endRing(in frame: CGRect) -> CGPath { endRing(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    static func endDot(in frame: CGRect) -> CGPath { endDot(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    /// A note's sheet, its top right corner cut off where it folds.
+    static func noteSheet(in frame: CGRect) -> CGPath { noteSheet(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    /// The fold of a note's top right corner.
+    static func noteFold(in frame: CGRect) -> CGPath { noteFold(in: frame, making: DiagramCoreGraphicsPaths()).path }
+
+    /// The line across a box under its name, above its other descriptions.
+    static func rule(in frame: CGRect, below name: DiagramTextBlock) -> CGPath { rule(in: frame, below: name, making: DiagramCoreGraphicsPaths()).path }
+
+    // MARK: In any kind a drawing records
+
+    static func box<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
         let radius = min(boxCornerRadius, frame.height / 2)
-        return CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        return maker.roundedRectangle(frame, cornerWidth: radius, cornerHeight: radius)
     }
 
-    static func diamond(in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
+    static func diamond<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         path.addLines(between: [CGPoint(x: frame.midX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.midY), CGPoint(x: frame.midX, y: frame.maxY),
                                 CGPoint(x: frame.minX, y: frame.midY)])
         path.closeSubpath()
         return path
     }
 
-    static func bar(in frame: CGRect) -> CGPath {
-        CGPath(roundedRect: frame, cornerWidth: barCornerRadius, cornerHeight: barCornerRadius, transform: nil)
+    static func bar<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        maker.roundedRectangle(frame, cornerWidth: barCornerRadius, cornerHeight: barCornerRadius)
     }
 
-    static func endRing(in frame: CGRect) -> CGPath {
-        CGPath(ellipseIn: frame.insetBy(dx: endRingInset, dy: endRingInset), transform: nil)
+    static func endRing<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        maker.ellipse(in: frame.insetBy(dx: endRingInset, dy: endRingInset))
     }
 
-    static func endDot(in frame: CGRect) -> CGPath {
-        CGPath(ellipseIn: CGRect(x: frame.midX - endDotRadius, y: frame.midY - endDotRadius, width: 2 * endDotRadius, height: 2 * endDotRadius),
-               transform: nil)
+    static func endDot<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        maker.ellipse(in: CGRect(x: frame.midX - endDotRadius, y: frame.midY - endDotRadius, width: 2 * endDotRadius, height: 2 * endDotRadius))
     }
 
-    /// A note's sheet, its top right corner cut off where it folds.
-    static func noteSheet(in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
+    static func noteSheet<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         path.addLines(between: [CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX - noteFoldSize, y: frame.minY),
                                 CGPoint(x: frame.maxX, y: frame.minY + noteFoldSize), CGPoint(x: frame.maxX, y: frame.maxY),
                                 CGPoint(x: frame.minX, y: frame.maxY)])
@@ -51,17 +82,15 @@ enum StateDiagramShapeDrawing {
         return path
     }
 
-    /// The fold of a note's top right corner.
-    static func noteFold(in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
+    static func noteFold<Maker: DiagramPathMaking>(in frame: CGRect, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         path.addLines(between: [CGPoint(x: frame.maxX - noteFoldSize, y: frame.minY), CGPoint(x: frame.maxX - noteFoldSize, y: frame.minY + noteFoldSize),
                                 CGPoint(x: frame.maxX, y: frame.minY + noteFoldSize)])
         return path
     }
 
-    /// The line across a box under its name, above its other descriptions.
-    static func rule(in frame: CGRect, below name: DiagramTextBlock) -> CGPath {
-        let path = CGMutablePath()
+    static func rule<Maker: DiagramPathMaking>(in frame: CGRect, below name: DiagramTextBlock, making maker: Maker) -> Maker.Path {
+        let path = maker.makePath()
         let ruleHeight = name.frame.maxY + ruleGap
         path.move(to: CGPoint(x: frame.minX, y: ruleHeight))
         path.addLine(to: CGPoint(x: frame.maxX, y: ruleHeight))
