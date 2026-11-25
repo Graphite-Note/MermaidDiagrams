@@ -5,7 +5,7 @@
  * Description: What sits beside each state across the flow, its loops and its notes, and the place it takes in its rank.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -20,6 +20,8 @@ struct StateDiagramSurroundings {
     static let noteGap: CGFloat = 44
     /// Between the notes stacked on one side of a state: Pele's gap between the nodes of a rank.
     static let noteSeparation: CGFloat = 40
+    /// The sides a note sits on, made once rather than for each state.
+    private static let noteSides = StateDiagramNoteSide.allCases
 
     /// Each state's place in its rank, in flow space.
     let placeSizes: [LayeredSize]
@@ -50,7 +52,7 @@ struct StateDiagramSurroundings {
             let halfAcross = shape.across / 2 + loops.room
             var along = max(shape.along, loops.textAlong)
             var noteRoom: CGFloat = 0
-            for side in StateDiagramNoteSide.allCases where !notesBySide.isEmpty {
+            for side in Self.noteSides where !notesBySide.isEmpty {
                 let noteIndices = notesBySide[Self.slot(state: state, side: side)]
                 guard !noteIndices.isEmpty else { continue }
                 let stack = Self.stack(noteIndices.map { noteIndex in axes.flowSize(of: measured.noteSizes[noteIndex]) })

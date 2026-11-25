@@ -6,7 +6,7 @@
  *              as its tallest cell, every cell's lines starting at its column's left edge.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -21,6 +21,8 @@ struct EntityRelationshipAttributeTable {
     static let rowPadding: CGFloat = 9
     /// A row's cells: type, name, keys, comment.
     static let cellsPerRow = EntityRelationshipColumn.allCases.count
+    /// The columns in order, made once rather than for each row.
+    private static let columns = EntityRelationshipColumn.allCases
 
     /// The rows' cells, `cellsPerRow` of them for each row in column order.
     let cells: [DiagramTextBlock]
@@ -80,7 +82,7 @@ struct EntityRelationshipAttributeTable {
             for column in 0..<Self.cellsPerRow { lineCount += cells[rowIndex * Self.cellsPerRow + column].lineCount }
             var texts: [EntityRelationshipLayoutCellText] = []
             texts.reserveCapacity(lineCount)
-            for (columnIndex, column) in EntityRelationshipColumn.allCases.enumerated() {
+            for (columnIndex, column) in Self.columns.enumerated() {
                 let cell = cells[rowIndex * Self.cellsPerRow + columnIndex]
                 let baselineShift = (rowFontSize - cell.fontSize) * DiagramTextDrawing.baselineShiftRatio
                 let firstLineCenterY = rowTop + Self.rowPadding / 2 + rowLineHeight / 2 + baselineShift
