@@ -5,8 +5,8 @@
  * Description: Writes a treemap's values by a d3-format specifier, the part of it Mermaid's treemap uses.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -30,14 +30,25 @@ struct TreemapValueFormat: Equatable, Sendable {
     private static let pattern = try? NSRegularExpression(pattern: #"^(?:.?[<>=^])?([-+( ])?(\$)?0?[0-9]*(,)?(?:\.([0-9]+))?(~)?([a-zA-Z%])?$"#)
 
     init(specifier: String) {
-        let text = specifier == "$0,0" ? "$," : specifier
-        let groups = Self.groups(of: text) ?? Self.groups(of: ",") ?? Array(repeating: nil, count: 6)
-        signsPositive = groups[0] == "+"
-        prefix = groups[1] ?? ""
-        groupsThousands = groups[2] != nil
-        precision = groups[3].map(Self.precision(of:))
-        dropsTrailingZeros = groups[4] != nil
-        type = groups[5]?.first
+        var text = specifier == "$0,0" ? "$," : specifier
+        let parts = Self.parts(of: &text) ?? TreemapValueFormatParts(groupsThousands: true)
+        signsPositive = parts.sign == "+"
+        prefix = parts.currency ?? ""
+        groupsThousands = parts.groupsThousands
+        precision = parts.precisionDigits.map(Self.precision(of:))
+        dropsTrailingZeros = parts.dropsTrailingZeros
+        type = parts.type
+    }
+
+    /// The parts of `text`, read on its bytes when it is printable ASCII and by the pattern otherwise; nil when the
+    /// pattern does not match it.
+    private static func parts(of text: inout String) -> TreemapValueFormatParts? {
+        let (isReadable, parts) = text.withUTF8 { bytes in TreemapValueFormatSpecifier.parts(of: bytes) }
+        if isReadable { return parts }
+        return groups(of: text).map { groups in
+            TreemapValueFormatParts(sign: groups[0], currency: groups[1], groupsThousands: groups[2] != nil, precisionDigits: groups[3],
+                                    dropsTrailingZeros: groups[4] != nil, type: groups[5]?.first)
+        }
     }
 
     /// The precision the digits after the `.` ask for, as JavaScript's `Number` reads them (leading zeros aside: `007` is 7),
@@ -70,7 +81,7 @@ struct TreemapValueFormat: Equatable, Sendable {
             suffix = "%"
         case "d": body = TreemapNumberText.fixed((magnitude + 0.5).rounded(.down), digits: 0)
         case "e": body = TreemapNumberText.exponential(magnitude, digits: precision ?? 6)
-        default: body = TreemapNumberText.shortest(TreemapNumberText.significant(magnitude, digits: max(1, precision ?? 12)))
+        default: body = TreemapNumberText.shortestOfSignificant(magnitude, digits: max(1, precision ?? 12))
         }
         // A number's text is ASCII (digits, a point, `e`, a sign, `Infinity`, `NaN`): its characters are looked for in its bytes.
         let hasExponent = body.utf8.contains(UInt8(ascii: "e"))
@@ -84,13 +95,13 @@ struct TreemapValueFormat: Equatable, Sendable {
     private static func grouped(_ body: String) -> String {
         let wholeCount = body.utf8.prefix { byte in byte != UInt8(ascii: ".") }.count
         guard wholeCount > 3, body.utf8.prefix(wholeCount).allSatisfy({ byte in byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9") }) else { return body }
-        let whole = body.prefix { character in character != "." }
-        var grouped = ""
-        for (index, digit) in whole.enumerated() {
-            if index > 0, (whole.count - index) % 3 == 0 { grouped.append(",") }
+        var grouped: [UInt8] = []
+        grouped.reserveCapacity(body.utf8.count + wholeCount / 3)
+        for (index, digit) in body.utf8.enumerated() {
+            if index > 0, index < wholeCount, (wholeCount - index) % 3 == 0 { grouped.append(UInt8(ascii: ",")) }
             grouped.append(digit)
         }
-        return grouped + body.dropFirst(whole.count)
+        return String(decoding: grouped, as: UTF8.self)
     }
 
     /// The text without a trailing run of zeros and the point before it (`1.500` is `1.5`, `2.00` is `2`).

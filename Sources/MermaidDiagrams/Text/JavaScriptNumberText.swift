@@ -6,8 +6,8 @@
  *              double with the place of their decimal point.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// Writes a number as JavaScript's `String(number)` does, as Pele writes a chart's numbers: the fewest digits that
@@ -24,8 +24,13 @@ enum JavaScriptNumberText {
     static func text(_ number: Double) -> String {
         guard number.isFinite else { return number.isNaN ? "NaN" : (number > 0 ? "Infinity" : "-Infinity") }
         guard number != 0 else { return "0" }
-        let sign = number < 0 ? "-" : ""
         let (digits, pointPosition) = shortestDigits(of: number.magnitude)
+        return text(ofDigits: digits, pointPosition: pointPosition, sign: number < 0 ? "-" : "")
+    }
+
+    /// The text of a nonzero number whose shortest digits and point are `digits` and `pointPosition` (`shortestDigits`),
+    /// after `sign`.
+    static func text(ofDigits digits: String, pointPosition: Int, sign: String) -> String {
         let digitCount = digits.count
         if digitCount <= pointPosition, pointPosition <= largestPlainPointPosition {
             return sign + digits + String(repeating: "0", count: pointPosition - digitCount)
