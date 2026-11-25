@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyDiagram.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: A user journey as its text describes it: sections, tasks with their scores and actors, the actors once
+ *              each in Mermaid's order, and which of them each task names.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 /// A Mermaid user journey (`journey`) as its text describes it: tasks in the order they are written, each with its
 /// score and the actors who take part in it, under the sections written before them.
 public struct UserJourneyDiagram: Equatable, Sendable {
@@ -5,27 +17,57 @@ public struct UserJourneyDiagram: Equatable, Sendable {
     public internal(set) var title: String?
     /// The `section …` headings, in the order they are written.
     public internal(set) var sections: [DiagramLabel]
-    public internal(set) var tasks: [UserJourneyTask]
+    /// The tasks in the order they are written; the reader adds them with the actors they name (`init(title:sections:...)`
+    /// works those out once for tasks given whole).
+    public private(set) var tasks: [UserJourneyTask]
     /// `accTitle: …`, the short name a screen reader gives the diagram, or nil.
     public internal(set) var accessibilityTitle: String?
     /// `accDescr: …` or `accDescr { … }`, the longer description a screen reader reads, or nil.
     public internal(set) var accessibilityDescription: String?
 
+    /// Everyone named on a task, once each, in the order of their names' UTF-16 code units, as Mermaid sorts them:
+    /// an actor's place in this list picks its series color. A nameless actor (`Task: 5:`) is left out, as Pele draws
+    /// none. Worked out once, as the tasks are read.
+    public private(set) var actorNames: [String]
+    /// For each actor written on a task, the tasks' in order, its index in `actorNames`, or -1 for a nameless one:
+    /// task `k`'s from `firstActorMentions[k]` to `firstActorMentions[k + 1]`.
+    private(set) var actorMentions: [Int32]
+    /// Where each task's actors start in `actorMentions`, and their end after the last task's: one more than the tasks.
+    private(set) var firstActorMentions: [Int32]
+
+    /// A journey of `tasks` given whole, whose actors' names and indices are worked out from them as Mermaid sorts them.
     init(title: String? = nil, sections: [DiagramLabel] = [], tasks: [UserJourneyTask] = [], accessibilityTitle: String? = nil,
          accessibilityDescription: String? = nil) {
+        let names = Set(tasks.flatMap(\.actors)).subtracting([""]).sorted { first, second in first.utf16.lexicographicallyPrecedes(second.utf16) }
+        let indexByName = Dictionary(uniqueKeysWithValues: names.enumerated().map { index, name in (name, Int32(index)) })
+        var mentions: [Int32] = []
+        var firstMentions: [Int32] = [0]
+        for task in tasks {
+            for name in task.actors { mentions.append(indexByName[name] ?? -1) }
+            firstMentions.append(Int32(mentions.count))
+        }
+        self.init(title: title, sections: sections, tasks: tasks, actorNames: names, actorMentions: mentions, firstActorMentions: firstMentions,
+                  accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
+    }
+
+    /// A journey whose actors the reader has already interned and sorted.
+    init(title: String?, sections: [DiagramLabel], tasks: [UserJourneyTask], actorNames: [String], actorMentions: [Int32],
+         firstActorMentions: [Int32], accessibilityTitle: String?, accessibilityDescription: String?) {
+        precondition(firstActorMentions.count == tasks.count + 1 && firstActorMentions.last.map(Int.init) == actorMentions.count,
+                     "every task's actors are in the mentions")
         self.title = title
         self.sections = sections
         self.tasks = tasks
+        self.actorNames = actorNames
+        self.actorMentions = actorMentions
+        self.firstActorMentions = firstActorMentions
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
     }
 
-    /// Everyone named on a task, once each, in the order of their names' UTF-16 code units, as Mermaid sorts them:
-    /// an actor's place in this list picks its series color. A nameless actor (`Task: 5:`) is left out, as Pele draws
-    /// none.
-    public var actorNames: [String] {
-        let names = Set(tasks.flatMap(\.actors)).subtracting([""])
-        return names.sorted { first, second in first.utf16.lexicographicallyPrecedes(second.utf16) }
+    /// The indices in `actorNames` of the actors task `index` names, in the order they are written, -1 for a nameless one.
+    func actorIndices(ofTask index: Int) -> ArraySlice<Int32> {
+        actorMentions[Int(firstActorMentions[index])..<Int(firstActorMentions[index + 1])]
     }
 }
 

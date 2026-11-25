@@ -1,3 +1,15 @@
+/**
+ * File: UserJourneyParser.swift
+ * -----------------------------
+ * Layer: Core
+ * Description: Reads a user journey's statements after its keyword: the title, sections, accessibility text and tasks,
+ *              a task's text and data handed to the builder as the bytes they are written in.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 25/11/2026
+ */
+
 import Foundation
 
 /// Reads a user journey's statements after its `journey` keyword, as Mermaid's journey grammar does: `title …`,
@@ -82,19 +94,28 @@ struct UserJourneyParser {
     }
 
     /// A task: its text from the cursor to a colon, then its data, the colon and what follows it to the end of its
-    /// text, which must hold something.
+    /// text, which must hold something. The text is decoded and the data read from the bytes they are written in.
     private mutating func readTask() throws(MermaidDiagramReadError) {
         let start = cursor.position
         cursor.advance()
         Self.skipText(&cursor, endsAtColon: true)
-        let text = cursor.trimmedText(from: start, to: cursor.position)
+        let textEnd = cursor.position
         skipSpacesAndComments()
         guard cursor.peek() == MermaidByte.colon else { throw .invalidSyntax(line: cursor.line, problem: .expectedTaskScore) }
         let dataStart = cursor.position
         cursor.advance()
         Self.skipText(&cursor, endsAtColon: false)
         guard cursor.position > dataStart + 1 else { throw .invalidSyntax(line: cursor.line, problem: .expectedTaskScore) }
-        try builder.addTask(Self.label(text), data: Substring(cursor.text(from: dataStart, to: cursor.position)))
+        let dataEnd = cursor.position
+        let bytes = cursor.bytes
+        try bytes.withUnsafeBufferPointer { bytes throws(MermaidDiagramReadError) in
+            var first = start
+            var last = textEnd
+            while first < last, MermaidByte.isWhitespace(bytes[first]) { first += 1 }
+            while last > first, MermaidByte.isWhitespace(bytes[last - 1]) { last -= 1 }
+            let label = DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[first..<last]), form: .literal)
+            try builder.addTask(label, data: UnsafeBufferPointer(rebasing: bytes[dataStart..<dataEnd]))
+        }
     }
 
     /// Moves to the `#`, `;` or line break that ends a text, or to a colon too when `endsAtColon`.

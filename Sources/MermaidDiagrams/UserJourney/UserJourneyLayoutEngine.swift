@@ -6,8 +6,8 @@
  *              of cards.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -76,8 +76,7 @@ public enum UserJourneyLayoutEngine {
         let width = max(bodyWidth, titleSize.width, legendWidth)
         let origin = CGPoint(x: padding + (width - bodyWidth) / 2 + UserJourneyGeometry.scaleGutter,
                              y: padding + (title == nil ? 0 : titleSize.height + titleGap))
-        let actorIndices = Dictionary(uniqueKeysWithValues: actorNames.enumerated().map { index, name in (name, index) })
-        let body = UserJourneyPlacement(diagram: diagram, measured: measured, actorIndices: actorIndices, taskText: taskText, scaleText: scaleText)
+        let body = UserJourneyPlacement(diagram: diagram, measured: measured, taskText: taskText, scaleText: scaleText)
             .placed(at: origin)
         var bottom = body.bottom
         var legendEntries: [UserJourneyLegendEntry] = []
