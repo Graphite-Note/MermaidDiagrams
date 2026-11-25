@@ -6,8 +6,8 @@
  *              worst cases (tests/usecase/stress.test.ts) check them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import XCTest
@@ -53,7 +53,7 @@ final class UseCaseLexerTests: XCTestCase {
     func testJSONIsBalancedOutsideItsStrings() {
         let source = "json Payload@{\n  \"text\": \"} \\\" {\",\n  \"nested\": {\"items\": [1, 2]}\n}:::data"
         XCTAssertEqual(UseCaseReading.tokens(source)?.map(\.0), ["JSON_DECLARATION_START", "JSON_OBJECT_LITERAL", "CLASS_SEPARATOR", "IDENTIFIER"])
-        let text = UseCaseCharacters(units: Array(source.utf16))
+        let text = UseCaseBytes(text: Array(source.utf8), removedLineBreaks: [])
         let tokens = try? UseCaseLexer.tokens(of: text)
         XCTAssertEqual(tokens?.starts[1], 13)
         XCTAssertEqual(tokens.map { tokens in text.line(of: tokens.ends[1] - 1) }, 4)

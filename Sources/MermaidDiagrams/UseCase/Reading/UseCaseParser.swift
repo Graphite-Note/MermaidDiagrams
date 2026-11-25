@@ -4,42 +4,48 @@
  * Layer: Core
  * Description: Reads a use case diagram's tokens as Mermaid's Chevrotain parser does (Pele's parser.ts): the same
  *              choices from the same lookahead of at most three tokens, the same token named where the text breaks,
- *              then the drafts resolved into a diagram and its JSON read.
+ *              its names interned as they are met, then the drafts resolved into a diagram and its JSON read.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 /// Reads a use case diagram from its keyword on. Each statement is one line; a system boundary's lines run to its
 /// `end`. The text must be well formed before the JSON in it is read, as in Mermaid. An error names the line it is on.
 struct UseCaseParser {
-    let text: UseCaseCharacters
+    var text: UseCaseBytes
     let tokens: UseCaseTokens
     /// The line of the whole text the keyword is on.
     let firstLine: Int
     let limits: MermaidDiagramLimits
     var index = 0
     var drafts = UseCaseDrafts()
-    /// The boundary whose lines are being read, by its place among the drafts' boundaries.
-    var parent: Int?
+    /// The boundary whose lines are being read, by its place among the drafts' boundaries, or -1.
+    var parent: Int32 = -1
     /// Each JSON draft, by its place, and the token of its object.
     var pendingJSON: [(draft: Int, literal: Int)] = []
+    /// Every name met (ids, classes, relationships' ids), numbered in the order first met. A name is made of ASCII's
+    /// word characters alone, an id made from a label too, so that two names are one exactly when their bytes are.
+    var nameTable = GraphDiagramNameTable(isASCII: true)
+    /// Where each name's bytes are, by its number.
+    var nameRanges: [MermaidTextRange] = []
+    /// The labels `include` and `extend`, which the reading writes once each when a relationship asks for them.
+    var semanticLabels: [MermaidTextRange?] = [nil, nil]
 
-    /// PlantUML's statements that people are most likely to try, which Mermaid turns away.
-    private static let forbiddenWords: Set<String> = ["allowmixing", "newpage", "package", "rectangle", "skinparam"]
+    /// PlantUML's statements that people are most likely to try, which Mermaid turns away, in any case.
+    private static let forbiddenWords: [StaticString] = ["allowmixing", "newpage", "package", "rectangle", "skinparam"]
 
     /// Whether the identifier at `token` is one of `forbiddenWords` in any case. An identifier is ASCII's word
     /// characters only, so its length made lowercase is its length, and only a length of theirs (7, 9, 11) is looked up.
     private func isForbiddenWord(_ token: Int) -> Bool {
         let length = tokens.ends[token] - tokens.starts[token]
         guard length == 7 || length == 9 || length == 11 else { return false }
-        return Self.forbiddenWords.contains(image(token).lowercased())
+        return Self.forbiddenWords.contains { word in text.spellsIgnoringCase(range(of: token), word) }
     }
 
     static func parse(keyword: String, endingAt cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> UseCaseDiagram {
-        let written = Self.codeUnits(of: cursor.bytes[(cursor.position - keyword.utf8.count)...])
-        let text = UseCaseSourcePreparation.prepared(written)
+        let text = UseCaseSourcePreparation.prepared(cursor.bytes[(cursor.position - keyword.utf8.count)...])
         let tokens: UseCaseTokens
         do {
             tokens = try UseCaseLexer.tokens(of: text)
@@ -47,39 +53,28 @@ struct UseCaseParser {
             throw .invalidSyntax(line: cursor.line + text.line(of: error.offset) - 1, problem: .useCase(.unexpectedCharacter))
         }
         var parser = UseCaseParser(text: text, tokens: tokens, firstLine: cursor.line, limits: limits)
+        parser.nameTable.reserveCapacity(tokens.kinds.count / 4 + 4)
+        parser.nameRanges.reserveCapacity(tokens.kinds.count / 4 + 4)
+        // A statement takes about six tokens in the documentation's examples, with a line break.
+        let statementEstimate = tokens.kinds.count / 6 + 2
+        parser.drafts.elements.reserveCapacity(statementEstimate)
+        parser.drafts.relationships.reserveCapacity(statementEstimate)
         try parser.readDiagram()
         try parser.readJSON()
+        var builder = UseCaseDiagramBuilder(drafts: parser.drafts, text: parser.text, nameRanges: parser.nameRanges)
         do {
-            var diagram = try UseCaseDiagramBuilder.diagram(from: parser.drafts, limits: limits)
-            let options = MermaidConfigurationOptions(section: "usecase", in: cursor)
-            diagram.nodeSpacing = Self.spacing(options.values["nodeSpacing"])
-            diagram.rankSpacing = Self.spacing(options.values["rankSpacing"])
-            return diagram
+            try builder.build(limits: limits)
         } catch {
             switch error {
             case .contradiction(let contradiction, let offset): throw parser.failure(at: offset, .contradiction(contradiction))
             case .tooManyNodes: throw .tooManyNodes(limit: limits.maximumNodeCount)
             }
         }
-    }
-
-    /// The text's UTF-16 code units, which Pele's lexer reads: in ASCII a unit per byte, of its value, made without
-    /// making the bytes a string first.
-    static func codeUnits(of bytes: ArraySlice<UInt8>) -> [UInt16] {
-        var isASCII = true
-        let units = [UInt16](unsafeUninitializedCapacity: bytes.count) { buffer, count in
-            var written = 0
-            for byte in bytes {
-                guard byte < 0x80 else {
-                    isASCII = false
-                    break
-                }
-                buffer[written] = UInt16(byte)
-                written += 1
-            }
-            count = written
-        }
-        return isASCII ? units : Array(String(decoding: bytes, as: UTF8.self).utf16)
+        var diagram = builder.diagram
+        let options = MermaidConfigurationOptions(section: "usecase", in: cursor)
+        diagram.nodeSpacing = Self.spacing(options.values["nodeSpacing"])
+        diagram.rankSpacing = Self.spacing(options.values["rankSpacing"])
+        return diagram
     }
 
     /// The largest spacing Pele takes from the options.
@@ -95,7 +90,9 @@ struct UseCaseParser {
 
     func kind(at position: Int) -> UseCaseTokenKind { tokens.kinds[min(position, tokens.kinds.count - 1)] }
 
-    func image(_ token: Int) -> String { text.text(from: tokens.starts[token], to: tokens.ends[token]) }
+    func range(of token: Int) -> MermaidTextRange { MermaidTextRange(start: tokens.starts[token], end: tokens.ends[token]) }
+
+    func image(_ token: Int) -> String { text.string(range(of: token)) }
 
     func failure(at offset: Int, _ problem: UseCaseSyntaxProblem) -> MermaidDiagramReadError {
         .invalidSyntax(line: firstLine + text.line(of: offset) - 1, problem: .useCase(problem))
@@ -119,6 +116,17 @@ struct UseCaseParser {
             throw unexpected(.lineEnd)
         }
     }
+
+    /// The number of the name `range` of the text spells.
+    mutating func intern(_ range: MermaidTextRange) -> Int32 {
+        let bytes = text.bytes
+        let (number, isNew) = bytes.withUnsafeBufferPointer { buffer in nameTable.intern(buffer, range) }
+        if isNew { nameRanges.append(range) }
+        return Int32(number)
+    }
+
+    /// The number of the identifier at `token`.
+    mutating func name(of token: Int) -> Int32 { intern(range(of: token)) }
 
     /// Past the limits before anything of their counts is made: each statement that makes a node, and each
     /// relationship and note connector.
@@ -173,17 +181,22 @@ struct UseCaseParser {
         case .jsonDeclarationStart: try json()
         case .classDefinition:
             index += 1
-            let identifiers = try identifierList()
-            drafts.classDefinitions.append((identifiers.map(image), try styles()))
+            let names = try identifierList().map { token in name(of: token) }
+            let styles = try styles()
+            drafts.classDefinitions.append(UseCaseDraftClassDefinition(names: drafts.addNames(names), styles: styles))
         case .classKeyword:
             index += 1
-            let targets = try identifierList()
-            let classes = try identifierList()
-            drafts.classAssignments.append((targets.map { token in (image(token), tokens.starts[token]) }, classes.map(image)))
+            let targets = try identifierList().map { token in UseCaseDraftTarget(name: name(of: token), start: Int32(tokens.starts[token])) }
+            let classes = try identifierList().map { token in name(of: token) }
+            let targetStart = drafts.targets.count
+            drafts.targets.append(contentsOf: targets)
+            drafts.classAssignments.append(UseCaseDraftClassAssignment(targets: UseCaseListSpan(start: Int32(targetStart), count: Int32(targets.count)),
+                                                                       classes: drafts.addNames(classes)))
         case .style:
             index += 1
             let target = try expect(.identifier)
-            drafts.styles.append((image(target), tokens.starts[target], try styles()))
+            let name = name(of: target)
+            drafts.styles.append(UseCaseDraftStyle(target: name, start: Int32(tokens.starts[target]), styles: try styles()))
         default: return try nameStatement()
         }
         try lineEnd()
@@ -192,18 +205,25 @@ struct UseCaseParser {
     /// `accTitle: …`, `accDescr: …` or `accDescr { … }`, its text trimmed.
     private mutating func readAccessibility() {
         let kind = current
-        let written = image(index)
+        let written = range(of: index)
         index += 1
-        let units = Array(written.utf16)
-        if kind == .accessibilityDescriptionBlock {
-            let open = (units.firstIndex(of: UInt16(ascii: "{")) ?? 0) + 1
-            let close = max(open, units.lastIndex(of: UInt16(ascii: "}")) ?? units.count)
-            drafts.accessibilityDescription = UseCaseCharacters.trimmed(String(decoding: units[open..<close], as: UTF16.self))
-            return
+        let bytes = text.bytes
+        let value = bytes.withUnsafeBufferPointer { buffer -> MermaidTextRange in
+            func first(_ byte: UInt8) -> Int? { (written.lowerBound..<written.upperBound).first { position in buffer[position] == byte } }
+            if kind == .accessibilityDescriptionBlock {
+                let open = (first(UInt8(ascii: "{")) ?? written.lowerBound) + 1
+                let lastClose = (written.lowerBound..<written.upperBound).last { position in buffer[position] == UInt8(ascii: "}") }
+                let close = max(open, lastClose ?? written.upperBound)
+                return UseCaseCharacters.trimmed(MermaidTextRange(start: open, end: close), in: buffer)
+            }
+            let colon = min((first(UInt8(ascii: ":")) ?? written.lowerBound) + 1, written.upperBound)
+            return UseCaseCharacters.trimmed(MermaidTextRange(start: colon, end: written.upperBound), in: buffer)
         }
-        let colon = (units.firstIndex(of: UInt16(ascii: ":")) ?? 0) + 1
-        let value = UseCaseCharacters.trimmed(String(decoding: units[min(colon, units.count)...], as: UTF16.self))
-        if kind == .accessibilityTitleLine { drafts.accessibilityTitle = value } else { drafts.accessibilityDescription = value }
+        let string = text.string(value)
+        switch kind {
+        case .accessibilityTitleLine: drafts.accessibilityTitle = string
+        default: drafts.accessibilityDescription = string
+        }
     }
 
     /// `note for Target label`.
@@ -211,7 +231,8 @@ struct UseCaseParser {
         index += 1
         _ = try expect(.forKeyword)
         let target = try expect(.identifier)
-        drafts.notes.append((image(target), tokens.starts[target], try label()))
+        let name = name(of: target)
+        drafts.notes.append(UseCaseDraftNote(target: name, start: Int32(tokens.starts[target]), label: try label()))
     }
 
     /// `json Id@{ … }` and its classes; its object is read once the whole text is.
@@ -219,13 +240,14 @@ struct UseCaseParser {
         let declaration = index
         index += 1
         let literal = try expect(.jsonObjectLiteral)
-        var classes: [String] = []
-        if current == .classSeparator { try classSuffix(&classes) }
+        let classes = current == .classSeparator ? try classSuffix() : .empty
         var start = tokens.starts[declaration] + 4
         while UseCaseCharacters.isBlank(text[start]) { start += 1 }
         var end = start
         while UseCaseCharacters.isWord(text[end]) { end += 1 }
-        drafts.jsons.append(UseCaseDraftJSON(identifier: text.text(from: start, to: end), start: start, value: .emptyObject, classes: classes))
+        let name = intern(MermaidTextRange(start: start, end: end))
+        drafts.jsons.append(UseCaseDraftJSON(name: name, start: Int32(start), value: Int32(drafts.jsonValues.count), classes: classes))
+        drafts.jsonValues.append(.emptyObject)
         pendingJSON.append((drafts.jsons.count - 1, literal))
     }
 
@@ -238,8 +260,9 @@ struct UseCaseParser {
             guard self.kind(at: index + 2).isIn(.metadataFirst) else { throw unexpected(.statement) }
             index += 1
             let content = contentRange(of: first)
-            let target = kind == .identifier ? image(first) : Self.generatedIdentifier(text.text(from: content.lowerBound, to: content.upperBound))
-            drafts.metadata.append((target, content.lowerBound, try metadata()))
+            let target = kind == .identifier ? name(of: first) : generatedName(content)
+            let properties = try metadata()
+            drafts.metadata.append(UseCaseDraftMetadata(target: target, start: Int32(content.lowerBound), properties: properties))
             return try lineEnd()
         }
         let follows = next.isIn(.followsName) || (kind == .identifier && (next == .leftParenthesis || next == .leftBracket))
@@ -247,27 +270,29 @@ struct UseCaseParser {
         try entity(isTopLevel: true)
     }
 
-    /// Each JSON draft's object read, once the whole text is well formed.
+    /// Each JSON draft's object read, once the whole text is well formed: on the object's UTF-16 code units, as
+    /// JavaScript reads it.
     private mutating func readJSON() throws(MermaidDiagramReadError) {
         for (draft, literal) in pendingJSON {
             let start = tokens.starts[literal]
+            let units = Array(text.string(range(of: literal)).utf16)
             do {
-                drafts.jsons[draft].value = try UseCaseJSONReader.read(text.units[start..<tokens.ends[literal]])
+                drafts.jsonValues[Int(drafts.jsons[draft].value)] = try UseCaseJSONReader.read(units[...])
             } catch {
-                throw jsonFailure(literalStart: start, offset: error.offset)
+                throw jsonFailure(literalStart: start, units: units, offset: error.offset)
             }
-            guard drafts.jsons[draft].value.root.kind == .object else { throw failure(at: start, .jsonRootNotObject) }
+            guard drafts.jsonValues[Int(drafts.jsons[draft].value)].root.kind == .object else { throw failure(at: start, .jsonRootNotObject) }
         }
     }
 
-    /// Where JSON is not JSON, in the diagram's lines and columns: a line feed, a carriage return, or both together,
-    /// end a line.
-    private func jsonFailure(literalStart: Int, offset: Int) -> MermaidDiagramReadError {
-        var column = text.column(of: literalStart)
+    /// Where JSON is not JSON, in the diagram's lines and columns of UTF-16 code units: a line feed, a carriage
+    /// return, or both together, end a line.
+    private func jsonFailure(literalStart: Int, units: [UInt16], offset: Int) -> MermaidDiagramReadError {
+        var column = text.utf16Column(of: literalStart)
         var lineBreaks = 0
-        for position in literalStart..<min(literalStart + offset, text.count) {
-            let unit = text.units[position]
-            if unit == 0x0D || (unit == 0x0A && (position == literalStart || text.units[position - 1] != 0x0D)) {
+        for position in 0..<min(offset, units.count) {
+            let unit = units[position]
+            if unit == 0x0D || (unit == 0x0A && (position == 0 || units[position - 1] != 0x0D)) {
                 lineBreaks += 1
                 column = 1
             } else if unit != 0x0A {
@@ -277,8 +302,26 @@ struct UseCaseParser {
         return .invalidSyntax(line: firstLine + text.line(of: literalStart) - 1 + lineBreaks, problem: .useCase(.invalidJSON(column: column)))
     }
 
-    /// An id made from a label: each character other than a letter, a digit and `_` made `_`, code unit by code unit.
-    static func generatedIdentifier(_ label: String) -> String {
-        String(decoding: label.utf16.map { unit in UseCaseCharacters.isWord(unit) ? unit : 0x5F }, as: UTF16.self)
+    /// The name of an id made from a label: each character other than a letter, a digit and `_` made `_`, code unit by
+    /// code unit, so a character of four bytes in UTF-8 (two code units) makes two. A label of word characters alone
+    /// is its own id, written nowhere else.
+    mutating func generatedName(_ label: MermaidTextRange) -> Int32 {
+        let bytes = text.bytes
+        let isWordAlone = bytes.withUnsafeBufferPointer { buffer in
+            (label.lowerBound..<label.upperBound).allSatisfy { position in UseCaseCharacters.isWord(buffer[position]) }
+        }
+        guard !isWordAlone else { return intern(label) }
+        var generated: [UInt8] = []
+        generated.reserveCapacity(label.count)
+        for position in label.lowerBound..<label.upperBound {
+            let byte = bytes[position]
+            if UseCaseCharacters.isWord(byte) {
+                generated.append(byte)
+            } else if byte & 0xC0 != 0x80 {
+                generated.append(0x5F)
+                if byte >= 0xF0 { generated.append(0x5F) }
+            }
+        }
+        return intern(text.append(generated))
     }
 }

@@ -4,14 +4,15 @@
  * Layer: Tests
  * Description: Every use case diagram of the corpora, generated diagrams and random ones laid out by the use case layout
  *              and by the 0.7.0 engine kept as the reference, as they run and fitted to Graphite's narrow columns, alike
- *              to the bit; small layout budgets refused alike.
+ *              to the bit; small layout budgets refused alike; twelve threads laying out at once alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
+import Foundation
 import XCTest
 @testable import MermaidDiagrams
 @testable import MermaidDiagramsBenchmark
@@ -69,6 +70,28 @@ final class UseCaseLayoutEquivalenceTests: XCTestCase {
                 XCTAssertNil(Self.firstDifference(diagram, limits: limits), "budget \(budget):\n\(source.prefix(300))")
             }
         }
+    }
+
+    /// The layout runs on the calling thread's scratch arena: twelve threads laying out the documentation examples, with
+    /// and without boundaries, and random diagrams at once lay each out as the reference does alone.
+    func testLayoutsOnTwelveThreadsAtOnceMatchTheReference() throws {
+        var texts = UseCaseRandomTexts(seed: 0x7_4EAD)
+        let sources = try UseCaseCorpus.documentationExamples() + (0..<200).map { _ in texts.text(statementCount: 18) }
+        let diagrams = sources.compactMap { source -> UseCaseDiagram? in
+            guard case .useCase(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else { return nil }
+            return diagram
+        }
+        XCTAssertGreaterThan(diagrams.count, 80)
+        let typography = DiagramSceneSamples.typography
+        let expected = diagrams.map { diagram in UseCaseLayoutBits { try ReferenceUseCaseLayoutEngine.layout(diagram, typography: typography) } }
+        let mismatches = ThreadSafeCount()
+        DispatchQueue.concurrentPerform(iterations: 12) { thread in
+            for offset in diagrams.indices {
+                let index = (offset + thread * 7) % diagrams.count
+                if UseCaseLayoutBits(laying: { try UseCaseLayoutEngine.layout(diagrams[index], typography: typography) }) != expected[index] { mismatches.add() }
+            }
+        }
+        XCTAssertEqual(mismatches.value, 0)
     }
 
     /// The first way of laying `diagram` out whose layout differs from the reference's, or nil.

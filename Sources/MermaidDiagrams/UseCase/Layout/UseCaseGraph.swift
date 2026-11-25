@@ -7,7 +7,7 @@
  *              and note connector as an edge with its marks; Mermaid's class names made only when read.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -130,13 +130,16 @@ struct UseCaseGraph {
     private static let arrowMarkers: [(UseCaseMarker, UseCaseMarker)] = [(.none, .point), (.point, .none), (.none, .none), (.none, .circle),
                                                                          (.none, .cross), (.circle, .none), (.cross, .none)]
 
+    /// The graph of the diagram's records, its Strings made from their bytes once.
     init(_ diagram: UseCaseDiagram) {
         let styles = UseCaseClassStyles(diagram.classDefinitions)
-        nodes.reserveCapacity(diagram.actors.count + diagram.useCases.count + diagram.notes.count + diagram.jsonNodes.count + diagram.systemBoundaries.count)
-        for actor in diagram.actors { nodes.append(Self.node(of: actor, styles: styles)) }
-        for useCase in diagram.useCases { nodes.append(Self.node(of: useCase, styles: styles)) }
-        for note in diagram.notes {
-            nodes.append(UseCaseGraphNode(identifier: note.identifier, label: note.label, labelType: note.labelType, shape: .note, padding: 10,
+        nodes.reserveCapacity(diagram.actorRecords.count + diagram.useCaseRecords.count + diagram.noteRecords.count + diagram.jsonRecords.count
+            + diagram.boundaryRecords.count)
+        for record in diagram.actorRecords { nodes.append(Self.actorNode(record, of: diagram, styles: styles)) }
+        for record in diagram.useCaseRecords { nodes.append(Self.useCaseNode(record, of: diagram, styles: styles)) }
+        for (place, note) in diagram.noteRecords.enumerated() {
+            nodes.append(UseCaseGraphNode(identifier: UseCaseDiagram.noteName(place), label: diagram.text.string(note.label.text), labelType: note.label.type,
+                                          shape: .note, padding: 10,
                                           classNameParts: UseCaseNodeClassNames(kind: "usecase-note", variantPrefix: "", variant: nil, isBusiness: false, classes: []),
                                           styles: styles.compiled([])))
         }
@@ -157,10 +160,11 @@ struct UseCaseGraph {
             node.boundaryType = boundary.type
             nodes.append(node)
         }
-        edges.reserveCapacity(diagram.relationships.count + diagram.notes.count)
-        for relationship in diagram.relationships { edges.append(Self.edge(of: relationship, styles: styles)) }
-        for note in diagram.notes {
-            edges.append(UseCaseGraphEdge(identifier: note.identifier + "-edge", start: note.identifier, end: note.target, relationshipType: nil, isDotted: true,
+        edges.reserveCapacity(diagram.relationshipRecords.count + diagram.noteRecords.count)
+        for record in diagram.relationshipRecords { edges.append(Self.edge(of: record, in: diagram, styles: styles)) }
+        for (place, note) in diagram.noteRecords.enumerated() {
+            let identifier = UseCaseDiagram.noteName(place)
+            edges.append(UseCaseGraphEdge(identifier: identifier + "-edge", start: identifier, end: diagram.name(note.target), relationshipType: nil, isDotted: true,
                                           startMarker: .none, endMarker: .none, label: nil, labelType: nil, classes: [], animationClass: nil,
                                           styles: styles.compiled([]), isAnimated: false, minimumLength: 1))
         }
@@ -175,32 +179,43 @@ struct UseCaseGraph {
         }
     }
 
-    private static func node(of actor: UseCaseActor, styles: UseCaseClassStyles) -> UseCaseGraphNode {
-        var node = UseCaseGraphNode(identifier: actor.identifier, label: actor.label, labelType: actor.labelType, shape: shape(of: actor.type), padding: 10,
-                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-actor", variantPrefix: "usecase-actor-", variant: actor.type.rawValue,
-                                                                          isBusiness: actor.isBusiness, classes: actor.classes),
-                                    styles: styles.compiled(actor.classes) + actor.styles)
-        node.actorType = actor.type
-        node.isBusiness = actor.isBusiness
-        node.stereotype = actor.stereotype.flatMap { stereotype in stereotype.isEmpty ? nil : stereotype }
-        node.parentIdentifier = actor.parentIdentifier
+    /// A stereotype that is written and not empty, as a String.
+    private static func stereotype(of record: UseCaseElementRecord, in diagram: UseCaseDiagram) -> String? {
+        record.hasStereotype && !record.stereotype.isEmpty ? diagram.text.string(record.stereotype) : nil
+    }
+
+    private static func actorNode(_ record: UseCaseElementRecord, of diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphNode {
+        let classes = diagram.names(record.classes)
+        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: diagram.text.string(record.label.text), labelType: record.label.type,
+                                    shape: shape(of: record.actorType), padding: 10,
+                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-actor", variantPrefix: "usecase-actor-", variant: record.actorType.rawValue,
+                                                                          isBusiness: record.isBusiness, classes: classes),
+                                    styles: styles.compiled(classes) + diagram.styles(record.styles))
+        node.actorType = record.actorType
+        node.isBusiness = record.isBusiness
+        node.stereotype = stereotype(of: record, in: diagram)
+        node.parentIdentifier = diagram.parentName(record.parent)
         return node
     }
 
-    private static func node(of useCase: UseCase, styles: UseCaseClassStyles) -> UseCaseGraphNode {
-        let isEllipse = useCase.shape == .ellipse
-        var node = UseCaseGraphNode(identifier: useCase.identifier, label: useCase.label, labelType: useCase.labelType,
-                                    shape: !isEllipse ? .rectangle : useCase.isBusiness ? .businessEllipse : .ellipse, padding: isEllipse ? 20 : 10,
-                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-element", variantPrefix: "usecase-", variant: useCase.shape.rawValue,
-                                                                          isBusiness: useCase.isBusiness, classes: useCase.classes),
-                                    styles: styles.compiled(useCase.classes) + useCase.styles)
-        node.isBusiness = useCase.isBusiness
-        node.stereotype = useCase.stereotype.flatMap { stereotype in stereotype.isEmpty ? nil : stereotype }
-        node.parentIdentifier = useCase.parentIdentifier
+    private static func useCaseNode(_ record: UseCaseElementRecord, of diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphNode {
+        let isEllipse = record.shape == .ellipse
+        let classes = diagram.names(record.classes)
+        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: diagram.text.string(record.label.text), labelType: record.label.type,
+                                    shape: !isEllipse ? .rectangle : record.isBusiness ? .businessEllipse : .ellipse, padding: isEllipse ? 20 : 10,
+                                    classNameParts: UseCaseNodeClassNames(kind: "usecase-element", variantPrefix: "usecase-", variant: record.shape.rawValue,
+                                                                          isBusiness: record.isBusiness, classes: classes),
+                                    styles: styles.compiled(classes) + diagram.styles(record.styles))
+        node.isBusiness = record.isBusiness
+        node.stereotype = stereotype(of: record, in: diagram)
+        node.parentIdentifier = diagram.parentName(record.parent)
         return node
     }
 
-    private static func edge(of relationship: UseCaseRelationship, styles: UseCaseClassStyles) -> UseCaseGraphEdge {
+    private static func edge(of record: UseCaseRelationshipRecord, in diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphEdge {
+        let classes = diagram.names(record.classes)
+        let relationship = (type: record.type, arrow: record.arrow, isAnimated: record.isAnimated, animation: record.animation,
+                            label: record.hasLabel ? diagram.text.string(record.label.text) : nil, labelType: record.hasLabel ? record.label.type : nil)
         let isSemantic = relationship.type == .include || relationship.type == .extend
         let markers: (UseCaseMarker, UseCaseMarker) = switch relationship.type {
         case .generalization: (.none, .hollowTriangle)
@@ -211,12 +226,12 @@ struct UseCaseGraph {
         // Include and extend are labelled with their kind, whatever label the relationship carries.
         let label = isSemantic ? relationship.type.rawValue : relationship.type == .association ? relationship.label : nil
         let labelType: UseCaseLabelType? = isSemantic ? .text : relationship.type == .association ? relationship.labelType : nil
-        return UseCaseGraphEdge(identifier: relationship.identifier, start: relationship.source, end: relationship.target,
+        return UseCaseGraphEdge(identifier: diagram.relationshipName(record), start: diagram.name(record.source), end: diagram.name(record.target),
                                 relationshipType: relationship.type, isDotted: isSemantic, startMarker: markers.0, endMarker: markers.1,
-                                label: label, labelType: labelType, classes: relationship.classes,
+                                label: label, labelType: labelType, classes: classes,
                                 animationClass: isAnimated ? relationship.animation ?? .fast : nil,
-                                styles: styles.compiled(relationship.classes) + relationship.styles, isAnimated: relationship.isAnimated,
-                                minimumLength: relationship.minimumLength)
+                                styles: styles.compiled(classes) + diagram.styles(record.styles), isAnimated: relationship.isAnimated,
+                                minimumLength: Int(record.minimumLength))
     }
 }
 
