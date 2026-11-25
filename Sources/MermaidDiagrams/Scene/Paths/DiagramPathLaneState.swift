@@ -187,6 +187,26 @@ struct DiagramPathLaneState: ~Copyable {
         pointCount &+= 1
     }
 
+    /// One element of a single point, a line or a move, after the lane's elements, which hold no shape whole.
+    @inline(__always)
+    mutating func appendElement(_ verb: DiagramPathVerb, _ point: CGPoint) {
+        assert(!holdsShape, "a held shape is made into elements before others follow it")
+        reserve(verbs: 1, points: 1)
+        push(verb)
+        push(point)
+    }
+
+    /// A cubic curve's three points after the lane's elements, which hold no shape whole.
+    @inline(__always)
+    mutating func appendElement(_ control1: CGPoint, _ control2: CGPoint, _ end: CGPoint) {
+        assert(!holdsShape, "a held shape is made into elements before others follow it")
+        reserve(verbs: 1, points: 3)
+        push(.cubicCurve)
+        push(control1)
+        push(control2)
+        push(end)
+    }
+
     // MARK: Elements
 
     mutating func move(to point: CGPoint) {
