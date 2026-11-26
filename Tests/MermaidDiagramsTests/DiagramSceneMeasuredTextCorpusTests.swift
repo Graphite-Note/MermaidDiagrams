@@ -8,8 +8,8 @@
  *              accessibility text and scene text the same to the byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -22,6 +22,11 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
     /// Every input of every corpus prepared with its texts measured from their written bytes, against prepared as it is:
     /// the digest's line of each (its SVG, the palette's SVG, its spoken texts and its narrow scenes' SVGs) and the lines
     /// of each text of its scene the same.
+    /// The graph types whose layouts give their scenes blocks, and those whose layouts measure their texts themselves
+    /// (`DiagramMeasuredText`).
+    private static let graphCorporaGivingBlocks = ["state-docs", "class-docs", "er-docs"]
+    private static let graphCorporaMeasuringTheirTexts = ["requirement-docs"]
+
     func testEveryCorpusSceneBuiltFromWrittenBytesIsTheSame() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
         let remeasuring = WrittenTextRemeasuring()
@@ -51,11 +56,17 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
         XCTAssertGreaterThan(remeasuring.substitutedCount, 30_000, "texts drawn from their written bytes")
         XCTAssertGreaterThan(remeasuring.substitutedCount + remeasuring.fromLabelCount, 4 * remeasuring.keptCount, "texts drawn from measured texts")
         XCTAssertGreaterThan(remeasuring.brokenCount, 50, "texts broken between characters drawn from their written bytes")
-        // The graph types: every one has texts drawn from their written bytes, and most of the rest from their labels.
-        for corpus in ["state-docs", "class-docs", "er-docs", "requirement-docs"] {
+        // The graph types that still give their scenes blocks: every one has texts drawn from their written bytes, and most
+        // of the rest from their labels.
+        for corpus in Self.graphCorporaGivingBlocks {
             let counts = countsByCorpus[corpus] ?? (0, 0, 0)
             XCTAssertGreaterThan(counts.substituted, 100, "\(corpus): \(counts.substituted) texts drawn from their bytes")
             XCTAssertGreaterThan(counts.substituted + counts.fromLabels, 2 * counts.kept, "\(corpus): \(counts) kept")
+        }
+        // Those whose layouts measure their texts themselves give their scenes no block at all.
+        for corpus in Self.graphCorporaMeasuringTheirTexts {
+            let counts = countsByCorpus[corpus] ?? (-1, -1, -1)
+            XCTAssertTrue(counts == (0, 0, 0), "\(corpus): \(counts) blocks given to its scenes")
         }
         print(countsByCorpus.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))
     }

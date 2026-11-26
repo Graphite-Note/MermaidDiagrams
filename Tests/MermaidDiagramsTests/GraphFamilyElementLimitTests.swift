@@ -7,8 +7,8 @@
  *              refuses it as too many path elements instead of drawing it with the path missing.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -88,9 +88,10 @@ final class GraphFamilyElementLimitTests: XCTestCase {
         let source = "requirementDiagram\n  requirement checkout_req {\n    id: 1\n    text: pay\n  }\n  element shop {\n    type: service\n  }\n  shop - satisfies -> checkout_req"
         guard case .requirement(let diagram) = try read(source) else { return XCTFail("not a requirement diagram") }
         let layout = try RequirementLayoutEngine.layout(diagram, typography: typography, limits: .standard)
-        var relations = layout.relations
+        var relations = layout.placedRelations
         relations[0].path = longPath
-        let lengthened = RequirementLayout(size: layout.size, font: layout.font, boxes: layout.boxes, relations: relations, title: layout.title)
+        let lengthened = RequirementLayout(size: layout.size, font: layout.font, lines: layout.lines, placedBoxes: layout.placedBoxes, fieldTexts: layout.fieldTexts,
+                                           placedRelations: relations, placedTitle: layout.placedTitle)
         assertRefusedUnderSmallLimits { limits in DiagramScene(layout: lengthened, limits: limits) }
         assertSameDrawing(DiagramScene(layout: layout, limits: smallLimits), DiagramScene(layout: layout))
     }

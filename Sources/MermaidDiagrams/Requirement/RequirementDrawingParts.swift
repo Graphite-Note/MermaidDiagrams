@@ -6,8 +6,8 @@
  *              kind a drawing records, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -65,17 +65,18 @@ public struct RequirementDrawingParts {
 
     /// A box's rounded rectangle to fill, and it and its divider to stroke.
     static func addBox(_ box: RequirementLayoutBox, fill: CGMutablePath, outline: CGMutablePath) {
-        addBox(box, fill: DiagramCoreGraphicsPath(mutable: fill), outline: DiagramCoreGraphicsPath(mutable: outline), making: DiagramCoreGraphicsPaths())
+        addBox(frame: box.frame, dividerY: box.dividerY, fill: DiagramCoreGraphicsPath(mutable: fill), outline: DiagramCoreGraphicsPath(mutable: outline),
+               making: DiagramCoreGraphicsPaths())
     }
 
     /// `addBox` in any kind a drawing records; the rounded rectangle is made for a moment and given back.
-    static func addBox<Maker: DiagramPathMaking>(_ box: RequirementLayoutBox, fill: Maker.Path, outline: Maker.Path, making maker: Maker) {
+    static func addBox<Maker: DiagramPathMaking>(frame: CGRect, dividerY: CGFloat?, fill: Maker.Path, outline: Maker.Path, making maker: Maker) {
         let madeCount = maker.madePathCount
-        fill.addPath(maker.roundedRectangle(box.frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius), alsoTo: outline)
+        fill.addPath(maker.roundedRectangle(frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius), alsoTo: outline)
         maker.givePathsBack(downTo: madeCount)
-        if let dividerY = box.dividerY {
-            outline.move(to: CGPoint(x: box.frame.minX, y: dividerY))
-            outline.addLine(to: CGPoint(x: box.frame.maxX, y: dividerY))
+        if let dividerY {
+            outline.move(to: CGPoint(x: frame.minX, y: dividerY))
+            outline.addLine(to: CGPoint(x: frame.maxX, y: dividerY))
         }
     }
 
@@ -117,7 +118,7 @@ struct RequirementPaths<Path: DiagramPathRecording> {
         dashedLines = maker.makePath()
         marks = maker.makePath()
         textPatches = maker.makePath()
-        for relation in layout.relations {
+        for relation in layout.placedRelations {
             let madeCount = maker.madePathCount
             let line = maker.makePath()
             DiagramEdgeDrawing.record(relation.path, into: line)
@@ -130,7 +131,9 @@ struct RequirementPaths<Path: DiagramPathRecording> {
         }
         boxFills = maker.makePath()
         boxOutlines = maker.makePath()
-        for box in layout.boxes where box.style == nil { RequirementDrawingParts.addBox(box, fill: boxFills, outline: boxOutlines, making: maker) }
+        for box in layout.placedBoxes where box.style == nil {
+            RequirementDrawingParts.addBox(frame: box.frame, dividerY: box.dividerY, fill: boxFills, outline: boxOutlines, making: maker)
+        }
     }
 }
 
