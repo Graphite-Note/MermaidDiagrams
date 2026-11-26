@@ -6,8 +6,8 @@
  *              transitions written straight into the flat layout's spans, and the placed spans read on the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -19,7 +19,7 @@ import CoreGraphics
 /// are spans of the calling thread's arena; only the layout returned is allocated.
 enum StateDiagramRankedLayout {
     /// The layout, or nil when the flat graph would need more than `maximumPointCount` nodes and passing points.
-    static func layout(_ diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings, title: DiagramTextBlock?,
+    static func layout(_ diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings, title: DiagramMeasuredText?,
                        font: DiagramFont, maximumPointCount: Int, arena: DiagramScratchArena) -> StateDiagramLayout? {
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let graph = RankedGraph(diagram, measured: measured, surroundings: surroundings, axes: flowAxes, arena: arena)
@@ -52,7 +52,7 @@ enum StateDiagramRankedLayout {
 
         init(_ diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings, axes: FlowchartFlowAxes,
              arena: DiagramScratchArena) {
-            let stateCount = diagram.states.count
+            let stateCount = diagram.stateCount
             let order = StateDiagramFlowOrder.order(of: diagram, arena: arena)
             positionOfState = arena.uninitializedSpan(count: stateCount)
             nodes = arena.uninitializedSpan(count: stateCount)
@@ -64,15 +64,15 @@ enum StateDiagramRankedLayout {
                 node.sideSpan = Double(measured.sideSpan(of: state, in: diagram, flowIsVertical: axes.flowIsVertical))
                 nodes[position] = node
             }
-            var layered = arena.list(capacity: diagram.transitions.count, of: Int.self)
-            for (transitionIndex, transition) in diagram.transitions.enumerated() where transition.sourceIndex != transition.targetIndex {
+            var layered = arena.list(capacity: diagram.transitionCount, of: Int.self)
+            for (transitionIndex, transition) in diagram.model.transitions.enumerated() where transition.source != transition.target {
                 layered.append(transitionIndex)
             }
             layeredTransitionIndices = layered.elements
             edges = arena.uninitializedSpan(count: layered.count)
             for layeredIndex in 0..<layered.count {
                 let transitionIndex = layered[layeredIndex]
-                let transition = diagram.transitions[transitionIndex]
+                let transition = diagram.model.transitions[transitionIndex]
                 let labelSize = Self.labelFlowSize(of: transitionIndex, measured: measured, axes: axes)
                 edges[layeredIndex] = LayeredSpanEdge(tail: positionOfState[transition.sourceIndex], head: positionOfState[transition.targetIndex],
                                                       minimumLength: 1, labelWidth: Double(labelSize?.across ?? 0),
@@ -96,10 +96,10 @@ enum StateDiagramRankedLayout {
 enum StateDiagramFlowOrder {
     /// The states in that order, in `arena`.
     static func order(of diagram: StateDiagram, arena: DiagramScratchArena) -> ScratchSpan<Int> {
-        let stateCount = diagram.states.count
+        let stateCount = diagram.stateCount
         let firstAppearance = arena.span(count: stateCount, repeating: Int.max)
         var appearanceCount = 0
-        for transition in diagram.transitions {
+        for transition in diagram.model.transitions {
             if firstAppearance[transition.sourceIndex] == .max {
                 firstAppearance[transition.sourceIndex] = appearanceCount
                 appearanceCount += 1
@@ -113,7 +113,7 @@ enum StateDiagramFlowOrder {
         // any sort gives the order a sort by (start, appearance, index) gives.
         let keys: ScratchSpan<StateKey> = arena.uninitializedSpan(count: stateCount)
         for state in 0..<stateCount {
-            keys[state] = StateKey(isNotStart: diagram.states[state].kind.isStart ? 0 : 1, firstAppearance: firstAppearance[state], state: state)
+            keys[state] = StateKey(isNotStart: diagram.model.states[state].kind.isStart ? 0 : 1, firstAppearance: firstAppearance[state], state: state)
         }
         var sorted = keys.buffer
         sorted.sort { first, second in

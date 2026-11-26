@@ -2,12 +2,13 @@
  * File: ReferenceStateDiagramBuilder.swift
  * ----------------------------------------
  * Layer: Tests
- * Description: 0.7.0's state diagram reader, kept unchanged but for its names as the reference the reader on bytes is
- *              compared with (StateReadingEquivalenceTests).
+ * Description: 0.7.0's state diagram reader, kept unchanged but for its names, and for its parts kept in lists of their
+ *              own that the diagram's façade is made from, as the reference the reader on bytes is compared with
+ *              (StateReadingEquivalenceTests).
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 @testable import MermaidDiagrams
@@ -15,7 +16,9 @@
 /// top level, or a region of a composite's body), transitions and notes within the limits, and the composite bodies
 /// open at each point, which take the states named inside them.
 struct ReferenceStateDiagramBuilder {
-    private(set) var diagram = StateDiagram()
+    /// The diagram's parts as 0.7.0 kept them, in lists, which the façade the diagram now is is made from.
+    private(set) var parts = ReferenceStateDiagramParts()
+    var diagram: StateDiagram { parts.diagram }
     private let limits: MermaidDiagramLimits
     private var stateIndexByIdentifier: [String: Int] = [:]
     private var startOrEndIndexByScope: [StartOrEndScope: Int] = [:]
@@ -63,17 +66,17 @@ struct ReferenceStateDiagramBuilder {
                 startOrEndIndexByScope[scope] = index
             }
         }
-        if let innermost = openBodies.last, diagram.composites[innermost.compositeIndex].stateIndex != index {
-            diagram.states[index].compositeIndex = innermost.compositeIndex
-            diagram.states[index].regionIndex = innermost.regionIndex
+        if let innermost = openBodies.last, parts.composites[innermost.compositeIndex].stateIndex != index {
+            parts.states[index].compositeIndex = innermost.compositeIndex
+            parts.states[index].regionIndex = innermost.regionIndex
         }
         return index
     }
 
     private mutating func addState(identifier: String, kind: StateDiagramStateKind) throws(MermaidDiagramReadError) -> Int {
-        guard diagram.states.count + diagram.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        diagram.states.append(StateDiagramState(identifier: identifier, kind: kind))
-        return diagram.states.count - 1
+        guard parts.states.count + parts.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        parts.states.append(StateDiagramState(identifier: identifier, kind: kind))
+        return parts.states.count - 1
     }
 
     /// Adds the texts written for a state. A state given a text is drawn as a box with it, whatever it was first
@@ -81,18 +84,18 @@ struct ReferenceStateDiagramBuilder {
     mutating func addDescriptions(_ descriptions: [DiagramLabel], toStateAt index: Int) {
         let written = descriptions.filter { description in !description.isEmpty }
         guard !written.isEmpty else { return }
-        diagram.states[index].descriptions.append(contentsOf: written)
-        diagram.states[index].kind = .state
+        parts.states[index].descriptions.append(contentsOf: written)
+        parts.states[index].kind = .state
     }
 
     mutating func addTransition(from sourceIndex: Int, to targetIndex: Int, label: DiagramLabel?) throws(MermaidDiagramReadError) {
-        guard diagram.transitions.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-        diagram.transitions.append(StateDiagramTransition(sourceIndex: sourceIndex, targetIndex: targetIndex, label: label))
+        guard parts.transitions.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+        parts.transitions.append(StateDiagramTransition(sourceIndex: sourceIndex, targetIndex: targetIndex, label: label))
     }
 
     mutating func addNote(toStateAt stateIndex: Int, side: StateDiagramNoteSide, text: DiagramLabel) throws(MermaidDiagramReadError) {
-        guard diagram.states.count + diagram.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        diagram.notes.append(StateDiagramNote(stateIndex: stateIndex, side: side, text: text))
+        guard parts.states.count + parts.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        parts.notes.append(StateDiagramNote(stateIndex: stateIndex, side: side, text: text))
     }
 
     /// Opens a body of the composite state at `stateIndex`: the states named until it closes are inside it.
@@ -101,8 +104,8 @@ struct ReferenceStateDiagramBuilder {
         if let existing = compositeIndexByStateIndex[stateIndex] {
             compositeIndex = existing
         } else {
-            compositeIndex = diagram.composites.count
-            diagram.composites.append(StateDiagramComposite(stateIndex: stateIndex, parentCompositeIndex: openBodies.last?.compositeIndex))
+            compositeIndex = parts.composites.count
+            parts.composites.append(StateDiagramComposite(stateIndex: stateIndex, parentCompositeIndex: openBodies.last?.compositeIndex))
             compositeIndexByStateIndex[stateIndex] = compositeIndex
         }
         openBodies.append(OpenBody(compositeIndex: compositeIndex, regionIndex: 0))
@@ -117,33 +120,50 @@ struct ReferenceStateDiagramBuilder {
     mutating func startRegion() -> Bool {
         guard let innermost = openBodies.last else { return false }
         openBodies[openBodies.count - 1].regionIndex += 1
-        diagram.composites[innermost.compositeIndex].regionCount += 1
+        parts.composites[innermost.compositeIndex].regionCount += 1
         return true
     }
 
     /// The identifier of the composite whose body is the innermost still open, or nil.
     var innermostOpenCompositeIdentifier: String? {
-        openBodies.last.map { body in diagram.states[diagram.composites[body.compositeIndex].stateIndex].identifier }
+        openBodies.last.map { body in parts.states[parts.composites[body.compositeIndex].stateIndex].identifier }
     }
 
     /// Sets the direction of the body being read, or of the top level.
     mutating func setDirection(_ direction: FlowchartDirection) {
         if let innermost = openBodies.last {
-            diagram.composites[innermost.compositeIndex].direction = direction
+            parts.composites[innermost.compositeIndex].direction = direction
         } else {
-            diagram.direction = direction
+            parts.direction = direction
         }
     }
 
     mutating func setAccessibilityTitle(_ title: String) {
-        diagram.accessibilityTitle = title
+        parts.accessibilityTitle = title
     }
 
     mutating func setAccessibilityDescription(_ description: String) {
-        diagram.accessibilityDescription = description
+        parts.accessibilityDescription = description
     }
 
     mutating func countUnappliedStatement() {
-        diagram.unappliedStatementCount += 1
+        parts.unappliedStatementCount += 1
+    }
+}
+
+/// A state diagram's parts in lists, as 0.7.0's `StateDiagram` held them, so that the reference reader builds them as it did.
+struct ReferenceStateDiagramParts {
+    var direction: FlowchartDirection = .topToBottom
+    var states: [StateDiagramState] = []
+    var transitions: [StateDiagramTransition] = []
+    var notes: [StateDiagramNote] = []
+    var composites: [StateDiagramComposite] = []
+    var accessibilityTitle: String?
+    var accessibilityDescription: String?
+    var unappliedStatementCount = 0
+
+    var diagram: StateDiagram {
+        StateDiagram(direction: direction, states: states, transitions: transitions, notes: notes, composites: composites,
+                     accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
     }
 }

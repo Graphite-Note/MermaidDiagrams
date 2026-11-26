@@ -6,8 +6,8 @@
  *              turned, tightened and its unjoined parts set in rows as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 25/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -64,6 +64,10 @@ public enum ClassDiagramLayoutEngine {
         var measured = ClassDiagramMeasurement(diagram: diagram, measurers: measurers)
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         if flowAxes.flowIsVertical { measured.widenCrowdedClasses() }
+        let title = diagram.title.map { title in
+            DiagramFlatTextMeasuring.measure(DiagramLabel(title), measurer: DiagramFlatMeasurer(measurers.names), maximumWidth: .greatestFiniteMagnitude,
+                                             into: &measured.texts.lines)
+        }
         let selfLoops = measured.selfLoopEdgeIndices
         var layeredSpacing = spacing(for: measured)
         // A diagram with namespaces: each a box laid out on its own and placed in the box around it, as Pele's class
@@ -82,15 +86,12 @@ public enum ClassDiagramLayoutEngine {
                                                       maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
         }
         guard let page else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
-        let title = diagram.title.map { title in
-            DiagramTextBlock(label: DiagramLabel(title), measurer: measurers.names, maximumWidth: .greatestFiniteMagnitude)
-        }
         return finished(page, font: font, title: title, availableWidth: availableWidth)
     }
 
     /// The page finished; for a container `availableWidth` wide that the drawing (its title aside) is wider than, with
     /// its parts that nothing joins set in rows that fit it, when that makes it narrower.
-    private static func finished(_ page: ClassDiagramPageAssembly, font: DiagramFont, title: DiagramTextBlock?,
+    private static func finished(_ page: ClassDiagramPageAssembly, font: DiagramFont, title: DiagramMeasuredText?,
                                  availableWidth: CGFloat?) -> ClassDiagramLayout {
         let bounds = page.drawingBounds()
         // The width the drawing would take without its title, as the finished layout sizes it.

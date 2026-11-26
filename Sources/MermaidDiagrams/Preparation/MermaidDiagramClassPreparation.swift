@@ -6,8 +6,8 @@
  *              it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -29,7 +29,7 @@ extension MermaidDiagramAccessibility {
     init(classDiagram diagram: ClassDiagram) {
         self.init(kind: .classDiagram, title: diagram.accessibilityTitle ?? diagram.title,
                   description: diagram.accessibilityDescription) {
-            diagram.classes.map(\.displayedName.spokenText)
+            (0..<diagram.classCount).map { index in diagram.class(at: index).displayedName.spokenText }
         }
     }
 }

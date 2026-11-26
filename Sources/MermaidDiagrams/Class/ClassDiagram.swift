@@ -2,11 +2,12 @@
  * File: ClassDiagram.swift
  * ------------------------
  * Layer: Core
- * Description: A Mermaid class diagram as its text describes it.
+ * Description: A Mermaid class diagram as its text describes it, a façade over the flat records the reader writes
+ *              (`ClassDiagramModel`): its classes, relations and notes made from them when asked.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 19/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 /// A Mermaid class diagram (`classDiagram` or `classDiagram-v2`) as its text describes it: the classes in the order
@@ -15,9 +16,8 @@
 public struct ClassDiagram: Equatable, Sendable {
     /// The way ranks of classes follow each other: `direction TB`, `BT`, `LR` or `RL`, top to bottom by default.
     public internal(set) var direction: FlowchartDirection
-    public internal(set) var classes: [ClassDiagramClass]
-    public internal(set) var relations: [ClassDiagramRelation]
-    public internal(set) var notes: [ClassDiagramNote]
+    /// The classes, relations and notes as records over the diagram's text, which the layout reads.
+    let model: ClassDiagramModel
     /// The `namespace … { … }` groups, in the order they open, each statement once; drawn as boxes around their classes
     /// (`ClassDiagramNamespaceTree`).
     public internal(set) var namespaces: [ClassDiagramNamespace]
@@ -40,15 +40,44 @@ public struct ClassDiagram: Equatable, Sendable {
     init(direction: FlowchartDirection = .topToBottom, classes: [ClassDiagramClass] = [], relations: [ClassDiagramRelation] = [],
          notes: [ClassDiagramNote] = [], namespaces: [ClassDiagramNamespace] = [], title: String? = nil, accessibilityTitle: String? = nil,
          accessibilityDescription: String? = nil, unappliedStatementCount: Int = 0) {
+        self.init(direction: direction, model: ClassDiagramModel(ClassDiagramRecords(classes: classes, relations: relations, notes: notes)),
+                  namespaces: namespaces,
+                  title: title, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription,
+                  unappliedStatementCount: unappliedStatementCount)
+    }
+
+    init(direction: FlowchartDirection, model: ClassDiagramModel, namespaces: [ClassDiagramNamespace], title: String? = nil,
+         accessibilityTitle: String? = nil, accessibilityDescription: String? = nil, unappliedStatementCount: Int = 0) {
         self.direction = direction
-        self.classes = classes
-        self.relations = relations
-        self.notes = notes
+        self.model = model
         self.namespaces = namespaces
         self.title = title
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
         self.unappliedStatementCount = unappliedStatementCount
+    }
+
+    /// The classes in the order they first appear, made from the records: `class(at:)` makes one.
+    public var classes: [ClassDiagramClass] { (0..<classCount).map(model.materializedClass(at:)) }
+    /// The relations in the order they are written.
+    public var relations: [ClassDiagramRelation] { (0..<relationCount).map(model.materializedRelation(at:)) }
+    /// The notes in the order they are written.
+    public var notes: [ClassDiagramNote] { (0..<noteCount).map(model.materializedNote(at:)) }
+
+    public var classCount: Int { model.classes.count }
+    public var relationCount: Int { model.relations.count }
+    public var noteCount: Int { model.notes.count }
+
+    public func `class`(at index: Int) -> ClassDiagramClass { model.materializedClass(at: index) }
+    public func relation(at index: Int) -> ClassDiagramRelation { model.materializedRelation(at: index) }
+    public func note(at index: Int) -> ClassDiagramNote { model.materializedNote(at: index) }
+
+    public static func == (left: ClassDiagram, right: ClassDiagram) -> Bool {
+        left.direction == right.direction && left.namespaces == right.namespaces && left.hierarchicalNamespaces == right.hierarchicalNamespaces
+            && left.hidesEmptyMemberBoxes == right.hidesEmptyMemberBoxes && left.title == right.title && left.accessibilityTitle == right.accessibilityTitle
+            && left.accessibilityDescription == right.accessibilityDescription && left.unappliedStatementCount == right.unappliedStatementCount
+            && left.classCount == right.classCount && left.relationCount == right.relationCount && left.noteCount == right.noteCount
+            && left.classes == right.classes && left.relations == right.relations && left.notes == right.notes
     }
 }
 

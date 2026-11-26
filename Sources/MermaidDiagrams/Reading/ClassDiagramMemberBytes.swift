@@ -7,8 +7,8 @@
  *              each piece.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// `ClassDiagramMemberSyntax.member(from:)` for a text of ASCII bytes, where each byte is a character, so that every
@@ -34,6 +34,36 @@ enum ClassDiagramMemberBytes {
         let end = max(start, classifier == .plain ? bytes.count : bytes.count - 1)
         appendAngleBracketed(normalizedName(bytes, start..<end), to: &shown)
         return (ClassDiagramMember(text: displayed(shown), classifier: classifier), false)
+    }
+
+    /// `member(from:shownInto:)`, its shown text appended to `memberBytes` instead of made a String: the range it takes
+    /// there, its classifier, and whether it is a method. `shown` is a list kept from member to member.
+    static func member(from bytes: UnsafeBufferPointer<UInt8>, shownInto shown: inout [UInt8],
+                       appendingTo memberBytes: inout [UInt8]) -> (start: Int, end: Int, classifier: ClassDiagramMemberClassifier, isMethod: Bool) {
+        shown.removeAll(keepingCapacity: true)
+        let start = memberBytes.count
+        if let classifier = appendMethod(bytes, to: &shown) {
+            appendDisplayed(shown, to: &memberBytes)
+            return (start, memberBytes.count, classifier, true)
+        }
+        shown.removeAll(keepingCapacity: true)
+        guard let first = bytes.first, let last = bytes.last else { return (start, start, .plain, false) }
+        let classifier = classifierMarked(by: last) ?? .plain
+        let nameStart = isVisibility(first) ? 1 : 0
+        if nameStart == 1 { shown.append(first) }
+        let end = max(nameStart, classifier == .plain ? bytes.count : bytes.count - 1)
+        appendAngleBracketed(normalizedName(bytes, nameStart..<end), to: &shown)
+        appendDisplayed(shown, to: &memberBytes)
+        return (start, memberBytes.count, classifier, false)
+    }
+
+    /// The bytes of `displayed(shown)` appended to `memberBytes`, without a String unless an entity code is read.
+    private static func appendDisplayed(_ shown: [UInt8], to memberBytes: inout [UInt8]) {
+        shown.withUnsafeBufferPointer { shown in
+            let kept = trimmed(shown, 0..<shown.count)
+            guard shown[kept].contains(semicolon) else { return memberBytes.append(contentsOf: shown[kept]) }
+            memberBytes.append(contentsOf: displayed(Array(shown)).utf8)
+        }
     }
 
     /// Writes a method's shown text and returns its classifier, or returns nil when the text is no method.

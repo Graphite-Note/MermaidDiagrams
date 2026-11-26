@@ -1,17 +1,30 @@
+/**
+ * File: StateDiagramLayoutBounds.swift
+ * ------------------------------------
+ * Layer: Core
+ * Description: The rectangle a placed state diagram's drawing covers, read from its flat records and their runs of
+ *              segments.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 import CoreGraphics
 
 /// The rectangle a state diagram's drawing covers: its states and notes, its lines with their curves' control points,
 /// its arrows, and its transitions' texts with the patches behind them.
 enum StateDiagramLayoutBounds {
-    static func union(states: [StateDiagramLayoutState], transitions: [StateDiagramLayoutTransition], notes: [StateDiagramLayoutNote]) -> CGRect {
+    static func union(states: [StateDiagramPlacedState], transitions: [StateDiagramPlacedTransition], notes: [StateDiagramPlacedNote],
+                      segments: [DiagramPathSegment]) -> CGRect {
         var bounds = CGRect.null
         for state in states { bounds = bounds.union(state.frame) }
         for note in notes {
             bounds = bounds.union(note.frame)
-            bounds = union(bounds, note.connector)
+            bounds = DiagramRouteSegments.union(bounds, note.connector, in: segments)
         }
         for transition in transitions {
-            bounds = union(bounds, transition.path)
+            bounds = DiagramRouteSegments.union(bounds, transition.line, in: segments)
             let arrowLength = DiagramEdgeMark.arrowLength
             bounds = bounds.union(CGRect(origin: transition.arrow.tip, size: .zero).insetBy(dx: -arrowLength, dy: -arrowLength))
             if let text = transition.text {
@@ -20,18 +33,5 @@ enum StateDiagramLayoutBounds {
             }
         }
         return bounds.isNull ? .zero : bounds
-    }
-
-    private static func union(_ bounds: CGRect, _ path: DiagramPath) -> CGRect {
-        var bounds = bounds.union(CGRect(origin: path.start, size: .zero))
-        for segment in path.segments {
-            switch segment {
-            case .line(let end): bounds = bounds.union(CGRect(origin: end, size: .zero))
-            case .curve(let end, let firstControl, let secondControl):
-                bounds = bounds.union(CGRect(origin: end, size: .zero)).union(CGRect(origin: firstControl, size: .zero))
-                    .union(CGRect(origin: secondControl, size: .zero))
-            }
-        }
-        return bounds
     }
 }

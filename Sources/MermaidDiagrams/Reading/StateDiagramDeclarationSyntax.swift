@@ -6,8 +6,8 @@
  *              described one, a composite's opening, or nothing.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -17,7 +17,7 @@ enum StateDiagramDeclaration: Equatable {
     /// `state Id <<fork>>`, `<<join>>`, `<<choice>>`, or the same in double brackets (`[[choice]]`).
     case stereotyped(identifier: MermaidTextRange, kind: StateDiagramStateKind)
     /// `state "text" as Id`, or `state "text" as Id:more text`, which gives the state a second description.
-    case described(identifier: StateDiagramStateReference, descriptions: [DiagramLabel], opensBody: Bool)
+    case described(identifier: StateDiagramStateReference, descriptions: [StateDiagramReadText], opensBody: Bool)
     /// `state Id {`: a composite state whose body follows.
     case composite(identifier: MermaidTextRange)
     /// `state Id` alone, which declares nothing in Mermaid: a state is made by naming it in another statement.
@@ -114,18 +114,18 @@ enum StateDiagramDescribedSyntax {
         guard identifier != .named(.empty), identifier != .written("") else { throw .invalidSyntax(line: identifierStart.line, problem: .expectedState) }
         let opensBody = bytes.peek() == MermaidByte.openingBrace
         if opensBody { bytes.advance() }
-        return .described(identifier: identifier, descriptions: descriptions.filter { label in !label.isEmpty }, opensBody: opensBody)
+        return .described(identifier: identifier, descriptions: descriptions, opensBody: opensBody)
     }
 
     /// The identifier and texts of a text of ASCII bytes, trimmed of the bytes Foundation's white space and line
     /// breaks are in ASCII.
     private static func asciiIdentifier(_ bytes: GraphDiagramBytes, _ written: MermaidTextRange,
-                                        description: MermaidTextRange) -> (StateDiagramStateReference, [DiagramLabel]) {
-        var descriptions = [StateDiagramTextSyntax.label(bytes, trimmed(bytes, description, isLineBreakTrimmed: true))]
+                                        description: MermaidTextRange) -> (StateDiagramStateReference, [StateDiagramReadText]) {
+        var descriptions = [StateDiagramTextSyntax.text(bytes, trimmed(bytes, description, isLineBreakTrimmed: true))]
         var identifier = written
         if let colon = UnsafeBufferPointer(rebasing: bytes.buffer[written.lowerBound..<written.upperBound]).firstIndex(of: MermaidByte.colon) {
             let colonOffset = written.lowerBound + colon
-            descriptions.append(StateDiagramTextSyntax.label(bytes, trimmed(bytes, MermaidTextRange(start: colonOffset + 1, end: written.upperBound),
+            descriptions.append(StateDiagramTextSyntax.text(bytes, trimmed(bytes, MermaidTextRange(start: colonOffset + 1, end: written.upperBound),
                                                                             isLineBreakTrimmed: false)))
             identifier = trimmed(bytes, MermaidTextRange(start: written.lowerBound, end: colonOffset), isLineBreakTrimmed: false)
         }
@@ -145,11 +145,11 @@ enum StateDiagramDescribedSyntax {
 
     /// The identifier and texts of a text beyond ASCII, as 0.7.0 read them from Strings.
     private static func writtenIdentifier(_ bytes: GraphDiagramBytes, _ written: MermaidTextRange,
-                                          description: MermaidTextRange) -> (StateDiagramStateReference, [DiagramLabel]) {
+                                          description: MermaidTextRange) -> (StateDiagramStateReference, [StateDiagramReadText]) {
         var identifier = bytes.text(written)
-        var descriptions = [StateDiagramTextSyntax.label(from: bytes.text(description).trimmingCharacters(in: .whitespacesAndNewlines))]
+        var descriptions: [StateDiagramReadText] = [.label(StateDiagramTextSyntax.label(from: bytes.text(description).trimmingCharacters(in: .whitespacesAndNewlines)))]
         if let colon = identifier.firstIndex(of: ":") {
-            descriptions.append(StateDiagramTextSyntax.label(from: identifier[identifier.index(after: colon)...].trimmingCharacters(in: .whitespaces)))
+            descriptions.append(.label(StateDiagramTextSyntax.label(from: identifier[identifier.index(after: colon)...].trimmingCharacters(in: .whitespaces))))
             identifier = identifier[..<colon].trimmingCharacters(in: .whitespaces)
         }
         return (.written(identifier), descriptions)

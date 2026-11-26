@@ -5,8 +5,8 @@
  * Description: A class diagram's namespaces as the nested boxes Pele draws, and the box each class and note sits in.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 /// The namespaces of a class diagram as Pele's class database and graph make them (`class/db.ts` addNamespace,
@@ -33,8 +33,8 @@ struct ClassDiagramNamespaceTree {
     private var indexByIdentifier: [String: Int] = [:]
 
     init(diagram: ClassDiagram) {
-        classNamespaces = Array(repeating: nil, count: diagram.classes.count)
-        noteNamespaces = Array(repeating: nil, count: diagram.notes.count)
+        classNamespaces = Array(repeating: nil, count: diagram.classCount)
+        noteNamespaces = Array(repeating: nil, count: diagram.noteCount)
         var declaredIndices: [Int] = []
         for declared in diagram.namespaces {
             // The namespace it is written in was declared before it, so only the parts of its own name are walked.

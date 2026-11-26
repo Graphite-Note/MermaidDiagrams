@@ -6,8 +6,8 @@
  *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 25/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -53,10 +53,13 @@ public enum StateDiagramLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: StateDiagram, nameText: Measurer, smallText: Measurer, font: DiagramFont,
                                                        limits: MermaidDiagramLimits) throws(StateDiagramLayoutError) -> StateDiagramLayout {
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
+        var measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
                                                wrappingWidth: wrappingWidth, noteWrappingWidth: noteWrappingWidth)
+        let title = diagram.title.map { title in
+            DiagramFlatTextMeasuring.measure(DiagramLabel(title), measurer: DiagramFlatMeasurer(nameText), maximumWidth: .greatestFiniteMagnitude,
+                                             into: &measured.lines)
+        }
         let surroundings = StateDiagramSurroundings(diagram: diagram, measured: measured, axes: flowAxes)
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
         let laidOut = DiagramScratchArena.withCurrentThread { arena -> Result<StateDiagramLayout?, StateDiagramLayoutError> in
             guard !diagram.composites.isEmpty else {
                 return .success(StateDiagramRankedLayout.layout(diagram, measured: measured, surroundings: surroundings, title: title, font: font,
@@ -82,17 +85,17 @@ public enum StateDiagramLayoutEngine {
     /// first name them, then those no transition names, each group in the diagram's order. A state declared before
     /// the transitions does not become the top of the flow.
     static func flowOrder(of diagram: StateDiagram) -> [Int] {
-        var firstAppearance = [Int](repeating: .max, count: diagram.states.count)
+        var firstAppearance = [Int](repeating: .max, count: diagram.stateCount)
         var appearanceCount = 0
-        for transition in diagram.transitions {
+        for transition in diagram.model.transitions {
             for state in [transition.sourceIndex, transition.targetIndex] where firstAppearance[state] == .max {
                 firstAppearance[state] = appearanceCount
                 appearanceCount += 1
             }
         }
-        return diagram.states.indices.sorted { first, second in
-            (diagram.states[first].kind.isStart ? 0 : 1, firstAppearance[first], first)
-                < (diagram.states[second].kind.isStart ? 0 : 1, firstAppearance[second], second)
+        let states = diagram.model.states
+        return states.indices.sorted { first, second in
+            (states[first].kind.isStart ? 0 : 1, firstAppearance[first], first) < (states[second].kind.isStart ? 0 : 1, firstAppearance[second], second)
         }
     }
 }
