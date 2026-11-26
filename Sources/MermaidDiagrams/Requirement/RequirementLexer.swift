@@ -6,8 +6,8 @@
  *              Pele's lexer produces it, one token at a time as the parser asks for it.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 /// Produces the tokens of Mermaid's requirement lexer, as Pele's `lexer.ts` does: its rules are tried in order and the
@@ -126,7 +126,7 @@ struct RequirementLexer {
             emit(.lineBreak, from: position, to: endOfLineBreaks(from: position))
             return true
         }
-        let spaceEnd = Self.isPlainNonSpace(byte) ? position : JavaScriptWhitespace.endOfRun(in: bytes, from: position)
+        let spaceEnd = Self.isPlainNonSpace(byte) ? position : Self.endOfWhitespace(in: bytes, from: position)
         if spaceEnd > position {
             position = spaceEnd
             return true
