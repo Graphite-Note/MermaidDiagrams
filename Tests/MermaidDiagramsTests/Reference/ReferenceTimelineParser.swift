@@ -6,8 +6,8 @@
  *              which the timeline reader is compared with.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -21,10 +21,10 @@ import Foundation
 /// spaces between statements are skipped. Keywords are read without regard to case.
 struct ReferenceTimelineParser {
     private var cursor: MermaidTextCursor
-    private var builder: TimelineDiagramBuilder
+    private var builder: ReferenceTimelineDiagramBuilder
 
-    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> TimelineDiagram {
-        var parser = ReferenceTimelineParser(cursor: cursor, builder: TimelineDiagramBuilder(limits: limits))
+    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> ReferenceTimelineDiagram {
+        var parser = ReferenceTimelineParser(cursor: cursor, builder: ReferenceTimelineDiagramBuilder(limits: limits))
         parser.readDirection()
         try parser.readStatements()
         var diagram = parser.builder.diagram

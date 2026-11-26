@@ -1,11 +1,25 @@
+/**
+ * File: TimelineDiagramBuilder.swift
+ * ----------------------------------
+ * Layer: Core
+ * Description: Collects a timeline as its statements are read, its texts as ranges of its text's bytes, and counts
+ *              them against the node limit.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 /// Collects a timeline as its statements are read: each period under the section written last, each event on the
 /// period written last, and every section, period and event counted against the node limit.
 struct TimelineDiagramBuilder {
-    private(set) var diagram = TimelineDiagram()
+    private(set) var diagram: TimelineDiagram
     private let limits: MermaidDiagramLimits
     private var itemCount = 0
 
-    init(limits: MermaidDiagramLimits) {
+    /// A builder of a timeline whose texts are ranges of `text`.
+    init(text: MermaidSourceText, limits: MermaidDiagramLimits) {
+        diagram = TimelineDiagram(text: text)
         self.limits = limits
     }
 
@@ -18,21 +32,21 @@ struct TimelineDiagramBuilder {
         diagram.title = title.isEmpty ? nil : title
     }
 
-    mutating func addSection(_ label: DiagramLabel) throws(MermaidDiagramReadError) {
+    mutating func addSection(_ text: TimelineText) throws(MermaidDiagramReadError) {
         try countItem()
-        diagram.sections.append(label)
+        diagram.appendSection(text)
     }
 
-    mutating func addPeriod(_ label: DiagramLabel) throws(MermaidDiagramReadError) {
+    mutating func addPeriod(_ text: TimelineText) throws(MermaidDiagramReadError) {
         try countItem()
-        diagram.periods.append(TimelinePeriod(label: label, sectionIndex: diagram.sections.isEmpty ? nil : diagram.sections.count - 1))
+        diagram.appendPeriod(text)
     }
 
     /// An event written on `line`, for the period written last; an event before any period is an error, as in Mermaid.
-    mutating func addEvent(_ label: DiagramLabel, line: Int) throws(MermaidDiagramReadError) {
-        guard !diagram.periods.isEmpty else { throw .invalidSyntax(line: line, problem: .eventWithoutPeriod) }
+    mutating func addEvent(_ text: TimelineText, line: Int) throws(MermaidDiagramReadError) {
+        guard !diagram.periodRecords.isEmpty else { throw .invalidSyntax(line: line, problem: .eventWithoutPeriod) }
         try countItem()
-        diagram.periods[diagram.periods.count - 1].events.append(label)
+        diagram.appendEvent(text)
     }
 
     mutating func apply(_ statement: MermaidAccessibilityStatement) {

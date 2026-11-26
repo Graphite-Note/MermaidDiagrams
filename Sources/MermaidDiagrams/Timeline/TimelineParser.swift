@@ -6,8 +6,8 @@
  *              series colors.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -23,7 +23,7 @@ struct TimelineParser {
     private var builder: TimelineDiagramBuilder
 
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> TimelineDiagram {
-        var parser = TimelineParser(cursor: cursor, builder: TimelineDiagramBuilder(limits: limits))
+        var parser = TimelineParser(cursor: cursor, builder: TimelineDiagramBuilder(text: MermaidSourceText(bytes: cursor.bytes), limits: limits))
         parser.readDirection()
         try parser.readStatements()
         var diagram = parser.builder.diagram
@@ -60,12 +60,12 @@ struct TimelineParser {
             } else if let statement = try MermaidAccessibilityStatement.read(&cursor) {
                 builder.apply(statement)
             } else if let section = readSection() {
-                try builder.addSection(Self.label(section))
+                try builder.addSection(text(section))
             } else if byte != MermaidByte.colon {
                 let period = readPeriod()
-                try builder.addPeriod(Self.label(period))
+                try builder.addPeriod(text(period))
             } else if let event = readEvent() {
-                try builder.addEvent(Self.label(event.text), line: event.line)
+                try builder.addEvent(text(event.text), line: event.line)
             } else {
                 throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt()))
             }
@@ -103,7 +103,7 @@ struct TimelineParser {
     }
 
     /// `section` and a space, then text up to a colon or the end of the line, which must hold something.
-    private mutating func readSection() -> String? {
+    private mutating func readSection() -> Range<Int>? {
         guard isAtKeyword(Self.sectionKeyword), let separator = cursor.peek(Self.sectionKeyword.count),
               Self.isSpace(separator) || separator == MermaidByte.newline else { return nil }
         var lookahead = cursor
@@ -112,20 +112,20 @@ struct TimelineParser {
         while let byte = lookahead.peek(), byte != MermaidByte.colon, byte != MermaidByte.newline { lookahead.advance() }
         guard lookahead.position > start else { return nil }
         cursor = lookahead
-        return cursor.text(from: start, to: cursor.position)
+        return start..<cursor.position
     }
 
     /// A period: from the cursor, which is at no colon, to a colon, a `#` or the end of the line.
-    private mutating func readPeriod() -> String {
+    private mutating func readPeriod() -> Range<Int> {
         let start = cursor.position
         cursor.advance()
         while let byte = cursor.peek(), byte != MermaidByte.colon, byte != Self.numberSign, byte != MermaidByte.newline { cursor.advance() }
-        return cursor.text(from: start, to: cursor.position)
+        return start..<cursor.position
     }
 
     /// An event: a colon and a space, then text to the end of the line or to the next colon followed by a space, which
     /// must hold something. Nil, with the cursor left where it was, when there is none.
-    private mutating func readEvent() -> (text: String, line: Int)? {
+    private mutating func readEvent() -> (text: Range<Int>, line: Int)? {
         guard let separator = cursor.peek(1), Self.isSpace(separator) || separator == MermaidByte.newline else { return nil }
         var lookahead = cursor
         let line = lookahead.line
@@ -137,27 +137,13 @@ struct TimelineParser {
         }
         guard lookahead.position > start else { return nil }
         cursor = lookahead
-        return (cursor.text(from: start, to: cursor.position), line)
+        return (start..<cursor.position, line)
     }
 
-    /// Text as the timeline draws it: `<br>` breaks a line, entity codes are read, and other tags stay as written.
-    /// Text of ASCII alone is trimmed on its bytes and decoded from them: within ASCII, Foundation's white space and line
-    /// breaks are the tab to the carriage return and the space. Any other text is trimmed by Foundation, as before.
-    private static func label(_ text: String) -> DiagramLabel {
-        if let label = text.utf8.withContiguousStorageIfAvailable(asciiLabel), let label { return label }
-        return DiagramLabelDecoder.label(from: text.trimmingCharacters(in: .whitespacesAndNewlines), form: .literal)
-    }
-
-    private static func asciiLabel(_ bytes: UnsafeBufferPointer<UInt8>) -> DiagramLabel? {
-        var combined: UInt8 = 0
-        for byte in bytes { combined |= byte }
-        guard combined < 0x80 else { return nil }
-        func isWhiteSpace(_ byte: UInt8) -> Bool { (byte >= 0x09 && byte <= 0x0D) || byte == 0x20 }
-        var start = 0
-        var end = bytes.count
-        while start < end, isWhiteSpace(bytes[start]) { start += 1 }
-        while end > start, isWhiteSpace(bytes[end - 1]) { end -= 1 }
-        return DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[start..<end]), form: .literal)
+    /// The text of `range`, kept as a range of the text's bytes: trimmed on its bytes when it is ASCII, its label made
+    /// when read (`TimelineText`), where 0.7.0 made a String of it and its label here.
+    private func text(_ range: Range<Int>) -> TimelineText {
+        cursor.bytes.withUnsafeBufferPointer { bytes in TimelineText.read(bytes, from: range.lowerBound, to: range.upperBound) }
     }
 
     /// Whether `keyword` (lowercase) is at the cursor, in any case, and no letter, digit or underscore follows it.
