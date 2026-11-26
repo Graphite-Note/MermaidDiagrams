@@ -6,8 +6,8 @@
  *              another, its edges between sides, its alignments and its options, as Pele's architecture database keeps them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -106,6 +106,8 @@ public struct ArchitectureOptions: Equatable, Sendable {
     public init() {}
 
     init(_ options: MermaidConfigurationOptions) {
+        // Most diagrams set no option: every value keeps its default, which is what each option read from nothing gives.
+        guard !options.values.isEmpty else { return }
         iconSize = CGFloat(options.boundedNumber("iconSize", fallback: 48, least: -.infinity, largest: 512).clamped(least: 8))
         if case .number(let size) = options.values["fontSize"], size.isFinite { fontSize = CGFloat(min(128, max(4, size))) }
         padding = CGFloat(options.boundedNumber("padding", fallback: 20, least: -.infinity, largest: 256).clamped(least: 0))

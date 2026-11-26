@@ -6,8 +6,8 @@
  *              reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -56,6 +56,8 @@ public struct QuadrantChartOptions: Equatable, Sendable {
     public init() {}
 
     init(_ options: MermaidConfigurationOptions) {
+        // Most diagrams set no option: every value keeps its default, which is what each option read from nothing gives.
+        guard !options.values.isEmpty else { return }
         let values = options.values
         chartWidth = Self.length(values["chartWidth"], most: Self.largestPageSide)
         chartHeight = Self.length(values["chartHeight"], most: Self.largestPageSide)
