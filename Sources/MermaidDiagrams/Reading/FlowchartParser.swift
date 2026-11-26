@@ -6,8 +6,8 @@
  *              names interned by their bytes, texts kept as ranges, no String made for a name or a one-line text.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 /// Reads a flowchart's statements after its `flowchart` or `graph` keyword: the direction, then chains of nodes and
@@ -50,26 +50,32 @@ struct FlowchartParser {
 
     /// Reads the flowchart whose keyword the front end found, titled by its front matter.
     static func parse(_ frontEnd: MermaidFrontEndResult, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> FlowchartDiagram {
-        let read: Result<FlowchartDiagram, MermaidDiagramReadError> = frontEnd.text.withBytes { buffer in
+        // The diagram is written where it is kept, out of the closures, so that it is moved once rather than copied
+        // through each closure's result.
+        var diagram: FlowchartDiagram?
+        var failure = MermaidDiagramReadError.noDiagram
+        frontEnd.text.withBytes { buffer in
             FlowchartReadingScratch.withLists { lists in
                 var lookAhead = FlowchartLookAheadLists()
                 swap(&lookAhead, &lists.lookAhead)
                 defer { swap(&lookAhead, &lists.lookAhead) }
                 lookAhead.build(over: buffer)
-                return lookAhead.withIndex { index in
-                    guard let base = buffer.baseAddress else { return .failure(.noDiagram) }
-                    return withUnsafeMutablePointer(to: &lists) { listsAddress in
+                lookAhead.withIndex { index in
+                    guard let base = buffer.baseAddress else { return }
+                    withUnsafeMutablePointer(to: &lists) { listsAddress in
                         var parser = FlowchartParser(bytes: FlowchartBytes(base: base, count: buffer.count, lookAhead: index),
                                                      position: frontEnd.keyword.upperBound, limits: limits, lists: listsAddress)
-                        return Result { () throws(MermaidDiagramReadError) in try parser.read(text: frontEnd.text, title: frontEnd.frontMatterTitle) }
+                        do throws(MermaidDiagramReadError) {
+                            diagram = try parser.read(text: frontEnd.text, title: frontEnd.frontMatterTitle)
+                        } catch {
+                            failure = error
+                        }
                     }
                 }
             }
         }
-        switch consume read {
-        case .success(let diagram): return diagram
-        case .failure(let error): throw error
-        }
+        guard let read = consume diagram else { throw failure }
+        return read
     }
 
     private mutating func read(text: MermaidSourceText, title: String?) throws(MermaidDiagramReadError) -> FlowchartDiagram {

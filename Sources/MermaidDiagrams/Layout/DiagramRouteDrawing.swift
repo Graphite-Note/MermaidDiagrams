@@ -6,8 +6,8 @@
  *              a straight segment between two in line; the route an array or a span of a scratch arena.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -75,7 +75,7 @@ enum DiagramRouteDrawing {
     }
 
     /// The way the path heads from `from` to `to`: along the flow when an S joins them, straight at the other otherwise.
-    private static func direction(from: CGPoint, to: CGPoint, flowIsVertical: Bool) -> CGVector {
+    static func direction(from: CGPoint, to: CGPoint, flowIsVertical: Bool) -> CGVector {
         if !isInLine(from, to) {
             return flowIsVertical ? CGVector(dx: 0, dy: to.y >= from.y ? 1 : -1) : CGVector(dx: to.x >= from.x ? 1 : -1, dy: 0)
         }
@@ -84,7 +84,7 @@ enum DiagramRouteDrawing {
     }
 
     /// Two points are in line when they share a coordinate, to a hundredth of a point.
-    private static func isInLine(_ first: CGPoint, _ second: CGPoint) -> Bool {
+    static func isInLine(_ first: CGPoint, _ second: CGPoint) -> Bool {
         abs(first.x - second.x) < 0.01 || abs(first.y - second.y) < 0.01
     }
 }

@@ -5,8 +5,8 @@
  * Description: An edge of a flowchart and how its line is drawn.
  *
  * Authors: Félix Chevalier
- * Version: 0.2
- * Date: 01/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// An edge of a flowchart, from one node to another as written (`A --> B` runs from A to B).
@@ -41,7 +41,7 @@ public struct FlowchartEdge: Equatable, Sendable {
 }
 
 /// How an edge's line is drawn.
-public enum FlowchartEdgeStroke: Equatable, Sendable, CaseIterable {
+public enum FlowchartEdgeStroke: Equatable, Sendable, CaseIterable, BitwiseCopyable {
     /// `-->`, `---`.
     case solid
     /// `-.->`, `-.-`.
@@ -53,7 +53,7 @@ public enum FlowchartEdgeStroke: Equatable, Sendable, CaseIterable {
 }
 
 /// The mark drawn where an edge meets a node.
-public enum FlowchartArrowhead: Equatable, Sendable, CaseIterable {
+public enum FlowchartArrowhead: Equatable, Sendable, CaseIterable, BitwiseCopyable {
     case none
     /// `>` or `<`.
     case arrow

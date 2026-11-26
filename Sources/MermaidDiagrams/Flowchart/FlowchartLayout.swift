@@ -2,31 +2,62 @@
  * File: FlowchartLayout.swift
  * ---------------------------
  * Layer: Core
- * Description: A flowchart laid out on a page.
+ * Description: A flowchart laid out on a page: its nodes and edges kept as flat records its scene reads where they lie,
+ *              and made as values only for a reader that asks for them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
 
 /// A flowchart laid out on a page whose origin is the top left corner and whose y runs down, in points. Drawing it
 /// needs only colors: every position, path and text measurement is here.
+///
+/// The nodes and edges are kept as flat records (`FlowchartLayoutRecords`): a few numbers each, every edge's segments in
+/// one list. `nodes` and `edges` make them as values each time they are read; the scene reads the records themselves.
 public struct FlowchartLayout: Equatable, Sendable {
     public let size: CGSize
     /// The font the nodes' text was measured in; edge text is in the same font at its own `fontSize`.
     public let font: DiagramFont
-    /// The nodes drawn, in the order the diagram names them. A node that stands for a group (`A --> group`) is the
-    /// group's box, not a node, so a flowchart with subgraphs may have fewer nodes here than its diagram.
-    public let nodes: [FlowchartLayoutNode]
-    /// The edges in the order they are written, edges to a node itself included.
-    public let edges: [FlowchartLayoutEdge]
     /// The diagram's title above it, or nil.
     public let title: DiagramTextBlock?
     /// The boxes of the diagram's groups (`subgraph … end`), in the order of `FlowchartDiagram.subgraphs`: each before
     /// the boxes inside it. Empty for a flowchart without groups.
     public let clusters: [FlowchartLayoutCluster]
+    /// The nodes and edges.
+    let records: FlowchartLayoutRecords
+
+    init(size: CGSize, font: DiagramFont, records: FlowchartLayoutRecords, title: DiagramTextBlock?, clusters: [FlowchartLayoutCluster]) {
+        self.size = size
+        self.font = font
+        self.records = records
+        self.title = title
+        self.clusters = clusters
+    }
+
+    /// A layout of nodes and edges kept as values, each copied once into the records.
+    init(size: CGSize, font: DiagramFont, nodes: [FlowchartLayoutNode], edges: [FlowchartLayoutEdge], title: DiagramTextBlock?,
+         clusters: [FlowchartLayoutCluster]) {
+        self.init(size: size, font: font, records: FlowchartLayoutRecords(nodes: nodes, edges: edges), title: title, clusters: clusters)
+    }
+
+    /// The nodes drawn, in the order the diagram names them. A node that stands for a group (`A --> group`) is the
+    /// group's box, not a node, so a flowchart with subgraphs may have fewer nodes here than its diagram. Made from the
+    /// records each time it is read.
+    public var nodes: [FlowchartLayoutNode] { (0..<records.nodes.count).map(records.layoutNode(at:)) }
+
+    /// The edges in the order they are written, edges to a node itself included. Made from the records each time it is
+    /// read.
+    public var edges: [FlowchartLayoutEdge] { (0..<records.edges.count).map(records.layoutEdge(at:)) }
+
+    /// Layouts are equal when their sizes, fonts, titles, boxes, nodes and edges are, as values.
+    public static func == (left: FlowchartLayout, right: FlowchartLayout) -> Bool {
+        left.size == right.size && left.font == right.font && left.title == right.title && left.clusters == right.clusters
+            && left.records.nodes.count == right.records.nodes.count && left.records.edges.count == right.records.edges.count
+            && left.nodes == right.nodes && left.edges == right.edges
+    }
 }
 
 /// A group's box, drawn behind everything else, in Pele's style: half of the alternate surface color over what is
