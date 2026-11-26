@@ -61,24 +61,29 @@ struct FlowchartLayoutRecordHeader {
 struct FlowchartLayoutRecordBlock: @unchecked Sendable {
     private let buffer: ManagedBuffer<FlowchartLayoutRecordHeader, FlowchartLayoutRecordWord>
 
-    /// A block of `header`, its regions written by `fill` with the start of each.
-    static func make(header: FlowchartLayoutRecordHeader,
-                     fill: (UnsafeMutablePointer<FlowchartPlacedNode>, UnsafeMutablePointer<FlowchartPlacedEdge>,
-                            UnsafeMutablePointer<DiagramPathSegment>) -> Void) -> FlowchartLayoutRecordBlock {
-        let counts = header.counts
-        let buffer = ManagedBuffer<FlowchartLayoutRecordHeader, FlowchartLayoutRecordWord>.create(minimumCapacity: counts.wordCount) { _ in header }
-        buffer.withUnsafeMutablePointerToElements { words in
-            let base = UnsafeMutableRawPointer(words)
-            fill(base.bindMemory(to: FlowchartPlacedNode.self, capacity: counts.nodeCount),
-                 (base + counts.edgeOffset).bindMemory(to: FlowchartPlacedEdge.self, capacity: counts.edgeCount),
-                 (base + counts.segmentOffset).bindMemory(to: DiagramPathSegment.self, capacity: counts.segmentCount))
+    /// A block of `counts`, its regions written by `fill` with the start of each, which gives back the rest of the header:
+    /// the storages of the texts it placed and the styles and assets it listed.
+    static func make(counts: FlowchartLayoutRecordCounts,
+                     fill: (UnsafeMutablePointer<FlowchartPlacedNode>, UnsafeMutablePointer<FlowchartPlacedEdge>, UnsafeMutablePointer<DiagramPathSegment>)
+                         -> (textStorages: DiagramPlacedTextStorages, styles: [DiagramElementStyle], assets: [FlowchartNodeAsset]))
+        -> FlowchartLayoutRecordBlock {
+        let buffer = ManagedBuffer<FlowchartLayoutRecordHeader, FlowchartLayoutRecordWord>.create(minimumCapacity: counts.wordCount) { made in
+            // The regions are written before the header, which `fill` completes.
+            let rest = made.withUnsafeMutablePointerToElements { words in
+                let base = UnsafeMutableRawPointer(words)
+                return fill(base.bindMemory(to: FlowchartPlacedNode.self, capacity: counts.nodeCount),
+                            (base + counts.edgeOffset).bindMemory(to: FlowchartPlacedEdge.self, capacity: counts.edgeCount),
+                            (base + counts.segmentOffset).bindMemory(to: DiagramPathSegment.self, capacity: counts.segmentCount))
+            }
+            return FlowchartLayoutRecordHeader(counts: counts, textStorages: rest.textStorages, styles: rest.styles, assets: rest.assets)
         }
         return FlowchartLayoutRecordBlock(buffer: buffer)
     }
 
     /// The block of no records, shared.
-    static let empty = make(header: FlowchartLayoutRecordHeader(counts: FlowchartLayoutRecordCounts(nodeCount: 0, edgeCount: 0, segmentCount: 0),
-                                                                textStorages: DiagramPlacedTextStorages(), styles: [], assets: [])) { _, _, _ in }
+    static let empty = make(counts: FlowchartLayoutRecordCounts(nodeCount: 0, edgeCount: 0, segmentCount: 0)) { _, _, _ in
+        (DiagramPlacedTextStorages(), [], [])
+    }
 
     /// Calls `body` with the header where the block keeps it.
     @inline(__always)

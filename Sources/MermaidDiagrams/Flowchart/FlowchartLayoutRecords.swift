@@ -61,34 +61,34 @@ struct FlowchartLayoutRecords: Sendable {
         recordBlock = .empty
     }
 
-    /// The records of nodes and edges kept as values (a swimlane's flowchart, a layout a test makes), each copied once.
+    /// The records of nodes and edges kept as values (a swimlane's flowchart, a layout a test makes), each written once
+    /// into the block.
     init(nodes layoutNodes: [FlowchartLayoutNode], edges layoutEdges: [FlowchartLayoutEdge]) {
-        var placedNodes: [FlowchartPlacedNode] = []
-        placedNodes.reserveCapacity(layoutNodes.count)
-        var textStorages = DiagramPlacedTextStorages()
-        var styles: [DiagramElementStyle] = []
-        var assets: [FlowchartNodeAsset] = []
-        for node in layoutNodes {
-            placedNodes.append(FlowchartPlacedNode(shape: node.shape, frame: node.frame, text: textStorages.place(node.text),
-                                                   styleIndex: Self.listed(node.style, in: &styles), assetIndex: Self.listed(node.asset, in: &assets)))
-        }
-        var placedEdges: [FlowchartPlacedEdge] = []
-        placedEdges.reserveCapacity(layoutEdges.count)
-        var segments: [DiagramPathSegment] = []
-        for edge in layoutEdges {
-            let firstSegment = Int32(segments.count)
-            segments.append(contentsOf: edge.path.segments)
-            placedEdges.append(FlowchartPlacedEdge(stroke: edge.stroke, start: edge.path.start, firstSegment: firstSegment,
-                                                   segmentCount: Int32(edge.path.segments.count), sourceMark: edge.sourceMark,
-                                                   targetMark: edge.targetMark, text: edge.text.map { text in textStorages.place(text) },
-                                                   styleIndex: Self.listed(edge.style, in: &styles)))
-        }
-        let counts = FlowchartLayoutRecordCounts(nodeCount: placedNodes.count, edgeCount: placedEdges.count, segmentCount: segments.count)
-        let header = FlowchartLayoutRecordHeader(counts: counts, textStorages: textStorages, styles: styles, assets: assets)
-        recordBlock = FlowchartLayoutRecordBlock.make(header: header) { nodes, edges, segmentStart in
-            placedNodes.withUnsafeBufferPointer { made in if let base = made.baseAddress { nodes.initialize(from: base, count: made.count) } }
-            placedEdges.withUnsafeBufferPointer { made in if let base = made.baseAddress { edges.initialize(from: base, count: made.count) } }
-            segments.withUnsafeBufferPointer { made in if let base = made.baseAddress { segmentStart.initialize(from: base, count: made.count) } }
+        var segmentCount = 0
+        for edge in layoutEdges { segmentCount += edge.path.segments.count }
+        let counts = FlowchartLayoutRecordCounts(nodeCount: layoutNodes.count, edgeCount: layoutEdges.count, segmentCount: segmentCount)
+        recordBlock = FlowchartLayoutRecordBlock.make(counts: counts) { nodeStart, edgeStart, segmentStart in
+            var textStorages = DiagramPlacedTextStorages()
+            var styles: [DiagramElementStyle] = []
+            var assets: [FlowchartNodeAsset] = []
+            for (index, node) in layoutNodes.enumerated() {
+                (nodeStart + index).initialize(to: FlowchartPlacedNode(shape: node.shape, frame: node.frame, text: textStorages.place(node.text),
+                                                                       styleIndex: Self.listed(node.style, in: &styles),
+                                                                       assetIndex: Self.listed(node.asset, in: &assets)))
+            }
+            var segmentIndex = 0
+            for (index, edge) in layoutEdges.enumerated() {
+                let firstSegment = segmentIndex
+                for segment in edge.path.segments {
+                    (segmentStart + segmentIndex).initialize(to: segment)
+                    segmentIndex += 1
+                }
+                (edgeStart + index).initialize(to: FlowchartPlacedEdge(stroke: edge.stroke, start: edge.path.start, firstSegment: Int32(firstSegment),
+                                                                       segmentCount: Int32(segmentIndex - firstSegment), sourceMark: edge.sourceMark,
+                                                                       targetMark: edge.targetMark, text: edge.text.map { text in textStorages.place(text) },
+                                                                       styleIndex: Self.listed(edge.style, in: &styles)))
+            }
+            return (textStorages, styles, assets)
         }
     }
 
@@ -97,12 +97,13 @@ struct FlowchartLayoutRecords: Sendable {
         let nodes = recording.nodes.elements
         let edges = recording.edges.elements
         let segments = recording.segments.elements
+        let rest = (recording.textStorages, recording.styles, recording.assets)
         let counts = FlowchartLayoutRecordCounts(nodeCount: nodes.count, edgeCount: edges.count, segmentCount: segments.count)
-        let header = FlowchartLayoutRecordHeader(counts: counts, textStorages: recording.textStorages, styles: recording.styles, assets: recording.assets)
-        recordBlock = FlowchartLayoutRecordBlock.make(header: header) { nodeStart, edgeStart, segmentStart in
+        recordBlock = FlowchartLayoutRecordBlock.make(counts: counts) { nodeStart, edgeStart, segmentStart in
             nodeStart.initialize(from: nodes.start, count: nodes.count)
             edgeStart.initialize(from: edges.start, count: edges.count)
             segmentStart.initialize(from: segments.start, count: segments.count)
+            return rest
         }
     }
 
