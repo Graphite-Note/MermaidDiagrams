@@ -4,10 +4,11 @@
  * Layer: Core
  * Description: A requirement diagram's boxes and relations measured as Pele's requirement renderer measures them: the
  *              stereotype, the bold name and the rows of fields of each box, and each relation's text, every text
- *              measured on the flat path into the measurement's one list of lines and kept as a measured text.
+ *              measured on the flat path from the records' ranges of the diagram's text into the measurement's one list
+ *              of lines and kept as a measured text, the boxes, rows and edges in lists of the thread's arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -21,19 +22,20 @@ struct RequirementTextMeasurers<Measurer: DiagramTextMeasuring> {
 }
 
 /// One box measured: its stereotype, its name and its rows of fields (`rowCount` rows of the measurement's `rows` from
-/// `firstRow`), the widest field name, the height of its head and its size, the room its loops take kept apart.
+/// `firstRow`), the widest field name, the height of its head and its size, the room its loops take kept apart, and its
+/// look: `styleIndex` in the measurement's `styles`, -1 for the usual look.
 struct RequirementMeasuredBox {
     let isRequirement: Bool
     let stereotype: DiagramMeasuredText
     let name: DiagramMeasuredText
-    let firstRow: Int
-    let rowCount: Int
+    let firstRow: Int32
+    let rowCount: Int32
     let keyWidth: CGFloat
     let headHeight: CGFloat
     let size: CGSize
-    let style: DiagramElementStyle?
+    let styleIndex: Int32
 
-    var rowIndices: Range<Int> { firstRow..<(firstRow + rowCount) }
+    var rowIndices: Range<Int> { Int(firstRow)..<Int(firstRow + rowCount) }
 }
 
 /// A row of a box: a field's name and its value, and the taller one's height.
@@ -43,13 +45,15 @@ struct RequirementMeasuredRow {
     let height: CGFloat
 }
 
-/// A relation that joins two boxes drawn: the relation it draws, its ends by box, and its text, `«kind»`.
+/// A relation that joins two boxes drawn: the relation it draws, its ends by box, its text, `«kind»`, and for a relation
+/// from a box to itself the number of the box's loops before it, -1 for any other.
 struct RequirementMeasuredEdge {
-    let relationIndex: Int
+    let relationIndex: Int32
     let kind: RequirementRelationKind
-    let source: Int
-    let target: Int
+    let source: Int32
+    let target: Int32
     let text: DiagramMeasuredText
+    let loopIndex: Int32
 
     var isSelfLoop: Bool { source == target }
     var isContainment: Bool { kind == .contains }
@@ -57,7 +61,9 @@ struct RequirementMeasuredEdge {
 
 /// A requirement diagram measured, its boxes the requirements then the elements, as Mermaid orders them, and its edges the
 /// relations whose two names are declared, in the order written: what the layout needs before it places anything. Every
-/// text is a measured text of `lines`, measured as `DiagramTextBlock` measures the same label (`DiagramFlatTextMeasuring`).
+/// text is a measured text of `lines`, measured as `DiagramTextBlock` measures the same label (`DiagramFlatTextMeasuring`),
+/// from the diagram's text where it is written there. The boxes, rows and edges are lists of the calling thread's arena,
+/// valid while the layout runs.
 struct RequirementMeasurement {
     /// Pele's measurements: 14 points of padding across a box and 10 along it, 2 between rows, 12 between a row's name and
     /// value, boxes at least 120 points wide, names wrapped at 280 points and values at 240.
@@ -75,59 +81,57 @@ struct RequirementMeasurement {
 
     /// The lines of every text measured, the title's too once the layout measures it.
     var lines = DiagramMeasuredLines()
-    private(set) var boxes: [RequirementMeasuredBox] = []
-    private(set) var rows: [RequirementMeasuredRow] = []
-    private(set) var edges: [RequirementMeasuredEdge] = []
-    /// For each box, the indexes of its edges to itself, in their written order.
-    private(set) var selfLoopEdgeIndices: [[Int]] = []
+    private(set) var boxes: ScratchList<RequirementMeasuredBox>
+    private(set) var rows: ScratchList<RequirementMeasuredRow>
+    private(set) var edges: ScratchList<RequirementMeasuredEdge>
+    /// The looks the diagram's styles give the boxes that have one, each box's at its `styleIndex`.
+    private(set) var styles: [DiagramElementStyle] = []
     /// `RequirementDiagram.unappliedStatementCount`, counted as the boxes' styles are resolved.
     private(set) var unappliedStatementCount = 0
 
-    init<Measurer: DiagramTextMeasuring>(diagram: RequirementDiagram, measurers: RequirementTextMeasurers<Measurer>) {
-        var styles = RequirementStyleResolution()
-        var texts = RequirementConstantTexts(measurers: measurers)
+    init<Measurer: DiagramTextMeasuring>(diagram: RequirementDiagram, measurers: RequirementTextMeasurers<Measurer>, arena: DiagramScratchArena) {
+        let model = diagram.model
+        boxes = arena.list(capacity: model.boxCount, of: RequirementMeasuredBox.self)
+        rows = arena.list(capacity: 4 * model.requirementCount + 2 * model.elementCount, of: RequirementMeasuredRow.self)
+        edges = arena.list(capacity: model.relations.count, of: RequirementMeasuredEdge.self)
+        var styleResolution = RequirementStyleResolution(model: model)
+        var texts = RequirementConstantTexts(measurers: measurers, arena: arena)
         let names = DiagramFlatMeasurer(measurers.names)
-        let body = texts.body
-        boxes.reserveCapacity(diagram.requirements.count + diagram.elements.count)
-        rows.reserveCapacity(4 * diagram.requirements.count + 2 * diagram.elements.count)
-        reserveLines(for: diagram)
-        var boxIndices: [String: Int] = [:]
-        boxIndices.reserveCapacity(diagram.requirements.count + diagram.elements.count)
-        for requirement in diagram.requirements {
-            if boxIndices[requirement.name] == nil { boxIndices[requirement.name] = boxes.count }
-            var box = startBox(name: requirement.name, stereotype: texts.stereotype(of: requirement.kind, into: &lines), names: names)
-            appendRow(.identifier, requirement.identifier, to: &box, texts: &texts, body: body)
-            appendRow(.text, requirement.text, to: &box, texts: &texts, body: body)
-            appendRow(.risk, requirement.risk?.rawValue ?? "", to: &box, texts: &texts, body: body)
-            appendRow(.verification, requirement.verificationMethod?.rawValue ?? "", to: &box, texts: &texts, body: body)
-            finishBox(box, isRequirement: true, style: styles.style(of: requirement.styleDeclarations))
+        lines.reserveCapacity(lines: 16 + 8 * model.requirementCount + 5 * model.elementCount, derivedBytes: 256)
+        model.text.withUnsafeBufferPointer { bytes in
+            for record in model.requirements {
+                var box = startBox(name: record.name, of: bytes, stereotype: texts.stereotype(of: record.kind, into: &lines), names: names)
+                appendRow(.identifier, record.firstField, of: bytes, to: &box, texts: &texts)
+                appendRow(.text, record.secondField, of: bytes, to: &box, texts: &texts)
+                if let risk = record.risk { appendRow(.risk, texts.value(of: risk, into: &lines), to: &box, texts: &texts) }
+                if let method = record.verificationMethod { appendRow(.verification, texts.value(of: method, into: &lines), to: &box, texts: &texts) }
+                finishBox(box, isRequirement: true, style: styleResolution.style(of: record))
+            }
+            for record in model.elements {
+                var box = startBox(name: record.name, of: bytes, stereotype: texts.elementStereotype(into: &lines), names: names)
+                appendRow(.type, record.firstField, of: bytes, to: &box, texts: &texts)
+                appendRow(.documentReference, record.secondField, of: bytes, to: &box, texts: &texts)
+                finishBox(box, isRequirement: false, style: styleResolution.style(of: record))
+            }
         }
-        // A requirement and an element may share a name; relations then go to the requirement.
-        for element in diagram.elements {
-            if boxIndices[element.name] == nil { boxIndices[element.name] = boxes.count }
-            var box = startBox(name: element.name, stereotype: texts.elementStereotype(into: &lines), names: names)
-            appendRow(.type, element.type, to: &box, texts: &texts, body: body)
-            appendRow(.documentReference, element.documentReference, to: &box, texts: &texts, body: body)
-            finishBox(box, isRequirement: false, style: styles.style(of: element.styleDeclarations))
-        }
-        unappliedStatementCount = styles.unappliedCount
-        edges.reserveCapacity(diagram.relations.count)
-        selfLoopEdgeIndices = [[Int]](repeating: [], count: boxes.count)
-        for (relationIndex, relation) in diagram.relations.enumerated() {
-            guard let source = boxIndices[relation.source], let target = boxIndices[relation.target] else { continue }
-            if source == target { selfLoopEdgeIndices[source].append(edges.count) }
-            edges.append(RequirementMeasuredEdge(relationIndex: relationIndex, kind: relation.kind, source: source, target: target,
-                                                 text: texts.relationText(of: relation.kind, into: &lines)))
-        }
+        unappliedStatementCount = styleResolution.unappliedCount
+        measureEdges(of: model, texts: &texts, arena: arena)
     }
 
-    /// Room for about every line and byte the diagram's texts take: a line or two for each text, and the bytes of its
-    /// names and fields, which are copied into the derived bytes, with the constant texts'.
-    private mutating func reserveLines(for diagram: RequirementDiagram) {
-        var byteCount = 256
-        for requirement in diagram.requirements { byteCount += requirement.name.utf8.count + requirement.identifier.utf8.count + requirement.text.utf8.count }
-        for element in diagram.elements { byteCount += element.name.utf8.count + element.type.utf8.count + element.documentReference.utf8.count }
-        lines.reserveCapacity(lines: 16 + 8 * diagram.requirements.count + 5 * diagram.elements.count, derivedBytes: byteCount + 32 * diagram.requirements.count)
+    /// The relations whose two names are declared, each with its text; a requirement and an element may share a name, and
+    /// relations then go to the requirement (`RequirementRelationRecord`). A loop's index counts the box's loops before it.
+    private mutating func measureEdges<Measurer>(of model: RequirementModel, texts: inout RequirementConstantTexts<Measurer>, arena: DiagramScratchArena) {
+        let loopCounts = arena.span(count: boxes.count, repeating: Int32(0))
+        for (relationIndex, relation) in model.relations.enumerated() {
+            guard relation.sourceBox >= 0, relation.targetBox >= 0 else { continue }
+            var loopIndex: Int32 = -1
+            if relation.sourceBox == relation.targetBox {
+                loopIndex = loopCounts[Int(relation.sourceBox)]
+                loopCounts[Int(relation.sourceBox)] += 1
+            }
+            edges.append(RequirementMeasuredEdge(relationIndex: Int32(relationIndex), kind: relation.kind, source: relation.sourceBox, target: relation.targetBox,
+                                                 text: texts.relationText(of: relation.kind, into: &lines), loopIndex: loopIndex))
+        }
     }
 
     /// A box being measured, as Pele's `draw` measures a node: its stereotype and name, then its rows as they are added.
@@ -140,17 +144,25 @@ struct RequirementMeasurement {
         var bodyHeight: CGFloat = 0
     }
 
-    private mutating func startBox<Measurer>(name: String, stereotype: DiagramMeasuredText, names: DiagramFlatMeasurer<Measurer>) -> BoxInProgress {
-        let nameText = DiagramFlatTextMeasuring.measure(markdownWritten: name, measurer: names, maximumWidth: Self.nameWrappingWidth, into: &lines)
+    /// The box's name, `bytes[name]`, read as Markdown, and its stereotype.
+    private mutating func startBox<Measurer>(name: MermaidTextRange, of bytes: UnsafeBufferPointer<UInt8>, stereotype: DiagramMeasuredText,
+                                             names: DiagramFlatMeasurer<Measurer>) -> BoxInProgress {
+        let nameText = DiagramFlatTextMeasuring.measure(markdown: bytes, name, measurer: names, maximumWidth: Self.nameWrappingWidth, into: &lines)
         return BoxInProgress(stereotype: stereotype, name: nameText, firstRow: rows.count)
     }
 
-    /// The row of a field, its value Markdown; a field of empty text is left out.
-    private mutating func appendRow<Measurer>(_ key: RequirementFieldKey, _ value: String, to box: inout BoxInProgress,
-                                              texts: inout RequirementConstantTexts<Measurer>, body: DiagramFlatMeasurer<Measurer>) {
+    /// The row of a field whose value, `bytes[value]`, is Markdown; a field of empty text is left out.
+    private mutating func appendRow<Measurer>(_ key: RequirementFieldKey, _ value: MermaidTextRange, of bytes: UnsafeBufferPointer<UInt8>,
+                                              to box: inout BoxInProgress, texts: inout RequirementConstantTexts<Measurer>) {
         guard !value.isEmpty else { return }
+        let valueText = DiagramFlatTextMeasuring.measure(markdown: bytes, value, measurer: texts.body, maximumWidth: Self.valueWrappingWidth, into: &lines)
+        appendRow(key, valueText, to: &box, texts: &texts)
+    }
+
+    /// The row of a field and its value measured.
+    private mutating func appendRow<Measurer>(_ key: RequirementFieldKey, _ valueText: DiagramMeasuredText, to box: inout BoxInProgress,
+                                              texts: inout RequirementConstantTexts<Measurer>) {
         let keyText = texts.key(key, into: &lines)
-        let valueText = DiagramFlatTextMeasuring.measure(markdownWritten: value, measurer: body, maximumWidth: Self.valueWrappingWidth, into: &lines)
         let height = max(keyText.size.height, valueText.size.height)
         rows.append(RequirementMeasuredRow(key: keyText, value: valueText, height: height))
         box.keyWidth = max(box.keyWidth, keyText.size.width)
@@ -165,22 +177,31 @@ struct RequirementMeasurement {
         let headHeight = 2 * Self.paddingAlong + box.stereotype.size.height + box.name.size.height
         let width = max(Self.minimumWidth, max(box.stereotype.size.width, box.name.size.width) + 2 * Self.paddingAcross,
                         rowCount == 0 ? 0 : box.keyWidth + Self.columnGap + box.valueWidth + 2 * Self.paddingAcross)
-        boxes.append(RequirementMeasuredBox(isRequirement: isRequirement, stereotype: box.stereotype, name: box.name, firstRow: box.firstRow,
-                                            rowCount: rowCount, keyWidth: box.keyWidth, headHeight: headHeight,
-                                            size: CGSize(width: width, height: headHeight + bodyHeight), style: style))
+        var styleIndex: Int32 = -1
+        if let style {
+            styleIndex = Int32(styles.count)
+            styles.append(style)
+        }
+        boxes.append(RequirementMeasuredBox(isRequirement: isRequirement, stereotype: box.stereotype, name: box.name, firstRow: Int32(box.firstRow),
+                                            rowCount: Int32(rowCount), keyWidth: box.keyWidth, headHeight: headHeight,
+                                            size: CGSize(width: width, height: headHeight + bodyHeight), styleIndex: styleIndex))
+    }
+
+    /// The look of a box measured: its style, or nil for the usual look.
+    func style(of box: RequirementMeasuredBox) -> DiagramElementStyle? {
+        box.styleIndex >= 0 ? styles[Int(box.styleIndex)] : nil
     }
 
     /// Each box's size in its rank: its own, grown on both sides across the flow by each of its loops, as Pele grows the
-    /// node it lays out (`RequirementSelfLoops.room`).
-    func layoutSizes(flowIsVertical: Bool) -> [CGSize] {
-        boxes.indices.map { box in
-            var size = boxes[box].size
-            for edgeIndex in selfLoopEdgeIndices[box] {
-                let room = RequirementSelfLoops.room(textSize: edges[edgeIndex].text.size, flowIsVertical: flowIsVertical)
-                if flowIsVertical { size.width += 2 * room } else { size.height += 2 * room }
-            }
-            return size
+    /// node it lays out (`RequirementSelfLoops.room`), in the order its loops are written.
+    func layoutSizes(flowIsVertical: Bool, arena: DiagramScratchArena) -> ScratchSpan<CGSize> {
+        let sizes: ScratchSpan<CGSize> = arena.uninitializedSpan(count: boxes.count)
+        for box in 0..<boxes.count { sizes[box] = boxes[box].size }
+        for edge in edges where edge.loopIndex >= 0 {
+            let room = RequirementSelfLoops.room(textSize: edge.text.size, flowIsVertical: flowIsVertical)
+            if flowIsVertical { sizes[Int(edge.source)].width += 2 * room } else { sizes[Int(edge.source)].height += 2 * room }
         }
+        return sizes
     }
 }
 
@@ -188,31 +209,41 @@ extension RequirementDiagram {
     /// How many style declarations the requirements and elements hold, each time it is given, that their look has no place
     /// for (`font-weight`, `font-style`, `font-size`) or does not read; the colors and strokes are applied.
     public var unappliedStatementCount: Int {
-        var styles = RequirementStyleResolution()
-        for requirement in requirements { _ = styles.style(of: requirement.styleDeclarations) }
-        for element in elements { _ = styles.style(of: element.styleDeclarations) }
+        var styles = RequirementStyleResolution(model: model)
+        for record in model.requirements { _ = styles.style(of: record) }
+        for record in model.elements { _ = styles.style(of: record) }
         return styles.unappliedCount
     }
 }
 
 /// The look each box's declarations give it, as Pele's `resolveStyle` gives it (each property's last value wins), each
-/// distinct declaration read once.
+/// declaration read once, on its bytes, the first time a box holds it.
 struct RequirementStyleResolution {
-    private var read: [String: (style: DiagramElementStyle, isUnapplied: Bool)] = [:]
+    private let model: RequirementModel
+    /// By declaration number, once read.
+    private var read: [(style: DiagramElementStyle, isUnapplied: Bool)?] = []
     private(set) var unappliedCount = 0
 
-    mutating func style(of declarations: [String]) -> DiagramElementStyle? {
-        guard !declarations.isEmpty else { return nil }
+    init(model: RequirementModel) {
+        self.model = model
+    }
+
+    mutating func style(of record: RequirementNodeRecord) -> DiagramElementStyle? {
+        guard record.styleDeclarationCount > 0 else { return nil }
+        if read.isEmpty { read = Array(repeating: nil, count: model.ranges.count) }
         var style = DiagramElementStyle()
-        for declaration in declarations {
-            // A declaration read before is looked up once; one read for the first time is kept.
+        for position in record.styleDeclarationIndices {
+            let number = model.numbers[position]
             let reading: (style: DiagramElementStyle, isUnapplied: Bool)
-            if let known = read[declaration] {
+            if let known = read[Int(number)] {
                 reading = known
             } else {
-                let parsed = DiagramElementStyle.reading(declaration)
+                let parsed = model.withDeclarationBytes(number) { bytes in
+                    bytes.allSatisfy { byte in byte < 0x80 } ? DiagramElementStyle.reading(bytes: bytes)
+                                                              : DiagramElementStyle.reading(String(decoding: bytes, as: UTF8.self))
+                }
                 reading = (parsed.style, parsed.hasUnappliedDeclaration)
-                read[declaration] = reading
+                read[Int(number)] = reading
             }
             style = style.overridden(by: reading.style)
             if reading.isUnapplied { unappliedCount += 1 }

@@ -7,7 +7,7 @@
  *              refuses it as too many path elements instead of drawing it with the path missing.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -88,10 +88,14 @@ final class GraphFamilyElementLimitTests: XCTestCase {
         let source = "requirementDiagram\n  requirement checkout_req {\n    id: 1\n    text: pay\n  }\n  element shop {\n    type: service\n  }\n  shop - satisfies -> checkout_req"
         guard case .requirement(let diagram) = try read(source) else { return XCTFail("not a requirement diagram") }
         let layout = try RequirementLayoutEngine.layout(diagram, typography: typography, limits: .standard)
+        // The first relation's line made `longPath`: its segments written after the layout's.
         var relations = layout.placedRelations
-        relations[0].path = longPath
-        let lengthened = RequirementLayout(size: layout.size, font: layout.font, lines: layout.lines, placedBoxes: layout.placedBoxes, fieldTexts: layout.fieldTexts,
-                                           placedRelations: relations, placedTitle: layout.placedTitle)
+        let first = relations[0]
+        relations[0] = RequirementPlacedRelation(kind: first.kind, start: longPath.start, firstSegment: Int32(layout.segments.count),
+                                                 segmentCount: Int32(longPath.segments.count), mark: first.mark, text: first.text)
+        let lengthened = RequirementLayout(size: layout.size, font: layout.font, lines: layout.lines, source: layout.source, placedBoxes: layout.placedBoxes,
+                                           fieldTexts: layout.fieldTexts, placedRelations: relations, segments: layout.segments + longPath.segments,
+                                           placedTitle: layout.placedTitle)
         assertRefusedUnderSmallLimits { limits in DiagramScene(layout: lengthened, limits: limits) }
         assertSameDrawing(DiagramScene(layout: layout, limits: smallLimits), DiagramScene(layout: layout))
     }

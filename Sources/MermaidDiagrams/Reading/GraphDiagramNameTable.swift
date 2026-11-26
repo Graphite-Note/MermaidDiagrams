@@ -7,8 +7,8 @@
  *              otherwise, so that two names are one exactly when 0.7.0's String keys made them one.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 #if canImport(Darwin)
@@ -129,4 +129,27 @@ struct GraphDiagramNameTable {
         }
         return (combined.max() | tail) < 0x80
     }
+}
+
+extension GraphDiagramNameTable {
+    /// The table emptied for the names of another text, ASCII or not, keeping its room for them unless a long text left
+    /// more than `largestKeptSlotCount` slots: so that a thread's readings reuse one table.
+    mutating func reset(isASCII: Bool) {
+        var keptSlots = slots.count > Self.largestKeptSlotCount ? [] : slots
+        var keptHashes = hashes.capacity > Self.largestKeptSlotCount ? [] : hashes
+        var keptRanges = ranges.capacity > Self.largestKeptSlotCount ? [] : ranges
+        let hadStrings = !numberByString.isEmpty
+        var keptStrings = hadStrings && numberByString.capacity > Self.largestKeptSlotCount ? [:] : numberByString
+        self = GraphDiagramNameTable(isASCII: isASCII)
+        if !keptSlots.isEmpty { keptSlots.withUnsafeMutableBufferPointer { slots in slots.update(repeating: 0) } }
+        keptHashes.removeAll(keepingCapacity: true)
+        keptRanges.removeAll(keepingCapacity: true)
+        if hadStrings { keptStrings.removeAll(keepingCapacity: true) }
+        slots = keptSlots
+        hashes = keptHashes
+        ranges = keptRanges
+        numberByString = keptStrings
+    }
+
+    private static let largestKeptSlotCount = 8_192
 }

@@ -6,8 +6,8 @@
  *              renderer draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -38,9 +38,11 @@ enum RequirementSelfLoops {
         loopReach + (flowIsVertical ? textSize.width + textRoomAcross : textSize.height + textRoomAlong)
     }
 
-    /// One loop: its path, where it leaves the box and the way into the box there, where it comes back, and its text's center.
+    /// One loop: its path's start and its one curve, where it leaves the box and the way into the box there, where it
+    /// comes back, and its text's center.
     struct Loop {
-        let path: DiagramPath
+        let start: CGPoint
+        let curve: DiagramPathSegment
         let leave: CGPoint
         let back: CGPoint
         /// The way into the box, at both ends.
@@ -59,13 +61,12 @@ enum RequirementSelfLoops {
                            : CGPoint(x: center.x + along, y: center.y + boxSize.height / 2 + outward)
         }
         let pull = reach / controlReachRatio
-        let path = DiagramPath(start: point(outward: startTrim, along: -spread), segments: [
-            .curve(to: point(outward: 0, along: spread), control1: point(outward: pull, along: -spread), control2: point(outward: pull, along: spread)),
-        ])
+        let curve = DiagramPathSegment.curve(to: point(outward: 0, along: spread), control1: point(outward: pull, along: -spread),
+                                             control2: point(outward: pull, along: spread))
         let textCenter = flowIsVertical
             ? point(outward: reach + textGap + (textSize.width + textRoomAcross) / 2, along: 0)
             : point(outward: reach + textGap + (textSize.height + RequirementMeasurement.edgeTextRoom.height) / 2, along: 0)
-        return Loop(path: path, leave: point(outward: 0, along: -spread), back: point(outward: 0, along: spread),
+        return Loop(start: point(outward: startTrim, along: -spread), curve: curve, leave: point(outward: 0, along: -spread), back: point(outward: 0, along: spread),
                     intoBox: flowIsVertical ? CGVector(dx: -1, dy: 0) : CGVector(dx: 0, dy: -1), textCenter: textCenter)
     }
 }

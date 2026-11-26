@@ -5,8 +5,8 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.8
- * Date: 25/11/2026
+ * Version: 0.9
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagram {
@@ -39,7 +39,7 @@ extension MermaidDiagram {
         case .c4(let diagram): diagram.shapeRecords.isEmpty && diagram.boundaryRecords.count == 1
         case .block(let diagram): diagram.drawsNoBlock
         case .architecture(let diagram): diagram.nodes.isEmpty && diagram.groups.isEmpty
-        case .requirement(let diagram): diagram.requirements.isEmpty && diagram.elements.isEmpty
+        case .requirement(let diagram): diagram.requirementCount == 0 && diagram.elementCount == 0
         case .swimlane(let diagram): diagram.nodeCount == 0 && diagram.subgraphCount == 0
         case .useCase(let diagram): diagram.isEmpty
         case .agentFlow(let diagram): diagram.graph.nodes.isEmpty

@@ -9,8 +9,8 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -195,6 +195,14 @@ final class TypeReaderSpeedTests: XCTestCase {
                                            ("accessibilityTitle", useCase.accessibilityTitle), ("accessibilityDescription", useCase.accessibilityDescription),
                                            ("nodeSpacing", useCase.nodeSpacing as Any), ("rankSpacing", useCase.rankSpacing as Any)]
             return "UseCaseDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
+        }
+        // A requirement diagram too, its fields in the order 0.7.0 stored them.
+        if let requirement = value as? RequirementDiagram {
+            let fields: [(String, Any)] = [("direction", requirement.direction), ("requirements", requirement.requirements), ("elements", requirement.elements),
+                                           ("relations", requirement.relations), ("styleClasses", requirement.styleClasses),
+                                           ("title", requirement.title as Any), ("accessibilityTitle", requirement.accessibilityTitle as Any),
+                                           ("accessibilityDescription", requirement.accessibilityDescription as Any)]
+            return "RequirementDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
         }
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {

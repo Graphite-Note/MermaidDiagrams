@@ -2,12 +2,13 @@
  * File: ReferenceRequirementDiagramBuilder.swift
  * ----------------------------------------------
  * Layer: Tests
- * Description: 0.7.0's RequirementDiagramBuilder, kept unchanged but for its names as the reference the requirement
- *              reader on bytes is compared with (RequirementReadingEquivalenceTests).
+ * Description: 0.7.0's RequirementDiagramBuilder, kept unchanged but for its names, and for the values it builds into,
+ *              0.7.0's diagram's lists, which make the diagram at the end, as the reference the requirement reader on
+ *              bytes is compared with (RequirementReadingEquivalenceTests).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 @testable import MermaidDiagrams
@@ -21,7 +22,7 @@ struct ReferenceRequirementDiagramBuilder {
     /// Pele's `MAX_STYLE_COPIES`.
     static let maximumStyleCopyCount = 1_000_000
 
-    private(set) var diagram = RequirementDiagram()
+    private(set) var diagram = ReferenceRequirementDiagramValues()
     private let limits: MermaidDiagramLimits
     private var requirementIndices: [String: Int] = [:]
     private var elementIndices: [String: Int] = [:]
@@ -193,5 +194,21 @@ extension ReferenceRequirementDiagramBuilder {
             for index in requirementClassSets.indices where requirementClassSets[index].contains(name) { try copy(split, onto: .requirement(index)) }
             for index in elementClassSets.indices where elementClassSets[index].contains(name) { try copy(split, onto: .element(index)) }
         }
+    }
+}
+
+/// 0.7.0's requirement diagram as the lists the reference builds, made into the diagram when the reading ends.
+struct ReferenceRequirementDiagramValues {
+    var direction = FlowchartDirection.topToBottom
+    var requirements: [RequirementDiagramRequirement] = []
+    var elements: [RequirementDiagramElement] = []
+    var relations: [RequirementDiagramRelation] = []
+    var styleClasses: [RequirementDiagramStyleClass] = []
+    var accessibilityTitle: String?
+    var accessibilityDescription: String?
+
+    var made: RequirementDiagram {
+        RequirementDiagram(direction: direction, requirements: requirements, elements: elements, relations: relations, styleClasses: styleClasses,
+                           accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
     }
 }

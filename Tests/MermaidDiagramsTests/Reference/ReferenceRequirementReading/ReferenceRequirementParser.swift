@@ -2,12 +2,13 @@
  * File: ReferenceRequirementParser.swift
  * --------------------------------------
  * Layer: Tests
- * Description: 0.7.0's RequirementParser, kept unchanged but for its names as the reference the requirement reader on
- *              bytes is compared with (RequirementReadingEquivalenceTests).
+ * Description: 0.7.0's RequirementParser, kept unchanged but for its names and the diagram it makes of its builder's
+ *              values at the end, as the reference the requirement reader on bytes is compared with
+ *              (RequirementReadingEquivalenceTests).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 @testable import MermaidDiagrams
@@ -39,7 +40,7 @@ struct ReferenceRequirementParser {
         parser.index += 1
         try parser.expect(.lineBreak, else: .expectedLineBreak)
         try parser.readStatements()
-        return parser.builder.diagram
+        return parser.builder.diagram.made
     }
 
     private init(bytes: [UInt8], tokens: [ReferenceRequirementToken], builder: ReferenceRequirementDiagramBuilder, limits: MermaidDiagramLimits,

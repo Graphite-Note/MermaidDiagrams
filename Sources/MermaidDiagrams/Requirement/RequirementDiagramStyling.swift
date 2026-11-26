@@ -4,11 +4,12 @@
  * Layer: Core
  * Description: The style statements of a requirement diagram applied as Mermaid's database applies them: `style`
  *              copying declarations onto nodes, `class` and `:::` giving classes, `classDef` defining classes and
- *              copying their declarations onto the nodes that have them, every copy counted against Pele's million.
+ *              copying their declarations onto the nodes that have them, every copy counted against Pele's million,
+ *              each declaration a number of the bytes its parts joined.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -31,17 +32,33 @@ extension RequirementDiagramBuilder {
     }
 
     mutating func node(named name: Range<Int>) -> NodeReference? {
-        let named = namedByNumber[number(of: name)]
+        let named = lists.namedByNumber[number(of: name)]
         if named.requirementIndex >= 0 { return .requirement(Int(named.requirementIndex)) }
         return named.elementIndex >= 0 ? .element(Int(named.elementIndex)) : nil
     }
 
-    private mutating func copy(_ declarations: [String], onto node: NodeReference) throws(Refusal) {
-        try count(declarations.count)
-        switch node {
-        case .requirement(let index): diagram.requirements[index].styleDeclarations += declarations
-        case .element(let index): diagram.elements[index].styleDeclarations += declarations
+    /// A declaration whose bytes are the parts' bytes run together, `parts` ranges of the text; its number.
+    mutating func addDeclaration(joining parts: some Sequence<Range<Int>>) -> Int32 {
+        let start = lists.derived.count
+        for part in parts { lists.derived.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[part])) }
+        lists.declarations.append(MermaidTextRange(start: start, end: lists.derived.count))
+        return Int32(lists.declarations.count - 1)
+    }
+
+    /// The declarations `texts`, given as Strings rather than read, each a number of its bytes.
+    mutating func addDeclarations(_ texts: [String]) -> Range<Int32> {
+        let first = Int32(lists.declarations.count)
+        for text in texts {
+            let start = lists.derived.count
+            lists.derived.append(contentsOf: text.utf8)
+            lists.declarations.append(MermaidTextRange(start: start, end: lists.derived.count))
         }
+        return first..<Int32(lists.declarations.count)
+    }
+
+    private mutating func copy(_ declarations: some Collection<Int32>, onto node: NodeReference) throws(Refusal) {
+        try count(declarations.count)
+        for declaration in declarations { lists.declarationCopies.append(RequirementNodeEntry(node: node.key, declaration: declaration)) }
     }
 
     private mutating func count(_ copies: Int) throws(Refusal) {
@@ -50,76 +67,99 @@ extension RequirementDiagramBuilder {
     }
 
     /// `style a,b declarations`: Mermaid stops at the first name that is no node, leaving the rest of the list unstyled.
-    mutating func setStyle(names: [Range<Int>], declarations: [String]) throws(Refusal) {
-        let split = Self.splitAtCommas(declarations)
+    mutating func setStyle(names: [Range<Int>], declarations: Range<Int32>) throws(Refusal) {
         for name in names {
             guard let node = node(named: name) else { return }
-            try copy(split, onto: node)
+            try copy(declarations, onto: node)
         }
+    }
+
+    /// `style` with declarations given as Strings, each split at its commas as Mermaid splits them.
+    mutating func setStyle(names: [Range<Int>], declarations texts: [String]) throws(Refusal) {
+        try setStyle(names: names, declarations: addDeclarations(Self.splitAtCommas(texts)))
     }
 
     /// `class a,b c1,c2` and `a:::c1,c2`: each class is given to each node named, with the declarations its class holds
     /// now; a name that is no node is passed over.
     mutating func setClasses(names: [Range<Int>], classNames: [Range<Int>]) throws(Refusal) {
-        var classStrings: [String]?
         for name in names {
             guard let node = node(named: name) else { continue }
-            let given = classStrings ?? classNames.map(string)
-            classStrings = given
-            for (className, classString) in zip(classNames, given) {
+            for className in classNames {
                 try count(1)
                 let classNumber = number(of: className)
-                switch node {
-                case .requirement(let index): diagram.requirements[index].classNames.append(classString)
-                case .element(let index): diagram.elements[index].classNames.append(classString)
-                }
+                lists.classGifts.append(RequirementNodeClass(node: node.key, name: Self.textRange(className)))
                 addMember(node, toClassNumbered: classNumber)
-                let classIndex = namedByNumber[classNumber].styleClassIndex
-                if classIndex >= 0 { try copy(diagram.styleClasses[Int(classIndex)].styleDeclarations, onto: node) }
+                let classIndex = lists.namedByNumber[classNumber].styleClassIndex
+                if classIndex >= 0 { try copy(classDeclarationNumbers(of: Int(classIndex)), onto: node) }
             }
         }
+    }
+
+    /// The declarations class `index` holds now, in the order it was given them.
+    private func classDeclarationNumbers(of index: Int) -> [Int32] {
+        var numbers: [Int32] = []
+        var link = lists.classDeclarationLists[index].first
+        while link >= 0 {
+            numbers.append(lists.classDeclarationLinks[Int(link)].node)
+            link = lists.classDeclarationLinks[Int(link)].next
+        }
+        return numbers
     }
 
     /// Lists the node among those given the class, once; every node has `default`, which lists none.
     private mutating func addMember(_ node: NodeReference, toClassNumbered classNumber: Int) {
-        guard classNumber != defaultClassNumber, givenClasses.insert(RequirementClassMember.key(node: node.key, classNumber: classNumber)).inserted else { return }
-        classMembers.append(RequirementClassMember(node: node.key, next: namedByNumber[classNumber].firstMember))
-        namedByNumber[classNumber].firstMember = Int32(classMembers.count - 1)
+        guard classNumber != defaultClassNumber, lists.givenClasses.insert(RequirementClassMember.key(node: node.key, classNumber: classNumber)).inserted else { return }
+        lists.classMembers.append(RequirementClassMember(node: node.key, next: lists.namedByNumber[classNumber].firstMember))
+        lists.namedByNumber[classNumber].firstMember = Int32(lists.classMembers.count - 1)
     }
 
-    /// `classDef a,b declarations`: each class defined or extended, and its declarations copied onto every node that has
-    /// it already; a declaration that sets a color is also kept for text, its first `fill` written `bgFill`.
-    mutating func defineClasses(names: [Range<Int>], declarations: [String]) throws(Refusal) {
-        let split = Self.splitAtCommas(declarations)
+    /// `classDef a,b declarations`: each class defined or extended with `declarations`, and `copies` copied onto every
+    /// node that has it already. A declaration read from a text holds no comma, so the two are the same; declarations
+    /// given as Strings are copied split at their commas.
+    mutating func defineClasses(names: [Range<Int>], declarations: Range<Int32>, copies: Range<Int32>) throws(Refusal) {
         for name in names {
             let classNumber = number(of: name)
-            var classIndex = Int(namedByNumber[classNumber].styleClassIndex)
+            var classIndex = Int(lists.namedByNumber[classNumber].styleClassIndex)
             if classIndex < 0 {
-                classIndex = diagram.styleClasses.count
-                namedByNumber[classNumber].styleClassIndex = Int32(classIndex)
-                diagram.styleClasses.append(RequirementDiagramStyleClass(name: string(name), styleDeclarations: [], textStyleDeclarations: []))
+                classIndex = lists.styleClasses.count
+                lists.namedByNumber[classNumber].styleClassIndex = Int32(classIndex)
+                lists.styleClasses.append(RequirementStyleClassRecord(name: Self.textRange(name)))
+                lists.classDeclarationLists.append(RequirementClassDeclarations())
             }
-            for declaration in declarations {
-                if Self.holdsColor(declaration) { diagram.styleClasses[classIndex].textStyleDeclarations.append(Self.withBackgroundFill(declaration)) }
-                diagram.styleClasses[classIndex].styleDeclarations.append(declaration)
-            }
-            try copy(split, ontoNodesOfClassNumbered: classNumber)
+            for declaration in declarations { appendDeclaration(declaration, toClassAt: classIndex) }
+            try copy(copies, ontoNodesOfClassNumbered: classNumber)
         }
+    }
+
+    /// `classDef` with declarations given as Strings: kept whole by the class, copied split at their commas.
+    mutating func defineClasses(names: [Range<Int>], declarations texts: [String]) throws(Refusal) {
+        let whole = addDeclarations(texts)
+        let split = texts.contains { text in text.utf8.contains(MermaidByte.comma) } ? addDeclarations(Self.splitAtCommas(texts)) : whole
+        try defineClasses(names: names, declarations: whole, copies: split)
+    }
+
+    private mutating func appendDeclaration(_ declaration: Int32, toClassAt index: Int) {
+        lists.classDeclarationLinks.append(RequirementClassMember(node: declaration, next: -1))
+        let link = Int32(lists.classDeclarationLinks.count - 1)
+        if lists.classDeclarationLists[index].last >= 0 { lists.classDeclarationLinks[Int(lists.classDeclarationLists[index].last)].next = link } else {
+            lists.classDeclarationLists[index].first = link
+        }
+        lists.classDeclarationLists[index].last = link
     }
 
     /// Copies the declarations onto every node given the class: onto every node for `default`. The order the nodes are
     /// taken in changes nothing: each node's declarations grow in the statements' order, and a refusal refuses the whole
     /// statement whichever copy passes the count.
-    private mutating func copy(_ declarations: [String], ontoNodesOfClassNumbered classNumber: Int) throws(Refusal) {
+    private mutating func copy(_ declarations: Range<Int32>, ontoNodesOfClassNumbered classNumber: Int) throws(Refusal) {
         if classNumber == defaultClassNumber {
-            for index in diagram.requirements.indices { try copy(declarations, onto: .requirement(index)) }
-            for index in diagram.elements.indices { try copy(declarations, onto: .element(index)) }
+            for index in lists.requirements.indices { try copy(declarations, onto: .requirement(index)) }
+            for index in lists.elements.indices { try copy(declarations, onto: .element(index)) }
             return
         }
-        var member = Int(namedByNumber[classNumber].firstMember)
+        var member = Int(lists.namedByNumber[classNumber].firstMember)
         while member >= 0 {
-            try copy(declarations, onto: NodeReference(key: classMembers[member].node))
-            member = Int(classMembers[member].next)
+            try copy(declarations, onto: NodeReference(key: lists.classMembers[member].node))
+            member = Int(lists.classMembers[member].next)
         }
     }
 
