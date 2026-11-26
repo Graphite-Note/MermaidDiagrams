@@ -3,12 +3,12 @@
  * --------------------------------
  * Layer: Core
  * Description: A flowchart with groups laid out in nested boxes and put on the page in the scratch arena: the compound
- *              layout's nodes, boxes and routes read where it left them, and the layout written once at its place on
- *              the page.
+ *              layout's nodes, boxes and routes read where it left them, and the nodes and edges written once, as flat
+ *              records, at their place on the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -18,8 +18,8 @@ import CoreGraphics
 /// group at its box's), each edge from the outline of its node or box to the other's through the points its route
 /// passes, the ends on one side spread along it clear of the edges crossing a box's border there, the loops beside
 /// their nodes, each box with its title clear of the edges where it can be, and everything moved inside the padding
-/// below the title. The compound layout's spans are read in the calling thread's arena; only the layout returned is
-/// allocated.
+/// below the title. The compound layout's spans are read in the calling thread's arena; only the layout's records and
+/// boxes are allocated.
 enum FlowchartBoxedLayout {
     /// The layout, or nil when the boxes would need more than `maximumPointCount` nodes and passing points.
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: FlowchartDiagram, measured: FlowchartMeasurement, titleText: Measurer, font: DiagramFont,
@@ -31,7 +31,9 @@ enum FlowchartBoxedLayout {
         let boxes = FlowchartPlacedBoxes(diagram, clustered: clustered, compound: compound, measured: measured, arena: arena)
         let frame = FlowchartPageFrame(extent: CGSize(width: compound.total.width, height: compound.total.height), title: title)
         var edgePoints = arena.list(capacity: 4 * diagram.edgeCount, of: CGPoint.self)
-        let edges = boxes.pageEdges(diagram, measured: measured, offset: frame.offset, edgePoints: &edgePoints, arena: arena)
+        var recording = FlowchartLayoutRecording(nodeCapacity: diagram.nodeCount, edgeCapacity: diagram.edgeCount, textStorages: measured.textStorages,
+                                                  arena: arena)
+        boxes.appendPageEdges(diagram, measured: measured, offset: frame.offset, edgePoints: &edgePoints, to: &recording, arena: arena)
         var sortedPoints = edgePoints.elements.buffer
         sortedPoints.sort { first, second in first.y < second.y }
         var clusters: [FlowchartLayoutCluster] = []
@@ -42,12 +44,10 @@ enum FlowchartBoxedLayout {
             clusters.append(FlowchartLayoutCluster(frame: box, title: title?.title, depth: clustered.depths[subgraph], isTitleCrossed: title?.isCrossed ?? false)
                 .translated(by: frame.offset))
         }
-        var nodes: [FlowchartLayoutNode] = []
-        nodes.reserveCapacity(diagram.nodeCount)
         for node in 0..<diagram.nodeCount where clustered.representedSubgraphs[node] == nil {
-            nodes.append(FlowchartPagePieces.node(node, of: diagram, center: boxes.nodeCenters[node], measured: measured).translated(by: frame.offset))
+            FlowchartPagePieces.appendNode(node, of: diagram, center: boxes.nodeCenters[node], measured: measured, offset: frame.offset, to: &recording)
         }
-        return FlowchartLayout(size: frame.size, font: font, nodes: nodes, edges: edges, title: frame.title, clusters: clusters)
+        return FlowchartLayout(size: frame.size, font: font, records: FlowchartLayoutRecords(recorded: recording), title: frame.title, clusters: clusters)
     }
 }
 

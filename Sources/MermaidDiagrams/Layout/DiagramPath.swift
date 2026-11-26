@@ -6,8 +6,8 @@
  *              or where it stands.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ public struct DiagramPath: Equatable, Sendable {
     public internal(set) var segments: [DiagramPathSegment]
 }
 
-public enum DiagramPathSegment: Equatable, Sendable {
+public enum DiagramPathSegment: Equatable, Sendable, BitwiseCopyable {
     case line(to: CGPoint)
     case curve(to: CGPoint, control1: CGPoint, control2: CGPoint)
 }

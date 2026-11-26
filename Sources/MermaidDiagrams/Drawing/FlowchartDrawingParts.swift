@@ -5,8 +5,8 @@
  * Description: A laid-out flowchart's geometry grouped by how it is painted.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 24/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -57,8 +57,9 @@ public struct FlowchartDrawingParts {
 
     public init(layout: FlowchartLayout) {
         let maker = DiagramCoreGraphicsPaths()
-        let edges = FlowchartEdgePaths(edges: layout.edges, making: maker)
-        let nodes = FlowchartNodePaths(nodes: layout.nodes, making: maker)
+        let records = layout.records
+        let edges = FlowchartEdgePaths(records: records, making: maker)
+        let nodes = FlowchartNodePaths(records: records, making: maker)
         clusters = FlowchartClusterDrawingParts(clusters: layout.clusters)
         solidEdges = edges.solid.path
         thickEdges = edges.thick.path
@@ -66,23 +67,24 @@ public struct FlowchartDrawingParts {
         filledMarks = edges.filledMarks.path
         strokedMarks = edges.strokedMarks.path
         edgeTextPatches = edges.textPatches.path
-        edgeTexts = layout.edges.compactMap(\.text)
+        edgeTexts = records.edges.compactMap { edge in edge.text.map(records.block) }
         nodeFills = nodes.fills.path
         nodeOutlines = nodes.outlines.path
-        styledEdges = layout.edges.compactMap { edge in
-            guard FlowchartEdgePaths<DiagramCoreGraphicsPath>.isStyled(edge), let style = edge.style else { return nil }
-            return FlowchartStyledEdgeParts(edge: edge, style: style)
+        styledEdges = records.edges.indices.compactMap { index in
+            let edge = records.edges[index]
+            guard edge.isStyled, let style = records.style(at: edge.styleIndex) else { return nil }
+            return FlowchartStyledEdgeParts(edge: records.layoutEdge(at: index), style: style)
         }
         var layered: [FlowchartShapeLayer] = []
         var texts: [DiagramTextBlock] = []
         var styled: [FlowchartStyledNodeParts] = []
-        for node in layout.nodes {
-            if let style = node.style {
-                styled.append(FlowchartStyledNodeParts(node: node, style: style))
+        for (index, node) in records.nodes.enumerated() {
+            if let style = records.style(at: node.styleIndex) {
+                styled.append(FlowchartStyledNodeParts(node: records.layoutNode(at: index), style: style))
                 continue
             }
-            texts.append(node.text)
-            if node.asset == nil, let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) { layered.append(contentsOf: layers) }
+            texts.append(records.block(node.text))
+            if !node.hasAsset, let layers = FlowchartShapeDrawing.layers(of: node.shape, in: node.frame) { layered.append(contentsOf: layers) }
         }
         layeredNodeShapes = layered
         nodeTexts = texts

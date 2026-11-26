@@ -5,8 +5,8 @@
  * Description: The geometry of an edge's line and marks, Pele's, recorded into Core Graphics paths or the scene's lanes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -33,6 +33,19 @@ enum DiagramEdgeDrawing {
             switch segment {
             case .line(let end): drawn.addLine(to: end)
             case .curve(let end, let firstControl, let secondControl): drawn.addCurve(to: end, control1: firstControl, control2: secondControl)
+            }
+        }
+    }
+
+    /// A flowchart edge's line recorded into `drawn` from its layout's records, as `record(_:into:)` records its path.
+    static func record<Path: DiagramPathRecording>(_ edge: FlowchartPlacedEdge, of records: FlowchartLayoutRecords, into drawn: Path) {
+        drawn.move(to: edge.start)
+        records.withSegments(of: edge) { segments in
+            for segment in segments {
+                switch segment {
+                case .line(let end): drawn.addLine(to: end)
+                case .curve(let end, let firstControl, let secondControl): drawn.addCurve(to: end, control1: firstControl, control2: secondControl)
+                }
             }
         }
     }

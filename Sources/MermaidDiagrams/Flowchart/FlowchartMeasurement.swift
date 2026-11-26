@@ -3,24 +3,25 @@
  * --------------------------------
  * Layer: Core
  * Description: A flowchart's text measured, its markup decoded from the bytes it was written in, and its shapes sized,
- *              before the layout places anything.
+ *              before the layout places anything: a flat record a node and a placed text an edge.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
- * Date: 25/11/2026
+ * Version: 0.9
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
 
-/// A flowchart's text measured and its shapes sized: what the layout needs before it places anything. Lists that most
-/// flowcharts leave empty (loops, icons and pictures) are made only for those that have them.
+/// A flowchart's text measured and its shapes sized: what the layout needs before it places anything. Each node's text,
+/// shape's size and text's offset are one flat record, each edge's text another, the texts kept without a reference to
+/// their storage (`DiagramPlacedText`), so that the measurement is two lists that free without reference counting. Lists
+/// that most flowcharts leave empty (loops, icons and pictures) are made only for those that have them.
 struct FlowchartMeasurement {
-    let nodeTexts: [DiagramTextBlock]
-    let shapeSizes: [CGSize]
-    /// How far below each shape's center its text's center is.
-    let textOffsets: [CGFloat]
+    private let nodeRecords: [FlowchartMeasuredNode]
     /// Each edge's text, or nil.
-    let edgeTexts: [DiagramTextBlock?]
+    private let edgeRecords: [DiagramPlacedText?]
+    /// The storages the texts were written in; a layout's records start from them, so that its texts keep their places.
+    let textStorages: DiagramPlacedTextStorages
     /// For each node, the indexes of its edges to itself, in their written order.
     let selfLoopEdgeIndices: FlowchartSelfLoopIndex
     /// Whether the edges meeting one side of a node spread along it, as a flowchart's do; an agent flow's meet in the
@@ -33,68 +34,96 @@ struct FlowchartMeasurement {
 
     /// A text written with markup is decoded from the bytes it was written in (`FlowchartTextMeasuring`).
     init<Measurer: DiagramTextMeasuring>(diagram: FlowchartDiagram, nodeText: Measurer, edgeText: Measurer, wrappingWidth: CGFloat) {
-        var shapeSizes: [CGSize] = []
-        var textOffsets: [CGFloat] = []
+        var storages = DiagramPlacedTextStorages()
         let nodeCount = diagram.nodeCount
-        shapeSizes.reserveCapacity(nodeCount)
-        textOffsets.reserveCapacity(nodeCount)
-        let (nodeTexts, edgeTexts) = diagram.model.text.withBytes { source in
-            Self.texts(of: diagram, source: source, nodeText: nodeText, edgeText: edgeText, wrappingWidth: wrappingWidth)
-        }
-        for index in 0..<nodeCount {
-            let asset = diagram.nodeAsset(at: index)
-            if asset != nil {
-                if assetNodeFlags.isEmpty { assetNodeFlags = [Bool](repeating: false, count: nodeCount) }
-                assetNodeFlags[index] = true
+        var nodeRecords: [FlowchartMeasuredNode] = []
+        nodeRecords.reserveCapacity(nodeCount)
+        var edgeRecords: [DiagramPlacedText?] = []
+        edgeRecords.reserveCapacity(diagram.edgeCount)
+        var assetNodeFlags: [Bool] = []
+        diagram.model.text.withBytes { source in
+            let model = diagram.model
+            let nodeMeasuring = FlowchartTextMeasuring(model: model, measurer: nodeText, maximumWidth: wrappingWidth)
+            for index in 0..<nodeCount {
+                let node = model.nodes[index]
+                let asset = diagram.nodeAsset(at: index)
+                // A shape drawn without text (a start, a fork, a junction) and not as an icon or a picture measures none, as
+                // Pele lays out no label for it.
+                let measuresText = node.shape.holdsText || asset != nil
+                let text = storages.place(nodeMeasuring.block(of: measuresText ? node.label : .none, source: source))
+                if asset != nil {
+                    if assetNodeFlags.isEmpty { assetNodeFlags = [Bool](repeating: false, count: nodeCount) }
+                    assetNodeFlags[index] = true
+                }
+                let (size, textOffset) = asset?.size(textSize: text.size) ?? FlowchartShapeGeometry.size(of: node.shape, textSize: text.size)
+                nodeRecords.append(FlowchartMeasuredNode(text: text, shapeSize: size, textOffset: textOffset))
             }
-            let textSize = nodeTexts[index].size
-            let (size, textOffset) = asset?.size(textSize: textSize) ?? FlowchartShapeGeometry.size(of: diagram.nodeShape(at: index), textSize: textSize)
-            shapeSizes.append(size)
-            textOffsets.append(textOffset)
+            let edgeMeasuring = FlowchartTextMeasuring(model: model, measurer: edgeText, maximumWidth: wrappingWidth)
+            for edge in model.edges {
+                // An edge's text of no line is none.
+                guard edge.label.kind != .none else {
+                    edgeRecords.append(nil)
+                    continue
+                }
+                let text = edgeMeasuring.block(of: edge.label, source: source)
+                edgeRecords.append(text.lineCount == 0 ? nil : storages.place(text))
+            }
         }
-        self.nodeTexts = nodeTexts
-        self.shapeSizes = shapeSizes
-        self.textOffsets = textOffsets
-        self.edgeTexts = edgeTexts
+        self.nodeRecords = nodeRecords
+        self.edgeRecords = edgeRecords
+        self.assetNodeFlags = assetNodeFlags
+        textStorages = storages
         selfLoopEdgeIndices = FlowchartSelfLoopIndex(diagram: diagram)
-    }
-
-    /// The nodes' texts and the edges' texts of `diagram`, whose text's bytes are `source`. A shape drawn without text (a
-    /// start, a fork, a junction) and not as an icon or a picture measures none, as Pele lays out no label for it; an
-    /// edge's text of no line is none.
-    private static func texts<Measurer: DiagramTextMeasuring>(of diagram: FlowchartDiagram, source: UnsafeBufferPointer<UInt8>, nodeText: Measurer,
-                                                              edgeText: Measurer, wrappingWidth: CGFloat) -> ([DiagramTextBlock], [DiagramTextBlock?]) {
-        let model = diagram.model
-        let nodeMeasuring = FlowchartTextMeasuring(model: model, measurer: nodeText, maximumWidth: wrappingWidth)
-        var nodeTexts: [DiagramTextBlock] = []
-        nodeTexts.reserveCapacity(model.nodes.count)
-        for (index, node) in model.nodes.enumerated() {
-            let measuresText = node.shape.holdsText || diagram.nodeAsset(at: index) != nil
-            nodeTexts.append(nodeMeasuring.block(of: measuresText ? node.label : .none, source: source))
-        }
-        let edgeMeasuring = FlowchartTextMeasuring(model: model, measurer: edgeText, maximumWidth: wrappingWidth)
-        var edgeTexts: [DiagramTextBlock?] = []
-        edgeTexts.reserveCapacity(model.edges.count)
-        for edge in model.edges {
-            guard edge.label.kind != .none else {
-                edgeTexts.append(nil)
-                continue
-            }
-            let text = edgeMeasuring.block(of: edge.label, source: source)
-            edgeTexts.append(text.lineCount == 0 ? nil : text)
-        }
-        return (nodeTexts, edgeTexts)
     }
 
     /// A flowchart measured by a diagram drawn as one, which sizes its nodes its own way.
     init(nodeTexts: [DiagramTextBlock], shapeSizes: [CGSize], textOffsets: [CGFloat], edgeTexts: [DiagramTextBlock?],
          selfLoopEdgeIndices: FlowchartSelfLoopIndex) {
-        self.nodeTexts = nodeTexts
-        self.shapeSizes = shapeSizes
-        self.textOffsets = textOffsets
-        self.edgeTexts = edgeTexts
+        precondition(shapeSizes.count == nodeTexts.count && textOffsets.count == nodeTexts.count, "a size and an offset for each node's text")
+        var storages = DiagramPlacedTextStorages()
+        var nodeRecords: [FlowchartMeasuredNode] = []
+        nodeRecords.reserveCapacity(nodeTexts.count)
+        for index in nodeTexts.indices {
+            nodeRecords.append(FlowchartMeasuredNode(text: storages.place(nodeTexts[index]), shapeSize: shapeSizes[index], textOffset: textOffsets[index]))
+        }
+        self.nodeRecords = nodeRecords
+        edgeRecords = edgeTexts.map { text in text.map { text in storages.place(text) } }
+        textStorages = storages
         self.selfLoopEdgeIndices = selfLoopEdgeIndices
     }
+
+    // MARK: Reading
+
+    /// The text of `node`, placed in `textStorages`, at its measured center (none).
+    @inline(__always)
+    func nodeText(of node: Int) -> DiagramPlacedText { nodeRecords[node].text }
+
+    @inline(__always)
+    func shapeSize(of node: Int) -> CGSize { nodeRecords[node].shapeSize }
+
+    /// How far below the shape's center of `node` its text's center is.
+    @inline(__always)
+    func textOffset(of node: Int) -> CGFloat { nodeRecords[node].textOffset }
+
+    /// The text of edge `edgeIndex`, placed in `textStorages`, or nil.
+    @inline(__always)
+    func edgeText(of edgeIndex: Int) -> DiagramPlacedText? { edgeRecords[edgeIndex] }
+
+    /// The size of the text of edge `edgeIndex`, or nil for an edge without text.
+    @inline(__always)
+    func edgeTextSize(of edgeIndex: Int) -> CGSize? { edgeRecords[edgeIndex]?.size }
+
+    /// Each node's text as a block, for a reader that wants blocks (a swimlane).
+    var nodeTexts: FlowchartMeasuredNodeTexts { FlowchartMeasuredNodeTexts(records: nodeRecords, storages: textStorages) }
+
+    /// Each node's shape's size.
+    var shapeSizes: FlowchartMeasuredShapeSizes { FlowchartMeasuredShapeSizes(records: nodeRecords) }
+
+    /// How far below each shape's center its text's center is.
+    var textOffsets: FlowchartMeasuredTextOffsets { FlowchartMeasuredTextOffsets(records: nodeRecords) }
+
+    /// Each edge's text as a block, or nil, for a reader that wants blocks (a swimlane).
+    var edgeTexts: FlowchartMeasuredEdgeTexts { FlowchartMeasuredEdgeTexts(records: edgeRecords, storages: textStorages) }
 
     /// Whether `node` is drawn as an icon or a picture.
     @inline(__always)
@@ -107,7 +136,7 @@ struct FlowchartMeasurement {
     /// How much of the side of `node` facing `side` its edges share out between them (Pele's `shapeSpan`), or 0 where
     /// they all meet its middle.
     func sideSpan(of node: Int, shape: FlowchartNodeShape, side: DiagramSide) -> CGFloat {
-        spreadsEdgeEnds(of: node) ? FlowchartShapeGeometry.span(of: shape, size: shapeSizes[node], side: side) : 0
+        spreadsEdgeEnds(of: node) ? FlowchartShapeGeometry.span(of: shape, size: shapeSize(of: node), side: side) : 0
     }
 
     /// The shape of `node` as the layout meets it: its own, or a rectangle for a node drawn as an icon or a picture.
@@ -119,12 +148,12 @@ struct FlowchartMeasurement {
     /// One node's size in its rank: its shape, widened on both sides across the flow by the room its loops take, its loops
     /// going out of `loopSide`.
     func layoutSize(of node: Int, loopSide: DiagramSide) -> CGSize {
-        let size = shapeSizes[node]
+        let size = shapeSize(of: node)
         let loopEdgeIndices = selfLoopEdgeIndices[node]
         guard !loopEdgeIndices.isEmpty else { return size }
         let flowRunsAcross = loopSide == .bottom
         var room: CGFloat = 0
-        for edgeIndex in loopEdgeIndices { room = room + FlowchartSelfLoops.room(textSize: edgeTexts[edgeIndex]?.size, flowRunsAcross: flowRunsAcross) }
+        for edgeIndex in loopEdgeIndices { room = room + FlowchartSelfLoops.room(textSize: edgeTextSize(of: edgeIndex), flowRunsAcross: flowRunsAcross) }
         return loopSide == .right ? CGSize(width: size.width + 2 * room, height: size.height)
                                   : CGSize(width: size.width, height: size.height + 2 * room)
     }

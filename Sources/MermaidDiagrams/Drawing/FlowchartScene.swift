@@ -3,11 +3,12 @@
  * --------------------------
  * Layer: Core
  * Description: A laid-out flowchart's scene: its geometry recorded into lanes of the thread's scene workspace and added
- *              back to front in the colors' roles, as Pele paints it, without a Core Graphics path.
+ *              back to front in the colors' roles, as Pele paints it, without a Core Graphics path, read from the
+ *              layout's flat records.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -30,54 +31,58 @@ extension DiagramScene {
 /// for a moment and given back once the builder has copied them. Swimlane diagrams add a flowchart's painting over their
 /// lanes the same way.
 enum FlowchartSceneRecording {
-    /// Every line is drawn with round caps and joins.
+    /// Every line is drawn with round caps and joins. The nodes and edges are read from the layout's flat records.
     static func add(_ layout: FlowchartLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let line = DiagramStroke.rounded(lineWidth: FlowchartDrawingParts.lineWidth)
+        let records = layout.records
         let clusters = FlowchartClusterPaths(clusters: layout.clusters, making: workspace)
         addBoxes(of: clusters, to: &builder)
-        let edges = FlowchartEdgePaths(edges: layout.edges, making: workspace)
+        let edges = FlowchartEdgePaths(records: records, making: workspace)
         builder.stroke(edges.solid, .line, line, part: .edge)
         builder.stroke(edges.thick, .line, .rounded(lineWidth: FlowchartDrawingParts.thickLineWidth), part: .edge)
         builder.stroke(edges.dotted, .line, .rounded(lineWidth: FlowchartDrawingParts.lineWidth, dashLengths: FlowchartDrawingParts.dottedDashLengths),
                        part: .edge)
         builder.fill(edges.filledMarks, .line, part: .marker)
         builder.stroke(edges.strokedMarks, .line, line, part: .marker)
-        for edge in layout.edges where FlowchartEdgePaths<DiagramPathLane>.isStyled(edge) { addStyled(edge, to: &builder, workspace: workspace, line: line) }
+        for edge in records.edges where edge.isStyled {
+            if let style = records.style(at: edge.styleIndex) { addStyled(edge, style: style, of: records, to: &builder, workspace: workspace, line: line) }
+        }
         addCrossedTitles(of: clusters, to: &builder)
         builder.fill(edges.textPatches, .background, part: .labelBackground)
-        for edge in layout.edges { builder.text(edge.text, .foreground, part: .edgeLabel) }
-        addNodes(of: layout, to: &builder, workspace: workspace, line: line)
+        for edge in records.edges {
+            if let text = edge.text { builder.text(records.block(text), .foreground, part: .edgeLabel) }
+        }
+        addNodes(of: records, to: &builder, workspace: workspace, line: line)
         builder.title(layout.title)
     }
 
     /// The usual nodes' shapes, the pieces of those painted piece by piece, the styled nodes, then all the nodes' text.
-    private static func addNodes(of layout: FlowchartLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace,
+    private static func addNodes(of records: FlowchartLayoutRecords, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace,
                                  line: DiagramStroke) {
-        let nodes = FlowchartNodePaths(nodes: layout.nodes, making: workspace)
+        let nodes = FlowchartNodePaths(records: records, making: workspace)
         builder.fill(nodes.fills, .surface, part: .node)
         builder.stroke(nodes.outlines, .border, line, part: .node)
-        for node in layout.nodes where node.hasUsualLook && !node.hasAsset {
+        for node in records.nodes where node.hasUsualLook && !node.hasAsset {
             addLayers(of: node.shape, in: node.frame, style: nil, stroke: line, to: &builder, workspace: workspace)
         }
-        for node in layout.nodes {
-            guard let style = node.style else { continue }
-            addStyled(node, style: style, to: &builder, workspace: workspace)
+        for node in records.nodes {
+            guard let style = records.style(at: node.styleIndex) else { continue }
+            addStyled(node, style: style, of: records, to: &builder, workspace: workspace)
         }
-        for node in layout.nodes where node.hasUsualLook { builder.text(node.text, .foreground, part: .label) }
-        for node in layout.nodes {
-            guard let style = node.style else { continue }
-            builder.text(node.text, style.textColor.map(DiagramPaint.color) ?? .foreground, part: .label)
+        for node in records.nodes where node.hasUsualLook { builder.text(records.block(node.text), .foreground, part: .label) }
+        for node in records.nodes {
+            guard let style = records.style(at: node.styleIndex) else { continue }
+            builder.text(records.block(node.text), style.textColor.map(DiagramPaint.color) ?? .foreground, part: .label)
         }
     }
 
     /// An edge in the stroke or colors the diagram gave it: its line, then its marks in the line's color.
-    private static func addStyled(_ edge: FlowchartLayoutEdge, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace,
-                                  line: DiagramStroke) {
-        guard let style = edge.style else { return }
+    private static func addStyled(_ edge: FlowchartPlacedEdge, style: DiagramElementStyle, of records: FlowchartLayoutRecords,
+                                  to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace, line: DiagramStroke) {
         let madeCount = workspace.madePathCount
         defer { workspace.givePathsBack(downTo: madeCount) }
         let drawn = workspace.makeLane()
-        DiagramEdgeDrawing.record(edge.path, into: drawn)
+        DiagramEdgeDrawing.record(edge, of: records, into: drawn)
         let filled = workspace.makeLane()
         let stroked = workspace.makeLane()
         if let mark = edge.sourceMark { DiagramEdgeDrawing.addMark(mark, filled: filled, stroked: stroked) }
@@ -91,16 +96,16 @@ enum FlowchartSceneRecording {
     }
 
     /// A node in the colors the diagram gave it: its pieces, or its shape filled and its outline and lines stroked.
-    private static func addStyled(_ node: FlowchartLayoutNode, style: DiagramElementStyle, to builder: inout DiagramSceneBuilder,
-                                  workspace: DiagramSceneWorkspace) {
+    private static func addStyled(_ node: FlowchartPlacedNode, style: DiagramElementStyle, of records: FlowchartLayoutRecords,
+                                  to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let madeCount = workspace.madePathCount
         defer { workspace.givePathsBack(downTo: madeCount) }
         let stroke = DiagramStroke.rounded(lineWidth: style.strokeWidth ?? FlowchartDrawingParts.lineWidth, dashLengths: style.strokeDashLengths ?? [])
         if !node.hasAsset, addLayers(of: node.shape, in: node.frame, style: style, stroke: stroke, to: &builder, workspace: workspace) { return }
         let fill: DiagramPathLane?
         let outline: DiagramPathLane
-        if let asset = node.asset {
-            fill = FlowchartNodeAssetDrawing.frame(of: asset, in: node, making: workspace)
+        if let asset = records.asset(at: node.assetIndex) {
+            fill = FlowchartNodeAssetDrawing.frame(of: asset, in: node.frame, hasLabel: node.text.lineCount > 0, making: workspace)
             outline = fill ?? workspace.makeLane()
         } else {
             fill = FlowchartShapeDrawing.outline(of: node.shape, in: node.frame, making: workspace)
