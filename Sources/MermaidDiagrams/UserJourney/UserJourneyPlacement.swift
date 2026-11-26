@@ -3,11 +3,11 @@
  * --------------------------------
  * Layer: Core
  * Description: Places a user journey's body: the section bands, the cards with their text and their actors' dots, the scale,
- *              the faces at their tasks' levels with their stems, and the line from face to face.
+ *              the faces at their tasks' levels with their stems, and the line from face to face, as flat records.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -24,29 +24,43 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
     /// The body with its bands' top and its first card's left edge at `origin`.
     func placed(at origin: CGPoint) -> UserJourneyPlacedBody {
         guard !diagram.taskRecords.isEmpty else { return UserJourneyPlacedBody(bottom: origin.y) }
-        let runs = UserJourneySectionRun.runs(of: diagram)
-        let headings = runs.map { run in run.heading.map { heading in headingText(heading, taskCount: run.taskCount) } }
-        let bandHeight = headings.compactMap { heading in heading.map(bandHeight) }.max() ?? 0
+        var body = UserJourneyPlacedBody(bottom: 0)
+        let bandHeight = measureHeadings(into: &body)
         let cardsTop = origin.y + (bandHeight > 0 ? bandHeight + UserJourneyGeometry.bandPadding : 0)
         let cardHeight = measured.textHeight + (diagram.actorNames.isEmpty ? 0 : UserJourneyGeometry.dotRowHeight) + 2 * UserJourneyGeometry.cardPadding.height
         let chartTop = cardsTop + cardHeight + UserJourneyGeometry.faceRadius + UserJourneyGeometry.chartGap
-        var body = UserJourneyPlacedBody(bottom: chartTop + UserJourneyGeometry.offset(ofLevel: UserJourneyTask.lowestLevel) + UserJourneyGeometry.faceRadius)
-        for (run, heading) in zip(runs, headings) {
-            guard let heading else { continue }
+        body.bottom = chartTop + UserJourneyGeometry.offset(ofLevel: UserJourneyTask.lowestLevel) + UserJourneyGeometry.faceRadius
+        for index in body.sections.indices {
+            let run = body.runs[index]
             let frame = CGRect(x: origin.x + CGFloat(run.firstTaskIndex) * measured.cardPitch, y: origin.y,
                                width: CGFloat(run.taskCount) * measured.cardPitch - UserJourneyGeometry.cardGap, height: bandHeight)
-            body.sections.append(UserJourneyLayoutSection(frame: frame, text: Self.centered(heading, at: CGPoint(x: frame.midX, y: frame.midY))))
+            body.sections[index] = UserJourneyLayoutSection(frame: frame, text: Self.centered(body.sections[index].text, at: CGPoint(x: frame.midX, y: frame.midY)))
         }
-        // Made by one map, which sizes the list once (room reserved first would be dropped by the assignment).
-        body.tasks = diagram.taskRecords.indices.map { index in
-            placedTask(index, frame: CGRect(x: origin.x + CGFloat(index) * measured.cardPitch, y: cardsTop, width: measured.cardWidth, height: cardHeight),
-                       chartTop: chartTop)
+        body.tasks.reserveCapacity(diagram.taskRecords.count)
+        body.dots.reserveCapacity(diagram.actorMentions.count)
+        for index in diagram.taskRecords.indices {
+            placeTask(index, frame: CGRect(x: origin.x + CGFloat(index) * measured.cardPitch, y: cardsTop, width: measured.cardWidth, height: cardHeight),
+                      chartTop: chartTop, into: &body)
         }
-        body.scaleLevels = scaleLevels(left: origin.x, chartTop: chartTop)
-        if body.tasks.count > 1, let first = body.tasks.first {
-            body.scoreLine = DiagramPath(start: first.faceCenter, segments: body.tasks.dropFirst().map { task in .line(to: task.faceCenter) })
-        }
+        body.scale = scale(left: origin.x, chartTop: chartTop)
         return body
+    }
+
+    /// Each band's heading measured, as 0.7.0 measured them before placing any, with the runs that have one; the
+    /// tallest band's height, 0 without headings.
+    private func measureHeadings(into body: inout UserJourneyPlacedBody) -> CGFloat {
+        var bandHeight: CGFloat = 0
+        let runs = UserJourneySectionRun.runs(of: diagram)
+        body.sections.reserveCapacity(runs.count)
+        body.runs.reserveCapacity(runs.count)
+        for run in runs {
+            guard let section = run.headingSection else { continue }
+            let heading = headingText(diagram.sections[section], taskCount: run.taskCount)
+            bandHeight = body.sections.isEmpty ? self.bandHeight(heading) : max(bandHeight, self.bandHeight(heading))
+            body.sections.append(UserJourneyLayoutSection(frame: .zero, text: heading))
+            body.runs.append(run)
+        }
+        return bandHeight
     }
 
     /// A band's heading, fitted within the band less a card's padding at each end.
@@ -61,13 +75,11 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
 
     /// The task at `index` with its card at `frame`: its text at the card's top, its actors' dots along its bottom,
     /// spread at most 13 points apart and closer to stay inside it, and its face on the scale.
-    private func placedTask(_ index: Int, frame: CGRect, chartTop: CGFloat) -> UserJourneyLayoutTask {
+    private func placeTask(_ index: Int, frame: CGRect, chartTop: CGFloat, into body: inout UserJourneyPlacedBody) {
         let task = diagram.taskRecords[index]
         let text = Self.centered(measured.taskTexts[index],
                                  at: CGPoint(x: frame.midX, y: frame.minY + UserJourneyGeometry.cardPadding.height + measured.textHeight / 2))
         let faceCenter = CGPoint(x: frame.midX, y: chartTop + UserJourneyGeometry.offset(ofLevel: task.level))
-        let stem = DiagramPath(start: CGPoint(x: frame.midX, y: frame.maxY),
-                               segments: [.line(to: CGPoint(x: frame.midX, y: faceCenter.y - UserJourneyGeometry.faceRadius))])
         // The named actors' mentions are read in place, a nameless one (-1) skipped, instead of copied into a list first.
         let mentions = diagram.actorIndices(ofTask: index)
         var namedCount = 0
@@ -75,28 +87,31 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
         let room = frame.width - 2 * UserJourneyGeometry.cardPadding.width - 2 * UserJourneyGeometry.dotRadius
         let spacing = min(UserJourneyGeometry.dotSpacing, room / CGFloat(max(namedCount - 1, 1)))
         let dotsY = frame.maxY - UserJourneyGeometry.cardPadding.height - UserJourneyGeometry.dotRadius
-        var dots: [UserJourneyActorDot] = []
-        dots.reserveCapacity(namedCount)
+        let firstDot = body.dots.count
         for actorIndex in mentions where actorIndex >= 0 {
-            let position = dots.count
-            dots.append(UserJourneyActorDot(center: CGPoint(x: frame.midX + (CGFloat(position) - CGFloat(namedCount - 1) / 2) * spacing, y: dotsY),
-                                            seriesIndex: Int(actorIndex)))
+            let position = body.dots.count - firstDot
+            body.dots.append(UserJourneyActorDot(center: CGPoint(x: frame.midX + (CGFloat(position) - CGFloat(namedCount - 1) / 2) * spacing, y: dotsY),
+                                                 seriesIndex: Int(actorIndex)))
         }
-        return UserJourneyLayoutTask(frame: frame, text: text, faceCenter: faceCenter, mood: task.mood, stem: stem, actorDots: dots)
+        body.tasks.append(UserJourneyPlacedTask(frame: frame, text: text, faceCenter: faceCenter, mood: task.mood, firstDot: Int32(firstDot),
+                                                dotCount: Int32(body.dots.count - firstDot)))
     }
 
-    /// A line across the chart at each level, from a little left of the first card to the last card's right edge,
-    /// with the level's number to the left of it.
-    private func scaleLevels(left: CGFloat, chartTop: CGFloat) -> [UserJourneyScaleLevel] {
-        UserJourneyGeometry.levels.map { level in
-            let y = chartTop + UserJourneyGeometry.offset(ofLevel: Double(level))
-            let line = DiagramPath(start: CGPoint(x: left - UserJourneyGeometry.scaleLineOverhang, y: y),
-                                   segments: [.line(to: CGPoint(x: left + measured.plotWidth, y: y))])
-            let text = DiagramTextBlock(label: DiagramLabel(String(level)), measurer: scaleText, maximumWidth: UserJourneyGeometry.scaleGutter)
-            let center = CGPoint(x: left - UserJourneyGeometry.scaleTextGap - text.size.width / 2, y: y)
-            return UserJourneyScaleLevel(score: level, line: line, text: Self.centered(text, at: center))
+    /// The levels' numbers to the left of the chart, and its lines from a little left of the first card to the last
+    /// card's right edge.
+    private func scale(left: CGFloat, chartTop: CGFloat) -> UserJourneyPlacedScale {
+        var scale = UserJourneyPlacedScale(lineStart: left - UserJourneyGeometry.scaleLineOverhang, lineEnd: left + measured.plotWidth, chartTop: chartTop)
+        scale.texts.reserveCapacity(UserJourneyGeometry.levels.count)
+        for (index, label) in Self.levelLabels.enumerated() {
+            let text = DiagramTextBlock(label: label, measurer: scaleText, maximumWidth: UserJourneyGeometry.scaleGutter)
+            let center = CGPoint(x: left - UserJourneyGeometry.scaleTextGap - text.size.width / 2, y: scale.lineY(at: index))
+            scale.texts.append(Self.centered(text, at: center))
         }
+        return scale
     }
+
+    /// The levels' numbers, made once.
+    private static var levelLabels: [DiagramLabel] { UserJourneyLevelLabels.labels }
 
     private static func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {
         var centered = text
@@ -105,12 +120,18 @@ struct UserJourneyPlacement<Measurer: DiagramTextMeasuring> {
     }
 }
 
-/// What the placement makes: the bands, the tasks, the scale and the line through the faces, and how far down the
-/// lowest face reaches.
+/// The scale's numbers as labels, from the highest level, made once for every journey.
+private enum UserJourneyLevelLabels {
+    static let labels = UserJourneyGeometry.levels.map { level in DiagramLabel(String(level)) }
+}
+
+/// What the placement makes: the bands with the runs they are over, the tasks with their dots, the scale, and how far
+/// down the lowest face reaches.
 struct UserJourneyPlacedBody {
     var sections: [UserJourneyLayoutSection] = []
-    var tasks: [UserJourneyLayoutTask] = []
-    var scaleLevels: [UserJourneyScaleLevel] = []
-    var scoreLine: DiagramPath?
+    var runs: [UserJourneySectionRun] = []
+    var tasks: [UserJourneyPlacedTask] = []
+    var dots: [UserJourneyActorDot] = []
+    var scale = UserJourneyPlacedScale()
     var bottom: CGFloat
 }

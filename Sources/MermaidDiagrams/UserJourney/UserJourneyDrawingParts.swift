@@ -6,8 +6,8 @@
  *              Graphics paths or into lanes of the thread's scene workspace.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -69,9 +69,9 @@ public struct UserJourneyDrawingParts {
         cards = paths.cards.path
         cardDotsBySeries = paths.cardDotsBySeries.map(\.path)
         legendDotsBySeries = paths.legendDotsBySeries.map(\.path)
-        scaleTexts = layout.scaleLevels.map(\.text)
+        scaleTexts = layout.scale.texts
         sectionTexts = layout.sections.map(\.text)
-        taskTexts = layout.tasks.map(\.text)
+        taskTexts = layout.placedTasks.map(\.text)
         legendTexts = layout.legend.map(\.text)
         title = layout.title
     }
@@ -104,19 +104,30 @@ struct UserJourneyDrawingPaths<Path: DiagramCurvedPathRecording> {
         let radius = UserJourneyDrawingParts.cornerRadius
         // A stem and a scale line are a move and a line each, so that recording them straight into their group adds the
         // elements adding each through a path of its own would (`addEdgeLine`): no group ends with a move another follows.
-        for task in layout.tasks {
+        // Read from the layout's records: a stem from the card's bottom to the face's top, a level's line across the
+        // chart, the score line through the faces, each recorded as its path was.
+        for task in layout.placedTasks {
             UserJourneyFaceShape.add(task.mood, at: task.faceCenter, circles: faces, eyes: eyes, mouths: mouths)
-            DiagramEdgeDrawing.record(task.stem, into: stems)
+            stems.move(to: task.stemTop)
+            stems.addLine(to: task.stemBottom)
             maker.addMadeRoundedRectangle(task.frame, cornerWidth: radius, cornerHeight: radius, to: cards)
-            for dot in task.actorDots { Self.add(dot, to: cardDotsBySeries) }
+            for dot in layout.dots[task.dotIndices] { Self.add(dot, to: cardDotsBySeries) }
         }
         for entry in layout.legend { Self.add(entry.dot, to: legendDotsBySeries) }
         scaleLines = maker.makePath()
-        for level in layout.scaleLevels { DiagramEdgeDrawing.record(level.line, into: scaleLines) }
+        let scale = layout.scale
+        for index in scale.texts.indices {
+            let y = scale.lineY(at: index)
+            scaleLines.move(to: CGPoint(x: scale.lineStart, y: y))
+            scaleLines.addLine(to: CGPoint(x: scale.lineEnd, y: y))
+        }
         sectionBands = maker.makePath()
         for section in layout.sections { maker.addMadeRoundedRectangle(section.frame, cornerWidth: radius, cornerHeight: radius, to: sectionBands) }
         scoreLine = maker.makePath()
-        if let line = layout.scoreLine { DiagramEdgeDrawing.record(line, into: scoreLine) }
+        if layout.placedTasks.count > 1 {
+            scoreLine.move(to: layout.placedTasks[0].faceCenter)
+            for task in layout.placedTasks.dropFirst() { scoreLine.addLine(to: task.faceCenter) }
+        }
     }
 
     /// An actor's dot, in the paths of its series color.

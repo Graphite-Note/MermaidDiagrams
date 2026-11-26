@@ -7,8 +7,8 @@
  *              of mutated texts and random statements of every spacing and of characters beyond ASCII.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import XCTest
@@ -17,12 +17,16 @@ import XCTest
 final class TimelineReadingEquivalenceTests: XCTestCase {
     private static let keywords: Set<String> = ["timeline"]
 
+    /// Whether the flat reader reads `source` as 0.7.0's reader did, model or error; nil when it is no timeline.
     private func agree(_ source: String) -> Bool? {
-        ChartReadingEquivalence.agree(source, keywords: Self.keywords, read: { (cursor, _) throws(MermaidDiagramReadError) in
-            try TimelineParser.parse(cursor, limits: .standard)
-        }, reference: { (cursor, _) throws(MermaidDiagramReadError) in
-            try ReferenceTimelineParser.parse(cursor, limits: .standard)
-        })
+        guard let frontEnd = try? MermaidFrontEnd.read(source), Self.keywords.contains(frontEnd.keywordText) else { return nil }
+        let read = Result { () throws(MermaidDiagramReadError) in try TimelineParser.parse(MermaidTextCursor(frontEnd), limits: .standard) }
+        let expected = Result { () throws(MermaidDiagramReadError) in try ReferenceTimelineParser.parse(MermaidTextCursor(frontEnd), limits: .standard) }
+        switch (read, expected) {
+        case (.success(let model), .success(let reference)): return TimelineEquivalence.same(model, reference)
+        case (.failure(let error), .failure(let expectedError)): return error == expectedError
+        default: return false
+        }
     }
 
     private func assertAgree(_ sources: [String], atLeast count: Int, file: StaticString = #filePath, line: UInt = #line) {

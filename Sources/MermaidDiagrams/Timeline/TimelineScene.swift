@@ -5,8 +5,8 @@
  * Description: A laid-out timeline's scene: its drawing parts back to front in the colors' roles, as Pele paints them.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -46,12 +46,18 @@ enum TimelineSceneRecording {
             builder.fillAndStroke(group.dots, fill: paint, stroke: .background, DiagramStroke(lineWidth: TimelineDrawingParts.dotOutlineWidth),
                                   part: .marker)
         }
-        for section in layout.sections {
-            builder.text(section.text, TimelineDrawingParts.ink(.series(section.sectionIndex), of: layout), isBold: true, part: .clusterLabel)
-        }
-        for period in layout.periods { builder.text(period.text, TimelineDrawingParts.ink(period.color, of: layout), part: .label) }
-        for period in layout.periods {
-            for event in period.events { builder.text(event.text, .foreground, part: .label) }
+        // The texts are read from the layout's records and lines, measured from the timeline's bytes; the events are
+        // in the order of their periods.
+        let body = layout.body
+        layout.text.withBytes { source in
+            for section in body.sections {
+                builder.text(section.text, of: layout.lines, source: source, TimelineDrawingParts.ink(.series(section.sectionIndex), of: layout), isBold: true,
+                             part: .clusterLabel)
+            }
+            for period in body.periods {
+                builder.text(period.text, of: layout.lines, source: source, TimelineDrawingParts.ink(period.color, of: layout), part: .label)
+            }
+            for event in body.events { builder.text(event.text, of: layout.lines, source: source, .foreground, part: .label) }
         }
         builder.title(layout.title)
     }

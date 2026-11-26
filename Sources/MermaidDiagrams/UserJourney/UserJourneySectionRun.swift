@@ -2,35 +2,40 @@
  * File: UserJourneySectionRun.swift
  * ---------------------------------
  * Layer: Core
- * Description: The runs of a user journey's tasks under sections of one name, which Pele draws under one band.
+ * Description: The runs of a user journey's tasks under sections of one name, which Pele draws under one band, found
+ *              from the tasks' section indices without copying the tasks.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
-/// A run of tasks written one after the other under sections of one name, which Pele draws under one band, as
-/// Mermaid does: two sections of one name in a row make one band, and a section without tasks makes none.
+/// A run of tasks written one after the other under sections of one heading (or under none), drawn under one band.
 struct UserJourneySectionRun: Equatable {
     let firstTaskIndex: Int
-    let taskCount: Int
-    /// The sections' heading, or nil for the tasks written before the first section, which have no band.
-    let heading: DiagramLabel?
+    var taskCount: Int
+    /// The section of the run's last task, whose heading the band shows, or nil for tasks before the first section.
+    var headingSection: Int?
 
-    /// The runs of `diagram`'s tasks, in order. A task under the section of the task before it joins its run without
-    /// its heading being compared.
+    /// The runs, in order: a task joins the run before it when its section's heading is that run's (two sections of one
+    /// name written one after the other share a band), compared only when their sections differ.
     static func runs(of diagram: UserJourneyDiagram) -> [UserJourneySectionRun] {
         var runs: [UserJourneySectionRun] = []
-        var lastSectionIndex: Int??
+        let sections = diagram.sections
+        runs.reserveCapacity(sections.count + 1)
         for (index, task) in diagram.taskRecords.enumerated() {
-            let heading = task.sectionIndex.map { section in diagram.sections[section] }
-            defer { lastSectionIndex = task.sectionIndex }
-            if let last = runs.last, lastSectionIndex == task.sectionIndex || last.heading == heading {
-                runs[runs.count - 1] = UserJourneySectionRun(firstTaskIndex: last.firstTaskIndex, taskCount: last.taskCount + 1, heading: heading)
+            let section = task.sectionIndex
+            if let last = runs.last, last.headingSection == section || Self.heading(last.headingSection, in: sections) == Self.heading(section, in: sections) {
+                runs[runs.count - 1].taskCount += 1
+                runs[runs.count - 1].headingSection = section
             } else {
-                runs.append(UserJourneySectionRun(firstTaskIndex: index, taskCount: 1, heading: heading))
+                runs.append(UserJourneySectionRun(firstTaskIndex: index, taskCount: 1, headingSection: section))
             }
         }
         return runs
+    }
+
+    private static func heading(_ section: Int?, in sections: [DiagramLabel]) -> DiagramLabel? {
+        section.map { section in sections[section] }
     }
 }
