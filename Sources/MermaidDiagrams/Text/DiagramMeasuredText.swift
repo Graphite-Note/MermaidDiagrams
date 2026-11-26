@@ -8,8 +8,8 @@
  *              outlive the measuring copied into the derived bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -75,6 +75,13 @@ struct DiagramMeasuredLines: Sendable {
         derived.removeAll(keepingCapacity: true)
     }
 
+    /// Room made for `lineCount` lines and `derivedByteCount` derived bytes, so that a layout that knows about how many
+    /// texts it measures grows its lists once.
+    mutating func reserveCapacity(lines lineCount: Int, derivedBytes derivedByteCount: Int) {
+        lines.reserveCapacity(lineCount)
+        derived.reserveCapacity(derivedByteCount)
+    }
+
     /// Lines from `count` on taken out: a measuring that left the fast path undoes the lines it added.
     mutating func removeLines(from count: Int) {
         lines.removeSubrange(count...)
@@ -106,7 +113,10 @@ struct DiagramMeasuredLines: Sendable {
     mutating func deriveLines(of text: DiagramMeasuredText, source: UnsafeBufferPointer<UInt8>) {
         for index in text.lineIndices where lines[index].start < Self.derivedOffset {
             let line = lines[index]
-            let start = withBytes(from: line.start, to: line.end, source: source) { bytes in appendDerived(bytes) }
+            precondition(line.start >= 0 && line.start <= line.end && Int(line.end) <= source.count, "line outside its source")
+            // Appended from `source` itself: reading it through `withBytes` borrowed a copy of these lists, so that each
+            // append copied the derived bytes whole.
+            let start = appendDerived(UnsafeBufferPointer(rebasing: source[Int(line.start)..<Int(line.end)]))
             lines[index].start = start
             lines[index].end = start + (line.end - line.start)
         }

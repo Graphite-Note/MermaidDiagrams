@@ -6,8 +6,8 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -32,13 +32,16 @@ public enum RequirementLayoutEngine {
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: RequirementDiagram, measurers: RequirementTextMeasurers<Measurer>, titleText: Measurer,
                                                        font: DiagramFont, limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> RequirementLayout {
-        let measured = RequirementMeasurement(diagram: diagram, measurers: measurers)
+        var measured = RequirementMeasurement(diagram: diagram, measurers: measurers)
+        let title = diagram.title.map { title in
+            DiagramFlatTextMeasuring.measure(DiagramLabel(title), measurer: DiagramFlatMeasurer(titleText), maximumWidth: RequirementMeasurement.unwrapped,
+                                             into: &measured.lines)
+        }
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let placed = DiagramScratchArena.withCurrentThread { arena in
             rankedPage(diagram, measured: measured, flowAxes: flowAxes, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
         }
         guard let (page, extent) = placed else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
-        let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: titleText, maximumWidth: RequirementMeasurement.unwrapped) }
         return page.finished(extent: flowAxes.flowIsVertical ? extent : CGSize(width: extent.height, height: extent.width), font: font, title: title)
     }
 
@@ -87,7 +90,7 @@ struct RequirementPageAssembly {
     let axes: FlowchartFlowAxes
     let centers: [CGPoint]
     /// By the measurement's edge index; nil until placed.
-    private var relations: [RequirementLayoutRelation?]
+    private var relations: [RequirementPlacedRelation?]
 
     init(measured: RequirementMeasurement, axes: FlowchartFlowAxes, flowNodes: ScratchSpan<LayeredFlatNode>) {
         self.measured = measured
@@ -137,7 +140,7 @@ struct RequirementPageAssembly {
             let laidOutEdge = laidOut[layeredIndex]
             let textCenter = laidOutEdge.labelWidth > 0 ? axes.pagePoint(laidOutEdge.labelCenter)
                 : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
-            relations[edgeIndex] = RequirementLayoutRelation(kind: edge.kind, path: drawn.path, mark: mark, text: Self.centered(edge.text, at: textCenter))
+            relations[edgeIndex] = RequirementPlacedRelation(kind: edge.kind, path: drawn.path, mark: mark, text: edge.text.centered(at: textCenter))
         }
     }
 
@@ -177,86 +180,82 @@ struct RequirementPageAssembly {
                                                      startTrim: edge.isContainment ? 2 * RequirementLayoutEngine.containmentRadius : 0, textSize: edge.text.size)
                 let mark: RequirementRelationMark = edge.isContainment ? .containment(point: loop.leave, towardBox: loop.intoBox)
                                                                        : .arrow(tip: loop.back, direction: loop.intoBox)
-                relations[edgeIndex] = RequirementLayoutRelation(kind: edge.kind, path: loop.path, mark: mark, text: Self.centered(edge.text, at: loop.textCenter))
+                relations[edgeIndex] = RequirementPlacedRelation(kind: edge.kind, path: loop.path, mark: mark, text: edge.text.centered(at: loop.textCenter))
             }
         }
     }
 
     /// The finished layout: the layout's `extent` moved 8 points inside the page, below the title and centered under it
     /// when the title is wider, as Pele frames it.
-    func finished(extent: CGSize, font: DiagramFont, title: DiagramTextBlock?) -> RequirementLayout {
+    func finished(extent: CGSize, font: DiagramFont, title: DiagramMeasuredText?) -> RequirementLayout {
         let padding = RequirementLayoutEngine.padding
         let titleSize = title?.size ?? .zero
         let titleHeight = titleSize.height > 0 ? titleSize.height + RequirementLayoutEngine.titleGap : 0
         let innerWidth = max(extent.width, titleSize.width)
         let offset = CGVector(dx: padding + (innerWidth - extent.width) / 2, dy: padding + titleHeight)
         let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (extent.height + titleHeight + 2 * padding).rounded(.up))
-        var placedTitle = title.flatMap { title in title.lineCount == 0 ? nil : title }
-        placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        var boxes: [RequirementLayoutBox] = []
+        let placedTitle = title.flatMap { title in title.lineCount == 0 ? nil : title.centered(at: CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)) }
+        var boxes: [RequirementPlacedBox] = []
         boxes.reserveCapacity(measured.boxes.count)
-        for box in measured.boxes.indices { boxes.append(Self.placedBox(measured.boxes[box], at: centers[box], offset: offset)) }
-        var placedRelations: [RequirementLayoutRelation] = []
+        var fieldTexts: [DiagramMeasuredText] = []
+        fieldTexts.reserveCapacity(2 * measured.rows.count)
+        for box in measured.boxes.indices { boxes.append(placedBox(measured.boxes[box], at: centers[box], offset: offset, fieldTexts: &fieldTexts)) }
+        var placedRelations: [RequirementPlacedRelation] = []
         placedRelations.reserveCapacity(relations.count)
         for relation in relations {
             guard var placed = relation else { continue }
             placed.translate(by: offset)
             placedRelations.append(placed)
         }
-        return RequirementLayout(size: size, font: font, boxes: boxes, relations: placedRelations, title: placedTitle)
+        return RequirementLayout(size: size, font: font, lines: measured.lines, placedBoxes: boxes, fieldTexts: fieldTexts, placedRelations: placedRelations,
+                                 placedTitle: placedTitle, unappliedStatementCount: measured.unappliedStatementCount)
     }
 
     /// A box with its texts placed around `center`, then moved by `offset`: each place found around `center` and moved as
-    /// `translated(by:)` moves it.
-    private static func placedBox(_ box: RequirementMeasuredBox, at center: CGPoint, offset: CGVector) -> RequirementLayoutBox {
+    /// `translated(by:)` moves it; its fields' lines appended to `fieldTexts`, the names' then the values'.
+    private func placedBox(_ box: RequirementMeasuredBox, at center: CGPoint, offset: CGVector, fieldTexts: inout [DiagramMeasuredText]) -> RequirementPlacedBox {
         let frame = CGRect(x: center.x - box.size.width / 2, y: center.y - box.size.height / 2, width: box.size.width, height: box.size.height)
         let headTop = frame.minY + RequirementMeasurement.paddingAlong
-        let stereotype = centered(box.stereotype, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height / 2).translated(by: offset))
-        let name = centered(box.name, at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height + box.name.size.height / 2).translated(by: offset))
+        let stereotype = box.stereotype.centered(at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height / 2).translated(by: offset))
+        let name = box.name.centered(at: CGPoint(x: center.x, y: headTop + box.stereotype.size.height + box.name.size.height / 2).translated(by: offset))
         let movedFrame = frame.offsetBy(dx: offset.dx, dy: offset.dy)
-        guard !box.rows.isEmpty else {
-            return RequirementLayoutBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: nil,
-                                        fieldNames: [], fieldValues: [], style: box.style)
+        guard box.rowCount > 0 else {
+            return RequirementPlacedBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: nil,
+                                        fieldNames: fieldTexts.count..<fieldTexts.count, fieldValues: fieldTexts.count..<fieldTexts.count, style: box.style)
         }
         let divider = frame.minY + box.headHeight
-        var rowTop = divider + RequirementMeasurement.paddingAlong
-        var fieldNames: [DiagramTextBlock] = []
-        var fieldValues: [DiagramTextBlock] = []
-        // A field's name or value of several lines is drawn as a block for each line.
-        var nameLineCount = 0
-        var valueLineCount = 0
-        for row in box.rows {
-            nameLineCount += max(row.key.lineCount, 1)
-            valueLineCount += max(row.value.lineCount, 1)
-        }
-        fieldNames.reserveCapacity(nameLineCount)
-        fieldValues.reserveCapacity(valueLineCount)
         let keyLeft = frame.minX + RequirementMeasurement.paddingAcross
-        for row in box.rows {
-            appendStartingAt(row.key, left: keyLeft, top: rowTop, offset: offset, to: &fieldNames)
-            appendStartingAt(row.value, left: keyLeft + box.keyWidth + RequirementMeasurement.columnGap, top: rowTop, offset: offset, to: &fieldValues)
-            rowTop += row.height + RequirementMeasurement.rowGap
+        let valueLeft = keyLeft + box.keyWidth + RequirementMeasurement.columnGap
+        // A field's name or value of several lines is drawn as a text for each line.
+        let namesStart = fieldTexts.count
+        var rowTop = divider + RequirementMeasurement.paddingAlong
+        for row in box.rowIndices {
+            appendStartingAt(measured.rows[row].key, left: keyLeft, top: rowTop, offset: offset, to: &fieldTexts)
+            rowTop += measured.rows[row].height + RequirementMeasurement.rowGap
         }
-        return RequirementLayoutBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name,
-                                    dividerY: divider + offset.dy, fieldNames: fieldNames, fieldValues: fieldValues, style: box.style)
+        let valuesStart = fieldTexts.count
+        rowTop = divider + RequirementMeasurement.paddingAlong
+        for row in box.rowIndices {
+            appendStartingAt(measured.rows[row].value, left: valueLeft, top: rowTop, offset: offset, to: &fieldTexts)
+            rowTop += measured.rows[row].height + RequirementMeasurement.rowGap
+        }
+        return RequirementPlacedBox(frame: movedFrame, isRequirement: box.isRequirement, stereotype: stereotype, name: name, dividerY: divider + offset.dy,
+                                    fieldNames: namesStart..<valuesStart, fieldValues: valuesStart..<fieldTexts.count, style: box.style)
     }
 
     /// The text's lines, each starting at `left`, the first line's box starting at `top`, as Pele writes a field, moved by
-    /// `offset` (`DiagramTextBlock.leftAlignedLines()`, each line's place then moved).
-    private static func appendStartingAt(_ text: DiagramTextBlock, left: CGFloat, top: CGFloat, offset: CGVector, to lines: inout [DiagramTextBlock]) {
-        let placed = centered(text, at: CGPoint(x: left + text.size.width / 2, y: top + text.size.height / 2))
-        guard placed.lineCount > 1 else { return lines.append(placed.translated(by: offset)) }
+    /// `offset` (as `DiagramTextBlock.lineBlock(at:center:)` cuts a block of several lines, each line's place then moved).
+    private func appendStartingAt(_ text: DiagramMeasuredText, left: CGFloat, top: CGFloat, offset: CGVector, to texts: inout [DiagramMeasuredText]) {
+        let placed = text.centered(at: CGPoint(x: left + text.size.width / 2, y: top + text.size.height / 2))
+        guard placed.lineCount > 1 else { return texts.append(placed.translated(by: offset)) }
         let lineLeft = placed.center.x - placed.size.width / 2
         let lineTop = placed.center.y - placed.size.height / 2
-        for index in 0..<placed.lineCount {
-            let center = CGPoint(x: lineLeft + placed.lineWidth(at: index) / 2, y: lineTop + (CGFloat(index) + 0.5) * placed.lineHeight)
-            lines.append(placed.lineBlock(at: index, center: center).translated(by: offset))
+        for index in 0..<Int(placed.lineCount) {
+            let lineWidth = measured.lines[Int(placed.firstLine) + index].width
+            let center = CGPoint(x: lineLeft + lineWidth / 2, y: lineTop + (CGFloat(index) + 0.5) * placed.lineHeight)
+            let line = DiagramMeasuredText(firstLine: placed.firstLine + Int32(index), lineCount: 1, width: lineWidth, height: placed.lineHeight,
+                                           lineHeight: placed.lineHeight, fontSize: placed.fontSize, hasEmphasis: placed.hasEmphasis, center: center)
+            texts.append(line.translated(by: offset))
         }
-    }
-
-    private static func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {
-        var placed = text
-        placed.center = center
-        return placed
     }
 }

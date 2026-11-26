@@ -7,8 +7,8 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -27,13 +27,13 @@ enum ReferenceRequirementLayoutEngine {
     static let containmentRadius: CGFloat = 6
 
     static func layout(_ diagram: RequirementDiagram, typography: DiagramTypography,
-                              limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> RequirementLayout {
+                              limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> ReferenceRequirementLayout {
         try layout(diagram, measurers: ReferenceRequirementTextMeasurers(names: typography.boldNodeText, body: typography.edgeText),
                    titleText: typography.boldNodeText, font: typography.font, limits: limits)
     }
 
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: RequirementDiagram, measurers: ReferenceRequirementTextMeasurers<Measurer>, titleText: Measurer,
-                                                       font: DiagramFont, limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> RequirementLayout {
+                                                       font: DiagramFont, limits: MermaidDiagramLimits) throws(RequirementLayoutError) -> ReferenceRequirementLayout {
         let measured = ReferenceRequirementMeasurement(diagram: diagram, measurers: measurers)
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let layeredEdgeIndices = measured.edges.indices.filter { edgeIndex in !measured.edges[edgeIndex].isSelfLoop }
@@ -124,7 +124,7 @@ struct ReferenceRequirementPageAssembly {
 
     /// The finished layout: the layout's `extent` moved 8 points inside the page, below the title and centered under it
     /// when the title is wider, as Pele frames it.
-    func finished(extent: CGSize, font: DiagramFont, title: DiagramTextBlock?) -> RequirementLayout {
+    func finished(extent: CGSize, font: DiagramFont, title: DiagramTextBlock?) -> ReferenceRequirementLayout {
         let padding = ReferenceRequirementLayoutEngine.padding
         let titleSize = title?.size ?? .zero
         let titleHeight = titleSize.height > 0 ? titleSize.height + ReferenceRequirementLayoutEngine.titleGap : 0
@@ -134,7 +134,7 @@ struct ReferenceRequirementPageAssembly {
         var placedTitle = title.flatMap { title in title.lineCount == 0 ? nil : title }
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
         let boxes = measured.boxes.indices.map { box in Self.placedBox(measured.boxes[box], at: centers[box]).translated(by: offset) }
-        return RequirementLayout(size: size, font: font, boxes: boxes, relations: relations.compactMap { relation in relation?.translated(by: offset) },
+        return ReferenceRequirementLayout(size: size, font: font, boxes: boxes, relations: relations.compactMap { relation in relation?.translated(by: offset) },
                                  title: placedTitle)
     }
 

@@ -7,8 +7,8 @@
  *              narrow columns lay them out, alike to the bit; small layout budgets refused alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -57,6 +57,20 @@ final class RequirementLayoutEquivalenceTests: XCTestCase {
         XCTAssertGreaterThan(diagramCount, 1_400)
     }
 
+    /// The layout counts the diagram's unapplied statements as it resolves the boxes' styles: the count the diagram gives.
+    func testTheLayoutCountsTheDiagramsUnappliedStatements() throws {
+        var texts = RequirementRandomTexts(seed: 0x57_11E)
+        let sources = try OutputDigest.corpora().flatMap(\.sources) + RequirementCorpus.documentationExamples() + (0..<1_000).map { _ in texts.text(statementCount: 22) }
+        var counted = 0
+        for source in sources {
+            guard case .requirement(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard),
+                  let layout = try? RequirementLayoutEngine.layout(diagram, typography: DiagramSceneSamples.typography, limits: .standard) else { continue }
+            XCTAssertEqual(layout.unappliedStatementCount, diagram.unappliedStatementCount, source)
+            if diagram.unappliedStatementCount > 0 { counted += 1 }
+        }
+        XCTAssertGreaterThan(counted, 10)
+    }
+
     /// Budgets of layout points too small for some diagrams: both refuse the same ones alike.
     func testSmallLayoutBudgetsAreRefusedAlike() throws {
         var limits = MermaidDiagramLimits.standard
@@ -90,9 +104,9 @@ final class RequirementLayoutEquivalenceTests: XCTestCase {
 struct RequirementLayoutBits: Equatable {
     var bits = FlowchartLayoutBits { throw CancellationError() }
 
-    init(laying: () throws -> RequirementLayout) {
+    init<Layout: RequirementLayoutViews>(laying: () throws -> Layout) {
         bits.error = nil
-        let layout: RequirementLayout
+        let layout: Layout
         do {
             layout = try laying()
         } catch {
