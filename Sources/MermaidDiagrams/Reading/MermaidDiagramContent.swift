@@ -20,7 +20,7 @@ extension MermaidDiagram {
         case .stateDiagram(let diagram): diagram.states.isEmpty
         case .classDiagram(let diagram): diagram.classes.isEmpty && diagram.notes.isEmpty
         case .sequence(let diagram): diagram.participants.isEmpty
-        case .entityRelationship(let diagram): diagram.entities.isEmpty
+        case .entityRelationship(let diagram): diagram.entityCount == 0
         case .mindmap(let diagram): diagram.nodes.isEmpty
         case .timeline(let diagram): diagram.periods.isEmpty
         case .pieChart(let chart): chart.slices.isEmpty

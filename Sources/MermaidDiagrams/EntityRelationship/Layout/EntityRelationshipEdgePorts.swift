@@ -2,11 +2,12 @@
  * File: EntityRelationshipEdgePorts.swift
  * ---------------------------------------
  * Layer: Core
- * Description: Where relationships meet their boxes, the ends that share a side spread along it.
+ * Description: Where relationships meet their boxes, the ends that share a side spread along it, kept in spans of the
+ *              thread's arena.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -20,40 +21,38 @@ struct EntityRelationshipEdgePorts {
 
     /// One end of a relationship on a side of a box.
     struct End {
-        let relationshipIndex: Int
+        let relationshipIndex: Int32
         let isFirstEntityEnd: Bool
-        let entity: Int
+        let entity: Int32
         let side: DiagramSide
         /// Where, across the flow, the route's next point is: the order the ends take along the side.
         let neighborAcross: CGFloat
     }
 
-    /// The page points of each relationship's ends, by relationship index; nil for an end not placed.
-    private(set) var firstEntityPoints: [CGPoint?]
-    private(set) var secondEntityPoints: [CGPoint?]
+    /// The page points of each relationship's ends, by relationship index, set where `isFirstPlaced` and
+    /// `isSecondPlaced` say, and the side each end is on: spans of the thread's arena.
+    let firstEntityPoints: ScratchSpan<CGPoint>
+    let secondEntityPoints: ScratchSpan<CGPoint>
+    let isFirstPlaced: ScratchSpan<Bool>
+    let isSecondPlaced: ScratchSpan<Bool>
+    let firstSides: ScratchSpan<DiagramSide>
+    let secondSides: ScratchSpan<DiagramSide>
 
-    init(ends: [End], relationshipCount: Int, boxCenters: [CGPoint], boxSizes: [CGSize]) {
-        firstEntityPoints = Array(repeating: nil, count: relationshipCount)
-        secondEntityPoints = Array(repeating: nil, count: relationshipCount)
+    init(ends: ScratchSpan<End>, relationshipCount: Int, boxCenters: ScratchSpan<CGPoint>, boxSizes: ScratchSpan<CGSize>, arena: DiagramScratchArena) {
+        firstEntityPoints = arena.uninitializedSpan(count: relationshipCount)
+        secondEntityPoints = arena.uninitializedSpan(count: relationshipCount)
+        isFirstPlaced = arena.span(count: relationshipCount, repeating: false)
+        isSecondPlaced = arena.span(count: relationshipCount, repeating: false)
+        firstSides = arena.uninitializedSpan(count: relationshipCount)
+        secondSides = arena.uninitializedSpan(count: relationshipCount)
         guard !ends.isEmpty else { return }
-        // The ends in one list sorted by their side, then by where they go, by relationship and by the order they were
-        // listed in: each side's ends together, in the order they take along it, as sorting each side's ends alone
-        // ordered them (two ends of one side never share a relationship, a relationship with itself being a loop).
-        var ordered = Array(ends.indices)
-        ordered.sort { first, second in
-            let firstEnd = ends[first]
-            let secondEnd = ends[second]
-            let firstSlot = Self.slot(of: firstEnd)
-            let secondSlot = Self.slot(of: secondEnd)
-            if firstSlot != secondSlot { return firstSlot < secondSlot }
-            return (firstEnd.neighborAcross, firstEnd.relationshipIndex, first) < (secondEnd.neighborAcross, secondEnd.relationshipIndex, second)
-        }
+        let ordered = Self.ordered(ends, arena: arena)
         var first = 0
         while first < ordered.count {
             let slot = Self.slot(of: ends[ordered[first]])
             var last = first + 1
             while last < ordered.count, Self.slot(of: ends[ordered[last]]) == slot { last += 1 }
-            let entity = ends[ordered[first]].entity
+            let entity = Int(ends[ordered[first]].entity)
             let side = ends[ordered[first]].side
             let count = last - first
             let length = side.isHorizontal ? boxSizes[entity].width : boxSizes[entity].height
@@ -62,14 +61,42 @@ struct EntityRelationshipEdgePorts {
                 let end = ends[ordered[first + position]]
                 let offset = (CGFloat(position) - CGFloat(count - 1) / 2) * step
                 let point = Self.sidePoint(center: boxCenters[entity], size: boxSizes[entity], side: side, offset: offset)
-                if end.isFirstEntityEnd { firstEntityPoints[end.relationshipIndex] = point } else { secondEntityPoints[end.relationshipIndex] = point }
+                let relationship = Int(end.relationshipIndex)
+                if end.isFirstEntityEnd {
+                    firstEntityPoints[relationship] = point
+                    isFirstPlaced[relationship] = true
+                    firstSides[relationship] = end.side
+                } else {
+                    secondEntityPoints[relationship] = point
+                    isSecondPlaced[relationship] = true
+                    secondSides[relationship] = end.side
+                }
             }
             first = last
         }
     }
 
+    /// The ends' indexes sorted by their side, then by where they go, by relationship and by the order they were listed
+    /// in: each side's ends together, in the order they take along it, as sorting each side's ends alone ordered them
+    /// (two ends of one side never share a relationship, a relationship with itself being a loop). Sorted as an array of
+    /// them sorts, by the same sort on the same order.
+    private static func ordered(_ ends: ScratchSpan<End>, arena: DiagramScratchArena) -> ScratchSpan<Int> {
+        let ordered: ScratchSpan<Int> = arena.uninitializedSpan(count: ends.count)
+        for index in 0..<ends.count { ordered[index] = index }
+        var orderedBuffer = ordered.buffer
+        orderedBuffer.sort { first, second in
+            let firstEnd = ends[first]
+            let secondEnd = ends[second]
+            let firstSlot = slot(of: firstEnd)
+            let secondSlot = slot(of: secondEnd)
+            if firstSlot != secondSlot { return firstSlot < secondSlot }
+            return (firstEnd.neighborAcross, firstEnd.relationshipIndex, first) < (secondEnd.neighborAcross, secondEnd.relationshipIndex, second)
+        }
+        return ordered
+    }
+
     /// The side an end is on, numbered by box and side.
-    private static func slot(of end: End) -> Int { end.entity * 4 + sideNumber(end.side) }
+    private static func slot(of end: End) -> Int { Int(end.entity) * 4 + sideNumber(end.side) }
 
     /// The point of a box's `side`, `offset` from the side's middle (rightward or downward).
     static func sidePoint(center: CGPoint, size: CGSize, side: DiagramSide, offset: CGFloat) -> CGPoint {

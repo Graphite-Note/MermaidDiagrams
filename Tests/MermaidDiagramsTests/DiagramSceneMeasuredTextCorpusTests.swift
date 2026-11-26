@@ -8,7 +8,7 @@
  *              accessibility text and scene text the same to the byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -24,8 +24,11 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
     /// of each text of its scene the same.
     /// The graph types whose layouts give their scenes blocks, and those whose layouts measure their texts themselves
     /// (`DiagramMeasuredText`).
-    private static let graphCorporaGivingBlocks = ["state-docs", "class-docs", "er-docs"]
+    private static let graphCorporaGivingBlocks = ["state-docs", "class-docs"]
     private static let graphCorporaMeasuringTheirTexts = ["requirement-docs"]
+    /// The graph types whose layouts measure their texts themselves but give their groups' titles, a flowchart's cluster
+    /// blocks, to their scenes as blocks: their inputs without groups give their scenes no block at all.
+    private static let graphCorporaMeasuringTheirTextsButGroupTitles = ["er-docs"]
 
     func testEveryCorpusSceneBuiltFromWrittenBytesIsTheSame() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
@@ -33,12 +36,23 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
         var differences: [String] = []
         var inputCount = 0
         var countsByCorpus: [String: (substituted: Int, fromLabels: Int, kept: Int)] = [:]
+        var blockedInputsWithoutGroups: [String] = []
+        var inputsWithoutGroupsCount = 0
         for (corpus, sources) in try OutputDigest.corpora() {
             let before = (remeasuring.substitutedCount, remeasuring.fromLabelCount, remeasuring.keptCount)
             defer {
                 countsByCorpus[corpus] = (remeasuring.substitutedCount - before.0, remeasuring.fromLabelCount - before.1, remeasuring.keptCount - before.2)
             }
             for (index, source) in sources.enumerated() {
+                let blocksBefore = remeasuring.substitutedCount + remeasuring.fromLabelCount + remeasuring.keptCount
+                defer {
+                    if Self.graphCorporaMeasuringTheirTextsButGroupTitles.contains(corpus), Self.hasNoGroup(source) {
+                        inputsWithoutGroupsCount += 1
+                        if remeasuring.substitutedCount + remeasuring.fromLabelCount + remeasuring.keptCount != blocksBefore {
+                            blockedInputsWithoutGroups.append("\(corpus) \(index)")
+                        }
+                    }
+                }
                 let expected = OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: OutputDigest.narrowColumnWidths)
                 let expectedLines = Self.sceneLines(source, typography: typography)
                 let outcome = remeasuring.whileSubstituting {
@@ -68,7 +82,16 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
             let counts = countsByCorpus[corpus] ?? (-1, -1, -1)
             XCTAssertTrue(counts == (0, 0, 0), "\(corpus): \(counts) blocks given to its scenes")
         }
+        // Those that give their groups' titles alone: an input without groups gives its scenes no block.
+        XCTAssertEqual(blockedInputsWithoutGroups, [], "inputs without groups that gave their scenes blocks")
+        XCTAssertGreaterThan(inputsWithoutGroupsCount, 15)
         print(countsByCorpus.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))
+    }
+
+    /// Whether `source` reads as an entity relationship diagram without groups.
+    private static func hasNoGroup(_ source: String) -> Bool {
+        guard case .entityRelationship(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else { return false }
+        return diagram.subgraphCount == 0
     }
 
     /// The lines of each text of the input's regular scene, or none when it is refused.

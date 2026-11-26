@@ -3,38 +3,62 @@
  * -------------------------------------------
  * Layer: Core
  * Description: The cells of an entity's attribute rows that come from a closed set, measured once a diagram: the keys
- *              (`PK`, `PK, FK` and the other lists written) and a comment that is not written.
+ *              (`PK`, `PK, FK` and the other lists written) and a comment that is not written, into the layout's lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
 import CoreGraphics
 
-/// The keys cells and the empty comment of a diagram's attribute rows, each measured the first time a row shows it, as
-/// `EntityRelationshipBoxMeasurement` measured it for every row: keys written as their keywords joined by `, ` (no keys
-/// the empty one-line label), an unwritten comment as a label of no lines. A block measured once is the block measuring
-/// its text again gives. The lists of keys are compared in a short list, as an attribute holds at most a few keys and a
-/// diagram writes few lists of them; past `largestKeyListCount` lists, a list is measured each time.
+/// The keys cells and the empty comment of a diagram's attribute rows, each measured the first time a row shows it into
+/// the layout's lines, as `EntityRelationshipBoxMeasurement` measured it for every row: keys written as their keywords
+/// joined by `, ` (no keys the empty one-line label), an unwritten comment as a label of no lines. A text measured once is
+/// the text measuring it again gives. A list of at most four keys is known by its count and its packed keys, which tell
+/// it exactly; the first `largestKeyListCount` such lists are kept, any other list is measured each time.
 struct EntityRelationshipConstantCells {
     static let largestKeyListCount = 16
 
-    private var keyLists: [(keys: [EntityRelationshipAttributeKey], block: DiagramTextBlock)] = []
-    private var unwrittenComment: DiagramTextBlock?
+    /// The lists of keys measured, by count and packed keys, in a span of the thread's arena.
+    private let keyLists: ScratchSpan<EntityRelationshipMeasuredKeys>
+    private var keyListCount = 0
+    private var unwrittenComment: DiagramMeasuredText?
 
-    mutating func keys<Measurer: DiagramTextMeasuring>(_ keys: [EntityRelationshipAttributeKey], measurer: Measurer) -> DiagramTextBlock {
-        for known in keyLists where known.keys == keys { return known.block }
-        let label = keys.isEmpty ? DiagramLabel("") : DiagramLabel(keys.map(\.mermaidKeyword).joined(separator: ", "))
-        let block = DiagramTextBlock(label: label, measurer: measurer, maximumWidth: .greatestFiniteMagnitude)
-        if keyLists.count < Self.largestKeyListCount { keyLists.append((keys, block)) }
-        return block
+    init(arena: DiagramScratchArena) {
+        keyLists = arena.uninitializedSpan(count: Self.largestKeyListCount)
     }
 
-    mutating func noComment<Measurer: DiagramTextMeasuring>(measurer: Measurer) -> DiagramTextBlock {
+    mutating func keys<Measurer: DiagramTextMeasuring>(of attribute: EntityRelationshipAttributeRecord, model: EntityRelationshipModel, measurer: Measurer,
+                                                       into lines: inout DiagramMeasuredLines) -> DiagramMeasuredText {
+        let isPacked = Int(attribute.keyCount) <= EntityRelationshipAttributeRecord.packedKeyLimit
+        if isPacked {
+            for index in 0..<keyListCount where keyLists[index].count == attribute.keyCount && keyLists[index].packed == attribute.keyStart {
+                return keyLists[index].text
+            }
+        }
+        let keys = (0..<Int(attribute.keyCount)).map { position in model.key(position, of: attribute).mermaidKeyword }
+        let label = keys.isEmpty ? DiagramLabel("") : DiagramLabel(keys.joined(separator: ", "))
+        let text = DiagramFlatTextMeasuring.copied(DiagramTextBlock(label: label, measurer: measurer, maximumWidth: .greatestFiniteMagnitude), into: &lines)
+        if isPacked, keyListCount < Self.largestKeyListCount {
+            keyLists[keyListCount] = EntityRelationshipMeasuredKeys(count: attribute.keyCount, packed: attribute.keyStart, text: text)
+            keyListCount += 1
+        }
+        return text
+    }
+
+    mutating func noComment<Measurer: DiagramTextMeasuring>(measurer: Measurer, into lines: inout DiagramMeasuredLines) -> DiagramMeasuredText {
         if let unwrittenComment { return unwrittenComment }
-        let block = DiagramTextBlock(label: DiagramLabel(lines: []), measurer: measurer, maximumWidth: EntityRelationshipBoxMeasurement.commentWrappingWidth)
-        unwrittenComment = block
-        return block
+        let text = DiagramFlatTextMeasuring.copied(DiagramTextBlock(label: DiagramLabel(lines: []), measurer: measurer,
+                                                                    maximumWidth: EntityRelationshipBoxMeasurement.commentWrappingWidth), into: &lines)
+        unwrittenComment = text
+        return text
     }
+}
+
+/// A list of keys measured: its count and packed keys, and its text.
+struct EntityRelationshipMeasuredKeys {
+    let count: Int32
+    let packed: Int32
+    let text: DiagramMeasuredText
 }

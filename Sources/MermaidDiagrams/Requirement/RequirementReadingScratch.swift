@@ -96,10 +96,11 @@ final class RequirementReadingScratch {
     /// reading inside another on the same thread finds none there and makes its own.
     static func withLists<Result, Failure: Error>(isASCII: Bool, _ body: (inout RequirementReadingLists) throws(Failure) -> Result) throws(Failure) -> Result {
         let scratch = current
-        var lists = scratch.lists.take() ?? RequirementReadingLists()
-        lists.reset(isASCII: isASCII)
-        defer { scratch.lists = lists }
-        return try body(&lists)
+        // The lists are moved in and out by swapping, never copied: a copy would make every list's first change copy it.
+        var lists: RequirementReadingLists? = scratch.lists.take() ?? RequirementReadingLists()
+        lists?.reset(isASCII: isASCII)
+        defer { swap(&scratch.lists, &lists) }
+        return try body(&lists!)
     }
 
     /// The scratch of the calling thread, made the first time the thread reads a requirement diagram.

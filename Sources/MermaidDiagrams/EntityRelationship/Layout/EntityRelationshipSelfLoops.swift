@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationshipSelfLoops.swift
+ * ---------------------------------------
+ * Layer: Core
+ * Description: Relationships of an entity with itself looped beside its box as Pele draws them: each loop's bands, the
+ *              room its loops take, and its line's start and three segments, which the layout writes into its list.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 import CoreGraphics
 
 /// Relationships of an entity with itself, as Pele draws them: each leaves the box straight for a mark's length,
@@ -32,38 +44,33 @@ enum EntityRelationshipSelfLoops {
 
     /// The room on each side of a box, across the flow, that its loops and their labels take: the layout keeps a box
     /// centered in its place, so its place is widened on both sides.
-    static func room(labelSizes: [CGSize?], leavesBelow: Bool) -> CGFloat {
-        let reach = labelSizes.map { labelSize in labelSize.map { size in leavesBelow ? size.height : size.width } ?? 0 }.max() ?? 0
+    static func room(labelSizes: some Sequence<CGSize?>, leavesBelow: Bool) -> CGFloat {
+        let reach = labelSizes.lazy.map { labelSize in labelSize.map { size in leavesBelow ? size.height : size.width } ?? 0 }.max() ?? 0
         return EntityRelationshipCardinalityMark.length + turnReach * turnPeakRatio + outerRoom + reach
     }
 
-    /// One loop: its path, where it leaves and comes back, the direction into the box there, and its label's center.
+    /// One loop: its path's start and its three segments (out, around, back), where it leaves and comes back, the
+    /// direction into the box there, and its label's center.
     struct Loop {
-        let path: DiagramPath
-        let leave: CGPoint
-        let back: CGPoint
+        let start: CGPoint
+        let out: DiagramPathSegment
+        let around: DiagramPathSegment
+        let back: DiagramPathSegment
+        let leavePoint: CGPoint
+        let backPoint: CGPoint
         let intoBox: CGVector
         let labelCenter: CGPoint?
     }
 
-    /// The loops of a box centered on `center`, one per band, in the order given.
-    static func loops(center: CGPoint, boxSize: CGSize, bands: [CGFloat], labelSizes: [CGSize?], leavesBelow: Bool) -> [Loop] {
-        let total = bands.reduce(0, +)
+    /// How much a box's loops' bands, `total` long together, are scaled to fit its side, less its margin, as the loops
+    /// of a box are laid along it: the first band's start `total * scale / 2` before the side's middle, each band scaled.
+    static func scale(total: CGFloat, boxSize: CGSize, leavesBelow: Bool) -> CGFloat {
         let sideLength = leavesBelow ? boxSize.width : boxSize.height
-        let scale = total > 0 ? min(1, max(sideLength - sideMargin, 0) / total) : 1
-        var along = -total * scale / 2
-        var loops: [Loop] = []
-        for (band, labelSize) in zip(bands, labelSizes) {
-            let scaledBand = band * scale
-            loops.append(loop(center: center, boxSize: boxSize, offsetAlongSide: along + scaledBand / 2, band: scaledBand, labelSize: labelSize,
-                              leavesBelow: leavesBelow))
-            along += scaledBand
-        }
-        return loops
+        return total > 0 ? min(1, max(sideLength - sideMargin, 0) / total) : 1
     }
 
     /// The loop whose middle is `offsetAlongSide` from the middle of its side.
-    private static func loop(center: CGPoint, boxSize: CGSize, offsetAlongSide: CGFloat, band: CGFloat, labelSize: CGSize?, leavesBelow: Bool) -> Loop {
+    static func loop(center: CGPoint, boxSize: CGSize, offsetAlongSide: CGFloat, band: CGFloat, labelSize: CGSize?, leavesBelow: Bool) -> Loop {
         // `outward` leaves the box through the side; `alongSide` runs along it.
         let outward = leavesBelow ? CGVector(dx: 0, dy: 1) : CGVector(dx: 1, dy: 0)
         let alongSide = leavesBelow ? CGVector(dx: 1, dy: 0) : CGVector(dx: 0, dy: 1)
@@ -75,15 +82,12 @@ enum EntityRelationshipSelfLoops {
         let spread = max(min(band / 2 - spreadInset, largestSpread), 1)
         let straight = EntityRelationshipCardinalityMark.length
         let turn = straight + turnReach
-        let path = DiagramPath(start: point(outwardBy: 0, alongBy: -spread), segments: [
-            .line(to: point(outwardBy: straight, alongBy: -spread)),
-            .curve(to: point(outwardBy: straight, alongBy: spread), control1: point(outwardBy: turn, alongBy: -spread),
-                   control2: point(outwardBy: turn, alongBy: spread)),
-            .line(to: point(outwardBy: 0, alongBy: spread)),
-        ])
         let labelDistance = straight + turnReach * turnPeakRatio + labelGap
         let labelCenter = labelSize.map { size in point(outwardBy: labelDistance + (leavesBelow ? size.height : size.width) / 2, alongBy: 0) }
-        return Loop(path: path, leave: point(outwardBy: 0, alongBy: -spread), back: point(outwardBy: 0, alongBy: spread),
-                    intoBox: CGVector(dx: -outward.dx, dy: -outward.dy), labelCenter: labelCenter)
+        return Loop(start: point(outwardBy: 0, alongBy: -spread), out: .line(to: point(outwardBy: straight, alongBy: -spread)),
+                    around: .curve(to: point(outwardBy: straight, alongBy: spread), control1: point(outwardBy: turn, alongBy: -spread),
+                                   control2: point(outwardBy: turn, alongBy: spread)),
+                    back: .line(to: point(outwardBy: 0, alongBy: spread)), leavePoint: point(outwardBy: 0, alongBy: -spread),
+                    backPoint: point(outwardBy: 0, alongBy: spread), intoBox: CGVector(dx: -outward.dx, dy: -outward.dy), labelCenter: labelCenter)
     }
 }
