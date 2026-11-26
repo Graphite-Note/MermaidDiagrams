@@ -8,7 +8,7 @@
  *              accessibility text and scene text the same to the byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -25,7 +25,7 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
     /// The graph types whose layouts give their scenes blocks, and those whose layouts measure their texts themselves
     /// (`DiagramMeasuredText`).
     private static let graphCorporaGivingBlocks = ["state-docs", "class-docs", "er-docs"]
-    private static let graphCorporaMeasuringTheirTexts = ["requirement-docs"]
+    private static let graphCorporaMeasuringTheirTexts = ["requirement-docs", "c4-docs"]
 
     func testEveryCorpusSceneBuiltFromWrittenBytesIsTheSame() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
@@ -53,7 +53,9 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
         }
         XCTAssertEqual(differences, [])
         XCTAssertEqual(inputCount, 825)
-        XCTAssertGreaterThan(remeasuring.substitutedCount, 30_000, "texts drawn from their written bytes")
+        // The texts of the types whose layouts now measure their texts themselves (requirement, C4, most of timeline's)
+        // are no longer given to their scenes as blocks, so not counted here: their own equivalence tests compare them.
+        XCTAssertGreaterThan(remeasuring.substitutedCount, 28_000, "texts drawn from their written bytes")
         XCTAssertGreaterThan(remeasuring.substitutedCount + remeasuring.fromLabelCount, 4 * remeasuring.keptCount, "texts drawn from measured texts")
         XCTAssertGreaterThan(remeasuring.brokenCount, 50, "texts broken between characters drawn from their written bytes")
         // The graph types that still give their scenes blocks: every one has texts drawn from their written bytes, and most
