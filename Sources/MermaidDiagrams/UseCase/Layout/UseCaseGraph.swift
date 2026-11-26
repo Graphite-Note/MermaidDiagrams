@@ -7,8 +7,8 @@
  *              and note connector as an edge with its marks; Mermaid's class names made only when read.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -38,8 +38,8 @@ public enum UseCaseMarker: String, Equatable, Sendable {
 
 struct UseCaseGraphNode {
     let identifier: String
-    let label: String
-    let labelType: UseCaseLabelType
+    /// Its label: a range of the diagram's text (a JSON table's is its id's) and how it is read.
+    let label: UseCaseLabelText
     let shape: UseCaseNodeShape
     let padding: CGFloat
     /// What Mermaid's classes of the node are made of, which no drawing reads: `classNames` joins them when read.
@@ -48,7 +48,8 @@ struct UseCaseGraphNode {
     let styles: [String]
     var actorType: UseCaseActorType?
     var isBusiness = false
-    var stereotype: String?
+    /// The range of its stereotype, when one is written and not empty.
+    var stereotype: MermaidTextRange?
     var parentIdentifier: String?
     var jsonRows: [UseCaseJSONRow]?
     var boundaryType: UseCaseBoundaryType?
@@ -93,8 +94,10 @@ struct UseCaseGraphEdge {
     let isDotted: Bool
     let startMarker: UseCaseMarker
     let endMarker: UseCaseMarker
+    /// An include's or an extend's kind, which labels it.
     let label: String?
-    let labelType: UseCaseLabelType?
+    /// An association's label as written: a range of the diagram's text and how it is read.
+    let writtenLabel: UseCaseLabelText?
     /// The classes written, and the animation's class (`edge-animation-fast`) for an animated relationship: Mermaid's class
     /// names, which no drawing reads, are made from them when read.
     let classes: [String]
@@ -138,25 +141,26 @@ struct UseCaseGraph {
         for record in diagram.actorRecords { nodes.append(Self.actorNode(record, of: diagram, styles: styles)) }
         for record in diagram.useCaseRecords { nodes.append(Self.useCaseNode(record, of: diagram, styles: styles)) }
         for (place, note) in diagram.noteRecords.enumerated() {
-            nodes.append(UseCaseGraphNode(identifier: UseCaseDiagram.noteName(place), label: diagram.text.string(note.label.text), labelType: note.label.type,
-                                          shape: .note, padding: 10,
+            nodes.append(UseCaseGraphNode(identifier: UseCaseDiagram.noteName(place), label: note.label, shape: .note, padding: 10,
                                           classNameParts: UseCaseNodeClassNames(kind: "usecase-note", variantPrefix: "", variant: nil, isBusiness: false, classes: []),
                                           styles: styles.compiled([])))
         }
-        for json in diagram.jsonNodes {
-            var node = UseCaseGraphNode(identifier: json.identifier, label: json.identifier, labelType: .text, shape: .jsonTable, padding: 10,
+        for json in diagram.jsonRecords {
+            let classes = diagram.names(json.classes)
+            var node = UseCaseGraphNode(identifier: diagram.name(json.name), label: UseCaseLabelText(text: diagram.nameRanges[Int(json.name)], type: .text),
+                                        shape: .jsonTable, padding: 10,
                                         classNameParts: UseCaseNodeClassNames(kind: "usecase-json-table", variantPrefix: "", variant: nil, isBusiness: false,
-                                                                              classes: json.classes),
-                                        styles: styles.compiled(json.classes) + json.styles)
-            node.jsonRows = UseCaseJSONRow.rows(of: json.value)
+                                                                              classes: classes),
+                                        styles: styles.compiled(classes) + diagram.styles(json.styles))
+            node.jsonRows = UseCaseJSONRow.rows(of: diagram.jsonValues[Int(json.value)])
             nodes.append(node)
         }
-        for boundary in diagram.systemBoundaries {
-            var node = UseCaseGraphNode(identifier: boundary.identifier, label: boundary.label, labelType: boundary.labelType, shape: .systemBoundary,
-                                        padding: 20,
+        for boundary in diagram.boundaryRecords {
+            let classes = diagram.names(boundary.classes)
+            var node = UseCaseGraphNode(identifier: diagram.name(boundary.name), label: boundary.label, shape: .systemBoundary, padding: 20,
                                         classNameParts: UseCaseNodeClassNames(kind: "system-boundary", variantPrefix: "system-boundary-",
-                                                                              variant: boundary.type.rawValue, isBusiness: false, classes: boundary.classes),
-                                        styles: styles.compiled(boundary.classes) + boundary.styles)
+                                                                              variant: boundary.type.rawValue, isBusiness: false, classes: classes),
+                                        styles: styles.compiled(classes) + diagram.styles(boundary.styles))
             node.boundaryType = boundary.type
             nodes.append(node)
         }
@@ -165,7 +169,7 @@ struct UseCaseGraph {
         for (place, note) in diagram.noteRecords.enumerated() {
             let identifier = UseCaseDiagram.noteName(place)
             edges.append(UseCaseGraphEdge(identifier: identifier + "-edge", start: identifier, end: diagram.name(note.target), relationshipType: nil, isDotted: true,
-                                          startMarker: .none, endMarker: .none, label: nil, labelType: nil, classes: [], animationClass: nil,
+                                          startMarker: .none, endMarker: .none, label: nil, writtenLabel: nil, classes: [], animationClass: nil,
                                           styles: styles.compiled([]), isAnimated: false, minimumLength: 1))
         }
     }
@@ -179,21 +183,20 @@ struct UseCaseGraph {
         }
     }
 
-    /// A stereotype that is written and not empty, as a String.
-    private static func stereotype(of record: UseCaseElementRecord, in diagram: UseCaseDiagram) -> String? {
-        record.hasStereotype && !record.stereotype.isEmpty ? diagram.text.string(record.stereotype) : nil
+    /// The range of a stereotype that is written and not empty.
+    private static func stereotype(of record: UseCaseElementRecord) -> MermaidTextRange? {
+        record.hasStereotype && !record.stereotype.isEmpty ? record.stereotype : nil
     }
 
     private static func actorNode(_ record: UseCaseElementRecord, of diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphNode {
         let classes = diagram.names(record.classes)
-        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: diagram.text.string(record.label.text), labelType: record.label.type,
-                                    shape: shape(of: record.actorType), padding: 10,
+        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: record.label, shape: shape(of: record.actorType), padding: 10,
                                     classNameParts: UseCaseNodeClassNames(kind: "usecase-actor", variantPrefix: "usecase-actor-", variant: record.actorType.rawValue,
                                                                           isBusiness: record.isBusiness, classes: classes),
                                     styles: styles.compiled(classes) + diagram.styles(record.styles))
         node.actorType = record.actorType
         node.isBusiness = record.isBusiness
-        node.stereotype = stereotype(of: record, in: diagram)
+        node.stereotype = stereotype(of: record)
         node.parentIdentifier = diagram.parentName(record.parent)
         return node
     }
@@ -201,13 +204,13 @@ struct UseCaseGraph {
     private static func useCaseNode(_ record: UseCaseElementRecord, of diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphNode {
         let isEllipse = record.shape == .ellipse
         let classes = diagram.names(record.classes)
-        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: diagram.text.string(record.label.text), labelType: record.label.type,
+        var node = UseCaseGraphNode(identifier: diagram.name(record.name), label: record.label,
                                     shape: !isEllipse ? .rectangle : record.isBusiness ? .businessEllipse : .ellipse, padding: isEllipse ? 20 : 10,
                                     classNameParts: UseCaseNodeClassNames(kind: "usecase-element", variantPrefix: "usecase-", variant: record.shape.rawValue,
                                                                           isBusiness: record.isBusiness, classes: classes),
                                     styles: styles.compiled(classes) + diagram.styles(record.styles))
         node.isBusiness = record.isBusiness
-        node.stereotype = stereotype(of: record, in: diagram)
+        node.stereotype = stereotype(of: record)
         node.parentIdentifier = diagram.parentName(record.parent)
         return node
     }
@@ -215,7 +218,7 @@ struct UseCaseGraph {
     private static func edge(of record: UseCaseRelationshipRecord, in diagram: UseCaseDiagram, styles: UseCaseClassStyles) -> UseCaseGraphEdge {
         let classes = diagram.names(record.classes)
         let relationship = (type: record.type, arrow: record.arrow, isAnimated: record.isAnimated, animation: record.animation,
-                            label: record.hasLabel ? diagram.text.string(record.label.text) : nil, labelType: record.hasLabel ? record.label.type : nil)
+                            label: record.hasLabel ? record.label : nil)
         let isSemantic = relationship.type == .include || relationship.type == .extend
         let markers: (UseCaseMarker, UseCaseMarker) = switch relationship.type {
         case .generalization: (.none, .hollowTriangle)
@@ -224,11 +227,11 @@ struct UseCaseGraph {
         }
         let isAnimated = relationship.isAnimated || relationship.animation != nil
         // Include and extend are labelled with their kind, whatever label the relationship carries.
-        let label = isSemantic ? relationship.type.rawValue : relationship.type == .association ? relationship.label : nil
-        let labelType: UseCaseLabelType? = isSemantic ? .text : relationship.type == .association ? relationship.labelType : nil
+        let label = isSemantic ? relationship.type.rawValue : nil
+        let writtenLabel = relationship.type == .association ? relationship.label : nil
         return UseCaseGraphEdge(identifier: diagram.relationshipName(record), start: diagram.name(record.source), end: diagram.name(record.target),
                                 relationshipType: relationship.type, isDotted: isSemantic, startMarker: markers.0, endMarker: markers.1,
-                                label: label, labelType: labelType, classes: classes,
+                                label: label, writtenLabel: writtenLabel, classes: classes,
                                 animationClass: isAnimated ? relationship.animation ?? .fast : nil,
                                 styles: styles.compiled(classes) + diagram.styles(record.styles), isAnimated: relationship.isAnimated,
                                 minimumLength: Int(record.minimumLength))

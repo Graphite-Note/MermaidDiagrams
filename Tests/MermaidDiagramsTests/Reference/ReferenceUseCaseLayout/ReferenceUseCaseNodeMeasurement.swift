@@ -2,14 +2,14 @@
  * File: ReferenceUseCaseNodeMeasurement.swift
  * -------------------------------------------
  * Layer: Tests
- * Description: The 0.7.0 UseCaseNodeMeasurement kept as the reference the 0.8.0 layout is checked against:
- *              each node of a use case diagram measured as Pele's renderUsecase measures it: an actor's figure over its
- *              stereotype and label, an oval or a box around its text, a note, a JSON table's rows, and a boundary's
- *              title and padding.
+ * Description: The 0.7.0 UseCaseNodeMeasurement kept as the reference the 0.8.0 layout is checked against: each node of
+ *              a use case diagram measured as Pele's renderUsecase measures it: an actor's figure over its stereotype
+ *              and label, an oval or a box around its text, a note, a JSON table's rows, and a boundary's title and
+ *              padding.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -36,12 +36,12 @@ enum ReferenceUseCaseNodeMeasurement {
     static func smallSize(_ size: CGFloat) -> CGFloat { (size * 0.875).rounded() }
     static func stereotypeSize(_ size: CGFloat) -> CGFloat { (size * 0.8125).rounded() }
 
-    static func view<Measurer>(of node: UseCaseGraphNode, size: CGFloat, measurers: inout ReferenceUseCaseTextMeasurers<Measurer>) -> UseCaseNodeView {
+    static func view<Measurer>(of node: ReferenceUseCaseGraphNode, size: CGFloat, measurers: inout ReferenceUseCaseTextMeasurers<Measurer>) -> ReferenceUseCaseNodeView {
         let look = UseCaseLook(styles: node.styles)
         let fontSize = look.fontSize ?? size
         let stereotypeMeasurer = measurers.measurer(size: stereotypeSize(size), isBold: look.isBold, isItalic: look.isItalic)
         let stereotype = ReferenceUseCaseTextLabel.block(node.stereotype.map { stereotype in "«\(stereotype)»" }, measurer: stereotypeMeasurer, room: stereotypeRoom)
-        var view = UseCaseNodeView(node: node, look: look, label: stereotype, stereotype: stereotype)
+        var view = ReferenceUseCaseNodeView(node: node, look: look, label: stereotype, stereotype: stereotype)
         let labelMeasurer = measurers.measurer(size: fontSize, isBold: look.isBold, isItalic: look.isItalic)
         if node.isGroup {
             view.form = .boundary
@@ -64,7 +64,7 @@ enum ReferenceUseCaseNodeMeasurement {
     }
 
     /// An oval, a box or a note around its stereotype and label.
-    private static func measureOutlined<Measurer>(_ view: inout UseCaseNodeView, size: CGFloat, fontSize: CGFloat,
+    private static func measureOutlined<Measurer>(_ view: inout ReferenceUseCaseNodeView, size: CGFloat, fontSize: CGFloat,
                                                   measurers: inout ReferenceUseCaseTextMeasurers<Measurer>) {
         let node = view.node
         let measurer = measurers.measurer(size: node.shape == .note ? smallSize(size) : fontSize, isBold: view.look.isBold, isItalic: view.look.isItalic)
@@ -82,7 +82,7 @@ enum ReferenceUseCaseNodeMeasurement {
     }
 
     /// A JSON table: its name in bold over a row for each leaf, keys in a column of their own when any has one.
-    private static func measureTable<Measurer>(_ rows: [UseCaseJSONRow], of view: inout UseCaseNodeView, size: CGFloat, fontSize: CGFloat,
+    private static func measureTable<Measurer>(_ rows: [UseCaseJSONRow], of view: inout ReferenceUseCaseNodeView, size: CGFloat, fontSize: CGFloat,
                                                measurers: inout ReferenceUseCaseTextMeasurers<Measurer>) {
         view.form = .json
         let look = view.look

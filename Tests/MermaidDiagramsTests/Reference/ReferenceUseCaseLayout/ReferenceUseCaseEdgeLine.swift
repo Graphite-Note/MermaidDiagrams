@@ -2,13 +2,13 @@
  * File: ReferenceUseCaseEdgeLine.swift
  * ------------------------------------
  * Layer: Tests
- * Description: The 0.7.0 UseCaseEdgeLine kept as the reference the 0.8.0 layout is checked against:
- *              a use case diagram's line once drawn, made the relationship it shows: its dashes, its marks, its label
- *              on a patch, and how it is painted over the boundaries a style fills, as Pele's renderUsecase paints it.
+ * Description: The 0.7.0 UseCaseEdgeLine kept as the reference the 0.8.0 layout is checked against: a use case
+ *              diagram's line once drawn, made the relationship it shows: its dashes, its marks, its label on a patch,
+ *              and how it is painted over the boundaries a style fills, as Pele's renderUsecase paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -33,7 +33,7 @@ struct ReferenceUseCaseEdgeLine {
     /// The relationship `edge` along this line, with `label`, painted over the filled boundaries `fills`: in the color
     /// Pele's ink picks for the fill it lies in, or cased where it crosses a border, or inside a fill it has no ink for
     /// or when its style sets a stroke.
-    func edge(_ edge: UseCaseGraphEdge, label: DiagramTextBlock, fills: [UseCaseLayoutBoundary]) -> UseCaseLayoutEdge {
+    func edge(_ edge: ReferenceUseCaseGraphEdge, label: DiagramTextBlock, fills: [UseCaseLayoutBoundary]) -> UseCaseLayoutEdge {
         let look = UseCaseLook(styles: edge.styles)
         var inkOverFill: DiagramColor?
         var fillUnderMarks: DiagramColor?

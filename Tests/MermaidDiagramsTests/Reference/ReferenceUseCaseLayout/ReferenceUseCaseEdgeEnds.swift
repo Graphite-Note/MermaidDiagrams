@@ -7,8 +7,8 @@
  *              along it in the order they fan out, each on the node's outline, an actor's at its figure.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -28,7 +28,7 @@ enum ReferenceUseCaseEdgeEnds {
     }
 
     /// Each route's first and last points moved onto the outlines of `sources[route]` and `targets[route]`.
-    static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [UseCaseNodeView]) {
+    static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [ReferenceUseCaseNodeView]) {
         var sides: [Int: [End]] = [:]
         var order: [Int] = []
         for (route, path) in routes.enumerated() where path.points.count >= 2 {
@@ -73,7 +73,7 @@ enum ReferenceUseCaseEdgeEnds {
 
     /// The point of a node's outline on `side`, `along` away from the middle of that side. Lines meet an actor at its
     /// figure, not at its label.
-    static func anchor(of view: UseCaseNodeView, center: CGPoint, side: DiagramSide, along: CGFloat) -> CGPoint {
+    static func anchor(of view: ReferenceUseCaseNodeView, center: CGPoint, side: DiagramSide, along: CGFloat) -> CGPoint {
         let sign: CGFloat = side == .right || side == .bottom ? 1 : -1
         let isUpright = !side.isHorizontal
         var reach = (isUpright ? view.size.width : view.size.height) / 2
@@ -93,7 +93,7 @@ enum ReferenceUseCaseEdgeEnds {
     }
 
     /// How much of a side edges may spread over.
-    static func sideLength(of view: UseCaseNodeView, side: DiagramSide) -> CGFloat {
+    static func sideLength(of view: ReferenceUseCaseNodeView, side: DiagramSide) -> CGFloat {
         let isUpright = !side.isHorizontal
         if view.form == .actor { return isUpright ? UseCaseNodeMeasurement.figureHeight * 0.5 : UseCaseNodeMeasurement.figureWidth * 0.6 }
         let length = isUpright ? view.size.height : view.size.width

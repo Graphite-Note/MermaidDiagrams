@@ -2,14 +2,14 @@
  * File: ReferenceUseCasePageAssembly.swift
  * ----------------------------------------
  * Layer: Tests
- * Description: The 0.7.0 UseCasePageAssembly kept as the reference the 0.8.0 layout is checked against:
- *              puts a placed use case diagram on the page as Pele's renderUsecase does: everything moved inside the
- *              padding below the title, the boundaries' titles clear of the lines, the lines' ends on the outlines,
- *              loops beside their nodes, and each node's texts placed.
+ * Description: The 0.7.0 UseCasePageAssembly kept as the reference the 0.8.0 layout is checked against: puts a placed
+ *              use case diagram on the page as Pele's renderUsecase does: everything moved inside the padding below the
+ *              title, the boundaries' titles clear of the lines, the lines' ends on the outlines, loops beside their
+ *              nodes, and each node's texts placed.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -33,13 +33,13 @@ extension ReferenceUseCaseLayoutPass {
         var routes = placement.edgeRoutes.map { route in
             LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
         }
-        let crossings = UseCaseBoundaryTitles.crossings(ofPoints: routes.lazy.flatMap(\.points))
+        let crossings = ReferenceUseCaseBoundaryTitles.crossings(ofPoints: routes.lazy.flatMap(\.points))
         ReferenceUseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
         let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
         var boundaries: [UseCaseLayoutBoundary] = []
         boundaries.reserveCapacity(frames.count)
         for place in views.indices where views[place].node.isGroup {
-            boundaries.append(UseCaseBoundaryTitles.boundary(views[place], frame: frames[layoutPlaces[place]], crossings: crossings))
+            boundaries.append(ReferenceUseCaseBoundaryTitles.boundary(views[place], frame: frames[layoutPlaces[place]], crossings: crossings))
         }
         let edges = placedEdges(routes: routes, labelCenters: labelCenters, centers: centers, boundaries: boundaries)
         var nodes: [UseCaseLayoutNode] = []
@@ -64,7 +64,7 @@ extension ReferenceUseCaseLayoutPass {
             if drawn.source == drawn.target {
                 let loopIndex = loopsSeen[drawn.source, default: 0]
                 loopsSeen[drawn.source] = loopIndex + 1
-                let loop = UseCaseSelfLoops.loop(of: views[drawn.source], center: centers[drawn.source], loopIndex: loopIndex, isSideways: isSideways,
+                let loop = ReferenceUseCaseSelfLoops.loop(of: views[drawn.source], center: centers[drawn.source], loopIndex: loopIndex, isSideways: isSideways,
                                                  labelSize: drawn.label.size, startTrim: startTrim, endTrim: endTrim)
                 line = ReferenceUseCaseEdgeLine(path: loop.path, startTip: loop.startTip, startDirection: loop.startDirection, endTip: loop.endTip,
                                        endDirection: loop.endDirection, labelCenter: loop.labelCenter)
@@ -97,7 +97,7 @@ extension ReferenceUseCaseLayoutPass {
     }
 
     /// A node with its texts placed around its center, as Pele draws them.
-    private func placedNode(_ view: UseCaseNodeView, center: CGPoint) -> UseCaseLayoutNode {
+    private func placedNode(_ view: ReferenceUseCaseNodeView, center: CGPoint) -> UseCaseLayoutNode {
         let height = view.size.height
         var label = view.label
         var stereotype = view.stereotype
@@ -127,7 +127,7 @@ extension ReferenceUseCaseLayoutPass {
                                  stereotype: stereotype, rows: rows, headHeight: view.headHeight, keyColumnWidth: view.keyColumnWidth, look: view.look)
     }
 
-    private static func form(of view: UseCaseNodeView) -> UseCaseLayoutNodeForm {
+    private static func form(of view: ReferenceUseCaseNodeView) -> UseCaseLayoutNodeForm {
         switch view.node.shape {
         case .actor, .hollowActor, .awesomeActor, .iconActor: .actor(view.node.actorType ?? .normal, isBusiness: view.node.isBusiness)
         case .ellipse, .businessEllipse: .ellipse(isBusiness: view.node.isBusiness)

@@ -8,8 +8,8 @@
  *              points and of one, given to it as a use case layout keeps them, in one list of the scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -50,6 +50,10 @@ final class UseCaseEdgeEndsEquivalenceTests: XCTestCase {
             guard case .useCase(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { continue }
             var measurers = UseCaseTextMeasurers(typography: DiagramSceneSamples.typography)
             let views = UseCaseLayoutPass(diagram: diagram, measurers: &measurers).views
+            var referenceMeasurers = ReferenceUseCaseTextMeasurers(typography: DiagramSceneSamples.typography)
+            let referenceViews = ReferenceUseCaseLayoutPass(diagram: diagram, measurers: &referenceMeasurers).views
+            XCTAssertEqual(views.map { view in [view.size.width.bitPattern, view.size.height.bitPattern] },
+                           referenceViews.map { view in [view.size.width.bitPattern, view.size.height.bitPattern] })
             guard !views.isEmpty else { continue }
             for _ in 0..<40 {
                 let routeCount = Int.random(in: 1...24, using: &random)
@@ -60,7 +64,7 @@ final class UseCaseEdgeEndsEquivalenceTests: XCTestCase {
                 let targets = (0..<routeCount).map { _ in Int.random(in: 0..<nodeCount, using: &random) }
                 let centers = views.indices.map { _ in CGPoint(x: CGFloat.random(in: 0...300, using: &random), y: CGFloat.random(in: 0...300, using: &random)) }
                 var reference = routes
-                ReferenceUseCaseEdgeEnds.attach(&reference, sources: sources, targets: targets, centers: centers, views: views)
+                ReferenceUseCaseEdgeEnds.attach(&reference, sources: sources, targets: targets, centers: centers, views: referenceViews)
                 routes = Self.attached(routes, sources: sources, targets: targets, centers: centers, views: views)
                 XCTAssertEqual(routes.map { route in route.points.map { point in [point.x.bitPattern, point.y.bitPattern] } },
                                reference.map { route in route.points.map { point in [point.x.bitPattern, point.y.bitPattern] } })
