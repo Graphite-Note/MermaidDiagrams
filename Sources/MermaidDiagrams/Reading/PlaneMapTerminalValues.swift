@@ -6,8 +6,8 @@
  *              title's and an accessibility statement's text, and a string's without its quotation marks and escapes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// The values of shared terminals, each from the token's text as matched.
@@ -37,6 +37,14 @@ enum PlaneMapTerminalValues {
     /// A string's text without its quotation marks, each backslash replaced by the character it escapes (`\n` a line
     /// break, `\t` a tab, `\0` a null character; any other character itself).
     static func string(_ token: String) -> String {
+        // The quotation marks are characters of their own when the bytes inside next to them are ASCII (no mark joins
+        // the first, no prepended character the last): without a backslash the text inside is then its bytes.
+        let bytes = token.utf8
+        if bytes.count >= 2, let first = bytes.first, let last = bytes.last, first < 0x80, last < 0x80,
+           bytes.count == 2 || (bytes[bytes.index(after: bytes.startIndex)] < 0x80 && bytes[bytes.index(bytes.endIndex, offsetBy: -2)] < 0x80),
+           !bytes.contains(UInt8(ascii: "\\")) {
+            return String(Substring(bytes.dropFirst().dropLast()))
+        }
         let inside = token.dropFirst().dropLast()
         // Without a backslash's byte no character is one, and the text is kept as it is.
         guard inside.utf8.contains(UInt8(ascii: "\\")) else { return String(inside) }
