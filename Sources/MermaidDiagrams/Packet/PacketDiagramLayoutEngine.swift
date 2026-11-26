@@ -6,8 +6,8 @@
  *              container too narrow for it, as Pele turns one to fit.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -183,33 +183,33 @@ public enum PacketDiagramLayoutEngine {
         var measurers: DiagramTextMeasurerSizes<Measurer>
         let size: CGFloat
         let smallestSize: CGFloat
-        /// Each label fitted so far, as the block it fits as (nil when it does not), and its size.
-        private var fitted: [FitKey: (fontSize: CGFloat, block: DiagramTextBlock)?] = [:]
-
-        private struct FitKey: Hashable {
-            let fieldIndex: Int
-            let width: CGFloat
-        }
+        /// The widths the last field's label was fitted to, each with the block it fits as (nil when it does not) and
+        /// its size. A field's pieces follow one another, a row after the other, so a label fitted again to a width it
+        /// was fitted to is one of these; fitting gives the same each time, so what is kept is only what is not done again.
+        private var lastFieldIndex = -1
+        private var lastFieldFits: [(width: CGFloat, fit: (fontSize: CGFloat, block: DiagramTextBlock)?)] = []
 
         init(labels: [String], measurer: Measurer, size: CGFloat, smallestSize: CGFloat) {
             self.labels = labels
             measurers = DiagramTextMeasurerSizes(measurer)
             self.size = size
             self.smallestSize = smallestSize
-            fitted.reserveCapacity(labels.count)
         }
 
         /// The label of the field in `frame`, centered in it, or nil when there is none to draw: it is empty, not even a
         /// character of it fits `width`, or its size is more than the frame is high.
         mutating func block(of fieldIndex: Int, width: CGFloat, in frame: CGRect) -> DiagramTextBlock? {
-            let key = FitKey(fieldIndex: fieldIndex, width: width)
+            if fieldIndex != lastFieldIndex {
+                lastFieldIndex = fieldIndex
+                lastFieldFits.removeAll(keepingCapacity: true)
+            }
             let fit: (fontSize: CGFloat, block: DiagramTextBlock)?
-            if let known = fitted[key] {
-                fit = known
+            if let known = lastFieldFits.first(where: { entry in entry.width == width }) {
+                fit = known.fit
             } else {
                 fit = DiagramTextFitting.fitted(labels[fieldIndex], maximumWidth: width, fontSize: size, minimumFontSize: smallestSize, measurers: &measurers)
                     .map { fitted in (fitted.fontSize, PacketTextBlocks.oneLine(fitted.text, width: fitted.width, fontSize: fitted.fontSize)) }
-                fitted[key] = fit
+                lastFieldFits.append((width, fit))
             }
             guard let fit, fit.fontSize <= frame.height else { return nil }
             var block = fit.block

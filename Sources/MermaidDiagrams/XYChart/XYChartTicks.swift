@@ -1,3 +1,15 @@
+/**
+ * File: XYChartTicks.swift
+ * ------------------------
+ * Layer: Core
+ * Description: The marks along an XY chart's numeric axis, as Pele finds them: a step of 1, 2 or 5 times a power of
+ *              ten and its multiples within a range.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 import Foundation
 
 /// The marks along an XY chart's numeric axis, as Pele finds them: a step of 1, 2 or 5 times a power of ten, and its
@@ -37,6 +49,8 @@ enum XYChartTicks {
         var last = javaScriptRounded(index(of: upper, step: step))
         if value(at: last, step: step) > upper { last -= 1 }
         var values: [Double] = []
+        // The marks are few: room for at most `maximumMarkCount` of them is made once.
+        if last >= first { values.reserveCapacity(Int(min(last - first + 1, Double(maximumMarkCount)))) }
         var markIndex = first
         while markIndex <= last, values.count < maximumMarkCount {
             values.append(value(at: markIndex, step: step))

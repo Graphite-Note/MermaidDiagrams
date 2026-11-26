@@ -6,8 +6,8 @@
  *              up around their icons, descriptions beside the names, guide lines from each folder to its entries.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -54,8 +54,8 @@ public enum TreeViewLayoutEngine {
         let size = CGSize(width: (width + 2 * inset).rounded(.up), height: (origin.y + rows.height + padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        return TreeViewLayout(size: size, font: font, title: placedTitle, guides: rows.guides(diagram, origin: origin),
-                              guideLineWidth: CGFloat(diagram.options.lineThickness),
-                              rows: rows.placedRows(origin: origin, pageWidth: size.width))
+        return TreeViewLayout(size: size, font: font, title: placedTitle, guideLineWidth: CGFloat(diagram.options.lineThickness),
+                              placedRows: rows.placedRows(diagram, origin: origin, pageWidth: size.width), guideStrokes: rows.guides(diagram, origin: origin),
+                              lines: rows.lines, text: diagram.text)
     }
 }

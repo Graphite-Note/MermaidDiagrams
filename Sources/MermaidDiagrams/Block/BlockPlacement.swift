@@ -6,8 +6,8 @@
  *              from the blocks' own widths, each block's drawn size, and what edges and their text must stay clear of.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -55,15 +55,17 @@ struct BlockPlacement {
         obstacleIndices.reserveCapacity(cells.count)
         titles.removeAll(keepingCapacity: true)
         for index in cells.indices {
-            let cell = cells[index]
+            // The cell's sizes and place read one by one: a copy of the cell would retain each of its lists.
+            let cell = (neededWidth: cells[index].neededWidth, neededHeight: cells[index].neededHeight, width: cells[index].width,
+                        height: cells[index].height, span: cells[index].span, center: cells[index].center, titleHeight: cells[index].titleHeight)
             let drawn: CGSize
             let form: BlockOutline.Form
             switch views[index].kind {
             case .leaf(let shape):
-                if BlockViews.keepsOwnSize.contains(shape) {
+                if BlockViews.keepsItsOwnSize(shape) {
                     drawn = CGSize(width: cell.neededWidth, height: cell.neededHeight)
                 } else {
-                    drawn = CGSize(width: cell.width, height: BlockViews.onlyWidens.contains(shape) ? cell.neededHeight : cell.height)
+                    drawn = CGSize(width: cell.width, height: BlockViews.onlyWidensItself(shape) ? cell.neededHeight : cell.height)
                 }
                 if shape == .cylinder { views[index].textOffset.dy = FlowchartShapeGeometry.cylinderCapDepth(width: drawn.width) / 2 }
                 form = shape == .circle || shape == .doubleCircle ? .round : shape == .diamond ? .diamond : .shape(shape)

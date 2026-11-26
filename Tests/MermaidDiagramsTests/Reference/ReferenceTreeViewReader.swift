@@ -3,11 +3,12 @@
  * -----------------------------------
  * Layer: Tests
  * Description: 0.7.0's tree view reader, frozen as main 2a0cc65 read it: the parser, the tree builder, the box-drawing
- *              preprocessing and the icon maps, which the tree view reader is compared with.
+ *              preprocessing and the icon maps, and the model it read into (ReferenceTreeViewDiagram), which the tree view
+ *              reader is compared with.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -19,7 +20,7 @@ import Foundation
 /// of its line or the annotations), and its annotations (`:::class`, `icon(name)`, `## description`). A name ending
 /// with `/` is a folder. An entry's parent is the last entry before it indented less.
 enum ReferenceTreeViewParser {
-    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> TreeViewDiagram {
+    static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> ReferenceTreeViewDiagram {
         // Mermaid's lexer takes a keyword with anything after it on its line, blanks too, as a name.
         if let byte = cursor.peek(), byte != MermaidByte.newline, !(byte == MermaidByte.carriageReturn && cursor.peek(1) == MermaidByte.newline) {
             throw .invalidSyntax(line: cursor.line, problem: .treeViewExpectedName(cursor.excerpt()))
@@ -33,7 +34,7 @@ enum ReferenceTreeViewParser {
         case .success(let read): tokens = read
         case .failure(let failure): throw .invalidSyntax(line: source.writtenLine(at: failure.offset), problem: .unexpectedText(source.excerpt(at: failure.offset)))
         }
-        var diagram = TreeViewDiagram()
+        var diagram = ReferenceTreeViewDiagram()
         diagram.options = TreeViewOptions(MermaidConfigurationOptions(section: "treeView", in: cursor))
         let iconMaps = ReferenceTreeViewIconMaps(frontMatterOf: cursor.sourceBytes)
         diagram.options.iconMaps = TreeViewIconMaps(filenameIcons: iconMaps.filenameIcons, extensionIcons: iconMaps.extensionIcons)
@@ -56,6 +57,30 @@ enum ReferenceTreeViewParser {
         diagram.entries = tree.entries
         diagram.topLevelIndices = tree.topLevelIndices
         return diagram
+    }
+}
+
+/// 0.7.0's tree view model, frozen as main ba176e5 kept it: its entries with their Strings and children's indexes, its
+/// top level, titles and options. A diagram the reader reads is compared with it through its entries, as `init(_:)` makes
+/// one of it.
+struct ReferenceTreeViewDiagram: Equatable {
+    var entries: [TreeViewEntry] = []
+    var title: String?
+    var accessibilityTitle: String?
+    var accessibilityDescription: String?
+    var options = TreeViewOptions()
+    var topLevelIndices: [Int] = []
+
+    init() {}
+
+    /// The model `diagram` reads as, from the entries and top level it makes when read.
+    init(_ diagram: TreeViewDiagram) {
+        entries = diagram.entries
+        title = diagram.title
+        accessibilityTitle = diagram.accessibilityTitle
+        accessibilityDescription = diagram.accessibilityDescription
+        options = diagram.options
+        topLevelIndices = diagram.topLevelIndices
     }
 }
 

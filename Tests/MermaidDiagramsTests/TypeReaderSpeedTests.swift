@@ -9,7 +9,7 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 26/11/2026
  */
 
@@ -206,6 +206,13 @@ final class TypeReaderSpeedTests: XCTestCase {
                                            ("accessibilityTitle", agentFlow.accessibilityTitle as Any),
                                            ("accessibilityDescription", agentFlow.accessibilityDescription as Any), ("options", agentFlow.options)]
             return "AgentFlowDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
+        }
+        // A tree view too, its fields in the order 0.7.0 stored them.
+        if let tree = value as? TreeViewDiagram {
+            let fields: [(String, Any)] = [("entries", tree.entries), ("title", tree.title as Any), ("accessibilityTitle", tree.accessibilityTitle as Any),
+                                           ("accessibilityDescription", tree.accessibilityDescription as Any), ("options", tree.options),
+                                           ("topLevelIndices", tree.topLevelIndices)]
+            return "TreeViewDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
         }
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {

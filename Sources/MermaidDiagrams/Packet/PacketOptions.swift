@@ -5,8 +5,8 @@
  * Description: The options of a packet diagram its front matter (`config:`, `packet:`) and its directives set.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -34,6 +34,8 @@ public struct PacketOptions: Equatable, Sendable {
     public init() {}
 
     init(_ options: MermaidConfigurationOptions) {
+        // Most diagrams set no option: every value keeps its default, each of which is the fallback below.
+        guard !options.values.isEmpty else { return }
         bitsPerRow = Int(options.boundedNumber("bitsPerRow", fallback: 32, least: 1, largest: 4_096).rounded(.down))
         rowHeight = CGFloat(options.boundedNumber("rowHeight", fallback: 32, least: 1, largest: 400))
         bitWidth = CGFloat(options.boundedNumber("bitWidth", fallback: 32, least: 1, largest: 400))

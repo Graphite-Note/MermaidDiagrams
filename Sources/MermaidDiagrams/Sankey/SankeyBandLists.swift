@@ -6,8 +6,8 @@
  *              settling passes put each node's bands in order where they lie instead of copying lists out and in.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 /// The bands (by their link's place) leaving or entering each node, in one list: node `n`'s are at `range(of: n)`, in
@@ -46,31 +46,14 @@ struct SankeyBandLists {
         bands[range(of: node)]
     }
 
-    /// Puts the bands at `range` in the order of `keys` (each band's key and the band, in the bands' order), as sorting
-    /// the bands by them would: a list already in order is left as it is, as Swift's sort leaves it. Returns whether
-    /// the order changed, the order before in `previousOrder` when it did; `keys` is left sorted.
-    mutating func putInOrder(_ range: Range<Int>, keys: inout [(Double, Int)], previousOrder: inout [Int]) -> Bool {
-        guard !Self.isInOrder(keys) else { return false }
-        previousOrder.removeAll(keepingCapacity: true)
-        previousOrder.append(contentsOf: bands[range])
-        keys.sort(by: Self.isOrderedBefore)
-        for (offset, key) in keys.enumerated() { bands[range.lowerBound + offset] = key.1 }
-        return true
+    /// Calls `body` with the bands to put in order where they lie, and where each node's start (the count of bands
+    /// after the last node's): node `n`'s are at `starts[n]..<starts[n + 1]`.
+    mutating func withBands<Result>(_ body: (UnsafeMutableBufferPointer<Int>, UnsafeBufferPointer<Int>) -> Result) -> Result {
+        starts.withUnsafeBufferPointer { starts in bands.withUnsafeMutableBufferPointer { bands in body(bands, starts) } }
     }
 
     /// The order the settling passes sort by: by key, then by the band or node, as a tuple compares.
     static func isOrderedBefore(_ first: (Double, Int), _ second: (Double, Int)) -> Bool {
         first < second
-    }
-
-    /// Whether no key comes before the one ahead of it: such a list is one run, which Swift's sort leaves as it is (its
-    /// insertion sort moves no element of it, and its run search finds the whole list ascending), so it need not sort.
-    static func isInOrder(_ keys: [(Double, Int)]) -> Bool {
-        var position = 1
-        while position < keys.count {
-            if isOrderedBefore(keys[position], keys[position - 1]) { return false }
-            position += 1
-        }
-        return true
     }
 }

@@ -6,8 +6,8 @@
  *              and the page a chart is laid out on.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -95,6 +95,8 @@ public struct XYChartAxisOptions: Equatable, Sendable {
     var tickLength: CGFloat { showsTicks ? XYChartLayoutEngine.tickLength : 0 }
 
     init(_ nestedValues: [String: MermaidConfigurationOptions.Value], axis: String) {
+        // Most charts set no nested option: each flag keeps its default without a key made and looked up.
+        guard !nestedValues.isEmpty else { return }
         showsLabels = XYChartOptions.flag(nestedValues[axis + ".showLabel"], default: true)
         showsTitle = XYChartOptions.flag(nestedValues[axis + ".showTitle"], default: true)
         showsTicks = XYChartOptions.flag(nestedValues[axis + ".showTick"], default: true)

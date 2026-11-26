@@ -6,8 +6,8 @@
  *              heights, the label room thin nodes keep, and the six passes that settle each column.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -225,6 +225,12 @@ struct SankeyPlacement {
     /// Pele's passes: each column, from the second to last back to the first, moves toward the nodes its bands go to;
     /// then each, from the second on, toward the nodes its bands come from; the pull weakening with each pass.
     private mutating func settle() {
+        // Room for the most bands a node has on one side and the most nodes a column has, made once for every pass.
+        var room = 0
+        for node in nodes.indices { room = max(room, leaving.count(of: node), entering.count(of: node)) }
+        for column in columns { room = max(room, column.count) }
+        sortKeys = Array(repeating: (0, 0), count: room)
+        previousOrder = Array(repeating: 0, count: room)
         stackAllBands()
         for pass in 0..<Self.settlingPassCount {
             let pull = pow(Self.pullDecay, Double(pass))
@@ -235,86 +241,23 @@ struct SankeyPlacement {
         }
     }
 
-    private func center(_ node: Int) -> Double {
-        nodes[node].y + nodes[node].height / 2
-    }
-
+    /// Each node's bands leaving it top to bottom in the order of their targets' middles, and entering it in the order
+    /// of their sources' (`SankeyBandStacking.stack`).
     private mutating func stackAllBands() {
-        for node in nodes.indices {
-            stackLeaving(node)
-            stackEntering(node)
-        }
-    }
-
-    /// The bands leaving `node`, top to bottom in the order of their targets' middles. Returns whether their order
-    /// changed, the order before in `previousOrder` when it did.
-    @discardableResult
-    private mutating func stackLeaving(_ node: Int) -> Bool {
-        let range = leaving.range(of: node)
-        sortKeys.removeAll(keepingCapacity: true)
-        for position in range {
-            let linkIndex = leaving.bands[position]
-            sortKeys.append((center(links[linkIndex].target), linkIndex))
-        }
-        let isReordered = leaving.putInOrder(range, keys: &sortKeys, previousOrder: &previousOrder)
-        var offset = 0.0
-        for position in range {
-            let linkIndex = leaving.bands[position]
-            sourceOffsets[linkIndex] = offset + links[linkIndex].thickness / 2
-            offset += links[linkIndex].thickness
-        }
-        return isReordered
-    }
-
-    /// The bands entering `node`, top to bottom in the order of their sources' middles. Returns whether their order
-    /// changed, the order before in `previousOrder` when it did.
-    @discardableResult
-    private mutating func stackEntering(_ node: Int) -> Bool {
-        let range = entering.range(of: node)
-        sortKeys.removeAll(keepingCapacity: true)
-        for position in range {
-            let linkIndex = entering.bands[position]
-            sortKeys.append((center(links[linkIndex].source), linkIndex))
-        }
-        let isReordered = entering.putInOrder(range, keys: &sortKeys, previousOrder: &previousOrder)
-        var offset = 0.0
-        for position in range {
-            let linkIndex = entering.bands[position]
-            targetOffsets[linkIndex] = offset + links[linkIndex].thickness / 2
-            offset += links[linkIndex].thickness
-        }
-        return isReordered
+        SankeyBandStacking.stackAll(leaving: &leaving, entering: &entering, links: links, nodes: &nodes, sourceOffsets: &sourceOffsets,
+                                    targetOffsets: &targetOffsets, keys: &sortKeys, previousOrder: &previousOrder)
     }
 
     /// Moves each node of a column `pull` of the way toward where its bands would run level (weighted by their
     /// thickness), then restores the column's order and gaps within the chart's height. The bands are weighed in the
     /// order they had before this pass stacked them.
     private mutating func settle(layer: Int, pull: Double, towardSources: Bool) {
-        for node in columns[layer] {
-            let range = towardSources ? entering.range(of: node) : leaving.range(of: node)
-            guard !range.isEmpty else { continue }
-            let isReordered = towardSources ? stackEntering(node) : stackLeaving(node)
-            var weighted = 0.0
-            var weight = 0.0
-            var plain = 0.0
-            for position in range {
-                let linkIndex = isReordered ? previousOrder[position - range.lowerBound]
-                    : towardSources ? entering.bands[position] : leaving.bands[position]
-                let link = links[linkIndex]
-                let level = towardSources ? nodes[link.source].y + sourceOffsets[linkIndex] - targetOffsets[linkIndex]
-                    : nodes[link.target].y + targetOffsets[linkIndex] - sourceOffsets[linkIndex]
-                weighted += level * link.thickness
-                weight += link.thickness
-                plain += center(towardSources ? link.source : link.target) - nodes[node].height / 2
-            }
-            let wanted = weight > 0 ? weighted / weight : plain / Double(range.count)
-            nodes[node].y += (wanted - nodes[node].y) * pull
-        }
-        sortKeys.removeAll(keepingCapacity: true)
-        for node in columns[layer] { sortKeys.append((center(node), node)) }
-        if !SankeyBandLists.isInOrder(sortKeys) {
-            sortKeys.sort(by: SankeyBandLists.isOrderedBefore)
-            for position in sortKeys.indices { columns[layer][position] = sortKeys[position].1 }
+        if towardSources {
+            SankeyBandStacking.settle(&columns[layer], pull: pull, towardSources: true, side: &entering, links: links, nodes: &nodes,
+                                      sourceOffsets: &sourceOffsets, targetOffsets: &targetOffsets, keys: &sortKeys, previousOrder: &previousOrder)
+        } else {
+            SankeyBandStacking.settle(&columns[layer], pull: pull, towardSources: false, side: &leaving, links: links, nodes: &nodes,
+                                      sourceOffsets: &sourceOffsets, targetOffsets: &targetOffsets, keys: &sortKeys, previousOrder: &previousOrder)
         }
         restoreGaps(in: layer)
     }

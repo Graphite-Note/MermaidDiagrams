@@ -7,8 +7,8 @@
  *              box drawing, and long, many and deep hostile ones.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import XCTest
@@ -23,7 +23,9 @@ final class TreeViewReaderEquivalenceTests: XCTestCase {
     @discardableResult
     private func assertReadAsTheReference(_ source: String, file: StaticString = #filePath, line: UInt = #line) -> Bool {
         guard let cursor = MapReadingEquivalence.cursor(of: source, readAs: .treeView) else { return false }
-        let read = MapReadingEquivalence.outcome { () throws(MermaidDiagramReadError) in try TreeViewParser.parse(cursor, limits: .standard) }
+        let read = MapReadingEquivalence.outcome { () throws(MermaidDiagramReadError) in
+            ReferenceTreeViewDiagram(try TreeViewParser.parse(cursor, limits: .standard))
+        }
         let expected = MapReadingEquivalence.outcome { () throws(MermaidDiagramReadError) in try ReferenceTreeViewParser.parse(cursor, limits: .standard) }
         XCTAssertEqual(read, expected, source, file: file, line: line)
         return true
@@ -70,6 +72,28 @@ final class TreeViewReaderEquivalenceTests: XCTestCase {
             for second in lines {
                 assertReadAsTheReference("treeView-beta\n    root/\n" + first + "\n" + second + "\n        child\n" + second + "\n" + first)
                 assertReadAsTheReference("treeView-beta\n" + first + "\n" + second + "\n    a")
+            }
+        }
+    }
+
+    /// Names and annotations whose bytes and Swift's characters could differ where the byte reading looks: a mark
+    /// joining an opening quotation mark, a prepended character (U+0600) before a closing one, a slash or trailing
+    /// blanks, Unicode white space at an annotation's ends, and plain ASCII beside them, each with every annotation,
+    /// with and without icons shown and icon maps; the byte reading keeps their characters as the String reading did.
+    func testNamesAndAnnotationsPastASCIIReadAsTheFrozenReaderReadThem() {
+        let names = ["a", "a/", "/", "\"\"", "\"a\"", "\"/\"", "\"\u{301}a\"", "\"a\u{600}\"", "\"\u{600}\"", "\"é/\"", "\"a\u{600}/\"",
+                     "a\u{600}/", "\u{600}/", "é/", "a\u{301}/", "a/\u{301}", "a\u{600} ", "a\u{600}\t ", "é ", "a  ", "a\u{301} \t", "\u{1F4E6} x/",
+                     "x\u{200D} ", "\"multi\nline\"", "\"a\r\n\"", "a.ts", ".env", "README.md"]
+        let annotations = ["", " :::highlight", " :::a", " ::: highlight", " :::highlightx", " icon(none)", " icon()", " icon(folder)", " icon(file)",
+                           " icon(mermaid-treeview:folder)", " icon(mermaid-treeview:x)", " icon(a:file)", " ## d", " ##", " ## \u{00A0}d\u{00A0}",
+                           " ## \u{3000}", " ##\u{301}d", " ## d\u{600}", " ## é", " ##  \t ", " :::a icon(b) ## c \u{2003}", " ## \u{600} d"]
+        let headers = ["", "---\nconfig:\n  treeView:\n    showIcons: true\n---\n",
+                       "---\nconfig:\n  treeView:\n    showIcons: true\n    filenameIcons:\n      a.ts: none\n    extensionIcons:\n      .md: folder\n---\n"]
+        for header in headers {
+            for name in names {
+                for annotation in annotations {
+                    assertReadAsTheReference(header + "treeView-beta\n    root/\n        " + name + annotation + "\n            " + name + "\n")
+                }
             }
         }
     }
