@@ -5,7 +5,7 @@
  * Description: Pele's layered (Sugiyama) layout of one flat graph, ported step for step from layout/layered.ts.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 25/11/2026
  */
 
@@ -65,33 +65,6 @@ struct LayeredFlatLayout {
         let result = layout.run(maximumVertexCount: maximumVertexCount)
         points = layout.points
         return result
-    }
-
-    /// Lays `nodes` and `edges` out in place as `layout(nodes:edges:points:...)` does, with the calling thread's arena:
-    /// each edge laid out gets its route as a list of its own. For compound layouts and tests.
-    static func layout(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], options: LayeredFlatOptions,
-                       maximumVertexCount: Int = .max) -> LayeredFlatResult? {
-        DiagramScratchArena.withCurrentThread { arena in
-            let nodeSpan: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: nodes.count)
-            for node in nodes.indices { nodeSpan[node] = nodes[node] }
-            let edgeSpan: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: edges.count)
-            for edgeIndex in edges.indices { edgeSpan[edgeIndex] = LayeredSpanEdge(edges[edgeIndex]) }
-            var points = arena.list(capacity: 0, of: CGPoint.self)
-            let result = layout(nodes: nodeSpan, edges: edgeSpan, points: &points, options: options, maximumVertexCount: maximumVertexCount,
-                                arena: arena)
-            for node in nodes.indices { nodes[node] = nodeSpan[node] }
-            for edgeIndex in edges.indices {
-                let laidOut = edgeSpan[edgeIndex]
-                edges[edgeIndex].tailOffset = laidOut.tailOffset
-                edges[edgeIndex].headOffset = laidOut.headOffset
-                edges[edgeIndex].isReversed = laidOut.isReversed
-                edges[edgeIndex].labelCenter = laidOut.labelCenter
-                if laidOut.pointStart >= 0 {
-                    edges[edgeIndex].points = Array(points.elements.part(laidOut.pointStart..<(laidOut.pointStart + laidOut.pointCount)))
-                }
-            }
-            return result
-        }
     }
 
     /// Every edge gets a middle rank of its own when an edge has a label or two edges join the same two nodes.
