@@ -6,7 +6,7 @@
  *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 26/11/2026
  */
 
@@ -53,7 +53,7 @@ public enum StateDiagramLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: StateDiagram, nameText: Measurer, smallText: Measurer, font: DiagramFont,
                                                        limits: MermaidDiagramLimits) throws(StateDiagramLayoutError) -> StateDiagramLayout {
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        var measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
+        let measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
                                                wrappingWidth: wrappingWidth, noteWrappingWidth: noteWrappingWidth)
         let title = diagram.title.map { title in
             DiagramFlatTextMeasuring.measure(DiagramLabel(title), measurer: DiagramFlatMeasurer(nameText), maximumWidth: .greatestFiniteMagnitude,

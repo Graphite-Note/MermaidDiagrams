@@ -5,7 +5,7 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 26/11/2026
  */
 
@@ -94,9 +94,13 @@ struct ClassDiagramMeasurement {
         boxes.reserveCapacity(model.classes.count)
         noteTexts.reserveCapacity(model.notes.count)
         edges.reserveCapacity(model.notes.count + model.relations.count)
-        texts.lines.reserveCapacity(lines: model.classes.count + model.members.count + model.notes.count + 2 * model.relations.count,
-                                    derivedBytes: model.memberBytes.count)
+        // A line a name, member and annotation, two a note, and four a relation with its cardinalities; the members' and
+        // cardinalities' bytes are copied into the lines' own.
+        texts.lines.reserveCapacity(lines: model.classes.count + model.members.count + model.annotations.count + 2 * model.notes.count
+                                        + 4 * model.relations.count + 2, derivedBytes: model.memberBytes.count + 8 * model.relations.count)
         texts.members.reserveCapacity(model.members.count)
+        texts.annotations.reserveCapacity(model.annotations.count)
+        interfaceTexts.reserveCapacity(model.interfaces.count)
         model.text.withBytes { source in
             let measuring = ClassDiagramTextMeasuring(measurers, source: source)
             for classIndex in model.classes.indices {
@@ -151,24 +155,32 @@ struct ClassDiagramMeasurement {
     }
 
     mutating func widenCrowdedClasses() {
-        var leaving = [(count: Int, room: CGFloat)](repeating: (0, 0), count: nodes.count)
-        var reaching = leaving
+        // Each node's leaving side, then its reaching side, in one list of a struct (a list of tuples looks its element's
+        // metadata up each time it is made).
+        let nodeCount = nodes.count
+        var sides = [CrowdedSide](repeating: CrowdedSide(count: 0, room: 0), count: 2 * nodeCount)
         for edge in edges where !edge.isSelfLoop {
-            leaving[edge.source].count += 1
-            leaving[edge.source].room = max(leaving[edge.source].room, edge.sourceCardinality?.width ?? 0)
-            reaching[edge.target].count += 1
-            reaching[edge.target].room = max(reaching[edge.target].room, edge.targetCardinality?.width ?? 0)
+            sides[edge.source].count += 1
+            sides[edge.source].room = max(sides[edge.source].room, edge.sourceCardinality?.width ?? 0)
+            sides[nodeCount + edge.target].count += 1
+            sides[nodeCount + edge.target].room = max(sides[nodeCount + edge.target].room, edge.targetCardinality?.width ?? 0)
         }
         for (node, kind) in nodes.enumerated() {
             guard case .classBox(let boxIndex) = kind else { continue }
-            let needed = min(Self.crowdedMaximumWidth, max(Self.crowdedWidth(leaving[node]), Self.crowdedWidth(reaching[node])))
+            let needed = min(Self.crowdedMaximumWidth, max(Self.crowdedWidth(sides[node]), Self.crowdedWidth(sides[nodeCount + node])))
             guard needed > sizes[node].width else { continue }
             sizes[node].width = needed
             boxes[boxIndex].size.width = needed
         }
     }
 
-    private static func crowdedWidth(_ side: (count: Int, room: CGFloat)) -> CGFloat {
+    /// How many relations leave or reach a class, and the widest cardinality among them.
+    private struct CrowdedSide {
+        var count: Int
+        var room: CGFloat
+    }
+
+    private static func crowdedWidth(_ side: CrowdedSide) -> CGFloat {
         guard side.count > 1 else { return 0 }
         let gap = side.room > 0 ? side.room + crowdedCardinalityGap : crowdedEndGap
         return CGFloat(side.count - 1) * gap + crowdedSideClearance

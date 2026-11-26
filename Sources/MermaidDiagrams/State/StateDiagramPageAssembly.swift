@@ -6,7 +6,7 @@
  *              the layout's spans into flat records over one list of segments, moved into the padding where they stand.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 26/11/2026
  */
 
@@ -37,13 +37,19 @@ struct StateDiagramPageAssembly {
     /// The centers of the notes beside composites, by note index; empty for a diagram without composites.
     var compositeNoteCenters: [CGPoint?] = []
 
+    /// The segments made room for a transition, and the points for one route, before the lists grow.
+    static let segmentsPerTransition = 6
+    static let routeCapacity = 16
+
     init(diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings, axes: FlowchartFlowAxes) {
         self.diagram = diagram
         self.measured = measured
         self.surroundings = surroundings
         self.axes = axes
         transitions = Array(repeating: nil, count: diagram.transitionCount)
-        segments.reserveCapacity(3 * diagram.transitionCount + diagram.noteCount)
+        // About three segments a transition, more through boxes; one a note's dashed line.
+        segments.reserveCapacity(Self.segmentsPerTransition * diagram.transitionCount + diagram.noteCount)
+        route.reserveCapacity(Self.routeCapacity)
     }
 
     /// The states of a diagram laid out in ranks at their nodes' centers; `positionOfState[state]` is the state's node.
