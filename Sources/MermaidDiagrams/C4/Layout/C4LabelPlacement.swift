@@ -43,7 +43,7 @@ extension C4DrawingPass {
                 if count == 0 { break }
             }
             let left = box.x + groups[groupIndex].headingLeft
-            taken.append(CGRect(x: left - 4, y: top, width: width + 8, height: bottom - top))
+            taken.append(C4TakenArea(CGRect(x: left - 4, y: top, width: width + 8, height: bottom - top)))
         }
     }
 
@@ -68,7 +68,7 @@ extension C4DrawingPass {
         guard height > 0 else { return nil }
         let center = labelCenter(of: route, relation: relation, size: CGSize(width: width, height: height))
         let frame = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
-        if isCareful { taken.append(frame) }
+        if isCareful { taken.append(C4TakenArea(frame)) }
         grow(frame)
         let placedLabel = label.map { text in text.centered(at: CGPoint(x: center.x, y: frame.minY + text.height / 2)) }
         let placedTechnology = technology.map { text in
@@ -115,11 +115,12 @@ extension C4DrawingPass {
 
     /// How much of the rectangle the shapes, arrowheads, headings and labels taken cover, added up.
     private func covered(_ rectangle: CGRect) -> CGFloat {
+        let placed = C4TakenArea(rectangle)
         var area: CGFloat = 0
         for other in taken {
-            let width = min(rectangle.maxX, other.maxX) - max(rectangle.minX, other.minX)
+            let width = min(placed.maximumX, other.maximumX) - max(placed.minimumX, other.minimumX)
             guard width > 0 else { continue }
-            let height = min(rectangle.maxY, other.maxY) - max(rectangle.minY, other.minY)
+            let height = min(placed.maximumY, other.maximumY) - max(placed.minimumY, other.minimumY)
             if height > 0 { area += width * height }
         }
         return area
@@ -129,5 +130,21 @@ extension C4DrawingPass {
     private static func offset(_ value: Double?) -> CGFloat {
         guard let value, value != 0, !value.isNaN else { return 0 }
         return CGFloat(max(-Double(C4Metrics.largestLabelOffset), min(Double(C4Metrics.largestLabelOffset), value)))
+    }
+}
+
+/// A rectangle a label should not cover, by its edges, read once from the rectangle as `CGRect`'s `minX`, `maxX`, `minY`
+/// and `maxY` give them rather than at each comparison.
+struct C4TakenArea {
+    let minimumX: CGFloat
+    let minimumY: CGFloat
+    let maximumX: CGFloat
+    let maximumY: CGFloat
+
+    init(_ rectangle: CGRect) {
+        minimumX = rectangle.minX
+        minimumY = rectangle.minY
+        maximumX = rectangle.maxX
+        maximumY = rectangle.maxY
     }
 }

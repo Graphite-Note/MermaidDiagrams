@@ -57,7 +57,7 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
     let boxes: [C4RouteBox]
     let isCareful: Bool
     /// What a relation's label should not cover: shapes (less a margin), arrowheads, headings, and the labels placed before.
-    var taken: [CGRect] = []
+    var taken: [C4TakenArea] = []
     var extent: CGRect
     var relations: [C4RoutedRelation] = []
     /// Each relation's label once placed, nil for one with neither a label nor a technology.
@@ -81,7 +81,7 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
         extent = CGRect(x: 0, y: 0, width: grid.groups[0].box.width, height: grid.groups[0].box.height)
         let allowance = C4Metrics.shapeEdgeAllowance
         taken.reserveCapacity(isCareful ? grid.shapes.count + grid.groups.count + 3 * relationCount : 0)
-        for index in grid.shapes.indices { taken.append(boxes[index].frame.insetBy(dx: allowance, dy: allowance)) }
+        for index in grid.shapes.indices { taken.append(C4TakenArea(boxes[index].frame.insetBy(dx: allowance, dy: allowance))) }
     }
 
     /// The box of group `groupIndex`, nil for the top level.
@@ -121,8 +121,10 @@ struct C4DrawingPass<Measurer: DiagramTextMeasuring> {
             grow(CGRect(x: min(route.labelStretchStart.x, route.labelStretchEnd.x), y: min(route.labelStretchStart.y, route.labelStretchEnd.y),
                         width: abs(route.labelStretchEnd.x - route.labelStretchStart.x), height: abs(route.labelStretchEnd.y - route.labelStretchStart.y)))
             let arrowLength = C4Metrics.arrowLength
-            if pointsAtStart, isCareful { taken.append(CGRect(x: route.start.x - arrowLength, y: route.start.y - arrowLength, width: 2 * arrowLength, height: 2 * arrowLength)) }
-            if pointsAtEnd, isCareful { taken.append(CGRect(x: route.end.x - arrowLength, y: route.end.y - arrowLength, width: 2 * arrowLength, height: 2 * arrowLength)) }
+            if pointsAtStart, isCareful { taken.append(C4TakenArea(CGRect(x: route.start.x - arrowLength, y: route.start.y - arrowLength, width: 2 * arrowLength,
+                                                                       height: 2 * arrowLength))) }
+            if pointsAtEnd, isCareful { taken.append(C4TakenArea(CGRect(x: route.end.x - arrowLength, y: route.end.y - arrowLength, width: 2 * arrowLength,
+                                                                   height: 2 * arrowLength))) }
             let lineColor = diagram.string(relation.lineColor)
             let painting = C4BoundaryFills.painting(of: route, lineColor: lineColor, ownColor: colors.color(lineColor, property: "stroke"), fills: fills)
             relations.append(C4RoutedRelation(relationIndex: relationIndex, route: route, pointsAtStart: pointsAtStart, pointsAtEnd: pointsAtEnd,
