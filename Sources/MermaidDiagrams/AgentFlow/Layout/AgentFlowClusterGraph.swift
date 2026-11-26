@@ -7,8 +7,8 @@
  *              between a node and a flow around it held back to be drawn afterwards.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 /// An agent flow's graph as a flowchart (`FlowchartDiagram`) to lay out with the flowchart's boxes
@@ -48,20 +48,27 @@ struct AgentFlowClusterGraph {
 
     init(graph: AgentFlowGraph, direction: FlowchartDirection) {
         self.direction = direction
+        let nodes = graph.nodes
+        // Each node and edge is read where it lies in its list, not copied out.
         var indexByIdentifier: [String: Int] = [:]
-        for (index, node) in graph.nodes.enumerated() where indexByIdentifier[node.identifier] == nil { indexByIdentifier[node.identifier] = index }
-        parents = graph.nodes.map { node in
-            node.parentIdentifier.flatMap { parent in indexByIdentifier[parent] }.flatMap { parent in graph.nodes[parent].isGroup ? parent : nil } ?? -1
+        indexByIdentifier.reserveCapacity(nodes.count)
+        for index in nodes.indices where indexByIdentifier[nodes[index].identifier] == nil { indexByIdentifier[nodes[index].identifier] = index }
+        parents = [Int](repeating: -1, count: nodes.count)
+        directions = [FlowchartDirection?](repeating: nil, count: nodes.count)
+        for index in nodes.indices {
+            if let parent = nodes[index].parentIdentifier.flatMap({ parent in indexByIdentifier[parent] }), nodes[parent].isGroup { parents[index] = parent }
+            if nodes[index].isGroup { directions[index] = nodes[index].directionKeyword.flatMap(FlowchartDirection.init(keyword:)) }
         }
         depths = Self.depths(parents: parents)
-        directions = graph.nodes.map { node in node.isGroup ? node.directionKeyword.flatMap(FlowchartDirection.init(keyword:)) : nil }
-        let ends = graph.edges.compactMap { edge -> (Int, Int)? in
-            guard let source = indexByIdentifier[edge.start], let target = indexByIdentifier[edge.end] else { return nil }
-            return (source, target)
+        // Each edge's ends, -1 for an end no node is named for.
+        var ends: [(source: Int, target: Int)] = []
+        ends.reserveCapacity(graph.edges.count)
+        for index in graph.edges.indices {
+            ends.append((indexByIdentifier[graph.edges[index].start] ?? -1, indexByIdentifier[graph.edges[index].end] ?? -1))
+            if ends[index].source >= 0, ends[index].target >= 0 { inheritCrossedDirections(source: ends[index].source, target: ends[index].target) }
         }
-        for (source, target) in ends { inheritCrossedDirections(source: source, target: target) }
         placeNodes(graph: graph)
-        placeEdges(graph: graph, indexByIdentifier: indexByIdentifier)
+        placeEdges(graph: graph, ends: ends)
     }
 
     /// How many nodes the flowchart has: the graph's nodes that are not open flows, and one for each open flow.
@@ -141,24 +148,32 @@ struct AgentFlowClusterGraph {
 
     /// The nodes, then a node standing for each open flow, and the flows as subgraphs, outer ones first.
     private mutating func placeNodes(graph: AgentFlowGraph) {
-        flowchartIndices = Array(repeating: 0, count: graph.nodes.count)
-        subgraphIndices = Array(repeating: nil, count: graph.nodes.count)
-        for (index, node) in graph.nodes.enumerated() where !node.isGroup {
+        let nodes = graph.nodes
+        flowchartIndices = Array(repeating: 0, count: nodes.count)
+        subgraphIndices = Array(repeating: nil, count: nodes.count)
+        nodeRecords.reserveCapacity(nodes.count)
+        drawnGraphIndices.reserveCapacity(nodes.count)
+        var groups: [Int] = []
+        for index in nodes.indices {
+            guard !nodes[index].isGroup else {
+                groups.append(index)
+                continue
+            }
             flowchartIndices[index] = nodeRecords.count
             drawnGraphIndices.append(index)
-            let shape = node.shape == "collapsedGroup" ? FlowchartNodeShape.rectangle : AgentFlowShapes.drawnShape(node.shape)
-            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(node.identifier), label: .none, shape: shape))
+            let shape = nodes[index].shape == "collapsedGroup" ? FlowchartNodeShape.rectangle : AgentFlowShapes.drawnShape(nodes[index].shape)
+            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(nodes[index].identifier), label: .none, shape: shape))
         }
-        let groups = graph.nodes.indices.filter { index in graph.nodes[index].isGroup }.sorted { first, second in
-            depths[first] != depths[second] ? depths[first] < depths[second] : first < second
-        }
+        groups.sort { first, second in depths[first] != depths[second] ? depths[first] < depths[second] : first < second }
+        subgraphGraphIndices.reserveCapacity(groups.count)
+        subgraphIdentifiers.reserveCapacity(groups.count)
         for group in groups {
             subgraphIndices[group] = subgraphGraphIndices.count
             subgraphGraphIndices.append(group)
             flowchartIndices[group] = nodeRecords.count
-            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(graph.nodes[group].identifier), label: .none, shape: .rectangle))
+            nodeRecords.append(FlowchartNodeRecord(identifier: appendedIdentifier(nodes[group].identifier), label: .none, shape: .rectangle))
         }
-        for group in groups { subgraphIdentifiers.append(appendedIdentifier(graph.nodes[group].identifier)) }
+        for group in groups { subgraphIdentifiers.append(appendedIdentifier(nodes[group].identifier)) }
         placeSubgraphMembers()
     }
 
@@ -202,22 +217,30 @@ struct AgentFlowClusterGraph {
     }
 
     /// Each edge between drawn ends, laid out unless it joins a node and a flow around it.
-    private mutating func placeEdges(graph: AgentFlowGraph, indexByIdentifier: [String: Int]) {
-        for (edgeIndex, edge) in graph.edges.enumerated() {
-            guard let source = indexByIdentifier[edge.start], let target = indexByIdentifier[edge.end] else { continue }
+    private mutating func placeEdges(graph: AgentFlowGraph, ends: [(source: Int, target: Int)]) {
+        let edges = graph.edges
+        edgeRecords.reserveCapacity(edges.count)
+        laidOutEdgeIndices.reserveCapacity(edges.count)
+        for edgeIndex in edges.indices {
+            let (source, target) = ends[edgeIndex]
+            guard source >= 0, target >= 0 else { continue }
             if contains(source, target) || contains(target, source) {
                 heldEdges.append((edgeIndex, source, target))
                 continue
             }
             laidOutEdgeIndices.append(edgeIndex)
             edgeRecords.append(FlowchartEdgeRecord(sourceIndex: Int32(flowchartIndices[source]), targetIndex: Int32(flowchartIndices[target]),
-                                                   minimumRankSpan: Int32(max(1, edge.minimumLength ?? 1)), stroke: edge.thickness == "dotted" ? .dotted : .solid,
-                                                   sourceArrowhead: .none, targetArrowhead: Self.arrowhead(of: edge), label: .none))
+                                                   minimumRankSpan: Int32(max(1, edges[edgeIndex].minimumLength ?? 1)),
+                                                   stroke: edges[edgeIndex].thickness == "dotted" ? .dotted : .solid,
+                                                   sourceArrowhead: .none, targetArrowhead: Self.arrowhead(of: edges[edgeIndex].arrowTypeEnd), label: .none))
         }
     }
 
-    static func arrowhead(of edge: AgentFlowGraphEdge) -> FlowchartArrowhead {
-        switch edge.arrowTypeEnd {
+    static func arrowhead(of edge: AgentFlowGraphEdge) -> FlowchartArrowhead { arrowhead(of: edge.arrowTypeEnd) }
+
+    /// The arrowhead Pele draws for an edge's `arrowTypeEnd`.
+    static func arrowhead(of arrowTypeEnd: String) -> FlowchartArrowhead {
+        switch arrowTypeEnd {
         case "none": .none
         case "arrow_cross": .cross
         default: .arrow

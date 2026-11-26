@@ -6,8 +6,8 @@
  *              laid-out edges by meaning, and the edges between a node and a flow around it drawn as Pele draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -17,13 +17,14 @@ struct AgentFlowLayoutAssembly {
 
     init(diagram: AgentFlowDiagram, clustered: AgentFlowClusterGraph, measurement: AgentFlowMeasurement, laidOut: FlowchartLayout) {
         let graph = diagram.graph
+        // Each node's fields are read where it lies in the graph's list, not copied out.
         let nodes = zip(clustered.drawnGraphIndices, laidOut.nodes).map { graphIndex, placed in
-            let node = graph.nodes[graphIndex]
-            let isCollapsed = node.shape == "collapsedGroup"
-            return AgentFlowLayoutNode(identifier: node.identifier, shape: placed.shape, isCollapsedFlow: isCollapsed, frame: placed.frame,
+            let isCollapsed = graph.nodes[graphIndex].shape == "collapsedGroup"
+            let kind = graph.nodes[graphIndex].kind
+            return AgentFlowLayoutNode(identifier: graph.nodes[graphIndex].identifier, shape: placed.shape, isCollapsedFlow: isCollapsed, frame: placed.frame,
                                        text: placed.text,
-                                       paletteSlot: isCollapsed ? node.colorIndex ?? AgentFlowVertexKind.allCases.count : (node.kind ?? .task).paletteSlot,
-                                       kind: isCollapsed ? nil : node.kind ?? .task, style: measurement.styles[graphIndex],
+                                       paletteSlot: isCollapsed ? graph.nodes[graphIndex].colorIndex ?? AgentFlowVertexKind.allCases.count : (kind ?? .task).paletteSlot,
+                                       kind: isCollapsed ? nil : kind ?? .task, style: measurement.styles[graphIndex],
                                        isBold: measurement.textLooks[graphIndex].isBold, isItalic: measurement.textLooks[graphIndex].isItalic)
         }
         let flows = zip(clustered.subgraphGraphIndices, laidOut.clusters).map { graphIndex, cluster in
@@ -33,11 +34,21 @@ struct AgentFlowLayoutAssembly {
         var edges = zip(clustered.laidOutEdgeIndices, laidOut.edges).map { edgeIndex, placed in
             Self.edge(graph.edges[edgeIndex], path: placed.path, mark: placed.targetMark, text: placed.text)
         }
+        // The edges between a node and a flow around it are routed among the nodes' frames and shapes, made only for them.
+        if !clustered.heldEdges.isEmpty {
+            Self.addHeldEdges(to: &edges, graph: graph, clustered: clustered, measurement: measurement, nodes: nodes, flows: flows)
+        }
+        layout = AgentFlowLayout(size: laidOut.size, font: laidOut.font, title: laidOut.title, flows: flows, nodes: nodes, edges: edges)
+    }
+
+    /// The edges between a node and a flow around it, routed among the frames of the nodes and flows laid out.
+    private static func addHeldEdges(to edges: inout [AgentFlowLayoutEdge], graph: AgentFlowGraph, clustered: AgentFlowClusterGraph,
+                                     measurement: AgentFlowMeasurement, nodes: [AgentFlowLayoutNode], flows: [AgentFlowLayoutFlow]) {
         var frames = [CGRect](repeating: .null, count: graph.nodes.count)
         for (graphIndex, node) in zip(clustered.drawnGraphIndices, nodes) { frames[graphIndex] = node.frame }
         for (graphIndex, flow) in zip(clustered.subgraphGraphIndices, flows) { frames[graphIndex] = flow.frame }
-        let held = AgentFlowHeldEdges(clustered: clustered, frames: frames,
-                                      shapes: Dictionary(uniqueKeysWithValues: zip(clustered.drawnGraphIndices, nodes.map(\.shape))))
+        let shapes = Dictionary(uniqueKeysWithValues: zip(clustered.drawnGraphIndices, nodes.map(\.shape)))
+        let held = AgentFlowHeldEdges(clustered: clustered, frames: frames, shapes: shapes)
         for (edgeIndex, source, target) in clustered.heldEdges {
             let edge = graph.edges[edgeIndex]
             let arrowhead = AgentFlowClusterGraph.arrowhead(of: edge)
@@ -49,7 +60,6 @@ struct AgentFlowLayoutAssembly {
             }
             edges.append(Self.edge(edge, path: route.path, mark: route.mark, text: text))
         }
-        layout = AgentFlowLayout(size: laidOut.size, font: laidOut.font, title: laidOut.title, flows: flows, nodes: nodes, edges: edges)
     }
 
     private static func edge(_ edge: AgentFlowGraphEdge, path: DiagramPath, mark: DiagramEdgeMark?, text: DiagramTextBlock?) -> AgentFlowLayoutEdge {
