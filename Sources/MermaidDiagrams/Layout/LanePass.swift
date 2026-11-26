@@ -7,8 +7,8 @@
  *              across the flow in their lanes.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -99,17 +99,22 @@ struct LanePass {
     func rowRange(_ row: Int) -> Range<Int> { rowStarts[row]..<rowStarts[row + 1] }
 
     /// Each rank by lane, then by its first order, then eight sweeps that sort each rank by the mean position of each
-    /// vertex's neighbours in the rank before (or keep its own position when it has none), by lane first.
+    /// vertex's neighbours in the rank before (or keep its own position when it has none), by lane first. A sweep is a
+    /// function of the ranks' orders alone, so once a sweep down and the sweep up after it, or the other way round, both
+    /// leave every rank as it was, the sweeps left would too, and they are not run.
     private func order(arena: DiagramScratchArena) {
         let mark = arena.mark()
         defer { arena.release(to: mark) }
         let key = arena.span(count: vertexCount, repeating: Double(0))
         for row in 0...maximumRank {
             for (index, slot) in rowRange(row).enumerated() { key[rowVertices[slot]] = Double(index) }
-            settle(row, key: key, arena: arena)
+            _ = settle(row, key: key, arena: arena)
         }
         guard maximumRank > 0 else { return }
+        var unchangedSweeps = 0
         for sweep in 0..<Self.sweepCount {
+            guard unchangedSweeps < 2 else { return }
+            var isChanged = false
             let isDownward = sweep.isMultiple(of: 2)
             let neighbors = isDownward ? upperNeighbors : lowerNeighbors
             for step in 1...maximumRank {
@@ -125,17 +130,26 @@ struct LanePass {
                     for neighborSlot in neighbors.range(of: vertex) { sum += position[neighbors.members[neighborSlot]] }
                     key[vertex] = sum / Double(count)
                 }
-                settle(row, key: key, arena: arena)
+                if settle(row, key: key, arena: arena) { isChanged = true }
             }
+            unchangedSweeps = isChanged ? 0 : unchangedSweeps + 1
         }
     }
 
-    /// A rank sorted by lane, key and vertex, a strict order every sort agrees on, and each vertex's position in it.
-    private func settle(_ row: Int, key: ScratchSpan<Double>, arena: DiagramScratchArena) {
+    /// A rank sorted by lane, key and vertex, a strict order every sort agrees on, and each vertex's position in it;
+    /// whether the rank's order changed. Each vertex's position was its place in the rank before the sort, so a position
+    /// changes exactly when the order does.
+    private func settle(_ row: Int, key: ScratchSpan<Double>, arena: DiagramScratchArena) -> Bool {
         let range = rowRange(row)
         let lane = lane
         rowVertices.sortStably(range, in: arena) { first, second in (lane[first], key[first], first) < (lane[second], key[second], second) }
-        for (index, slot) in range.enumerated() { position[rowVertices[slot]] = Double(index) }
+        var isChanged = false
+        for (index, slot) in range.enumerated() {
+            let vertex = rowVertices[slot]
+            if position[vertex] != Double(index) { isChanged = true }
+            position[vertex] = Double(index)
+        }
+        return isChanged
     }
 
     /// The gap between two neighbours of a run: the edge separation beside a passing point, else the node separation.
@@ -182,7 +196,9 @@ struct LanePass {
     }
 
     /// Across the flow: each run centered in its lane, then four passes, down and up, that move each vertex toward the mean
-    /// of its neighbours in the same lane in the rank before, as far as its lane and the vertices beside it allow.
+    /// of its neighbours in the same lane in the rank before, as far as its lane and the vertices beside it allow. A pass
+    /// is a function of the centers alone, so once two passes in a row move no center by a bit, the passes left would
+    /// not either, and they are not run.
     private func placeAcross(arena: DiagramScratchArena) {
         for row in 0...maximumRank {
             let range = rowRange(row)
@@ -197,31 +213,37 @@ struct LanePass {
         let mark = arena.mark()
         defer { arena.release(to: mark) }
         let wanted = arena.span(count: vertexCount, repeating: CGFloat(0))
+        var unchangedPasses = 0
         for pass in 0..<Self.alignmentPassCount {
+            guard unchangedPasses < 2 else { return }
+            var isChanged = false
             let isDownward = pass.isMultiple(of: 2)
             let neighbors = isDownward ? upperNeighbors : lowerNeighbors
             for step in 1...maximumRank {
                 let range = rowRange(isDownward ? step : maximumRank - step)
-                for slot in range {
-                    let vertex = rowVertices[slot]
-                    var sum: CGFloat = 0
-                    var count = 0
-                    for neighborSlot in neighbors.range(of: vertex) {
-                        let neighbor = neighbors.members[neighborSlot]
-                        guard lane[neighbor] == lane[vertex] else { continue }
-                        sum += centers[neighbor]
-                        count += 1
-                    }
-                    wanted[vertex] = count == 0 ? centers[vertex] : sum / CGFloat(count)
-                }
+                for slot in range { wanted[rowVertices[slot]] = wantedCenter(of: rowVertices[slot], neighbors: neighbors) }
                 var start = range.lowerBound
                 while start < range.upperBound {
                     let last = runEnd(from: start, before: range.upperBound)
-                    align(start, last, wanted: wanted)
+                    if align(start, last, wanted: wanted) { isChanged = true }
                     start = last + 1
                 }
             }
+            unchangedPasses = isChanged ? 0 : unchangedPasses + 1
         }
+    }
+
+    /// The mean center of the vertex's neighbours in its lane, or its own center when it has none there.
+    private func wantedCenter(of vertex: Int, neighbors: LaneAdjacency) -> CGFloat {
+        var sum: CGFloat = 0
+        var count = 0
+        for neighborSlot in neighbors.range(of: vertex) {
+            let neighbor = neighbors.members[neighborSlot]
+            guard lane[neighbor] == lane[vertex] else { continue }
+            sum += centers[neighbor]
+            count += 1
+        }
+        return count == 0 ? centers[vertex] : sum / CGFloat(count)
     }
 
     /// A run centered between its lane's paddings.
@@ -235,20 +257,26 @@ struct LanePass {
         }
     }
 
-    /// A run moved to where its vertices want to be, kept in order, apart and inside its lane's paddings.
-    private func align(_ first: Int, _ last: Int, wanted: ScratchSpan<CGFloat>) {
+    /// A run moved to where its vertices want to be, kept in order, apart and inside its lane's paddings; whether any of
+    /// its centers changed, to the bit. A vertex's wanted center, read once, keeps its center from before.
+    private func align(_ first: Int, _ last: Int, wanted: ScratchSpan<CGFloat>) -> Bool {
         let slot = lane[rowVertices[first]]
         var floor = laneStarts[slot] + paddings[slot]
         for index in first...last {
             let vertex = rowVertices[index]
+            let before = centers[vertex]
             centers[vertex] = max(wanted[vertex], floor + across[vertex] / 2)
+            wanted[vertex] = before
             if index < last { floor = centers[vertex] + across[vertex] / 2 + gap(vertex, rowVertices[index + 1]) }
         }
+        var isChanged = false
         var ceiling = laneStarts[slot + 1] - paddings[slot]
         for index in stride(from: last, through: first, by: -1) {
             let vertex = rowVertices[index]
             centers[vertex] = min(centers[vertex], ceiling - across[vertex] / 2)
+            if centers[vertex].bitPattern != wanted[vertex].bitPattern { isChanged = true }
             if index > first { ceiling = centers[vertex] - across[vertex] / 2 - gap(rowVertices[index - 1], vertex) }
         }
+        return isChanged
     }
 }
