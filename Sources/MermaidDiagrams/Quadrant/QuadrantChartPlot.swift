@@ -5,8 +5,8 @@
  * Description: Where a quadrant chart's title, axes' texts and quadrants go on its page.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -60,8 +60,12 @@ struct QuadrantChartPlot {
         quadrantSize = CGSize(width: max(0, (frame.width - Self.quadrantGap) / 2), height: max(0, (frame.height - Self.quadrantGap) / 2))
         let xMiddle = xAxisIsBelow ? frame.maxY + metrics.xAxisLabelPadding + xHeight / 2 : frame.minY - metrics.xAxisLabelPadding - xHeight / 2
         let yMiddle = metrics.yAxisIsRight ? frame.maxX + metrics.yAxisLabelPadding + yHeight / 2 : frame.minX - metrics.yAxisLabelPadding - yHeight / 2
-        axisLabels = Self.xAxisLabels(low: xLow, high: xHigh, frame: frame, middle: xMiddle)
-            + Self.yAxisLabels(low: yLow, high: yHigh, frame: frame, middle: yMiddle)
+        // At most four texts, the x axis' then the y axis', in one list made once.
+        var labels: [QuadrantChartAxisLabel] = []
+        labels.reserveCapacity(4)
+        Self.addXAxisLabels(low: xLow, high: xHigh, frame: frame, middle: xMiddle, to: &labels)
+        Self.addYAxisLabels(low: yLow, high: yHigh, frame: frame, middle: yMiddle, to: &labels)
+        axisLabels = labels
         // Half the title's padding above it, the other half below it.
         title?.center = CGPoint(x: metrics.page.width / 2, y: titleSpace / 2)
         self.title = title
@@ -82,26 +86,24 @@ struct QuadrantChartPlot {
 
     /// The x axis's texts on the line through `middle`: the low end's in the left half's middle, or from the left edge
     /// without a high end; the high end's in the right half's middle.
-    private static func xAxisLabels(low: DiagramTextBlock?, high: DiagramTextBlock?, frame: CGRect, middle: CGFloat) -> [QuadrantChartAxisLabel] {
-        var labels: [QuadrantChartAxisLabel] = []
+    private static func addXAxisLabels(low: DiagramTextBlock?, high: DiagramTextBlock?, frame: CGRect, middle: CGFloat,
+                                       to labels: inout [QuadrantChartAxisLabel]) {
         if let low {
             let center = high == nil ? frame.minX + low.size.width / 2 : frame.minX + frame.width / 4
             labels.append(placed(low, at: CGPoint(x: center, y: middle)))
         }
         if let high { labels.append(placed(high, at: CGPoint(x: frame.minX + frame.width * 3 / 4, y: middle))) }
-        return labels
     }
 
     /// The y axis's texts turned on the line through `middle`: the low end's in the lower half's middle, or from the
     /// bottom edge without a high end; the high end's in the upper half's middle.
-    private static func yAxisLabels(low: DiagramTextBlock?, high: DiagramTextBlock?, frame: CGRect, middle: CGFloat) -> [QuadrantChartAxisLabel] {
-        var labels: [QuadrantChartAxisLabel] = []
+    private static func addYAxisLabels(low: DiagramTextBlock?, high: DiagramTextBlock?, frame: CGRect, middle: CGFloat,
+                                       to labels: inout [QuadrantChartAxisLabel]) {
         if let low {
             let center = high == nil ? frame.maxY - low.size.width / 2 : frame.minY + frame.height * 3 / 4
             labels.append(placed(low, at: CGPoint(x: middle, y: center), isTurned: true))
         }
         if let high { labels.append(placed(high, at: CGPoint(x: middle, y: frame.minY + frame.height / 4), isTurned: true)) }
-        return labels
     }
 
     private static func placed(_ text: DiagramTextBlock, at center: CGPoint, isTurned: Bool = false) -> QuadrantChartAxisLabel {
