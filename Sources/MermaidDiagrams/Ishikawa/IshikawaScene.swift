@@ -6,8 +6,8 @@
  *              which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -47,21 +47,26 @@ enum IshikawaScene {
         defer { workspace.givePathsBack(downTo: madeCount) }
         if let spine = layout.spine { builder.stroke(recorded(spine, workspace: workspace), .line, line, part: .ishikawaSpine) }
         if let arrow = layout.spineArrow { builder.fill(arrowLane(arrow, workspace: workspace), .line, part: .marker) }
-        for category in layout.categories {
-            workspace.givePathsBack(downTo: madeCount)
-            builder.stroke(joined(category.boneLines, workspace: workspace), .line, line, part: .ishikawaBones)
-            builder.fill(arrowLane(category.arrow, workspace: workspace), .line, part: .marker)
-            let box = category.box
-            let corners = (width: min(boxCornerRadius, box.width / 2), height: min(boxCornerRadius, box.height / 2))
-            builder.fillAndStroke(workspace.roundedRectangle(box, cornerWidth: corners.width, cornerHeight: corners.height), fill: .surface,
-                                  stroke: .border, line, part: .node)
-            builder.text(category.label, .foreground, part: .label)
-            for cause in category.causes { builder.text(cause.text, cause.isMuted ? .muted : .foreground, part: .label) }
-        }
-        if let head = layout.head {
-            builder.fillAndStroke(headOutline(head.frame, workspace: workspace), fill: .surface, stroke: .border,
-                                  DiagramStroke(lineWidth: lineWidth, lineJoin: .round), part: .node)
-            builder.text(head.label, .foreground, isBold: true, part: .label)
+        let fishbone = layout.fishbone
+        fishbone.bytes.withUnsafeBufferPointer { source in
+            for category in fishbone.categoryRecords {
+                workspace.givePathsBack(downTo: madeCount)
+                builder.stroke(joined(fishbone.boneLines[category.boneRange], workspace: workspace), .line, line, part: .ishikawaBones)
+                builder.fill(arrowLane(category.arrow, workspace: workspace), .line, part: .marker)
+                let box = category.box
+                let corners = (width: min(boxCornerRadius, box.width / 2), height: min(boxCornerRadius, box.height / 2))
+                builder.fillAndStroke(workspace.roundedRectangle(box, cornerWidth: corners.width, cornerHeight: corners.height), fill: .surface,
+                                      stroke: .border, line, part: .node)
+                builder.text(category.label, of: fishbone.lines, source: source, .foreground, part: .label)
+                for cause in fishbone.causes[category.causeRange] {
+                    builder.text(cause.text, of: fishbone.lines, source: source, cause.isMuted ? .muted : .foreground, part: .label)
+                }
+            }
+            if let frame = fishbone.headFrame {
+                builder.fillAndStroke(headOutline(frame, workspace: workspace), fill: .surface, stroke: .border,
+                                      DiagramStroke(lineWidth: lineWidth, lineJoin: .round), part: .node)
+                builder.text(fishbone.headLabel, of: fishbone.lines, source: source, .foreground, isBold: true, part: .label)
+            }
         }
     }
 
@@ -91,7 +96,7 @@ enum IshikawaScene {
 
     /// Straight lines in one lane, each a move to its start and a line to its end, as the lines' paths added one to
     /// another give.
-    private static func joined(_ lines: [IshikawaBoneLine], workspace: DiagramSceneWorkspace) -> DiagramPathLane {
+    private static func joined(_ lines: ArraySlice<IshikawaBoneLine>, workspace: DiagramSceneWorkspace) -> DiagramPathLane {
         let lane = workspace.makeLane()
         for line in lines {
             lane.move(to: line.start)
