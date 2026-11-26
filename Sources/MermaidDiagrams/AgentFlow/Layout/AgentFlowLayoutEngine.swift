@@ -7,7 +7,7 @@
  *              layout, and the edges between a node and a flow around it drawn to the flow's border.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -79,7 +79,10 @@ struct AgentFlowMeasurement {
         let edgeText = measurers.edgeText
         let nodes = model.graph.nodes
         let text = model.text
-        subgraphTitles = clustered.subgraphGraphIndices.map { group in Self.label(nodes[group].label, type: nodes[group].labelType, in: text) }
+        var titles: [DiagramLabel] = []
+        titles.reserveCapacity(clustered.subgraphGraphIndices.count)
+        for group in clustered.subgraphGraphIndices { titles.append(Self.label(nodes[group].label, type: nodes[group].labelType, in: text)) }
+        subgraphTitles = titles
         let looks = Self.looks(of: model)
         styles = looks.styles
         textLooks = looks.textLooks
@@ -99,20 +102,37 @@ struct AgentFlowMeasurement {
             (sizes[flowchartIndex], offsets[flowchartIndex]) = Self.size(ofShape: nodes[graphIndex].shape, textSize: measured.size, minimumWidth: minimumWidth)
         }
         texts += repeatElement(DiagramTextBlock(label: DiagramLabel(lines: []), measurer: nodeText, maximumWidth: 0), count: count - texts.count)
-        func measuredText(of edgeIndex: Int) -> DiagramTextBlock? {
-            let raw = model.edges[Int(model.graph.edges[edgeIndex].edge)]
-            let measured = PlaneMapLabel.block(Self.label(raw.text, type: raw.labelType, in: text), measurer: edgeText, maximumWidth: wrappingWidth)
-            return measured.lineCount == 0 ? nil : measured
-        }
-        let edgeTexts = clustered.laidOutEdgeIndices.map(measuredText(of:))
-        var heldEdgeTexts: [Int: DiagramTextBlock] = [:]
-        for held in clustered.heldEdges { heldEdgeTexts[held.edgeIndex] = measuredText(of: held.edgeIndex) }
-        self.heldEdgeTexts = heldEdgeTexts
-        var flowchartMeasurement = FlowchartMeasurement(nodeTexts: texts, shapeSizes: sizes, textOffsets: offsets, edgeTexts: edgeTexts,
+        let edgeTexts = Self.edgeTexts(of: clustered, in: model, measurer: edgeText, wrappingWidth: wrappingWidth)
+        heldEdgeTexts = edgeTexts.held
+        var flowchartMeasurement = FlowchartMeasurement(nodeTexts: texts, shapeSizes: sizes, textOffsets: offsets, edgeTexts: edgeTexts.laidOut,
                                                         selfLoopEdgeIndices: clustered.selfLoopEdgeIndices)
         // Pele gives an agent flow's nodes no span: the edges on one side of a node meet in its middle.
         flowchartMeasurement.spreadsEdgeEnds = false
         self.flowchartMeasurement = flowchartMeasurement
+    }
+
+    /// The texts of the edges laid out, in their order, and of the edges held back, by graph edge index.
+    private static func edgeTexts(of clustered: AgentFlowClusterGraph, in model: AgentFlowModel, measurer: some DiagramTextMeasuring,
+                                  wrappingWidth: CGFloat) -> (laidOut: [DiagramTextBlock?], held: [Int: DiagramTextBlock]) {
+        var laidOut: [DiagramTextBlock?] = []
+        laidOut.reserveCapacity(clustered.laidOutEdgeIndices.count)
+        for edgeIndex in clustered.laidOutEdgeIndices {
+            laidOut.append(edgeText(of: edgeIndex, in: model, measurer: measurer, wrappingWidth: wrappingWidth))
+        }
+        var held: [Int: DiagramTextBlock] = [:]
+        for heldEdge in clustered.heldEdges {
+            held[heldEdge.edgeIndex] = edgeText(of: heldEdge.edgeIndex, in: model, measurer: measurer, wrappingWidth: wrappingWidth)
+        }
+        return (laidOut, held)
+    }
+
+    /// The text of the graph's edge at `edgeIndex` measured, or nil when it has none.
+    private static func edgeText(of edgeIndex: Int, in model: AgentFlowModel, measurer: some DiagramTextMeasuring,
+                                 wrappingWidth: CGFloat) -> DiagramTextBlock? {
+        let raw = model.edges[Int(model.graph.edges[edgeIndex].edge)]
+        guard !raw.text.isEmpty else { return nil }
+        let measured = PlaneMapLabel.block(label(raw.text, type: raw.labelType, in: model.text), measurer: measurer, maximumWidth: wrappingWidth)
+        return measured.lineCount == 0 ? nil : measured
     }
 
     /// Each graph node's style and text look from its classes' styles then its own, and the look of each node that has
