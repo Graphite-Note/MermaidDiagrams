@@ -6,8 +6,8 @@
  *              lexer.ts reads them: the closing brackets, comments, and the text between.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension AgentFlowLexer {
@@ -42,7 +42,7 @@ extension AgentFlowLexer {
             advance(to: end)
         default:
             var end = position + 1
-            while end < count, !Self.textStops.contains(Int(units[end])) { end += 1 }
+            while end < count, !Self.isStop(bytes[end], in: Self.textStops) { end += 1 }
             emit(.text, to: end)
         }
         return true
@@ -71,8 +71,8 @@ extension AgentFlowLexer {
     private func ellipseTextEnd() -> Int {
         var end = position + 1
         while end < count {
-            let unit = Int(units[end])
-            if Self.ellipseStops.contains(unit) { break }
+            let unit = Int(bytes[end])
+            if Self.isStop(bytes[end], in: Self.ellipseStops) { break }
             if unit == Unit.hyphen || unit == Unit.solidus, character(at: end + 1) == Unit.closingParenthesis { break }
             if unit == Unit.percentSign, character(at: end + 1) == Unit.percentSign, character(at: end + 2) != Unit.openingBrace { break }
             end += 1
@@ -108,7 +108,7 @@ extension AgentFlowLexer {
                 break
             }
             var end = position + 1
-            while end < count, !Self.trapezoidStops.contains(Int(units[end])) { end += 1 }
+            while end < count, !Self.isStop(bytes[end], in: Self.trapezoidStops) { end += 1 }
             emit(.text, to: end)
         }
         return true
@@ -135,11 +135,11 @@ extension AgentFlowLexer {
         if character == Unit.hyphen, self.character(at: position + 1) == Unit.hyphen { return false }
         var end = position + 1
         while end < count {
-            let unit = Int(units[end])
+            let unit = Int(bytes[end])
             if unit == Unit.quotationMark { break }
             if unit == Unit.hyphen {
                 if self.character(at: end + 1) == Unit.hyphen { break }
-            } else if Unit.isSpace(unit), arrowEnd(from: end) >= 0 {
+            } else if isSpace(at: end), arrowEnd(from: end) >= 0 {
                 break
             }
             end += 1
@@ -148,7 +148,17 @@ extension AgentFlowLexer {
         return true
     }
 
-    static let textStops: Set<Int> = [91, 93, 40, 41, 123, 125, 124, 34, 37]
-    static let ellipseStops: Set<Int> = [34, 40, 41, 91, 93, 123, 125]
-    static let trapezoidStops: Set<Int> = [92, 91, 93, 40, 41, 123, 125, 47, 37]
+    /// Whether `byte` is one of the ASCII characters `stops` marks, a table by byte looked up without hashing.
+    @inline(__always)
+    static func isStop(_ byte: UInt8, in stops: [Bool]) -> Bool { byte < 128 && stops[Int(byte)] }
+
+    static let textStops = stopTable([91, 93, 40, 41, 123, 125, 124, 34, 37])
+    static let ellipseStops = stopTable([34, 40, 41, 91, 93, 123, 125])
+    static let trapezoidStops = stopTable([92, 91, 93, 40, 41, 123, 125, 47, 37])
+
+    private static func stopTable(_ stops: [Int]) -> [Bool] {
+        var table = [Bool](repeating: false, count: 128)
+        for stop in stops { table[stop] = true }
+        return table
+    }
 }

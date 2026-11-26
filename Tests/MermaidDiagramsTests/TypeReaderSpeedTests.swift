@@ -9,8 +9,8 @@
  *              the readers made before.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -195,6 +195,17 @@ final class TypeReaderSpeedTests: XCTestCase {
                                            ("accessibilityTitle", useCase.accessibilityTitle), ("accessibilityDescription", useCase.accessibilityDescription),
                                            ("nodeSpacing", useCase.nodeSpacing as Any), ("rankSpacing", useCase.rankSpacing as Any)]
             return "UseCaseDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
+        }
+        // An agent flow too, its fields in the order 0.7.0 stored them.
+        if let agentFlow = value as? AgentFlowDiagram {
+            let fields: [(String, Any)] = [("directionKeyword", agentFlow.directionKeyword as Any), ("vertices", agentFlow.vertices), ("edges", agentFlow.edges),
+                                           ("flows", agentFlow.flows), ("connectorIdentifiers", agentFlow.connectorIdentifiers),
+                                           ("classDefinitions", agentFlow.classDefinitions), ("defaultEdgeStyle", agentFlow.defaultEdgeStyle as Any),
+                                           ("defaultInterpolation", agentFlow.defaultInterpolation as Any), ("mappings", agentFlow.mappings),
+                                           ("diagnostics", agentFlow.diagnostics), ("graph", agentFlow.graph), ("title", agentFlow.title as Any),
+                                           ("accessibilityTitle", agentFlow.accessibilityTitle as Any),
+                                           ("accessibilityDescription", agentFlow.accessibilityDescription as Any), ("options", agentFlow.options)]
+            return "AgentFlowDiagram(" + fields.map { label, field in "\(label): \(canonicalDescription(of: field))" }.joined(separator: ", ") + ")"
         }
         let mirror = Mirror(reflecting: value)
         switch mirror.displayStyle {

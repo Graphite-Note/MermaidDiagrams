@@ -6,13 +6,13 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension AgentFlowParser {
     /// Styles separated by commas, each its tokens run together.
-    mutating func styles() throws(MermaidDiagramReadError) -> [String] {
+    mutating func styles() throws(MermaidDiagramReadError) -> [MermaidTextRange] {
         var styles = [try style()]
         while current == .comma {
             index += 1
@@ -21,15 +21,12 @@ extension AgentFlowParser {
         return styles
     }
 
-    private mutating func style() throws(MermaidDiagramReadError) -> String {
+    private mutating func style() throws(MermaidDiagramReadError) -> MermaidTextRange {
         guard Self.styleTokens.contains(current) else { throw failure(expecting: "'NODE_STRING', 'NUM', 'COLON', 'BRKT'") }
-        var style = text(at: index)
+        let first = index
         index += 1
-        while Self.styleTokens.contains(current) {
-            style += text(at: index)
-            index += 1
-        }
-        return style
+        while Self.styleTokens.contains(current) { index += 1 }
+        return joinedText(from: first, to: index)
     }
 
     /// `linkStyle default|N,M [interpolate curve] [styles]`.
@@ -37,7 +34,7 @@ extension AgentFlowParser {
         let line = builder.line(of: span(from: index, to: index))
         index += 1
         _ = try expect(.space)
-        var positions: [String]
+        var positions: [MermaidTextRange]
         if current == .defaultKeyword {
             positions = [text(at: index)]
             index += 1
@@ -76,12 +73,12 @@ extension AgentFlowParser {
         case .callbackName:
             index += 1
             if current == .callbackArguments { index += 1 }
-            var tooltip: String?
+            var tooltip: MermaidTextRange?
             if current == .space {
                 index += 1
                 tooltip = try expect(.string)
             }
-            builder.setClass(identifier, className: "clickable")
+            builder.setClass(identifier, className: builder.constant(.clickable))
             if let tooltip { builder.setTooltip(identifier, tooltip: tooltip) }
         case .hyperlinkReference:
             index += 1
@@ -95,16 +92,16 @@ extension AgentFlowParser {
             if current == .space {
                 index += 1
                 let tooltip = try expect(.string)
-                builder.setClass(identifier, className: "clickable")
+                builder.setClass(identifier, className: builder.constant(.clickable))
                 builder.setTooltip(identifier, tooltip: tooltip)
             } else {
-                builder.setClass(identifier, className: "clickable")
+                builder.setClass(identifier, className: builder.constant(.clickable))
             }
         }
     }
 
     /// After a click's link: nothing, a target, or a tooltip and an optional target.
-    private mutating func linkTail(_ identifier: String, url: String) throws(MermaidDiagramReadError) {
+    private mutating func linkTail(_ identifier: MermaidTextRange, url: MermaidTextRange) throws(MermaidDiagramReadError) {
         guard current == .space else {
             builder.setLink(identifier, url: url)
             return

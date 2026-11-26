@@ -3,15 +3,15 @@
  * --------------------------
  * Layer: Core
  * Description: The tokens of an agent flow's text, in the order and with the names of Pele's tokens.ts, and where each
- *              one sits in the text.
+ *              one sits in the text's bytes and in Jison's lines and columns.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 /// A token of an agent flow, as Pele's `tokens.ts` numbers them (the order of Mermaid's agentflow.jison terminals).
-enum AgentFlowTokenKind: Int, Comparable {
+enum AgentFlowTokenKind: UInt8, Comparable {
     case end, error, accessibilityTitle, accessibilityTitleValue, accessibilityDescription, accessibilityDescriptionValue
     case accessibilityDescriptionMultilineValue, shapeData, callbackName, callbackArguments, markdownString, string, style, defaultKeyword
     case linkStyle, interpolate, classDefinition, classKeyword, hyperlinkReference, click, graph, flow, connector, global, endKeyword
@@ -26,7 +26,7 @@ enum AgentFlowTokenKind: Int, Comparable {
     static func < (left: AgentFlowTokenKind, right: AgentFlowTokenKind) -> Bool { left.rawValue < right.rawValue }
 
     /// Jison's name of the token, as Mermaid's messages write it.
-    var grammarName: String { Self.grammarNames[rawValue] }
+    var grammarName: String { Self.grammarNames[Int(rawValue)] }
 
     private static let grammarNames = [
         "$end", "INVALID", "acc_title", "acc_title_value", "acc_descr", "acc_descr_value", "acc_descr_multiline_value", "SHAPE_DATA",
@@ -40,30 +40,62 @@ enum AgentFlowTokenKind: Int, Comparable {
     ]
 }
 
-/// The tokens of a text: each one's kind, where its text starts and ends in UTF-16 code units, and the line and column
-/// it starts and ends at, counted as Jison counts them (lines from 1, columns from 0). A token whose text is not the
-/// text it covers (the `@{` that opens metadata, a quoted metadata string with its line breaks made `<br/>`) keeps its
-/// text apart.
+/// A token: its kind, where its bytes start and end in the prepared text, and the line and column it starts and ends
+/// at, counted as Jison counts them (lines from 1, columns from 0 in UTF-16 code units).
+struct AgentFlowToken {
+    var kind: AgentFlowTokenKind
+    var start: Int32
+    var end: Int32
+    var firstLine: Int32
+    var firstColumn: Int32
+    var lastLine: Int32
+    var lastColumn: Int32
+}
+
+/// The tokens of a text, in one list in the thread's scratch arena. A token whose text is not the text it covers (the `@{` that opens metadata, a
+/// quoted metadata string with its line breaks made `<br/>`) keeps its text apart, in the bytes after the prepared text.
 struct AgentFlowTokens {
-    var kinds: [AgentFlowTokenKind] = []
-    var starts: [Int] = []
-    var ends: [Int] = []
-    /// Four numbers per token: first line, first column, last line, last column.
-    var locations: [Int] = []
-    var replacedTexts: [Int: String] = [:]
+    var records: ScratchList<AgentFlowToken>
+    /// The tokens whose text is not their bytes, in order, and the ranges of their texts.
+    var replacedTokenIndices: [Int32] = []
+    var replacedRanges: [MermaidTextRange] = []
 
-    var count: Int { kinds.count }
+    init(arena: DiagramScratchArena, capacity: Int) {
+        records = arena.list(capacity: capacity)
+    }
 
-    /// The text of the token at `index` in `units`.
-    func text(at index: Int, in units: [UInt16]) -> String {
-        if !replacedTexts.isEmpty, let replaced = replacedTexts[index] { return replaced }
-        return UnicodeScalarText.string(utf16: units[starts[index]..<ends[index]])
+    var count: Int { records.count }
+
+    @inline(__always)
+    func kind(at index: Int) -> AgentFlowTokenKind { records[index].kind }
+
+    @inline(__always)
+    func start(at index: Int) -> Int { Int(records[index].start) }
+
+    /// The range of the text of the token at `index`: its bytes, or for a metadata token whose text was made, that
+    /// text's.
+    func textRange(at index: Int) -> MermaidTextRange {
+        let record = records[index]
+        if record.kind == .shapeData, !replacedTokenIndices.isEmpty, let replaced = replacedRange(at: index) { return replaced }
+        return MermaidTextRange(start: Int(record.start), end: Int(record.end))
+    }
+
+    private func replacedRange(at index: Int) -> MermaidTextRange? {
+        var low = 0
+        var high = replacedTokenIndices.count - 1
+        while low <= high {
+            let middle = (low + high) / 2
+            let found = Int(replacedTokenIndices[middle])
+            if found == index { return replacedRanges[middle] }
+            if found < index { low = middle + 1 } else { high = middle - 1 }
+        }
+        return nil
     }
 
     /// The span from the start of the token at `first` to the end of the token at `last`.
     func span(from first: Int, to last: Int) -> AgentFlowSourceSpan {
-        AgentFlowSourceSpan(firstLine: locations[4 * first], firstColumn: locations[4 * first + 1], lastLine: locations[4 * last + 2],
-                            lastColumn: locations[4 * last + 3])
+        AgentFlowSourceSpan(firstLine: Int(records[first].firstLine), firstColumn: Int(records[first].firstColumn), lastLine: Int(records[last].lastLine),
+                            lastColumn: Int(records[last].lastColumn))
     }
 }
 

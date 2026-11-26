@@ -7,7 +7,7 @@
  *              layout, and the edges between a node and a flow around it drawn to the flow's border.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -38,14 +38,22 @@ public enum AgentFlowLayoutEngine {
     static func layout<Measurer: DiagramTextMeasuring>(_ diagram: AgentFlowDiagram, measurers: BlockMeasurers<Measurer>, font: DiagramFont,
                                                        limits: MermaidDiagramLimits,
                                                        isTurnedToRunDown: Bool = false) throws(FlowchartLayoutError) -> AgentFlowLayout {
-        let clustered = AgentFlowClusterGraph(graph: diagram.graph, direction: isTurnedToRunDown ? .topToBottom : diagram.direction)
-        let measurement = AgentFlowMeasurement(graph: diagram.graph, clustered: clustered, measurers: measurers, options: diagram.options)
-        let flowchart = clustered.flowchart(titles: measurement.subgraphTitles, title: diagram.title)
+        let model = diagram.model
+        let direction = isTurnedToRunDown ? .topToBottom : diagram.direction
         let spacing = LayeredSpacing(nodeSeparation: CGFloat(diagram.options.nodeSpacing), edgeSeparation: edgeSeparation,
                                      rankSeparation: CGFloat(diagram.options.rankSpacing), borderSeparation: borderSeparation)
-        let laidOut = try FlowchartLayoutEngine.layout(flowchart, measured: measurement.flowchartMeasurement, nodeText: measurers.nodeText,
-                                                       font: font, limits: limits, spacing: spacing)
-        return AgentFlowLayoutAssembly(diagram: diagram, clustered: clustered, measurement: measurement, laidOut: laidOut).layout
+        // The cluster graph's lists live in the thread's scratch arena for the layout's run.
+        let laidOut = DiagramScratchArena.withCurrentThread { arena in
+            Result { () throws(FlowchartLayoutError) in
+                let clustered = AgentFlowClusterGraph(model: model, direction: direction, arena: arena)
+                let measurement = AgentFlowMeasurement(model: model, clustered: clustered, measurers: measurers, options: diagram.options)
+                let flowchart = clustered.flowchart(titles: measurement.subgraphTitles, title: diagram.title, text: model.text)
+                let placed = try FlowchartLayoutEngine.layout(flowchart, measured: measurement.flowchartMeasurement, nodeText: measurers.nodeText,
+                                                              font: font, limits: limits, spacing: spacing)
+                return AgentFlowLayoutAssembly(model: model, clustered: clustered, measurement: measurement, laidOut: placed).layout
+            }
+        }
+        return try laidOut.get()
     }
 }
 
@@ -55,21 +63,24 @@ struct AgentFlowMeasurement {
     let flowchartMeasurement: FlowchartMeasurement
     /// Each subgraph's title as its flow's box shows it, unwrapped, in the subgraphs' order.
     let subgraphTitles: [DiagramLabel]
-    /// Each graph node's style, from its classes then its own statements.
-    let styles: [DiagramElementStyle?]
-    /// Each graph node's text's weight and slant, as its style sets them (Pele's `resolveStyle`).
-    let textLooks: [(isBold: Bool, isItalic: Bool)]
+    /// Each graph node's style, from its classes then its own statements; empty when no node has styles.
+    private let styles: [DiagramElementStyle?]
+    /// Each graph node's text's weight and slant, as its style sets them (Pele's `resolveStyle`); empty when no node has
+    /// styles.
+    private let textLooks: [(isBold: Bool, isItalic: Bool)]
     /// The texts of the edges between a node and a flow around it, by graph edge index.
     let heldEdgeTexts: [Int: DiagramTextBlock]
 
-    init<Measurer: DiagramTextMeasuring>(graph: AgentFlowGraph, clustered: AgentFlowClusterGraph, measurers: BlockMeasurers<Measurer>,
+    init<Measurer: DiagramTextMeasuring>(model: AgentFlowModel, clustered: AgentFlowClusterGraph, measurers: BlockMeasurers<Measurer>,
                                          options: AgentFlowOptions) {
         let wrappingWidth = CGFloat(options.wrappingWidth)
         let minimumWidth = CGFloat(options.minimumNodeWidth)
         let nodeText = measurers.nodeText
         let edgeText = measurers.edgeText
-        subgraphTitles = clustered.subgraphGraphIndices.map { group in Self.label(graph.nodes[group].label, type: graph.nodes[group].labelType) }
-        let looks = Self.looks(of: graph)
+        let nodes = model.graph.nodes
+        let text = model.text
+        subgraphTitles = clustered.subgraphGraphIndices.map { group in Self.label(nodes[group].label, type: nodes[group].labelType, in: text) }
+        let looks = Self.looks(of: model)
         styles = looks.styles
         textLooks = looks.textLooks
         var restyled = BlockMeasurerCache(measurers: measurers)
@@ -82,16 +93,16 @@ struct AgentFlowMeasurement {
         var offsets = [CGFloat](repeating: 0, count: count)
         let plain = BlockAppearance()
         for (flowchartIndex, graphIndex) in clustered.drawnGraphIndices.enumerated() {
-            let text = PlaneMapLabel.block(Self.label(graph.nodes[graphIndex].label, type: graph.nodes[graphIndex].labelType),
-                                           measurer: restyled.measurer(for: looks.styledAppearances[graphIndex] ?? plain), maximumWidth: wrappingWidth)
-            texts.append(text)
-            (sizes[flowchartIndex], offsets[flowchartIndex]) = Self.size(ofShape: graph.nodes[graphIndex].shape, textSize: text.size, minimumWidth: minimumWidth)
+            let label = Self.label(nodes[graphIndex].label, type: nodes[graphIndex].labelType, in: text)
+            let measured = PlaneMapLabel.block(label, measurer: restyled.measurer(for: looks.styledAppearances[graphIndex] ?? plain), maximumWidth: wrappingWidth)
+            texts.append(measured)
+            (sizes[flowchartIndex], offsets[flowchartIndex]) = Self.size(ofShape: nodes[graphIndex].shape, textSize: measured.size, minimumWidth: minimumWidth)
         }
         texts += repeatElement(DiagramTextBlock(label: DiagramLabel(lines: []), measurer: nodeText, maximumWidth: 0), count: count - texts.count)
         func measuredText(of edgeIndex: Int) -> DiagramTextBlock? {
-            let text = PlaneMapLabel.block(Self.label(graph.edges[edgeIndex].label, type: graph.edges[edgeIndex].labelType), measurer: edgeText,
-                                           maximumWidth: wrappingWidth)
-            return text.lineCount == 0 ? nil : text
+            let raw = model.edges[Int(model.graph.edges[edgeIndex].edge)]
+            let measured = PlaneMapLabel.block(Self.label(raw.text, type: raw.labelType, in: text), measurer: edgeText, maximumWidth: wrappingWidth)
+            return measured.lineCount == 0 ? nil : measured
         }
         let edgeTexts = clustered.laidOutEdgeIndices.map(measuredText(of:))
         var heldEdgeTexts: [Int: DiagramTextBlock] = [:]
@@ -106,13 +117,18 @@ struct AgentFlowMeasurement {
 
     /// Each graph node's style and text look from its classes' styles then its own, and the look of each node that has
     /// styles (a node without any has no style and the look of no declaration, `BlockAppearance()`).
-    private static func looks(of graph: AgentFlowGraph)
+    private static func looks(of model: AgentFlowModel)
         -> (styles: [DiagramElementStyle?], textLooks: [(isBold: Bool, isItalic: Bool)], styledAppearances: [Int: BlockAppearance]) {
-        var styles = [DiagramElementStyle?](repeating: nil, count: graph.nodes.count)
-        var textLooks = [(isBold: Bool, isItalic: Bool)](repeating: (false, false), count: graph.nodes.count)
+        let nodes = model.graph.nodes
+        var styles: [DiagramElementStyle?] = []
+        var textLooks: [(isBold: Bool, isItalic: Bool)] = []
         var styledAppearances: [Int: BlockAppearance] = [:]
-        for index in graph.nodes.indices where !graph.nodes[index].compiledStyles.isEmpty || !graph.nodes[index].styles.isEmpty {
-            let declarations = graph.nodes[index].compiledStyles + graph.nodes[index].styles
+        for index in nodes.indices where !nodes[index].compiledStyles.isEmpty || !nodes[index].styles.isEmpty {
+            if styles.isEmpty {
+                styles = [DiagramElementStyle?](repeating: nil, count: nodes.count)
+                textLooks = [(isBold: Bool, isItalic: Bool)](repeating: (false, false), count: nodes.count)
+            }
+            let declarations = model.graphStyleStrings(nodes[index].compiledStyles) + model.graphStyleStrings(nodes[index].styles)
             styles[index] = style(declarations)
             let appearance = BlockAppearance(classNames: nil, styles: declarations, classes: [:])
             textLooks[index] = (appearance.isBold, appearance.isItalic)
@@ -121,24 +137,35 @@ struct AgentFlowMeasurement {
         return (styles, textLooks, styledAppearances)
     }
 
+    /// The style of the graph node at `index`, or nil.
+    func style(of index: Int) -> DiagramElementStyle? { styles.isEmpty ? nil : styles[index] }
+
+    /// The weight and slant of the text of the graph node at `index`.
+    func textLook(of index: Int) -> (isBold: Bool, isItalic: Bool) { textLooks.isEmpty ? (false, false) : textLooks[index] }
+
     /// A node's shape around its text, and how far below the shape's center the text is: a collapsed flow is a box with
     /// room for its dots below the text, any other shape is sized for text at least `minimumWidth` wide but a diamond,
-    /// which grows twice as fast as its text and so keeps the text's own width.
-    static func size(of node: AgentFlowGraphNode, textSize: CGSize, minimumWidth: CGFloat) -> (CGSize, CGFloat) {
-        size(ofShape: node.shape, textSize: textSize, minimumWidth: minimumWidth)
-    }
-
-    /// `size(of:textSize:minimumWidth:)` of a node of Mermaid's shape name `shape`.
-    static func size(ofShape shape: String, textSize: CGSize, minimumWidth: CGFloat) -> (CGSize, CGFloat) {
-        guard shape != "collapsedGroup" else {
+    /// which grows twice as fast as its text and so keeps the text's own width. `shape` is a number of
+    /// `AgentFlowShapeNames`.
+    static func size(ofShape shape: Int16, textSize: CGSize, minimumWidth: CGFloat) -> (CGSize, CGFloat) {
+        guard shape != AgentFlowShapeNames.collapsedGroup else {
             return (CGSize(width: max(textSize.width, minimumWidth) + 2 * FlowchartShapeGeometry.horizontalPadding,
                            height: textSize.height + 2 * FlowchartShapeGeometry.verticalPadding + AgentFlowLayoutEngine.collapsedMarkHeight),
                     -AgentFlowLayoutEngine.collapsedMarkHeight / 2)
         }
-        let drawn = AgentFlowShapes.drawnShape(shape)
+        let drawn = AgentFlowShapeNames.drawnShapes[Int(shape)]
         let sizingWidth = drawn == .diamond ? textSize.width : max(textSize.width, minimumWidth)
         let sized = FlowchartShapeGeometry.size(of: drawn, textSize: CGSize(width: sizingWidth, height: textSize.height))
         return (sized.size, sized.textOffset)
+    }
+
+    /// The text of the range `range` of `text` as drawn: a Markdown string loses its markers, `<br>` breaks lines.
+    static func label(_ range: MermaidTextRange, type: AgentFlowLabelType, in text: AgentFlowTextBytes) -> DiagramLabel {
+        guard !range.isEmpty else { return DiagramLabel(lines: []) }
+        return text.bytes.withUnsafeBufferPointer { bytes in
+            DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[range.lowerBound..<range.upperBound]),
+                                      form: type == .markdown ? .markdown : .plain)
+        }
     }
 
     /// A node's, a flow's or an edge's text as drawn: a Markdown string loses its markers, `<br>` breaks lines.
