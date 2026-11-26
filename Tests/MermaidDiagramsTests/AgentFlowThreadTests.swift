@@ -7,7 +7,7 @@
  *              table and the pair counts' basis are made once for every thread.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -20,13 +20,14 @@ final class AgentFlowThreadTests: XCTestCase {
     /// Twelve threads prepare the same agent flows at once, each starting at another input, regular and at two narrow
     /// widths: every SVG, narrow SVG and spoken text is the one prepared alone, before the threads start. The inputs are
     /// the documentation examples and Pele's reference inputs, each also kept to ASCII (the reader's byte paths) and with
-    /// a name beyond ASCII (its String paths), the hostile layouts, and texts whose many edges grow the pair counts.
+    /// names beyond ASCII that the grammar reads (its String paths: the Kelvin sign and `K` one node), the hostile
+    /// layouts, and texts whose many edges grow the pair counts.
     func testAgentFlowsPreparedOnManyThreadsAtOnceAreThosePreparedAlone() throws {
         let typography = DiagramSceneSamples.typography
         var sources: [String] = []
         for name in ["agentflow-docs", "agentflow-reference"] {
             let corpus = try PeleResults.sources(ofCorpus: name)
-            sources += corpus + corpus.map(GraphTextMutations.ascii) + corpus.map { source in source + "\n  caf\u{E9} --> cafe\u{301}" }
+            sources += corpus + corpus.map(GraphTextMutations.ascii) + corpus.map { source in source + "\n  x\u{212A} --> xK\n  y\u{E9} --> xK" }
         }
         sources += AgentFlowHostileTexts.all
         sources.append("agentflow-beta\n" + (0..<300).map { index in "  n\(index % 23) --> n\(index % 17)" }.joined(separator: "\n"))
