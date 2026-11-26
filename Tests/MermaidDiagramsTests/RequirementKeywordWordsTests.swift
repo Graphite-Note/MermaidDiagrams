@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: The requirement lexer's keywords told from packed bytes against 0.7.0's dictionary of lowercased words:
  *              every keyword in random cases, at the end of a text and inside one, and random words of word characters
- *              of every length, each told alike.
+ *              of every length, each told alike; and its bytes told by masks, and its whitespace runs, against 0.7.0's
+ *              tests of them for every byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -63,6 +64,33 @@ final class RequirementKeywordWordsTests: XCTestCase {
             guard !word.isEmpty else { continue }
             let suffix = [UInt8](repeating: UInt8(ascii: "z"), count: next(10))
             XCTAssertEqual(keyword(word, prefix: [], suffix: suffix), referenceKeyword(word), String(decoding: word, as: UTF8.self))
+        }
+    }
+
+    /// Every byte is a word byte and ends an unquoted text exactly where 0.7.0's comparisons said so.
+    func testEveryByteIsToldAsZeroSevenToldIt() {
+        for value in 0...255 {
+            let byte = UInt8(value)
+            let isWordByte = MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.underscore
+            XCTAssertEqual(RequirementLexer.isWordByte(byte), isWordByte, "\(value)")
+            let endsUnquotedText = [MermaidByte.colon, MermaidByte.comma, MermaidByte.carriageReturn, MermaidByte.newline, MermaidByte.openingBrace,
+                                    MermaidByte.lessThan, MermaidByte.greaterThan, MermaidByte.hyphen, MermaidByte.equals].contains(byte)
+            XCTAssertEqual(RequirementLexer.endsUnquotedText(byte), endsUnquotedText, "\(value)")
+        }
+    }
+
+    /// Runs of white space, ASCII and beyond (no-break spaces, ideographic spaces, line separators), mixed with other
+    /// bytes, end where JavaScript's whitespace ends them.
+    func testWhitespaceRunsEndWhereJavaScriptsEndThem() {
+        let pieces: [[UInt8]] = [[0x20], [0x09], [0x0A], [0x0B], [0x0C], [0x0D], Array("\u{A0}".utf8), Array("\u{3000}".utf8), Array("\u{2028}".utf8),
+                                 Array("\u{2009}".utf8), Array("\u{FEFF}".utf8), Array("é".utf8), Array("x".utf8), [0x80], [0xC1], Array("\u{1680}".utf8)]
+        for _ in 0..<20_000 {
+            let text = (0..<(1 + next(10))).flatMap { _ in pieces[next(pieces.count)] }
+            text.withUnsafeBufferPointer { bytes in
+                for start in 0..<bytes.count {
+                    XCTAssertEqual(RequirementLexer.endOfWhitespace(in: bytes, from: start), JavaScriptWhitespace.endOfRun(in: bytes, from: start), "\(text)")
+                }
+            }
         }
     }
 }
