@@ -2,10 +2,11 @@
  * File: EntityRelationshipBoxMeasurement.swift
  * --------------------------------------------
  * Layer: Core
- * Description: An entity's box sized around its name and attribute table, Pele's, its rows placed when the box is.
+ * Description: An entity's box sized around its name and attribute table, Pele's, its cells measured into the layout's
+ *              lines and its rows' heights and columns' widths kept for when the box is placed.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -16,25 +17,47 @@ import Darwin
 import Glibc
 #endif
 
-/// An entity's box measured: its size, its name placed from the box's top left corner, and its attribute table, whose
-/// rows are placed when the box is.
+/// The widths of an attribute table's four columns: type, name, keys, comment.
+struct EntityRelationshipColumnWidths {
+    var type: CGFloat = 0
+    var name: CGFloat = 0
+    var keys: CGFloat = 0
+    var comment: CGFloat = 0
+
+    subscript(column: Int) -> CGFloat {
+        get {
+            switch column {
+            case 0: type
+            case 1: name
+            case 2: keys
+            default: comment
+            }
+        }
+        set {
+            switch column {
+            case 0: type = newValue
+            case 1: name = newValue
+            case 2: keys = newValue
+            default: comment = newValue
+            }
+        }
+    }
+}
+
+/// An entity's box measured: its size, its name placed from the box's top left corner, and its attribute table: its
+/// rows (`rowCount` of the measurement's `rowHeights` from `firstRow`, their cells four to a row in its `cells`), its
+/// columns' widths, the height of a line of its text, and where the rows start, below the header.
 struct EntityRelationshipMeasuredBox {
     let size: CGSize
-    let name: DiagramTextBlock
-    /// The attribute table, nil for an entity without attributes.
-    let table: EntityRelationshipAttributeTable?
-    /// Where the rows start, below the header.
+    let name: DiagramMeasuredText
+    let firstRow: Int32
+    let rowCount: Int32
+    let columnWidths: EntityRelationshipColumnWidths
+    let rowLineHeight: CGFloat
     let headerHeight: CGFloat
     let rowFontSize: CGFloat
 
-    /// The box with its top left corner at `origin`, then moved by `offset`: every place found from the box's corner
-    /// and moved as `translated(by:)` moves it, first by `origin` and then by `offset`.
-    func placed(origin: CGVector, offset: CGVector) -> EntityRelationshipLayoutEntity {
-        let rows = table?.rows(top: headerHeight, width: size.width, inset: EntityRelationshipBoxMeasurement.cellHorizontalPadding, rowFontSize: rowFontSize,
-                               movedBy: origin, then: offset) ?? []
-        return EntityRelationshipLayoutEntity(frame: frame(origin: origin).offsetBy(dx: offset.dx, dy: offset.dy),
-                                              name: name.translated(by: origin).translated(by: offset), rows: rows)
-    }
+    var rowIndices: Range<Int> { Int(firstRow)..<Int(firstRow + rowCount) }
 
     /// The box's frame with its top left corner at `origin`, as the box placed there has it.
     func frame(origin: CGVector) -> CGRect {
@@ -56,47 +79,50 @@ enum EntityRelationshipBoxMeasurement {
     /// The widest a comment's line is before it wraps; types, names and keys never wrap.
     static let commentWrappingWidth: CGFloat = 260
 
+    /// The box of entity `index`, its cells measured into `measured`'s lines and lists.
     /// - Parameter minimumSize: The least size the entity's loops need; its height counts for a box without
     ///   attributes only, which loops out of its right side.
-    static func box<Measurer>(for entity: EntityRelationshipEntity, measurers: EntityRelationshipTextMeasurers<Measurer>,
-                              minimumSize: CGSize, cells constantCells: inout EntityRelationshipConstantCells) -> EntityRelationshipMeasuredBox {
-        var name = DiagramTextBlock(label: entity.label, measurer: measurers.name, maximumWidth: nameWrappingWidth)
-        let nameHeight = max(name.size.height, measurers.name.lineHeight)
+    static func box<Measurer>(ofEntity index: Int, cells cellMeasuring: EntityRelationshipCellMeasuring<Measurer>,
+                              measurers: EntityRelationshipFlatMeasurers<Measurer>, minimumSize: CGSize, into measured: inout EntityRelationshipMeasurement,
+                              constantCells: inout EntityRelationshipConstantCells) -> EntityRelationshipMeasuredBox {
+        let entity = cellMeasuring.model.entities[index]
+        var name = cellMeasuring.label(entity.label, measurer: measurers.name, maximumWidth: nameWrappingWidth, into: &measured.lines)
+        let nameHeight = max(name.size.height, measurers.name.singleLineHeight)
         let narrowest = max(minimumWidth, minimumSize.width, name.size.width + 2 * nameHorizontalPadding)
-        guard !entity.attributes.isEmpty else {
+        guard entity.attributeCount > 0 else {
             let size = CGSize(width: narrowest, height: max(nameHeight + 2 * nameVerticalPadding, minimumSize.height))
             name.center = CGPoint(x: size.width / 2, y: size.height / 2)
-            return EntityRelationshipMeasuredBox(size: size, name: name, table: nil, headerHeight: 0, rowFontSize: measurers.row.fontSize)
+            return EntityRelationshipMeasuredBox(size: size, name: name, firstRow: Int32(measured.rowHeights.count), rowCount: 0,
+                                                 columnWidths: EntityRelationshipColumnWidths(), rowLineHeight: measurers.row.singleLineHeight,
+                                                 headerHeight: 0, rowFontSize: measurers.row.fontSize)
         }
-        var cells: [DiagramTextBlock] = []
-        cells.reserveCapacity(entity.attributes.count * EntityRelationshipAttributeTable.cellsPerRow)
-        for attribute in entity.attributes { appendCells(of: attribute, measurers: measurers, constantCells: &constantCells, to: &cells) }
-        let table = EntityRelationshipAttributeTable(cells: cells, rowLineHeight: measurers.row.lineHeight)
+        let firstRow = measured.rowHeights.count
+        var table = EntityRelationshipAttributeTable(rowLineHeight: measurers.row.singleLineHeight)
+        for attributeIndex in entity.attributeIndices {
+            let attribute = cellMeasuring.model.attributes[attributeIndex]
+            let type = cellMeasuring.typeOrName(attribute.type, of: attribute, isType: true, measurer: measurers.row, into: &measured.lines)
+            let attributeName = cellMeasuring.typeOrName(attribute.name, of: attribute, isType: false, measurer: measurers.row, into: &measured.lines)
+            let keys = constantCells.keys(of: attribute, model: cellMeasuring.model, measurer: measurers.key, into: &measured.lines)
+            let comment = attribute.hasComment
+                ? cellMeasuring.comment(of: attribute, measurer: measurers.row, maximumWidth: commentWrappingWidth, into: &measured.lines)
+                : constantCells.noComment(measurer: measurers.row.measurer, into: &measured.lines)
+            measured.rowHeights.append(table.addRow(type, attributeName, keys, comment))
+            measured.cells.append(type)
+            measured.cells.append(attributeName)
+            measured.cells.append(keys)
+            measured.cells.append(comment)
+        }
         let width = max(narrowest, table.filledWidth + 2 * cellHorizontalPadding)
         let headerHeight = nameHeight + 2 * headerVerticalPadding
         name.center = CGPoint(x: width / 2, y: headerHeight / 2)
-        return EntityRelationshipMeasuredBox(size: CGSize(width: width, height: headerHeight + table.height), name: name, table: table,
-                                             headerHeight: headerHeight, rowFontSize: measurers.row.fontSize)
-    }
-
-    /// An attribute's type, name, keys and comment, measured in that order; a cell with nothing to show has no lines. The
-    /// keys and a comment that is not written are blocks of a closed set, measured once a diagram (`constantCells`).
-    private static func appendCells<Measurer>(of attribute: EntityRelationshipAttribute, measurers: EntityRelationshipTextMeasurers<Measurer>,
-                                              constantCells: inout EntityRelationshipConstantCells, to cells: inout [DiagramTextBlock]) {
-        let unwrapped = CGFloat.greatestFiniteMagnitude
-        cells.append(DiagramTextBlock(label: lines(of: attribute.type), measurer: measurers.row, maximumWidth: unwrapped))
-        cells.append(DiagramTextBlock(label: lines(of: attribute.name), measurer: measurers.row, maximumWidth: unwrapped))
-        cells.append(constantCells.keys(attribute.keys, measurer: measurers.key))
-        if let comment = attribute.comment {
-            cells.append(DiagramTextBlock(label: comment, measurer: measurers.row, maximumWidth: commentWrappingWidth))
-        } else {
-            cells.append(constantCells.noComment(measurer: measurers.row))
-        }
+        return EntityRelationshipMeasuredBox(size: CGSize(width: width, height: headerHeight + table.height), name: name, firstRow: Int32(firstRow),
+                                             rowCount: Int32(measured.rowHeights.count - firstRow), columnWidths: table.columnWidths,
+                                             rowLineHeight: table.rowLineHeight, headerHeight: headerHeight, rowFontSize: measurers.row.fontSize)
     }
 
     /// A type or a name in backticks may hold line breaks; each starts a line. A text without a line break or a final
     /// carriage return is its one line, the label `DiagramLabel(lines:)` makes of it.
-    private static func lines(of text: String) -> DiagramLabel {
+    static func lines(of text: String) -> DiagramLabel {
         // A line feed, alone or after a carriage return, is byte 10; a final carriage return is byte 13.
         if !hasLineBreak(text) { return DiagramLabel(lines: [text]) }
         return DiagramLabel(lines: text.split(separator: "\n", omittingEmptySubsequences: false).map { line in

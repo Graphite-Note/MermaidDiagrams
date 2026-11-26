@@ -6,8 +6,8 @@
  *              names byte ranges until the diagram keeps them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 /// Reads an entity relationship diagram's statements after its `erDiagram` keyword, as Mermaid's grammar does:
@@ -25,11 +25,16 @@ struct EntityRelationshipParser {
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> EntityRelationshipDiagram {
         try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
             let bytes = GraphDiagramBytes(buffer, position: cursor.position)
-            var parser = EntityRelationshipParser(lexer: EntityRelationshipLexer(bytes: bytes),
-                                                  builder: EntityRelationshipDiagramBuilder(limits: limits, bytes: bytes), currentStart: bytes.position)
-            try parser.advance()
-            try parser.readStatements()
-            return parser.builder.finished()
+            return try EntityRelationshipReadingScratch.withLists(isASCII: bytes.isASCII) { lists throws(MermaidDiagramReadError) in
+                var parser = EntityRelationshipParser(lexer: EntityRelationshipLexer(bytes: bytes),
+                                                      builder: EntityRelationshipDiagramBuilder(limits: limits, bytes: bytes), currentStart: bytes.position)
+                swap(&parser.builder.lists, &lists)
+                defer { swap(&lists, &parser.builder.lists) }
+                parser.builder.reserveNames()
+                try parser.advance()
+                try parser.readStatements()
+                return parser.builder.finished(text: cursor.bytes)
+            }
         }
     }
 
@@ -95,9 +100,10 @@ struct EntityRelationshipParser {
         if current == .openingBracket { return try readAliasedEntity(name) }
         try readClassShorthand()
         if case .cardinality(let firstCardinality) = current { return try readRelationship(from: name, firstCardinality: firstCardinality) }
-        let attributes = try readAttributeBlock(of: name)
+        let firstAttribute = builder.attributeCount
+        try readAttributeBlock(of: name)
         let index = try builder.entityIndex(for: name)
-        builder.addAttributes(attributes, toEntityAt: index)
+        builder.giveAttributes(from: firstAttribute, toEntityAt: index)
         builder.noteNameInOpenSubgraph(name.range)
     }
 
@@ -110,10 +116,11 @@ struct EntityRelationshipParser {
         guard current == .closingBracket else { throw unclosedAlias(opening: opening) }
         try advance()
         try readClassShorthand()
-        let attributes = try readAttributeBlock(of: name)
+        let firstAttribute = builder.attributeCount
+        try readAttributeBlock(of: name)
         let index = try builder.entityIndex(for: name)
         builder.setAlias(EntityRelationshipName(range: aliasRange, form: aliasForm), ofEntityAt: index)
-        builder.addAttributes(attributes, toEntityAt: index)
+        builder.giveAttributes(from: firstAttribute, toEntityAt: index)
         builder.noteNameInOpenSubgraph(name.range)
     }
 
@@ -133,17 +140,19 @@ struct EntityRelationshipParser {
         let label = try readRelationshipLabel()
         let firstIndex = try builder.entityIndex(for: first)
         let secondIndex = try builder.entityIndex(for: second)
-        try builder.addRelationship(EntityRelationship(firstEntityIndex: firstIndex, secondEntityIndex: secondIndex, firstEntityCardinality: firstCardinality,
-                                                       secondEntityCardinality: secondCardinality, identification: identification, label: label))
+        try builder.addRelationship(EntityRelationshipRelationshipRecord(firstEntityIndex: Int32(firstIndex), secondEntityIndex: Int32(secondIndex),
+                                                                         firstEntityCardinality: firstCardinality, secondEntityCardinality: secondCardinality,
+                                                                         identification: identification, label: label))
         builder.noteNamesInOpenSubgraph(first.range, second.range)
     }
 
-    /// A word, a quoted name or other quoted text; a number is no label in Mermaid's grammar.
-    private mutating func readRelationshipLabel() throws(MermaidDiagramReadError) -> DiagramLabel {
-        let label: DiagramLabel
+    /// A word, a quoted name or other quoted text, by its range, read as its form draws it; a number is no label in
+    /// Mermaid's grammar.
+    private mutating func readRelationshipLabel() throws(MermaidDiagramReadError) -> EntityRelationshipText {
+        let label: EntityRelationshipText
         switch current {
-        case .name(let range, let form) where form != .number: label = EntityRelationshipName(range: range, form: form).label(in: bytes)
-        case .quotedText(let range): label = DiagramLabelDecoder.label(from: bytes.text(range), form: .markdown)
+        case .name(let range, let form) where form != .number: label = EntityRelationshipText(name: range, form: form)
+        case .quotedText(let range): label = EntityRelationshipText(range: range, kind: .markdown)
         case .name, .cardinality, .identification, .keyword, .accessibilityTitle, .accessibilityDescription, .direction, .openingBrace,
              .openingBracket, .closingBracket, .classSeparator, .colon, .comma, .lineBreak, .endOfText, .unexpectedCharacter:
             throw problem(.expectedRelationshipLabel)
@@ -152,12 +161,11 @@ struct EntityRelationshipParser {
         return label
     }
 
-    /// The `{ … }` after an entity, or no attributes when there is none.
-    private mutating func readAttributeBlock(of name: EntityRelationshipName) throws(MermaidDiagramReadError) -> [EntityRelationshipAttribute] {
-        guard current == .openingBrace else { return [] }
-        let attributes = try EntityRelationshipAttributeSyntax.readBlock(&lexer.bytes, entity: name.range)
+    /// The `{ … }` after an entity, its rows appended to the builder's attributes, or nothing when there is none.
+    private mutating func readAttributeBlock(of name: EntityRelationshipName) throws(MermaidDiagramReadError) {
+        guard current == .openingBrace else { return }
+        try EntityRelationshipAttributeSyntax.readBlock(&lexer.bytes, entity: name.range, into: &builder.lists)
         try advance()
-        return attributes
     }
 
     /// `subgraph name` or `subgraph name [title words]`, alone on its line.
