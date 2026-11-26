@@ -5,8 +5,8 @@
  * Description: Places a quadrant chart's points and their texts as Pele does.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -55,14 +55,22 @@ struct QuadrantChartPointPlacement {
     func placed() -> [QuadrantChartLayoutPoint] {
         let drawn = zip(chart.points, pointTexts).compactMap(drawnPoint)
         let isCareful = drawn.count <= Self.largestCarefulPointCount
-        var taken = gapBoxes + quadrantTextBoxes
-        if isCareful { taken += drawn.map { point in point.center.box(halfWidth: point.reach, halfHeight: point.reach) } }
+        let gaps = gapBoxes
+        // The boxes taken, each by its edges read once, as `CGRect`'s own `minX` to `maxY` read them.
+        var taken: [QuadrantChartBoxEdges] = []
+        if isCareful {
+            taken.reserveCapacity(gaps.count + quadrantTextBoxes.count + 2 * drawn.count)
+            for box in gaps { taken.append(QuadrantChartBoxEdges(box)) }
+            for box in quadrantTextBoxes { taken.append(QuadrantChartBoxEdges(box)) }
+            for point in drawn { taken.append(QuadrantChartBoxEdges(point.center.box(halfWidth: point.reach, halfHeight: point.reach))) }
+        }
+        let plotEdges = QuadrantChartBoxEdges(plot.frame)
         var points: [QuadrantChartLayoutPoint] = []
         points.reserveCapacity(drawn.count)
         for point in drawn {
             let halfSize = halfSize(of: point.text)
-            let center = textCenter(point, halfSize: halfSize, taken: isCareful ? taken : nil)
-            if isCareful { taken.append(center.box(halfWidth: halfSize.width, halfHeight: halfSize.height)) }
+            let center = textCenter(point, halfSize: halfSize, taken: isCareful ? taken : nil, gapCount: gaps.count, plotEdges: plotEdges)
+            if isCareful { taken.append(QuadrantChartBoxEdges(center.box(halfWidth: halfSize.width, halfHeight: halfSize.height))) }
             var text = point.text
             text.center = center
             points.append(QuadrantChartLayoutPoint(center: point.center, radius: point.radius, fill: point.fill, stroke: point.stroke, text: text))
@@ -91,50 +99,49 @@ struct QuadrantChartPointPlacement {
     }
 
     /// Where the point's text goes: the first free place of the two rounds, else the first place inside the plot, else
-    /// below the point. Every place is free when `taken` is nil.
-    private func textCenter(_ point: DrawnPoint, halfSize: CGSize, taken: [CGRect]?) -> CGPoint {
-        let places = candidatePlaces(point, halfSize: halfSize)
+    /// below the point. Every place is free when `taken` is nil; the second round leaves the first `gapCount` boxes out.
+    private func textCenter(_ point: DrawnPoint, halfSize: CGSize, taken: [QuadrantChartBoxEdges]?, gapCount: Int,
+                            plotEdges: QuadrantChartBoxEdges) -> CGPoint {
         var chosen: CGPoint?
         for round in 0..<2 {
-            for (place, isClamped, margin) in places {
+            for candidate in 0..<Self.candidateCount {
+                let (place, isClamped, margin) = candidatePlace(candidate, of: point, halfSize: halfSize)
                 let center = isClamped && point.text.size.width < plot.frame.width ? clamped(place, halfWidth: halfSize.width, margin: margin) : place
-                let box = center.box(halfWidth: halfSize.width, halfHeight: halfSize.height)
-                guard isInsidePlot(box) else { continue }
-                let isFree = taken.map { boxes in Self.isClear(box, of: boxes.dropFirst(round == 0 ? 0 : gapBoxes.count)) } ?? true
+                let box = QuadrantChartBoxEdges(center.box(halfWidth: halfSize.width, halfHeight: halfSize.height))
+                guard box.isInside(plotEdges) else { continue }
+                let isFree = taken.map { boxes in box.isClear(of: boxes, from: round == 0 ? 0 : gapCount) } ?? true
                 if chosen == nil || isFree { chosen = center }
                 if isFree { return center }
             }
         }
-        return chosen ?? places[0].place
+        return chosen ?? candidatePlace(0, of: point, halfSize: halfSize).place
     }
 
-    /// Below the point, above it, right of it, left of it, and below its quadrant's text, each with whether it is moved
-    /// across to stay inside the plot, and how far from the plot's edges it then stays.
-    private func candidatePlaces(_ point: DrawnPoint, halfSize: CGSize) -> [(place: CGPoint, isClamped: Bool, margin: CGFloat)] {
+    /// How many places a text is tried at.
+    private static let candidateCount = 5
+
+    /// Place `index` of below the point, above it, right of it, left of it, and below its quadrant's text, with whether
+    /// it is moved across to stay inside the plot, and how far from the plot's edges it then stays.
+    private func candidatePlace(_ index: Int, of point: DrawnPoint, halfSize: CGSize) -> (place: CGPoint, isClamped: Bool, margin: CGFloat) {
         let away = point.reach + metrics.pointTextPadding
-        let inset = min(away, max(0, (plot.quadrantSize.width - point.text.size.width) / 2))
-        let quadrantText = quadrantTextBoxes[quadrantIndex(of: point.center)]
-        let belowQuadrantText = max(point.center.y + away, quadrantText.maxY + metrics.pointTextPadding) + halfSize.height
         let center = point.center
-        return [
-            (CGPoint(x: center.x, y: center.y + away + halfSize.height), true, 0),
-            (CGPoint(x: center.x, y: center.y - away - halfSize.height), true, 0),
-            (CGPoint(x: center.x + away + halfSize.width, y: center.y), false, 0),
-            (CGPoint(x: center.x - away - halfSize.width, y: center.y), false, 0),
-            (CGPoint(x: center.x, y: belowQuadrantText), true, inset),
-        ]
+        switch index {
+        case 0: return (CGPoint(x: center.x, y: center.y + away + halfSize.height), true, 0)
+        case 1: return (CGPoint(x: center.x, y: center.y - away - halfSize.height), true, 0)
+        case 2: return (CGPoint(x: center.x + away + halfSize.width, y: center.y), false, 0)
+        case 3: return (CGPoint(x: center.x - away - halfSize.width, y: center.y), false, 0)
+        default:
+            let inset = min(away, max(0, (plot.quadrantSize.width - point.text.size.width) / 2))
+            let quadrantText = quadrantTextBoxes[quadrantIndex(of: point.center)]
+            let belowQuadrantText = max(point.center.y + away, quadrantText.maxY + metrics.pointTextPadding) + halfSize.height
+            return (CGPoint(x: center.x, y: belowQuadrantText), true, inset)
+        }
     }
 
     /// `place` moved across, as little as it takes, to keep the text `margin` inside the plot's edges.
     private func clamped(_ place: CGPoint, halfWidth: CGFloat, margin: CGFloat) -> CGPoint {
         let frame = plot.frame
         return CGPoint(x: min(max(place.x, frame.minX + halfWidth + margin), frame.maxX - halfWidth - margin), y: place.y)
-    }
-
-    /// Whether `box` is inside the plot, its edges on the plot's edges included.
-    private func isInsidePlot(_ box: CGRect) -> Bool {
-        let frame = plot.frame
-        return box.minX >= frame.minX && box.maxX <= frame.maxX && box.minY >= frame.minY && box.maxY <= frame.maxY
     }
 
     /// The quadrant a point is in, by index: 0 at the top right, then anticlockwise.
@@ -151,12 +158,6 @@ struct QuadrantChartPointPlacement {
         let size = plot.quadrantSize
         return [CGRect(x: frame.minX + size.width, y: frame.minY, width: frame.width - 2 * size.width, height: frame.height),
                 CGRect(x: frame.minX, y: frame.minY + size.height, width: frame.width, height: frame.height - 2 * size.height)]
-    }
-
-    /// Whether `box` overlaps none of `boxes`, edges that only touch apart; an empty box is a point that a box overlaps
-    /// when the point is strictly inside it.
-    private static func isClear(_ box: CGRect, of boxes: ArraySlice<CGRect>) -> Bool {
-        !boxes.contains { other in box.minX < other.maxX && box.maxX > other.minX && box.minY < other.maxY && box.maxY > other.minY }
     }
 }
 

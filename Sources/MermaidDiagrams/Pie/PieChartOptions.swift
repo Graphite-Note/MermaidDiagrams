@@ -5,8 +5,8 @@
  * Description: The options of a pie chart its front matter (`config:`, `pie:`) and its directives set.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -32,6 +32,8 @@ public struct PieChartOptions: Equatable, Sendable {
     public init() {}
 
     init(_ options: MermaidConfigurationOptions) {
+        // Most diagrams set no option: every value keeps its default, which is what each option read from nothing gives.
+        guard !options.values.isEmpty else { return }
         if case .number(let position) = options.values["textPosition"], position >= 0, position <= 1 { percentagePosition = CGFloat(position) }
         if case .number(let hole) = options.values["donutHole"], hole >= 0, hole <= Self.largestHoleShare { holeShare = CGFloat(hole) }
         if case .text(let written) = options.values["legendPosition"], let position = PieChartLegendPosition(rawValue: written.lowercased()) {

@@ -6,8 +6,8 @@
  *              repeat: `trim`, the order of `sort`, the replacement of runs of blanks, and a search for an ASCII text.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 /// JavaScript's string operations as Pele's readers of the diagrams drawn on a fixed plane use them.
@@ -49,6 +49,7 @@ enum PlaneMapText {
     /// `text` trimmed, its runs of two or more spaces and tabs made one space, as Langium's title and accessibility
     /// statements are (`single` in Pele's `common/tokens.ts`).
     static func singleSpaced(_ text: String) -> String {
+        guard !isUnchangedWhenSingleSpaced(text) else { return text }
         var result = ""
         var blankRun = ""
         for character in trimmed(text) {
@@ -61,5 +62,22 @@ enum PlaneMapText {
             result.append(character)
         }
         return result + (blankRun.count >= 2 ? " " : blankRun)
+    }
+
+    /// Whether `text` starts and ends with printable ASCII other than a space, which leaves nothing to trim, and holds no
+    /// two blank bytes in a row: a space or a tab is a blank character only as a byte of its own, so the text then holds
+    /// no run of two blank characters to make one space either, and `singleSpaced` gives it back as it is.
+    private static func isUnchangedWhenSingleSpaced(_ text: String) -> Bool {
+        let bytes = text.utf8
+        guard let first = bytes.first, let last = bytes.last, isPrintableASCIIOtherThanSpace(first), isPrintableASCIIOtherThanSpace(last) else {
+            return false
+        }
+        var previousIsBlank = false
+        for byte in bytes {
+            let isBlank = byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t")
+            if isBlank, previousIsBlank { return false }
+            previousIsBlank = isBlank
+        }
+        return true
     }
 }

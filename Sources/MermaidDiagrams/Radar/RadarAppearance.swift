@@ -5,8 +5,8 @@
  * Description: The options of a radar chart its front matter (`config:`, `radar:`) and its directives set.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -35,6 +35,8 @@ public struct RadarAppearance: Equatable, Sendable {
     public init() {}
 
     init(_ options: MermaidConfigurationOptions) {
+        // Most diagrams set no option: every value keeps its default, which is what each option read from nothing gives.
+        guard !options.values.isEmpty else { return }
         func number(_ name: String, _ fallback: Double, _ least: Double, _ largest: Double) -> CGFloat {
             CGFloat(options.boundedNumber(name, fallback: fallback, least: least, largest: largest))
         }

@@ -3,18 +3,29 @@
  * ---------------------------
  * Layer: Core
  * Description: A Mermaid tree view as its text describes it: its files and folders in the order they are written, each
- *              with its place in the tree and its annotations, and the options its front matter sets.
+ *              with its place in the tree and its annotations, kept as records of ranges into its text, and the options
+ *              its front matter sets.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 /// A Mermaid tree view (`treeView-beta`): a tree of files and folders, written by indentation or with box-drawing
-/// characters (`├──`, `└──`, `│`), as Mermaid's tree view database holds it.
-public struct TreeViewDiagram: Equatable, Sendable {
+/// characters (`├──`, `└──`, `│`), as Mermaid's tree view database holds it. It keeps its entries as flat records of
+/// ranges into the text they were read from (`TreeViewEntryRecord`); `entries` and `topLevelIndices` are made from them
+/// when read, and two diagrams are equal when those, the titles and the options are.
+public struct TreeViewDiagram: Sendable {
+    /// The lines after the keyword as the grammar reads them, then the text of any entry field read as a String (one
+    /// past ASCII at a place where Swift's characters and the bytes differ): what the records' ranges index.
+    var text: [UInt8] = []
     /// The entries in the order they are written, which is depth first: each before its children.
-    public internal(set) var entries: [TreeViewEntry] = []
+    var records: [TreeViewEntryRecord] = []
+    /// The first and last entries at the top of the tree, -1 for none; the others follow `nextSibling`.
+    var firstTopLevelIndex: Int32 = -1
+    var lastTopLevelIndex: Int32 = -1
+    /// The deepest entry's depth, 0 without entries.
+    var deepestDepth: Int32 = 0
     /// `title …` in the diagram, else `title:` in the front matter, or nil.
     public internal(set) var title: String?
     /// `accTitle: …`, or nil.
@@ -23,8 +34,56 @@ public struct TreeViewDiagram: Equatable, Sendable {
     public internal(set) var accessibilityDescription: String?
     public internal(set) var options = TreeViewOptions()
 
+    /// How many entries the tree has.
+    public var entryCount: Int { records.count }
+
+    /// The entries in the order they are written, each made from its record when read.
+    public var entries: [TreeViewEntry] {
+        records.indices.map(entry(at:))
+    }
+
     /// The indexes of the entries at the top of the tree, in order.
-    public internal(set) var topLevelIndices: [Int] = []
+    public var topLevelIndices: [Int] {
+        siblings(from: firstTopLevelIndex)
+    }
+
+    /// Entry `index` made from its record.
+    func entry(at index: Int) -> TreeViewEntry {
+        let record = records[index]
+        return TreeViewEntry(name: string(record.name), isFolder: record.isFolder, depth: Int(record.depth),
+                             parentIndex: record.parentIndex < 0 ? nil : Int(record.parentIndex),
+                             childIndices: siblings(from: record.firstChildIndex),
+                             icon: record.hasIcon ? (record.iconIsNone ? "none" : string(record.icon)) : nil,
+                             classes: record.hasClasses ? string(record.classes) : nil,
+                             description: record.hasDescription ? string(record.description) : nil)
+    }
+
+    /// The entry `first` and its next siblings, in order.
+    private func siblings(from first: Int32) -> [Int] {
+        var indices: [Int] = []
+        var index = first
+        while index >= 0 {
+            indices.append(Int(index))
+            index = records[Int(index)].nextSiblingIndex
+        }
+        return indices
+    }
+
+    /// The text of `range`, a range of `text`.
+    func string(_ range: MermaidTextRange) -> String {
+        precondition(range.start >= 0 && range.start <= range.end && range.upperBound <= text.count, "tree view range outside its text")
+        return String(decoding: text[range.lowerBound..<range.upperBound], as: UTF8.self)
+    }
+}
+
+extension TreeViewDiagram: Equatable {
+    /// Equal when they read as the same tree: the same entries, top level, titles and options, whatever their text holds
+    /// besides.
+    public static func == (left: TreeViewDiagram, right: TreeViewDiagram) -> Bool {
+        left.title == right.title && left.accessibilityTitle == right.accessibilityTitle
+            && left.accessibilityDescription == right.accessibilityDescription && left.options == right.options
+            && left.entries == right.entries && left.topLevelIndices == right.topLevelIndices
+    }
 }
 
 /// A file or folder of a tree view.
@@ -106,6 +165,36 @@ public enum TreeViewGlyph: Equatable, Sendable {
         guard icon != "none" else { return nil }
         self.init(named: icon, isFolder: entry.isFolder)
     }
+
+    /// The outline an `icon(…)` name gives, nil for `none`.
+    init?(icon: String, isFolder: Bool) {
+        guard icon != "none" else { return nil }
+        self.init(named: icon, isFolder: isFolder)
+    }
+
+    /// The outline an `icon(…)` name of ASCII bytes gives, nil for `none`: its characters are its bytes, so it is read
+    /// on them as `init(icon:isFolder:)` reads its String.
+    init?(asciiIcon icon: ArraySlice<UInt8>, isFolder: Bool) {
+        guard !icon.elementsEqual(Self.noneName) else { return nil }
+        var builtInName = icon
+        if icon.starts(with: Self.builtInPackBytes) {
+            builtInName = icon.dropFirst(Self.builtInPackBytes.count)
+        } else if icon.contains(MermaidByte.colon) {
+            builtInName = []
+        }
+        if builtInName.elementsEqual(Self.folderName) {
+            self = .folder
+        } else if builtInName.elementsEqual(Self.fileName) {
+            self = .file
+        } else {
+            self = isFolder ? .folder : .file
+        }
+    }
+
+    private static let noneName = Array("none".utf8)
+    private static let folderName = Array("folder".utf8)
+    private static let fileName = Array("file".utf8)
+    private static let builtInPackBytes = Array(builtInPack.utf8)
 
     /// The outline an icon name gives: the built-in one it names, else the entry's kind's.
     private init(named icon: String, isFolder: Bool) {

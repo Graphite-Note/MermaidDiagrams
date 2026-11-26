@@ -6,15 +6,17 @@
  *              for a narrow column, its effect, categories and causes as an indented list; and the title.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
 
 /// An Ishikawa diagram laid out on a page whose origin is the top left corner and whose y runs down, in points: across
-/// as a fishbone (`spine`, `categories`, `head`), or down as an outline (`outlineEntries`, `outlineConnectors`).
-public struct IshikawaLayout: Equatable, Sendable {
+/// as a fishbone (`spine`, `categories`, `head`), or down as an outline (`outlineEntries`, `outlineConnectors`). The
+/// fishbone's categories, causes and head are kept as flat records of measured texts (`IshikawaFishboneRecords`);
+/// `categories` and `head` are made from them when read.
+public struct IshikawaLayout: Sendable {
     public let size: CGSize
     /// The font the text was measured in.
     public let font: DiagramFont
@@ -23,13 +25,30 @@ public struct IshikawaLayout: Equatable, Sendable {
     public let spine: DiagramPath?
     /// The arrow where the spine meets the head.
     public let spineArrow: DiagramEdgeMark?
-    /// The categories, alternately above and below the spine, in the order written.
-    public let categories: [IshikawaLayoutCategory]
-    public let head: IshikawaLayoutHead?
+    /// The fishbone's categories, causes and head, none when the diagram runs down.
+    let fishbone: IshikawaFishboneRecords
     /// Down the page: the effect, the categories and the causes in the order written, each set in by its depth.
     public let outlineEntries: [IshikawaLayoutOutlineEntry]
     /// Down the page: from under each entry's parent down and across to it.
     public let outlineConnectors: [DiagramPath]
+
+    /// The categories, alternately above and below the spine, in the order written.
+    public var categories: [IshikawaLayoutCategory] {
+        fishbone.categories
+    }
+
+    public var head: IshikawaLayoutHead? {
+        fishbone.head
+    }
+}
+
+extension IshikawaLayout: Equatable {
+    /// Equal when they draw the same: the same size, font, title, spine, categories, head and outline.
+    public static func == (left: IshikawaLayout, right: IshikawaLayout) -> Bool {
+        left.size == right.size && left.font == right.font && left.title == right.title && left.spine == right.spine
+            && left.spineArrow == right.spineArrow && left.categories == right.categories && left.head == right.head
+            && left.outlineEntries == right.outlineEntries && left.outlineConnectors == right.outlineConnectors
+    }
 }
 
 /// A category with its bones and causes.

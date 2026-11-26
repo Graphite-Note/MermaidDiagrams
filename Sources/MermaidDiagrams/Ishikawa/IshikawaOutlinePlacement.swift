@@ -6,8 +6,8 @@
  *              the categories and the causes as an indented list, each joined to its parent by an elbow.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -55,7 +55,7 @@ enum IshikawaOutlinePlacement {
                           height: (max(padding + (title?.size.height ?? 0), top - entryGap) + padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        return IshikawaLayout(size: size, font: font, title: placedTitle, spine: nil, spineArrow: nil, categories: [], head: nil,
+        return IshikawaLayout(size: size, font: font, title: placedTitle, spine: nil, spineArrow: nil, fishbone: IshikawaFishboneRecords(),
                               outlineEntries: entries, outlineConnectors: connectors)
     }
 

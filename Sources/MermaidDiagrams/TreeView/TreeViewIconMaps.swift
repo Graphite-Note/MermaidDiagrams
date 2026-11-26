@@ -6,8 +6,8 @@
  *              matter, and the icon they give a file, as Pele's detectIcon finds it.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 /// The icons a tree view's options give files by name and by extension, as Pele's `iconConfig` keeps them: only the
@@ -19,6 +19,11 @@ public struct TreeViewIconMaps: Equatable, Sendable {
     public internal(set) var extensionIcons: [String: String] = [:]
 
     init() {}
+
+    /// Whether neither map holds an icon: no file's name is then looked up.
+    var isEmpty: Bool {
+        filenameIcons.isEmpty && extensionIcons.isEmpty
+    }
 
     init(filenameIcons: [String: String], extensionIcons: [String: String]) {
         self.filenameIcons = filenameIcons

@@ -6,8 +6,8 @@
  *              cell, columns as wide as the widest block, rows as tall as the tallest, room left over shared out.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -79,7 +79,12 @@ enum BlockGridLayout {
     /// tallest block of the container, as in Mermaid; a row of nothing but containers as tall as they need.
     private static func measure(_ cells: inout [BlockCell], at index: Int, gap: CGFloat, inset: CGFloat) throws(BlockLayoutError) {
         let columns = cells[index].columns
-        var heights: [CGFloat] = []
+        // The row heights of the last time the grid was laid out are taken out and filled again, so that a grid laid
+        // out again as its gaps widen keeps its list's room.
+        var heights = cells[index].rowHeights
+        cells[index].rowHeights = []
+        heights.removeAll(keepingCapacity: true)
+        if heights.capacity == 0 { heights.reserveCapacity(cells[index].childIndices.count) }
         var position = 0
         var columnCount = 0
         var columnWidth: CGFloat = 0

@@ -5,8 +5,8 @@
  * Description: Where an XY chart's series go in its plot: bars, lines, point labels and bar values.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -50,6 +50,16 @@ struct XYChartSeriesPlacement {
         if barCount > 0, baseFraction > 0, baseFraction < 1 {
             baseline = [XYChartAxes.rule(at: baseFraction, in: frame.plot, isHorizontal: frame.isHorizontal)]
         }
+        // Room for every bar, line, point label and bar value is made once: each would grow its list as it is placed.
+        var barRoom = 0
+        var pointLabelRoom = 0
+        for series in chart.series {
+            if series.kind == .bar { barRoom += series.values.count } else { pointLabelRoom += series.pointLabels.count }
+        }
+        bars.reserveCapacity(barRoom)
+        lines.reserveCapacity(chart.series.count - barCount)
+        pointLabels.reserveCapacity(pointLabelRoom)
+        if frame.options.showsDataLabels { barValues.reserveCapacity(barRoom) }
         var barIndex = 0
         for (seriesIndex, series) in chart.series.enumerated() {
             let count = frame.categoryScale.isCategorical ? min(series.values.count, frame.categoryScale.placeCount) : series.values.count

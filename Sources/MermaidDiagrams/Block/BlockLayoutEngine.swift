@@ -6,8 +6,8 @@
  *              grids, the edges routed and their texts settled, gaps widened where texts do not fit, and the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -58,7 +58,7 @@ public enum BlockLayoutEngine {
                                        cellCount: placement.cells.count)
         try settle(&edges, &placement, isTight: isTight, availableWidth: availableWidth)
         let title = PlaneMapLabel.block(diagram.title, measurer: measurers.titleText, maximumWidth: titleWidth)
-        var assembly = BlockLayoutAssembly(diagram: diagram, placement: placement, edges: edges, cache: cache)
+        var assembly = BlockLayoutAssembly(diagram: diagram, placement: placement, edges: edges, edgeTexts: drawnEdges.texts, cache: cache)
         return assembly.layout(title: title, font: font)
     }
 
@@ -76,25 +76,30 @@ public enum BlockLayoutEngine {
         return tight.size.width < fitted.size.width ? tight : fitted
     }
 
-    /// The edges whose both ends are drawn, their ends' cells and their texts' sizes.
+    /// The edges whose both ends are drawn, their ends' cells, their texts (measured once, for their sizes here and drawn
+    /// as they are on the page) and their texts' sizes.
     private static func drawnEdges<Measurer: DiagramTextMeasuring>(of diagram: BlockDiagram, views: BlockViews, edgeText: Measurer)
-        -> (indices: [Int], ends: [(source: Int, target: Int)], textSizes: [CGSize]) {
+        -> (indices: [Int], ends: [(source: Int, target: Int)], texts: [DiagramTextBlock?], textSizes: [CGSize]) {
         var edgeIndices: [Int] = []
         var ends: [(source: Int, target: Int)] = []
+        var texts: [DiagramTextBlock?] = []
         var textSizes: [CGSize] = []
         let model = diagram.model
-        guard !model.edges.isEmpty else { return ([], [], []) }
+        guard !model.edges.isEmpty else { return ([], [], [], []) }
         edgeIndices.reserveCapacity(model.edges.count)
         ends.reserveCapacity(model.edges.count)
+        texts.reserveCapacity(model.edges.count)
         textSizes.reserveCapacity(model.edges.count)
         for (index, edge) in model.edges.enumerated() {
             guard let source = views.cellIndex(ofIdentifierNumber: edge.sourceNumber, in: model),
                   let target = views.cellIndex(ofIdentifierNumber: edge.targetNumber, in: model) else { continue }
             edgeIndices.append(index)
             ends.append((source, target))
-            textSizes.append(model.textBlock(of: edge.label, measurer: edgeText, maximumWidth: wrappingWidth)?.size ?? .zero)
+            let text = model.textBlock(of: edge.label, measurer: edgeText, maximumWidth: wrappingWidth)
+            texts.append(text)
+            textSizes.append(text?.size ?? .zero)
         }
-        return (edgeIndices, ends, textSizes)
+        return (edgeIndices, ends, texts, textSizes)
     }
 
     /// Pele's rounds: the texts stacked, and where they do not fit the gaps widened and the grid laid out again, up to

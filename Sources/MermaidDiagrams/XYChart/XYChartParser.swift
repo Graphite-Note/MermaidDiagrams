@@ -5,8 +5,8 @@
  * Description: Reads an XY chart's statements as Mermaid's grammar and Pele's parser do.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.7
- * Date: 25/11/2026
+ * Version: 0.8
+ * Date: 26/11/2026
  */
 
 /// Reads an XY chart's statements after its `xychart` or `xychart-beta` keyword, as Mermaid's grammar and Pele's
@@ -35,9 +35,30 @@ struct XYChartParser {
         var chart = parser.builder.chart
         chart.options = XYChartOptions(MermaidConfigurationOptions(section: "xyChart", in: cursor))
         if !chart.isOrientationWritten { chart.orientation = chart.options.orientation }
-        chart.seriesColors = MermaidThemeSeriesPalette.xyChart.seriesColors(in: cursor)
+        // Only a text that names the palette, or escapes a key that could, sets it: the configuration is read for it then.
+        if mayNamePlotColorPalette(cursor.sourceBytes) { chart.seriesColors = MermaidThemeSeriesPalette.xyChart.seriesColors(in: cursor) }
         return chart
     }
+
+    /// Whether `bytes` hold `plotColorPalette` or a backslash, without which neither the front matter nor a directive
+    /// writes `xyChart.plotColorPalette`: a key is written as its letters, or with an escape after a backslash.
+    private static func mayNamePlotColorPalette(_ bytes: [UInt8]) -> Bool {
+        bytes.withUnsafeBufferPointer { buffer in
+            let name = plotColorPaletteName
+            let lastStart = buffer.count - name.count
+            for index in buffer.indices {
+                let byte = buffer[index]
+                if byte == UInt8(ascii: "\\") { return true }
+                guard byte == name[0], index <= lastStart else { continue }
+                var matched = 1
+                while matched < name.count, buffer[index + matched] == name[matched] { matched += 1 }
+                if matched == name.count { return true }
+            }
+            return false
+        }
+    }
+
+    private static let plotColorPaletteName = Array("plotColorPalette".utf8)
 
     private var kind: XYChartTokenKind { tokens[index].kind }
 

@@ -6,8 +6,8 @@
  *              and its renderer, which paints it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -29,16 +29,13 @@ extension DiagramScene {
             builder.title(layout.title)
             let madeCount = workspace.madePathCount
             let guides = workspace.makeLane()
-            for guide in layout.guides {
-                let line = workspace.makeLane()
-                DiagramEdgeDrawing.record(guide, into: line)
-                guides.addPath(line)
-                workspace.givePathsBack(downTo: madeCount + 1)
-            }
+            for guide in layout.guideStrokes { guide.record(into: guides) }
             builder.stroke(guides, .border, DiagramStroke(lineWidth: layout.guideLineWidth), part: .treeGuides)
-            for row in layout.rows {
-                workspace.givePathsBack(downTo: madeCount)
-                TreeViewGlyphs.add(row, to: &builder, workspace: workspace)
+            layout.text.withUnsafeBufferPointer { source in
+                for row in layout.placedRows {
+                    workspace.givePathsBack(downTo: madeCount)
+                    TreeViewGlyphs.add(row, of: layout.lines, source: source, to: &builder, workspace: workspace)
+                }
             }
             return builder.scene(size: layout.size, font: layout.font)
         }
@@ -59,9 +56,11 @@ enum TreeViewGlyphs {
     private static let folder = DiagramGlyphPath(pathData: folderPathData)
     private static let file = DiagramGlyphPath(pathData: filePathData)
 
-    /// A row's band, its icon, its name and its description.
-    static func add(_ row: TreeViewLayoutRow, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
-        if let highlight = row.highlight {
+    /// A row's band, its icon, its name and its description, each line of a text drawn as a text of its own.
+    static func add(_ row: TreeViewPlacedRow, of lines: borrowing DiagramMeasuredLines, source: UnsafeBufferPointer<UInt8>,
+                    to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        if row.isHighlighted {
+            let highlight = row.highlight
             let corners = (width: min(highlightCornerRadius, highlight.width / 2), height: min(highlightCornerRadius, highlight.height / 2))
             builder.fill(workspace.roundedRectangle(highlight, cornerWidth: corners.width, cornerHeight: corners.height),
                          DiagramPaint.accent.atOpacity(highlightOpacity), part: .treeHighlight)
@@ -71,8 +70,14 @@ enum TreeViewGlyphs {
             outline.record(in: row.glyphFrame, into: lane)
             builder.stroke(lane, .muted, DiagramStroke.rounded(lineWidth: lineWidth(side: row.glyphFrame.width)), part: .icon)
         }
-        for line in row.nameLines { builder.text(line, .foreground, isBold: row.isFolder, part: .label) }
-        for line in row.descriptionLines { builder.text(line, .muted, isItalic: true, part: .treeDescription) }
+        for index in 0..<Int(row.name.lineCount) {
+            let line = TreeViewPlacedRow.line(index, of: row.name, left: row.nameLeft, top: row.nameTop, lines: lines)
+            builder.text(line, of: lines, source: source, .foreground, isBold: row.isFolder, part: .label)
+        }
+        for index in 0..<Int(row.description.lineCount) {
+            let line = TreeViewPlacedRow.line(index, of: row.description, left: row.descriptionLeft, top: row.descriptionTop, lines: lines)
+            builder.text(line, of: lines, source: source, .muted, isItalic: true, part: .treeDescription)
+        }
     }
 
     /// The stroke's width in points for a glyph drawn `side` points wide.

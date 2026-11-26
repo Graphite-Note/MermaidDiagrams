@@ -7,8 +7,8 @@
  *              links with their ports, arrows and labels.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension WardleyMapParser {
@@ -27,6 +27,12 @@ extension WardleyMapParser {
         return take()
     }
 
+    /// Moves past the token when it is of `kind`, without making its text; an error that names Pele's token otherwise.
+    mutating func skip(_ kind: WardleyMapTokenKind, named name: String) throws(MermaidDiagramReadError) {
+        guard isAt(kind) else { throw failure(.expectedToken(name)) }
+        index += 1
+    }
+
     mutating func readDecimal() throws(MermaidDiagramReadError) -> Double {
         Double(try expect(.decimal, named: "WARDLEY_NUMBER")) ?? .nan
     }
@@ -37,11 +43,11 @@ extension WardleyMapParser {
 
     /// `[first, second]`, each of `kind`, or either a decimal or a whole number when `kind` is nil.
     mutating func readPair(of kind: WardleyMapTokenKind?) throws(MermaidDiagramReadError) -> (first: Double, second: Double) {
-        _ = try expect(.openingBracket, named: "'['")
+        try skip(.openingBracket, named: "'['")
         let first = try readCoordinate(of: kind)
-        _ = try expect(.comma, named: "','")
+        try skip(.comma, named: "','")
         let second = try readCoordinate(of: kind)
-        _ = try expect(.closingBracket, named: "']'")
+        try skip(.closingBracket, named: "']'")
         return (first, second)
     }
 
@@ -55,12 +61,12 @@ extension WardleyMapParser {
 
     /// `label [x, y]`, each a whole number with an optional minus sign.
     mutating func readLabelOffset() throws(MermaidDiagramReadError) -> WardleyMapStatements.LabelOffset {
-        _ = try expect(.label, named: "KW_LABEL")
-        _ = try expect(.openingBracket, named: "'['")
+        try skip(.label, named: "KW_LABEL")
+        try skip(.openingBracket, named: "'['")
         let x = try readSignedWholeNumber()
-        _ = try expect(.comma, named: "','")
+        try skip(.comma, named: "','")
         let y = try readSignedWholeNumber()
-        _ = try expect(.closingBracket, named: "']'")
+        try skip(.closingBracket, named: "']'")
         return WardleyMapStatements.LabelOffset(x: x, y: y)
     }
 
@@ -74,7 +80,7 @@ extension WardleyMapParser {
     mutating func readEvolution() throws(MermaidDiagramReadError) {
         index += 1
         var stages = [try readStage()]
-        _ = try expect(.arrow, named: "ARROW")
+        try skip(.arrow, named: "ARROW")
         stages.append(try readStage())
         while isAt(.arrow) {
             index += 1
@@ -110,7 +116,7 @@ extension WardleyMapParser {
         if isAt(.openingParenthesis), index + 1 < tokens.count, tokens[index + 1].kind == .sourcing {
             sourcing = WardleyMapSourcing(rawValue: text(index + 1))
             index += 2
-            _ = try expect(.closingParenthesis, named: "')'")
+            try skip(.closingParenthesis, named: "')'")
         }
         var hasInertia = false
         if isAt(.inertia) {
@@ -118,8 +124,8 @@ extension WardleyMapParser {
             hasInertia = true
         } else if isAt(.openingParenthesis) {
             index += 1
-            _ = try expect(.inertia, named: "KW_INERTIA")
-            _ = try expect(.closingParenthesis, named: "')'")
+            try skip(.inertia, named: "KW_INERTIA")
+            try skip(.closingParenthesis, named: "')'")
             hasInertia = true
         }
         try countNode()
@@ -132,17 +138,17 @@ extension WardleyMapParser {
     mutating func readPipeline(offset: Int) throws(MermaidDiagramReadError) {
         index += 1
         let parent = try readName()
-        _ = try expect(.openingBrace, named: "'{'")
-        _ = try expect(.newline, named: "NEWLINE")
+        try skip(.openingBrace, named: "'{'")
+        try skip(.newline, named: "NEWLINE")
         while isAt(.newline) { index += 1 }
         var components: [WardleyMapStatements.PipelineComponent] = []
         repeat {
             let componentOffset = index < tokens.count ? tokens[index].start : bytes.count
-            _ = try expect(.component, named: "KW_COMPONENT")
+            try skip(.component, named: "KW_COMPONENT")
             let name = try readName()
-            _ = try expect(.openingBracket, named: "'['")
+            try skip(.openingBracket, named: "'['")
             let evolution = try readDecimal()
-            _ = try expect(.closingBracket, named: "']'")
+            try skip(.closingBracket, named: "']'")
             let labelOffset = isAt(.label) ? try readLabelOffset() : nil
             if current != nil {
                 guard isAt(.newline) else { throw failure(.expectedLineEnd) }
@@ -151,7 +157,7 @@ extension WardleyMapParser {
             try countNode()
             components.append(.init(name: name, evolution: evolution, labelOffset: labelOffset, offset: componentOffset))
         } while isAt(.component)
-        _ = try expect(.closingBrace, named: "'}'")
+        try skip(.closingBrace, named: "'}'")
         statements.pipelines.append(.init(parent: parent, components: components, offset: offset))
     }
 
@@ -159,7 +165,7 @@ extension WardleyMapParser {
     mutating func readAnnotation(offset: Int) throws(MermaidDiagramReadError) {
         index += 1
         let number = try readWholeNumber()
-        _ = try expect(.comma, named: "','")
+        try skip(.comma, named: "','")
         let pair = try readPair(of: nil)
         let text = PlaneMapTerminalValues.string(try expect(.string, named: "STRING"))
         try countNode()

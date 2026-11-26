@@ -6,8 +6,8 @@
  *              hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -28,7 +28,7 @@ extension MermaidDiagramAccessibility {
     init(treeView diagram: TreeViewDiagram) {
         self.init(kind: .treeView, title: diagram.accessibilityTitle ?? diagram.title,
                   description: diagram.accessibilityDescription) {
-            diagram.entries.map { entry in entry.isFolder ? entry.name + "/" : entry.name }
+            diagram.records.map { record in record.isFolder ? diagram.string(record.name) + "/" : diagram.string(record.name) }
         }
     }
 }

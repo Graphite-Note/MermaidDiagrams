@@ -6,8 +6,8 @@
  *              coordinates in percent, nodes merged by identifier, pipelines, links resolved by identifier or label.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 /// Mermaid's `populateDb`: the size and the stages, then anchors, components, notes, pipelines, links, evolutions, the
@@ -132,10 +132,17 @@ struct WardleyMapBuilder {
     /// Each link with its ends resolved, by identifier, else by the first node with that label, else as written.
     private mutating func addLinks(_ links: [WardleyMapStatements.Link]) {
         guard !links.isEmpty else { return }
-        var identifierByLabel: [String: String] = [:]
-        for node in map.nodes where identifierByLabel[node.label] == nil { identifierByLabel[node.label] = node.identifier }
+        // The identifiers by label are made only when a link names something other than an identifier, as few do.
+        var identifierByLabel: [String: String]?
         func resolved(_ name: String) -> String {
-            indexByIdentifier[name] != nil ? name : identifierByLabel[name] ?? name
+            guard indexByIdentifier[name] == nil else { return name }
+            if identifierByLabel == nil {
+                var labels: [String: String] = [:]
+                labels.reserveCapacity(map.nodes.count)
+                for node in map.nodes where labels[node.label] == nil { labels[node.label] = node.identifier }
+                identifierByLabel = labels
+            }
+            return identifierByLabel?[name] ?? name
         }
         for link in links {
             let isDashed = link.arrow.map { arrow in PlaneMapText.contains(arrow, "-.->") || PlaneMapText.contains(arrow, ".-.") } ?? false

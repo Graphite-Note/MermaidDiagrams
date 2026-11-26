@@ -6,8 +6,8 @@
  *              the spine, or for a narrow column an indented list down the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -54,13 +54,10 @@ public enum IshikawaLayoutEngine {
         let offset = CGVector(dx: padding + (inner - bounds.width) / 2 - bounds.minX, dy: padding + titleHeight - bounds.minY)
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + (title?.size.height ?? 0) / 2)
-        var categories = fish.categories
-        for index in categories.indices { categories[index].translate(by: offset) }
+        var records = fish.records
+        records.translate(by: offset)
         return IshikawaLayout(size: size, font: font, title: placedTitle, spine: fish.spine?.translated(by: offset),
-                              spineArrow: fish.spineArrow?.translated(by: offset), categories: categories,
-                              head: fish.head.map { head in IshikawaLayoutHead(frame: head.frame.offsetBy(dx: offset.dx, dy: offset.dy),
-                                                                              label: head.label.translated(by: offset)) },
-                              outlineEntries: [], outlineConnectors: [])
+                              spineArrow: fish.spineArrow?.translated(by: offset), fishbone: records, outlineEntries: [], outlineConnectors: [])
     }
 }
 
@@ -68,27 +65,56 @@ public enum IshikawaLayoutEngine {
 struct IshikawaFishbone {
     private(set) var spine: DiagramPath?
     private(set) var spineArrow: DiagramEdgeMark?
-    private(set) var categories: [IshikawaLayoutCategory] = []
-    private(set) var head: IshikawaLayoutHead?
+    /// The categories, causes and head, with their texts.
+    private(set) var records = IshikawaFishboneRecords()
     /// What is drawn, Pele's way: the spine's and the head's extent, the boxes and the causes' texts across.
     private(set) var bounds = CGRect.zero
 
     /// Lays out the diagram whose effect, its first node, is there.
-    mutating func lay<Measurer: DiagramTextMeasuring>(_ diagram: IshikawaDiagram, measurers: DiagramTextMeasurerSet<Measurer>) {
-        var headLabel = IshikawaCategoryArrangement.textBlock(of: 0, in: diagram, measurer: measurers.bold, maximumWidth: 200)
-        let headHeight = max(headLabel.size.height + 24, 48)
-        let headWidth = headLabel.size.width + 24 + headHeight / 2
-        headLabel.center = CGPoint(x: 12 + headLabel.size.width / 2, y: 0)
-        head = IshikawaLayoutHead(frame: CGRect(x: 0, y: -headHeight / 2, width: headWidth, height: headHeight), label: headLabel)
-        var walk = IshikawaCategoryWalk()
-        var arrangements = diagram.childIndices(of: 0).enumerated().map { order, index in
-            IshikawaCategoryArrangement(diagram, categoryIndex: Int(index), isAbove: order % 2 == 0, measurers: measurers, walk: &walk)
+    mutating func lay<Measurer: DiagramTextMeasuring>(_ diagram: IshikawaDiagram, measurers textMeasurers: DiagramTextMeasurerSet<Measurer>) {
+        let measurers = IshikawaMeasurers(textMeasurers)
+        records.bytes = diagram.bytes
+        records.lines.reserveCapacity(lines: diagram.nodeCount + 4, derivedBytes: 0)
+        var bones: [IshikawaCategoryArrangement.Bone] = []
+        bones.reserveCapacity(diagram.nodeCount)
+        let categoryIndices = diagram.childIndices(of: 0)
+        var arrangements: [IshikawaCategoryArrangement] = []
+        arrangements.reserveCapacity(categoryIndices.count)
+        var headLabel = DiagramMeasuredText(firstLine: 0, lineCount: 0, width: 0, height: 0, lineHeight: 0, fontSize: 0)
+        diagram.bytes.withUnsafeBufferPointer { source in
+            headLabel = measurers.measure(0, of: diagram, source: source, measurer: measurers.bold, maximumWidth: 200, into: &records.lines)
+            var walk = IshikawaCategoryWalk()
+            for (order, index) in categoryIndices.enumerated() {
+                arrangements.append(IshikawaCategoryArrangement(diagram, categoryIndex: Int(index), isAbove: order % 2 == 0, measurers: measurers,
+                                                                source: source, bones: &bones, texts: &records.lines, walk: &walk))
+            }
         }
+        let headHeight = max(headLabel.height + 24, 48)
+        let headWidth = headLabel.width + 24 + headHeight / 2
+        headLabel.center = CGPoint(x: 12 + headLabel.width / 2, y: 0)
+        records.headFrame = CGRect(x: 0, y: -headHeight / 2, width: headWidth, height: headHeight)
+        records.headLabel = headLabel
         for index in arrangements.indices { arrangements[index].rise = max(arrangements[index].rise, headHeight / 2 + 14) }
-        // Categories meet the spine in pairs, each pair as far toward the tail from the one before as the wider needs.
-        var meetings: [CGFloat] = []
-        meetings.reserveCapacity(arrangements.count + 1)
-        categories.reserveCapacity(arrangements.count)
+        let meetings = Self.meetings(of: arrangements)
+        let tailEnd = arrangements.isEmpty ? -IshikawaLayoutEngine.headGap : meetings.last - IshikawaLayoutEngine.tail
+        var extent = (minX: tailEnd, maxX: headWidth, minY: -headHeight / 2, maxY: headHeight / 2)
+        records.boneLines.reserveCapacity(bones.count + arrangements.count)
+        records.causes.reserveCapacity(bones.count)
+        records.categoryRecords.reserveCapacity(arrangements.count)
+        for (order, arrangement) in arrangements.enumerated() {
+            addCategory(arrangement, bones: bones, meeting: meetings.pairs[order / 2], sign: order % 2 == 0 ? -1 : 1, extent: &extent)
+        }
+        let trim = DiagramEdgeMark.arrowLength - 1
+        spine = DiagramPath(start: CGPoint(x: tailEnd, y: 0), segments: [.line(to: CGPoint(x: -trim, y: 0))])
+        spineArrow = DiagramEdgeMark(arrowhead: .arrow, tip: .zero, direction: CGVector(dx: 1, dy: 0))
+        bounds = CGRect(x: extent.minX, y: extent.minY, width: extent.maxX - extent.minX, height: extent.maxY - extent.minY)
+    }
+
+    /// Where each pair of categories meets the spine: each pair as far toward the tail from the one before as the wider
+    /// of the two needs, and the last pair's. Both of a pair meet it at the same place.
+    private static func meetings(of arrangements: [IshikawaCategoryArrangement]) -> (pairs: [CGFloat], last: CGFloat) {
+        var pairMeetings: [CGFloat] = []
+        pairMeetings.reserveCapacity(arrangements.count / 2 + 1)
         var meeting = -IshikawaLayoutEngine.headGap
         for first in stride(from: 0, to: arrangements.count, by: 2) {
             if first > 0 {
@@ -99,70 +125,49 @@ struct IshikawaFishbone {
                 }
                 meeting -= room + IshikawaLayoutEngine.pairGap
             }
-            meetings.append(meeting)
-            meetings.append(meeting)
+            pairMeetings.append(meeting)
         }
-        let tailEnd = arrangements.isEmpty ? -IshikawaLayoutEngine.headGap : meeting - IshikawaLayoutEngine.tail
-        var extent = (minX: tailEnd, maxX: headWidth, minY: -headHeight / 2, maxY: headHeight / 2)
-        for (order, arrangement) in arrangements.enumerated() {
-            categories.append(Self.category(arrangement, meeting: meetings[order], sign: order % 2 == 0 ? -1 : 1, extent: &extent))
-        }
-        let trim = DiagramEdgeMark.arrowLength - 1
-        spine = DiagramPath(start: CGPoint(x: tailEnd, y: 0), segments: [.line(to: CGPoint(x: -trim, y: 0))])
-        spineArrow = DiagramEdgeMark(arrowhead: .arrow, tip: .zero, direction: CGVector(dx: 1, dy: 0))
-        bounds = CGRect(x: extent.minX, y: extent.minY, width: extent.maxX - extent.minX, height: extent.maxY - extent.minY)
+        return (pairMeetings, meeting)
     }
 
     /// A category's bone, arrow, box and causes, its bone meeting the spine at `meeting`, above it for a `sign` of -1.
-    private static func category(_ arrangement: IshikawaCategoryArrangement, meeting: CGFloat, sign: CGFloat,
-                                 extent: inout (minX: CGFloat, maxX: CGFloat, minY: CGFloat, maxY: CGFloat)) -> IshikawaLayoutCategory {
+    private mutating func addCategory(_ arrangement: IshikawaCategoryArrangement, bones: [IshikawaCategoryArrangement.Bone], meeting: CGFloat,
+                                      sign: CGFloat, extent: inout (minX: CGFloat, maxX: CGFloat, minY: CGFloat, maxY: CGFloat)) {
         let slant = IshikawaLayoutEngine.slant
         let length = IshikawaLayoutEngine.slantLength
         func across(_ alongBone: CGFloat, _ rise: CGFloat) -> CGFloat { meeting + alongBone - rise * slant }
         let end = CGPoint(x: across(0, arrangement.rise), y: sign * arrangement.rise)
         // The bone stops short of the spine to leave its arrowhead a clean point.
         let trim = DiagramEdgeMark.arrowLength - 1
-        var bones = [IshikawaBoneLine(start: CGPoint(x: meeting - slant / length * trim, y: sign * trim / length), end: end)]
-        bones.reserveCapacity(arrangement.bones.count + 1)
-        var causes: [IshikawaLayoutCause] = []
-        causes.reserveCapacity(arrangement.bones.count)
-        for bone in arrangement.bones {
+        let firstBone = Int32(records.boneLines.count)
+        let firstCause = Int32(records.causes.count)
+        records.boneLines.append(IshikawaBoneLine(start: CGPoint(x: meeting - slant / length * trim, y: sign * trim / length), end: end))
+        let categoryBones = bones[arrangement.firstBone..<arrangement.firstBone + arrangement.boneCount]
+        for bone in categoryBones {
             let rowY = sign * bone.rise
             if bone.depth % 2 == 0 {
-                bones.append(IshikawaBoneLine(start: CGPoint(x: across(bone.meeting, bone.rise), y: rowY),
-                                              end: CGPoint(x: across(bone.textEnd + IshikawaCategoryArrangement.textGap, bone.rise), y: rowY)))
-            } else if let parentIndex = bone.parentIndex {
-                let from = arrangement.bones[parentIndex].rise
-                bones.append(IshikawaBoneLine(start: CGPoint(x: across(bone.meeting, from), y: sign * from),
-                                              end: CGPoint(x: across(bone.meeting, bone.rise), y: rowY)))
+                records.boneLines.append(IshikawaBoneLine(start: CGPoint(x: across(bone.meeting, bone.rise), y: rowY),
+                                                          end: CGPoint(x: across(bone.textEnd + IshikawaCategoryArrangement.textGap, bone.rise), y: rowY)))
+            } else if bone.parentIndex >= 0 {
+                let from = bones[arrangement.firstBone + Int(bone.parentIndex)].rise
+                records.boneLines.append(IshikawaBoneLine(start: CGPoint(x: across(bone.meeting, from), y: sign * from),
+                                                          end: CGPoint(x: across(bone.meeting, bone.rise), y: rowY)))
             }
             let right = across(bone.textEnd, bone.rise)
             var text = bone.text
-            text.center = CGPoint(x: right - text.size.width / 2, y: rowY)
-            causes.append(IshikawaLayoutCause(text: text, isMuted: bone.depth > 2))
-            extent.minX = min(extent.minX, right - text.size.width)
+            text.center = CGPoint(x: right - text.width / 2, y: rowY)
+            records.causes.append(IshikawaPlacedCause(text: text, isMuted: bone.depth > 2))
+            extent.minX = min(extent.minX, right - text.width)
         }
         let boxSize = arrangement.boxSize
         let box = CGRect(x: end.x - boxSize.width / 2, y: end.y + sign * boxSize.height / 2 - boxSize.height / 2, width: boxSize.width, height: boxSize.height)
         extent = (min(extent.minX, box.minX), max(extent.maxX, box.maxX), min(extent.minY, box.minY), max(extent.maxY, box.maxY))
         var label = arrangement.label
         label.center = CGPoint(x: box.midX, y: box.midY)
-        return IshikawaLayoutCategory(boneLines: bones, arrow: DiagramEdgeMark(arrowhead: .arrow, tip: CGPoint(x: meeting, y: 0),
-                                                                          direction: CGVector(dx: slant / length, dy: -sign / length)),
-                                      box: box, label: label, causes: causes)
-    }
-}
-
-extension IshikawaLayoutCategory {
-    /// Moves everything by `offset`, in place.
-    mutating func translate(by offset: CGVector) {
-        for index in boneLines.indices {
-            boneLines[index].start = CGPoint(x: boneLines[index].start.x + offset.dx, y: boneLines[index].start.y + offset.dy)
-            boneLines[index].end = CGPoint(x: boneLines[index].end.x + offset.dx, y: boneLines[index].end.y + offset.dy)
-        }
-        arrow = arrow.translated(by: offset)
-        box = box.offsetBy(dx: offset.dx, dy: offset.dy)
-        label = label.translated(by: offset)
-        for index in causes.indices { causes[index].text = causes[index].text.translated(by: offset) }
+        records.categoryRecords.append(IshikawaPlacedCategory(firstBone: firstBone, boneCount: Int32(records.boneLines.count) - firstBone,
+                                                              firstCause: firstCause, causeCount: Int32(records.causes.count) - firstCause,
+                                                              arrow: DiagramEdgeMark(arrowhead: .arrow, tip: CGPoint(x: meeting, y: 0),
+                                                                                     direction: CGVector(dx: slant / length, dy: -sign / length)),
+                                                              box: box, label: label))
     }
 }
