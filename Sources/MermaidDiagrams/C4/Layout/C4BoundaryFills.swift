@@ -6,8 +6,8 @@
  *              the text color picked for the fill it lies on, or cased in the page's color where it crosses a border.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -28,7 +28,7 @@ enum C4BoundaryFills {
                          fills: [C4BoundaryFill]) -> (lineColor: DiagramColor?, isCased: Bool) {
         // Off every fill when there is none, as the placement finds it, without the lists it is asked with.
         guard !fills.isEmpty else { return (ownColor, false) }
-        switch DiagramFillPlacement.placement(of: route.path, tips: [route.start, route.end], among: fills.map(\.frame)) {
+        switch DiagramFillPlacement.placement(of: route.path.diagramPath, tips: [route.start, route.end], among: fills.map(\.frame)) {
         case .onNone: return (ownColor, false)
         case .acrossBorder: return (ownColor, true)
         case .inside(let place):

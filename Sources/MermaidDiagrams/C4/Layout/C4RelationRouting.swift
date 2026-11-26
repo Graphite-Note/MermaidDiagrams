@@ -7,17 +7,17 @@
  *              row, and, when a shape stands in the way, a line with corners around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
 
 /// A routed relation: its line, where its arrowheads go and which way they point, the stretch its label may sit on, the
 /// side of that stretch the label is pushed to (a unit vector, zero to center it), how far it may lean instead, the
-/// widest the label should be, and the corners of the line as x, y pairs (none for a loop).
+/// widest the label should be, and the corners of the line as x, y pairs (none for a loop), all kept in place.
 struct C4Route {
-    var path: DiagramPath
+    var path: C4RoutePath
     var start: CGPoint
     var startDirection: CGVector
     var end: CGPoint
@@ -28,14 +28,14 @@ struct C4Route {
     /// When above zero, the label stays over the line and moves `labelSide`'s way by at most this much.
     var labelLean: CGFloat = 0
     var labelRoom = C4Metrics.wideLabelWidth
-    var points: [CGFloat]
+    var points: C4Numbers
 }
 
 /// Routes relations one after another, each kept apart from those before it (`lanes`). `obstacles` are the shapes a
-/// line steers clear of, by their indices in `boxes`; nil skips that check, when the diagram is too large for it.
+/// line steers clear of, the first boxes of `boxes`; nil skips that check, when the diagram is too large for it.
 struct C4Router {
     let boxes: [C4RouteBox]
-    let obstacles: [Int]?
+    let obstacles: Range<Int>?
     var lanes = C4Lanes()
 
     /// The route from box `first` to box `second`. `shift` moves the line sideways when another runs the opposite way.
@@ -83,13 +83,13 @@ struct C4Router {
         let directionX = (end.x - start.x) / usedLength
         let directionY = (end.y - start.y) / usedLength
         if start.x == end.x || start.y == end.y { lanes.take(C4Numbers(start.x, start.y, end.x, end.y)) }
-        let path = DiagramPath(start: CGPoint(x: start.x + directionX * startTrim, y: start.y + directionY * startTrim),
-                               segments: [.line(to: CGPoint(x: end.x - directionX * endTrim, y: end.y - directionY * endTrim))])
+        let path = C4RoutePath(start: CGPoint(x: start.x + directionX * startTrim, y: start.y + directionY * startTrim),
+                               .line(to: CGPoint(x: end.x - directionX * endTrim, y: end.y - directionY * endTrim)))
         return C4Route(path: path, start: start, startDirection: CGVector(dx: -directionX, dy: -directionY), end: end,
                        endDirection: CGVector(dx: directionX, dy: directionY), labelStretchStart: start, labelStretchEnd: end,
                        labelSide: shift != 0 ? CGVector(dx: -directionY, dy: directionX) : .zero,
                        labelRoom: abs(directionX) > abs(directionY) ? C4Metrics.narrowLabelWidth : C4Metrics.wideLabelWidth,
-                       points: [start.x, start.y, end.x, end.y])
+                       points: C4Numbers(start.x, start.y, end.x, end.y))
     }
 
     /// The straight line from `first` to `second`, from outline to outline. One holding the other is joined by a short
@@ -171,21 +171,20 @@ struct C4Router {
         let middle = box.centerY
         let unitX = reach / length
         let unitY = spread / length
-        let path = DiagramPath(start: CGPoint(x: side + unitX * startTrim, y: middle - spread - unitY * startTrim), segments: [
-            .curve(to: CGPoint(x: side + unitX * endTrim, y: middle + spread + unitY * endTrim), control1: CGPoint(x: side + reach, y: middle - spread * 2),
-                   control2: CGPoint(x: side + reach, y: middle + spread * 2)),
-        ])
+        let path = C4RoutePath(start: CGPoint(x: side + unitX * startTrim, y: middle - spread - unitY * startTrim),
+                               .curve(to: CGPoint(x: side + unitX * endTrim, y: middle + spread + unitY * endTrim),
+                                      control1: CGPoint(x: side + reach, y: middle - spread * 2), control2: CGPoint(x: side + reach, y: middle + spread * 2)))
         let labelPlace = CGPoint(x: side + reach + 4, y: middle)
         return C4Route(path: path, start: CGPoint(x: side, y: middle - spread), startDirection: CGVector(dx: -unitX, dy: unitY),
                        end: CGPoint(x: side, y: middle + spread), endDirection: CGVector(dx: -unitX, dy: -unitY), labelStretchStart: labelPlace,
-                       labelStretchEnd: labelPlace, labelSide: CGVector(dx: 1, dy: 0), labelRoom: C4Metrics.loopLabelWidth, points: [])
+                       labelStretchEnd: labelPlace, labelSide: CGVector(dx: 1, dy: 0), labelRoom: C4Metrics.loopLabelWidth, points: C4Numbers())
     }
 
     // MARK: - Lines with corners
 
     /// The route for a line with corners through `points`, from one outline to the other; its label sits on the stretch
     /// that starts at point `labelStretch`.
-    static func bent(_ points: [CGFloat], labelStretch: Int, startTrim: CGFloat, endTrim: CGFloat) -> C4Route {
+    static func bent(_ points: C4Numbers, labelStretch: Int, startTrim: CGFloat, endTrim: CGFloat) -> C4Route {
         let count = points.count
         return C4Route(path: path(through: points, startTrim: startTrim, endTrim: endTrim), start: CGPoint(x: points[0], y: points[1]),
                        startDirection: CGVector(dx: -sign(points[2] - points[0]), dy: -sign(points[3] - points[1])),
@@ -197,13 +196,12 @@ struct C4Router {
 
     /// Pele's `path`: level and upright stretches, each corner rounded by a quadratic curve of at most 8 points (drawn as
     /// the cubic that is the same curve), the ends trimmed for their arrowheads.
-    private static func path(through points: [CGFloat], startTrim: CGFloat, endTrim: CGFloat) -> DiagramPath {
+    private static func path(through points: C4Numbers, startTrim: CGFloat, endTrim: CGFloat) -> C4RoutePath {
         let count = points.count
         let startStepX = sign(points[2] - points[0])
         let startStepY = sign(points[3] - points[1])
         var current = CGPoint(x: points[0] + startStepX * startTrim, y: points[1] + startStepY * startTrim)
-        let start = current
-        var segments: [DiagramPathSegment] = []
+        var path = C4RoutePath(start: current)
         var index = 2
         while index < count - 2 {
             let corner = CGPoint(x: points[index], y: points[index + 1])
@@ -214,17 +212,17 @@ struct C4Router {
             let radius = min(C4Metrics.cornerRadius, abs(corner.x - points[index - 2] + corner.y - points[index - 1]) / 2,
                              abs(points[index + 2] - corner.x + points[index + 3] - corner.y) / 2)
             current = inX != 0 ? CGPoint(x: corner.x - inX * radius, y: current.y) : CGPoint(x: current.x, y: corner.y - inY * radius)
-            segments.append(.line(to: current))
+            path.append(.line(to: current))
             let after = CGPoint(x: corner.x + outX * radius, y: corner.y + outY * radius)
-            segments.append(quadratic(from: current, control: corner, to: after))
+            path.append(quadratic(from: current, control: corner, to: after))
             current = after
             index += 2
         }
         let lastX = sign(points[count - 2] - points[count - 4])
         let lastY = sign(points[count - 1] - points[count - 3])
         current = lastX != 0 ? CGPoint(x: points[count - 2] - lastX * endTrim, y: current.y) : CGPoint(x: current.x, y: points[count - 1] - lastY * endTrim)
-        segments.append(.line(to: current))
-        return DiagramPath(start: start, segments: segments)
+        path.append(.line(to: current))
+        return path
     }
 
     /// A quadratic curve as the cubic that draws it.

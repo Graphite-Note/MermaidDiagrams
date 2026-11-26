@@ -7,8 +7,8 @@
  *              fewer lines, a lane out from them and apart from the routes already there.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -59,7 +59,7 @@ extension C4Router {
         lanes.take(chosen.points)
         lanes.claim(first, side: chosen.side, at: chosen.startPort)
         lanes.claim(second, side: chosen.side, at: chosen.endPort)
-        var route = Self.bent(Array(chosen.points), labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
+        var route = Self.bent(chosen.points, labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
         if ends.isUpright {
             route.labelSide = CGVector(dx: forward ? 1 : -1, dy: 0)
             route.labelLean = C4Metrics.labelLean
@@ -78,7 +78,7 @@ extension C4Router {
         }
         widen(boxes[ends.first])
         widen(boxes[ends.second])
-        for other in obstacles ?? [] where other != ends.first && other != ends.second && Self.stands(boxes[other], on: ends.straightStart, ends.straightEnd) {
+        for other in obstacles ?? 0..<0 where other != ends.first && other != ends.second && Self.stands(boxes[other], on: ends.straightStart, ends.straightEnd) {
             widen(boxes[other])
         }
         return edge
@@ -90,7 +90,7 @@ extension C4Router {
         let end = boxes[ends.second]
         let low = ends.isUpright ? min(start.y, end.y) : min(start.x, end.x)
         let high = ends.isUpright ? max(start.bottom, end.bottom) : max(start.right, end.right)
-        for other in obstacles ?? [] where other != ends.first && other != ends.second {
+        for other in obstacles ?? 0..<0 where other != ends.first && other != ends.second {
             let box = boxes[other]
             let isNear = ends.isUpright ? box.y < high && box.bottom > low : box.x < high && box.right > low
             let near = ends.isUpright ? box.x : box.y

@@ -9,8 +9,8 @@
  *              makes a whole scene.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -97,12 +97,9 @@ final class UseCaseAgentFlowC4SwimlaneSceneLimitTests: XCTestCase {
         guard case .c4(let diagram) = try MermaidDiagramReader.read(examples[0], limits: .standard) else { return XCTFail("not a C4 diagram") }
         let layout = try C4LayoutEngine.layout(diagram, typography: typography)
         let relation = try XCTUnwrap(layout.relations.first)
-        let long = C4LayoutRelation(from: relation.from, to: relation.to, path: longPath(from: relation.path.start), corners: relation.corners,
-                                    startMark: relation.startMark, endMark: relation.endMark, labelFrame: relation.labelFrame, label: relation.label,
-                                    technology: relation.technology, lineColor: relation.lineColor, textColor: relation.textColor,
-                                    isCased: relation.isCased)
-        let tampered = C4Layout(size: layout.size, font: layout.font, title: layout.title, boundaries: layout.boundaries, shapes: layout.shapes,
-                                relations: [long] + layout.relations.dropFirst())
+        let tampered = layout.replacingPath(ofRelation: 0, with: longPath(from: relation.path.start))
+        XCTAssertEqual(tampered.relations.first?.path, longPath(from: relation.path.start))
+        XCTAssertEqual(Array(tampered.relations.dropFirst()), Array(layout.relations.dropFirst()))
         assertRefusedUnderSmallLimitsOnly { limits in DiagramScene(layout: tampered, limits: limits) }
     }
 
