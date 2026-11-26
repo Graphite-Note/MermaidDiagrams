@@ -7,8 +7,8 @@
  *              lanes and hostile ones, every frame, route point, segment, text center and size alike to the bit.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -77,15 +77,16 @@ final class LaneLayoutEquivalenceTests: XCTestCase {
         XCTAssertEqual(mismatches.value, 0)
     }
 
-    /// The lane graph the swimlane engine lays out for `diagram`, made as `SwimlaneLayoutEngine.layout` makes it.
+    /// The lane graph the swimlane engine lays out for `diagram`, made as the 0.7.0 `SwimlaneLayoutEngine.layout` made it, as
+    /// lists (`ReferenceSwimlaneGraph`, which `SwimlaneLayoutEquivalenceTests` checks the graph in the arena against).
     static func laneGraph(of written: FlowchartDiagram, typography: DiagramTypography, isTight: Bool) -> LaneLayoutGraph {
         let diagram = FlowchartCollapsedGroups.collapsing(written)
         let measured = FlowchartMeasurement(diagram: diagram, nodeText: typography.nodeText, edgeText: typography.edgeText,
                                             wrappingWidth: isTight ? SwimlaneLayoutEngine.tightWrappingWidth : SwimlaneLayoutEngine.wrappingWidth)
         let titleRoom = isTight ? max(80, PreparedMermaidDiagram.standardNarrowestColumnWidth - 2 * SwimlaneLayoutEngine.padding) : SwimlaneLayoutEngine.unwrapped
-        return SwimlaneGraph(diagram: diagram, measured: measured, titleText: typography.nodeText,
-                             titleWidth: isTight ? max(80, titleRoom / 2) : SwimlaneLayoutEngine.unwrapped, isTight: isTight,
-                             edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom).graph
+        return ReferenceSwimlaneGraph(diagram: diagram, measured: measured, titleText: typography.nodeText,
+                                      titleWidth: isTight ? max(80, titleRoom / 2) : SwimlaneLayoutEngine.unwrapped, isTight: isTight,
+                                      edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom).graph
     }
 
     static func placesAlike(_ graph: LaneLayoutGraph, spacing: LayeredSpacing) -> Bool {

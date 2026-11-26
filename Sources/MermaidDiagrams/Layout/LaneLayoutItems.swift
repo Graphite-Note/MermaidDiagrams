@@ -7,8 +7,8 @@
  *              ranked boxes and the ranks themselves.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -35,7 +35,7 @@ struct LaneRankedEdge {
 /// nothing, in the order of the boxes; each is in the lane of the top-level group around it. A lane keeps the room of its
 /// padding and, around a box inside groups, the room of the widest padding of each group between, so that the groups
 /// drawn around the boxes stay inside it. Every list is a span of the arena it was made in, valid until that arena is
-/// released past it; the graph's boxes and edges are copied into spans once.
+/// released past it; the graph's boxes and edges are the spans the graph was given in.
 struct LaneLayoutItems {
     /// Pele's: the deepest a box may be inside groups when its lane is looked for.
     static let maximumHops = 10_000
@@ -69,10 +69,10 @@ struct LaneLayoutItems {
     let step: Int
     let ranks: ScratchSpan<Int>
 
-    init(graph: LaneLayoutGraph, arena: DiagramScratchArena) {
-        let boxes = Self.copied(graph.boxes, arena: arena)
+    init(graph: LaneLayoutSpanGraph, arena: DiagramScratchArena) {
+        let boxes = graph.boxes
         self.boxes = boxes
-        graphEdges = Self.copied(graph.edges, arena: arena)
+        graphEdges = graph.edges
         lanePadding = graph.lanePadding
         runsAcross = !graph.direction.runsVertically
         isFlipped = graph.direction == .bottomToTop || graph.direction == .rightToLeft

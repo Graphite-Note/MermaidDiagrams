@@ -7,8 +7,8 @@
  *              prototype dropped, merged into what the element had.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -40,6 +40,8 @@ enum AgentFlowMetadataReading {
     /// `metadata` with what `value` holds added, as JavaScript's `Object.assign` spreads it: a mapping's keys, a list's
     /// indexes, a text's characters by index; other values add nothing.
     static func merged(_ metadata: AgentFlowMetadata?, with value: SequenceAttributeValue) -> AgentFlowMetadata {
+        // A first mapping is the metadata whole: its keys are only ever looked up, never listed in an order.
+        if metadata == nil, case .mapping(let fields) = value { return fields }
         var merged = metadata ?? [:]
         switch value {
         case .mapping(let fields):

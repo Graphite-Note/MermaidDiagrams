@@ -7,8 +7,8 @@
  *              given simple routes of their own; the placement read where it lies in the arena or copied into lists.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -32,13 +32,17 @@ enum LaneLayout {
     /// `body` given where the layout put everything, read from the routed pass in the calling thread's arena, which it
     /// must not keep: a host that moves the boxes and routes onto its page in place needs no list of the placement.
     static func withPlacement<Result>(_ graph: LaneLayoutGraph, spacing: LayeredSpacing, _ body: (LaneLayoutPlacedView) -> Result) -> Result {
-        DiagramScratchArena.withCurrentThread { arena in
-            guard !graph.boxes.isEmpty else { return body(LaneLayoutPlacedView(emptyWithEdgeCount: graph.edges.count, arena: arena)) }
-            return body(LaneLayoutPlacedView(place(graph, spacing: spacing, arena: arena)))
-        }
+        DiagramScratchArena.withCurrentThread { arena in body(placed(graph.spans(in: arena), spacing: spacing, arena: arena)) }
     }
 
-    private static func place(_ graph: LaneLayoutGraph, spacing: LayeredSpacing, arena: DiagramScratchArena) -> LaneHandoffRouting {
+    /// Where the layout put a graph built in `arena`, read from the routed pass in that arena: valid until the arena is
+    /// released past the graph.
+    static func placed(_ graph: LaneLayoutSpanGraph, spacing: LayeredSpacing, arena: DiagramScratchArena) -> LaneLayoutPlacedView {
+        guard !graph.boxes.isEmpty else { return LaneLayoutPlacedView(emptyWithEdgeCount: graph.edges.count, arena: arena) }
+        return LaneLayoutPlacedView(place(graph, spacing: spacing, arena: arena))
+    }
+
+    private static func place(_ graph: LaneLayoutSpanGraph, spacing: LayeredSpacing, arena: DiagramScratchArena) -> LaneHandoffRouting {
         let setup = LaneLayoutItems(graph: graph, arena: arena)
         let isPlain = arena.span(count: setup.edges.count, repeating: false)
         let next = arena.span(count: setup.edges.count, repeating: false)

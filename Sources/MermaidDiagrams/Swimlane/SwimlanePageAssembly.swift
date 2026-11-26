@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: Puts a swimlane diagram's lane layout on the page as Pele's flowchart renderer draws its swimlane variant:
  *              nodes, edges onto their shapes' outlines, loops, the groups inside lanes and the lanes, read from the lane
- *              layout's placement where it lies in the thread's scratch arena.
+ *              layout's placement where it lies in the thread's scratch arena, each edge moved onto the page as it is made.
  *
  * Authors: Bahey Shalash
- * Version: 0.8
- * Date: 25/11/2026
+ * Version: 0.9
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -17,26 +17,31 @@ import CoreGraphics
 /// its box's center; each edge along its route, its ends moved from its nodes' boxes onto their shapes' outlines (a group's
 /// end stays on its border), each segment an S along its own flow, with its marks and text; loops beside their nodes (a
 /// group's from the middle of its box); the groups inside lanes as a flowchart's boxes; the lanes with their title bands;
-/// then everything moved 8 points inside the page, below the title.
+/// then everything moved 8 points inside the page, below the title (`SwimlanePageFrame`).
+///
+/// An edge is moved onto the page as soon as it is made, with the very additions moving the finished layout would make:
+/// its path's points moved where they lie, so that no edge is made twice.
 struct SwimlanePageAssembly {
     let diagram: FlowchartDiagram
     let measured: FlowchartMeasurement
     let graph: SwimlaneGraph
     /// Where the lane layout put everything, in the calling thread's arena: the assembly lasts no longer than it.
     let placement: LaneLayoutPlacedView
-    private var edges: [FlowchartLayoutEdge?]
-    /// The points each edge's route passes, its ends on their outlines: where it crosses a group's top. Kept only when a
-    /// group sits inside a lane, whose title they move.
-    private var edgePoints: [[CGPoint]] = []
+    let page: SwimlanePageFrame
+    /// The edges drawn, on the page, in their order.
+    private(set) var placedEdges: [FlowchartLayoutEdge] = []
+    /// The points each edge's route passes, its ends on their outlines, before the move onto the page: where it crosses a
+    /// group's top. Kept only when a group sits inside a lane, whose title they move.
+    private(set) var routePoints: [[CGPoint]] = []
 
-    init(diagram: FlowchartDiagram, measured: FlowchartMeasurement, graph: SwimlaneGraph, placement: LaneLayoutPlacedView, arena: DiagramScratchArena) {
+    init(diagram: FlowchartDiagram, measured: FlowchartMeasurement, graph: SwimlaneGraph, placement: LaneLayoutPlacedView, page: SwimlanePageFrame,
+         arena: DiagramScratchArena) {
         self.diagram = diagram
         self.measured = measured
         self.graph = graph
         self.placement = placement
-        edges = Array(repeating: nil, count: diagram.edgeCount)
+        self.page = page
         placeEdges(arena: arena)
-        placeSelfLoops()
     }
 
     private func center(ofNode node: Int) -> CGPoint {
@@ -44,29 +49,69 @@ struct SwimlanePageAssembly {
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
+    /// Every edge in its order: a loop beside its node (an edge from a node to itself, which the lane layout gives no
+    /// route), else an edge along its route, else none.
     private mutating func placeEdges(arena: DiagramScratchArena) {
         let reaches = sideReaches(arena: arena)
-        let keepsEdgePoints = graph.nesting.subgraphParents.contains { parent in parent != nil }
-        for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() {
+        let records = diagram.model.edges
+        // For each node, how many of its loops drawn so far are visible, as the loops are counted node by node.
+        let loopsDrawn = measured.selfLoopEdgeIndices.isEmpty ? .empty : arena.span(count: diagram.nodeCount, repeating: 0)
+        placedEdges.reserveCapacity(records.count)
+        let routeStart = arena.mark()
+        for edgeIndex in 0..<records.count {
+            let record = records[edgeIndex]
+            if record.sourceIndex == record.targetIndex, !loopsDrawn.isEmpty {
+                let node = Int(record.sourceIndex)
+                placedEdges.append(loop(edgeIndex, of: node, loopIndex: loopsDrawn[node]))
+                if record.stroke != .invisible { loopsDrawn[node] += 1 }
+                continue
+            }
             let route = placement.route(of: edgeIndex)
             guard route.count >= 2 else { continue }
-            var points = route.map(\.point)
-            let segmentsRunVertically = route.dropFirst().map { point in point.axis == 0 }
-            let startReach = reach(at: points[0], box: graph.nodeBoxes[edge.sourceIndex], in: reaches)
-            let endReach = reach(at: points[points.count - 1], box: graph.nodeBoxes[edge.targetIndex], in: reaches)
-            points[0] = onOutline(points[0], node: edge.sourceIndex)
-            points[points.count - 1] = onOutline(points[points.count - 1], node: edge.targetIndex)
-            if keepsEdgePoints { edgePoints.append(points) }
-            let startTrim = DiagramEdgeMark.lineTrim(for: edge.sourceArrowhead)
-            let endTrim = DiagramEdgeMark.lineTrim(for: edge.targetArrowhead)
-            let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: segmentsRunVertically, startTrim: startTrim, endTrim: endTrim,
-                                                        startReach: startReach, endReach: endReach)
-            let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
-            edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: drawn.path,
-                                                   sourceMark: Self.mark(edge.sourceArrowhead, tip: points[0], direction: leaving),
-                                                   targetMark: Self.mark(edge.targetArrowhead, tip: points[points.count - 1], direction: drawn.endDirection),
-                                                   text: Self.centered(measured.edgeTexts[edgeIndex], at: placement.labelCenters[edgeIndex]), style: edge.style)
+            placedEdges.append(routedEdge(edgeIndex, record: record, route: route, reaches: reaches, arena: arena))
+            arena.release(to: routeStart)
         }
+    }
+
+    /// The edge at `edgeIndex` along its route, its ends on its nodes' outlines, on the page.
+    private mutating func routedEdge(_ edgeIndex: Int, record: FlowchartEdgeRecord, route: ScratchSpan<LaneRoutePoint>, reaches: ScratchSpan<CGFloat>,
+                                     arena: DiagramScratchArena) -> FlowchartLayoutEdge {
+        let offset = page.offset
+        let source = Int(record.sourceIndex)
+        let target = Int(record.targetIndex)
+        let last = route.count - 1
+        let points: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: route.count)
+        for index in 0..<route.count { points[index] = route[index].point }
+        let startReach = reach(at: points[0], box: graph.nodeBoxes[source], in: reaches)
+        let endReach = reach(at: points[last], box: graph.nodeBoxes[target], in: reaches)
+        points[0] = onOutline(points[0], node: source)
+        points[last] = onOutline(points[last], node: target)
+        if graph.nesting.hasGroupInsideLane { routePoints.append(Array(points)) }
+        let startTrim = DiagramEdgeMark.lineTrim(for: record.sourceArrowhead)
+        let endTrim = DiagramEdgeMark.lineTrim(for: record.targetArrowhead)
+        let drawn = DiagramTurningRouteDrawing.path(through: points, segmentsRunVertically: LaneRouteSegmentAxes(route: route), startTrim: startTrim,
+                                                    endTrim: endTrim, startReach: startReach, endReach: endReach)
+        let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
+        return FlowchartLayoutEdge(stroke: record.stroke, path: Self.moved(drawn.path, by: offset),
+                                   sourceMark: Self.mark(record.sourceArrowhead, tip: points[0], direction: leaving)?.translated(by: offset),
+                                   targetMark: Self.mark(record.targetArrowhead, tip: points[last], direction: drawn.endDirection)?.translated(by: offset),
+                                   text: Self.centered(measured.edgeTexts[edgeIndex], at: placement.labelCenters[edgeIndex])?.translated(by: offset),
+                                   style: diagram.model.edgeStyle(at: edgeIndex))
+    }
+
+    /// `path` with each of its points moved by `offset`, as `DiagramPath.translated(by:)` moves them, where they lie.
+    static func moved(_ path: consuming DiagramPath, by offset: CGVector) -> DiagramPath {
+        var moved = path
+        moved.start = moved.start.translated(by: offset)
+        for index in moved.segments.indices {
+            switch moved.segments[index] {
+            case .line(let end): moved.segments[index] = .line(to: end.translated(by: offset))
+            case .curve(let end, let firstControl, let secondControl):
+                moved.segments[index] = .curve(to: end.translated(by: offset), control1: firstControl.translated(by: offset),
+                                               control2: secondControl.translated(by: offset))
+            }
+        }
+        return moved
     }
 
     /// How far from each side of each box the edges that meet it start to turn, as Pele's `sideReach` sets it: as far as the
@@ -80,11 +125,11 @@ struct SwimlanePageAssembly {
             guard trim > 0, let key = sideKey(at: point, box: box) else { return }
             reaches[key] = max(reaches[key], DiagramTurningRouteDrawing.defaultReach(trim: trim))
         }
-        for (edgeIndex, edge) in diagram.edgeDrawings.enumerated() where edge.stroke != .invisible {
+        for (edgeIndex, record) in diagram.model.edges.enumerated() where record.stroke != .invisible {
             let route = placement.route(of: edgeIndex)
             guard route.count >= 2 else { continue }
-            reach(route[0].point, box: graph.nodeBoxes[edge.sourceIndex], arrowhead: edge.sourceArrowhead)
-            reach(route[route.count - 1].point, box: graph.nodeBoxes[edge.targetIndex], arrowhead: edge.targetArrowhead)
+            reach(route[0].point, box: graph.nodeBoxes[Int(record.sourceIndex)], arrowhead: record.sourceArrowhead)
+            reach(route[route.count - 1].point, box: graph.nodeBoxes[Int(record.targetIndex)], arrowhead: record.targetArrowhead)
         }
         return reaches
     }
@@ -117,7 +162,7 @@ struct SwimlanePageAssembly {
     /// A route's end moved from its node's box onto the outline of the shape drawn in it, as Pele's `insetRoute` moves it;
     /// a group's end, and one on no side of its box, stay.
     private func onOutline(_ point: CGPoint, node: Int) -> CGPoint {
-        guard graph.nesting.representedSubgraphs[node] == nil else { return point }
+        guard graph.nesting.representedSubgraphs[node] < 0 else { return point }
         let frame = placement.frames[graph.nodeBoxes[node]]
         guard let side = Self.side(of: point, on: frame) else { return point }
         let shape = measured.layoutShape(of: node, in: diagram)
@@ -126,28 +171,21 @@ struct SwimlanePageAssembly {
                                                offset: side.isHorizontal ? point.x - frame.midX : point.y - frame.midY)
     }
 
-    /// The loops of every node that has edges to itself, as Pele's `loopPath` draws them (`FlowchartSelfLoops`); a group's
-    /// from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is not drawn,
-    /// does not count among the loops drawn before the next one.
-    private mutating func placeSelfLoops() {
-        guard !measured.selfLoopEdgeIndices.isEmpty else { return }
-        for node in 0..<diagram.nodeCount {
-            let loopEdgeIndices = measured.selfLoopEdgeIndices[node]
-            let isGroup = graph.nesting.representedSubgraphs[node] != nil
-            var loopIndex = 0
-            for edgeIndex in loopEdgeIndices {
-                let edge = diagram.edgeDrawing(at: edgeIndex)
-                defer { if edge.stroke != .invisible { loopIndex += 1 } }
-                let text = measured.edgeTexts[edgeIndex]
-                let loop = FlowchartSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
-                                                  flowRunsAcross: diagram.direction.runsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
-                                                  textSize: text?.size)
-                edges[edgeIndex] = FlowchartLayoutEdge(stroke: edge.stroke, path: loop.path,
-                                                       sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoNodeAtLeave),
-                                                       targetMark: Self.mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving),
-                                                       text: Self.centered(text, at: loop.textCenter), style: edge.style)
-            }
-        }
+    /// The loop `edgeIndex` of `node`, the `loopIndex`th visible one, as Pele's `loopPath` draws it (`FlowchartSelfLoops`);
+    /// a group's from the middle of its box, as Pele loops a group whose drawn node has no size. An invisible loop, which is
+    /// not drawn, does not count among the loops drawn before the next one.
+    private func loop(_ edgeIndex: Int, of node: Int, loopIndex: Int) -> FlowchartLayoutEdge {
+        let offset = page.offset
+        let isGroup = graph.nesting.representedSubgraphs[node] >= 0
+        let edge = diagram.edgeDrawing(at: edgeIndex)
+        let text = measured.edgeTexts[edgeIndex]
+        let loop = FlowchartSelfLoops.loop(center: center(ofNode: node), shapeSize: isGroup ? .zero : measured.shapeSizes[node], loopIndex: loopIndex,
+                                          flowRunsAcross: diagram.direction.runsAcross, endTrim: DiagramEdgeMark.lineTrim(for: edge.targetArrowhead),
+                                          textSize: text?.size)
+        return FlowchartLayoutEdge(stroke: edge.stroke, path: Self.moved(loop.path, by: offset),
+                                   sourceMark: Self.mark(edge.sourceArrowhead, tip: loop.leave, direction: loop.intoNodeAtLeave)?.translated(by: offset),
+                                   targetMark: Self.mark(edge.targetArrowhead, tip: loop.back, direction: loop.arriving)?.translated(by: offset),
+                                   text: Self.centered(text, at: loop.textCenter)?.translated(by: offset), style: edge.style)
     }
 
     static func mark(_ arrowhead: FlowchartArrowhead, tip: CGPoint, direction: CGVector) -> DiagramEdgeMark? {
@@ -162,57 +200,16 @@ struct SwimlanePageAssembly {
 
 }
 
-extension SwimlanePageAssembly {
-    /// The finished layout: the lane layout's extent moved `padding` inside the page, below the title and centered under it
-    /// when the title is wider, as Pele frames a flowchart.
-    func finished(font: DiagramFont, title: DiagramTextBlock?, padding: CGFloat, titleGap: CGFloat) -> SwimlaneLayout {
-        let titleSize = title?.size ?? .zero
-        let titleHeight = title == nil ? 0 : titleSize.height + titleGap
-        let innerWidth = max(placement.size.width, titleSize.width)
-        let offset = CGVector(dx: padding + (innerWidth - placement.size.width) / 2, dy: padding + titleHeight)
-        let size = CGSize(width: (innerWidth + 2 * padding).rounded(.up), height: (placement.size.height + titleHeight + 2 * padding).rounded(.up))
-        var placedTitle = title
-        placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        let nodes = (0..<diagram.nodeCount).filter { node in graph.nesting.representedSubgraphs[node] == nil }.map { node in placedNode(node).translated(by: offset) }
-        let flowchart = FlowchartLayout(size: size, font: font, nodes: nodes, edges: edges.compactMap { edge in edge?.translated(by: offset) },
-                                        title: placedTitle, clusters: groupsInsideLanes().map { cluster in cluster.translated(by: offset) })
-        return SwimlaneLayout(flowchart: flowchart, lanes: lanes().map { lane in lane.translated(by: offset) })
-    }
+/// The axes of a lane route's segments, read from its points as `LaneLayoutPlacedView.placement` lists them: segment
+/// `index` runs along a vertical flow when the point it arrives at has axis 0.
+struct LaneRouteSegmentAxes: RandomAccessCollection {
+    let route: ScratchSpan<LaneRoutePoint>
 
-    private func placedNode(_ node: Int) -> FlowchartLayoutNode {
-        let center = center(ofNode: node)
-        var text = measured.nodeTexts[node]
-        text.center = CGPoint(x: center.x, y: center.y + measured.textOffsets[node])
-        let size = measured.shapeSizes[node]
-        return FlowchartLayoutNode(shape: diagram.nodeShape(at: node),
-                                   frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height),
-                                   text: text, style: diagram.nodeStyle(at: node), asset: diagram.nodeAsset(at: node))
-    }
+    var startIndex: Int { 0 }
+    var endIndex: Int { route.count - 1 }
 
-    /// The groups inside lanes, each title along its box's top, clear of the edges where it can be, their depths counted from
-    /// the lane they are in.
-    private func groupsInsideLanes() -> [FlowchartLayoutCluster] {
-        let crossings = FlowchartRoutePointIndex(edgePoints)
-        return (0..<diagram.subgraphCount).compactMap { subgraph in
-            guard graph.nesting.subgraphParents[subgraph] != nil else { return nil }
-            let frame = placement.frames[graph.subgraphBoxes[subgraph]]
-            let title = graph.titles[subgraph].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings) }
-            return FlowchartLayoutCluster(frame: frame, title: title?.title, depth: graph.nesting.subgraphDepths[subgraph] - 1,
-                                          isTitleCrossed: title?.isCrossed ?? false)
-        }
-    }
-
-    /// The lanes in the order they are placed, each title centered in the band at its start, turned where the flow runs across.
-    private func lanes() -> [SwimlaneLayoutLane] {
-        let isTurned = diagram.direction.runsAcross
-        let depth = placement.laneTitleDepth
-        return placement.lanes.map { box in
-            let frame = placement.frames[box]
-            let band = isTurned ? CGRect(x: frame.minX, y: frame.minY, width: depth, height: frame.height)
-                                : CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: depth)
-            let subgraph = graph.subgraphBoxes.firstIndex(of: box)
-            let title = subgraph.flatMap { subgraph in Self.centered(graph.titles[subgraph], at: CGPoint(x: band.midX, y: band.midY)) }
-            return SwimlaneLayoutLane(frame: frame, titleBand: band, title: title, isTitleTurned: isTurned)
-        }
+    subscript(index: Int) -> Bool {
+        precondition(index >= 0 && index < route.count - 1, "Index out of range of a route's segments")
+        return route[index + 1].axis == 0
     }
 }
