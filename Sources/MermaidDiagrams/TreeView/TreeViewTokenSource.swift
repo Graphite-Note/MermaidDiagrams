@@ -6,8 +6,8 @@
  *              its tokens: an entry's name and annotations, the title and the accessibility text.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -86,9 +86,10 @@ struct TreeViewTokenSource {
         }
     }
 
-    /// The entry whose tokens start at `index`, which moves past them: an indentation, a name, then annotations.
-    func entry(in tokens: [TreeViewToken], from index: inout Int) throws(MermaidDiagramReadError) -> TreeViewWrittenEntry {
-        var entry = TreeViewWrittenEntry()
+    /// The entry whose tokens start at `index`, which moves past them: an indentation, a name, then annotations, each
+    /// read on the bytes (`TreeViewEntryText`).
+    func entry(in tokens: [TreeViewToken], from index: inout Int) throws(MermaidDiagramReadError) -> TreeViewWrittenFields {
+        var entry = TreeViewWrittenFields()
         if tokens[index].kind == .indentation {
             entry.indentation = tokens[index].end - tokens[index].start
             index += 1
@@ -97,28 +98,24 @@ struct TreeViewTokenSource {
             let offset = index < tokens.count ? tokens[index].start : bytes.count
             throw .invalidSyntax(line: writtenLine(at: offset), problem: .treeViewExpectedName(excerpt(at: offset)))
         }
-        let name = text(of: tokens[index])
-        entry.name = tokens[index].kind == .quotedName ? String(name.dropFirst().dropLast())
-            : Self.withoutTrailingBlanks(name)
+        (entry.name, entry.isFolder) = TreeViewEntryText.name(bytes, from: tokens[index].start, to: tokens[index].end,
+                                                              isQuoted: tokens[index].kind == .quotedName)
         index += 1
         while index < tokens.count {
-            let written = FoundationTextOnBytes.trimmed(text(of: tokens[index]), includingLineBreaks: false)
-            switch tokens[index].kind {
-            case .classAnnotation: entry.classes = FoundationTextOnBytes.trimmed(String(written.dropFirst(3)), includingLineBreaks: false)
-            case .iconAnnotation: entry.icon = String(written.dropFirst("icon(".count).dropLast())
-            case .descriptionAnnotation: entry.description = FoundationTextOnBytes.trimmed(String(written.dropFirst(2)), includingLineBreaks: false)
+            let token = tokens[index]
+            switch token.kind {
+            case .classAnnotation:
+                entry.classes = TreeViewEntryText.annotation(bytes, from: token.start, to: token.end, markerLength: 3, closingLength: 0, trimsValue: true)
+            case .iconAnnotation:
+                entry.icon = TreeViewEntryText.annotation(bytes, from: token.start, to: token.end, markerLength: 5, closingLength: 1, trimsValue: false)
+            case .descriptionAnnotation:
+                entry.description = TreeViewEntryText.annotation(bytes, from: token.start, to: token.end, markerLength: 2, closingLength: 0,
+                                                                 trimsValue: true)
             default: return entry
             }
             index += 1
         }
         return entry
-    }
-
-    /// The name without the spaces and tabs at its end, its characters compared as the reversed name's were.
-    private static func withoutTrailingBlanks(_ name: String) -> String {
-        var end = name.endIndex
-        while end > name.startIndex, case let before = name.index(before: end), name[before] == " " || name[before] == "\t" { end = before }
-        return String(name[..<end])
     }
 
     /// Text of one line as Mermaid keeps it: trimmed, each run of blanks one space.
