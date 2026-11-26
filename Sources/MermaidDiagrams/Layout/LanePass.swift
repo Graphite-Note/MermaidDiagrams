@@ -221,18 +221,7 @@ struct LanePass {
             let neighbors = isDownward ? upperNeighbors : lowerNeighbors
             for step in 1...maximumRank {
                 let range = rowRange(isDownward ? step : maximumRank - step)
-                for slot in range {
-                    let vertex = rowVertices[slot]
-                    var sum: CGFloat = 0
-                    var count = 0
-                    for neighborSlot in neighbors.range(of: vertex) {
-                        let neighbor = neighbors.members[neighborSlot]
-                        guard lane[neighbor] == lane[vertex] else { continue }
-                        sum += centers[neighbor]
-                        count += 1
-                    }
-                    wanted[vertex] = count == 0 ? centers[vertex] : sum / CGFloat(count)
-                }
+                for slot in range { wanted[rowVertices[slot]] = wantedCenter(of: rowVertices[slot], neighbors: neighbors) }
                 var start = range.lowerBound
                 while start < range.upperBound {
                     let last = runEnd(from: start, before: range.upperBound)
@@ -242,6 +231,19 @@ struct LanePass {
             }
             unchangedPasses = isChanged ? 0 : unchangedPasses + 1
         }
+    }
+
+    /// The mean center of the vertex's neighbours in its lane, or its own center when it has none there.
+    private func wantedCenter(of vertex: Int, neighbors: LaneAdjacency) -> CGFloat {
+        var sum: CGFloat = 0
+        var count = 0
+        for neighborSlot in neighbors.range(of: vertex) {
+            let neighbor = neighbors.members[neighborSlot]
+            guard lane[neighbor] == lane[vertex] else { continue }
+            sum += centers[neighbor]
+            count += 1
+        }
+        return count == 0 ? centers[vertex] : sum / CGFloat(count)
     }
 
     /// A run centered between its lane's paddings.
