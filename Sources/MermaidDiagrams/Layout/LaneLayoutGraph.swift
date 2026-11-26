@@ -2,11 +2,12 @@
  * File: LaneLayoutGraph.swift
  * ---------------------------
  * Layer: Core
- * Description: What the lane layout lays out (boxes, some of them groups, and edges between them) and where it puts them.
+ * Description: What the lane layout lays out (boxes, some of them groups, and edges between them), as lists or as spans
+ *              of the thread's scratch arena, and where it puts them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -21,6 +22,21 @@ struct LaneLayoutGraph {
     var direction: LayeredDirection
     /// The room a lane keeps around its boxes: Pele's 24 points, 12 in a tight layout.
     var lanePadding: CGFloat = 24
+
+    /// The graph's boxes and edges copied into spans of `arena`, as the lane layout reads them.
+    func spans(in arena: DiagramScratchArena) -> LaneLayoutSpanGraph {
+        LaneLayoutSpanGraph(boxes: LaneLayoutItems.copied(boxes, arena: arena), edges: LaneLayoutItems.copied(edges, arena: arena), direction: direction,
+                            lanePadding: lanePadding)
+    }
+}
+
+/// A graph to lay out in lanes whose boxes and edges are spans of the calling thread's scratch arena: what a host that
+/// builds its graph in the arena (`SwimlaneGraph`) hands the layout, with no list of its own.
+struct LaneLayoutSpanGraph {
+    let boxes: ScratchSpan<LaneLayoutBox>
+    let edges: ScratchSpan<LaneLayoutEdge>
+    let direction: LayeredDirection
+    let lanePadding: CGFloat
 }
 
 /// A box: a node of its size, or a group whose size the layout gives it around what it holds. A group that holds nothing

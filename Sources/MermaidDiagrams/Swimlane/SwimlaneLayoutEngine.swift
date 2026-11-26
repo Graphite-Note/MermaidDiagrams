@@ -7,8 +7,8 @@
  *              narrow column fitted by SwimlaneNarrowLayout.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -70,14 +70,14 @@ public enum SwimlaneLayoutEngine {
                                                                titleText: Measurer, font: DiagramFont, isTight: Bool, columnWidth: CGFloat?) -> SwimlaneLayout {
         // Pele's room for a title in a column: its width less the page's padding, at least 80 points.
         let titleRoom = isTight ? columnWidth.map { width in max(80, width - 2 * padding) } ?? unwrapped : unwrapped
-        let graph = SwimlaneGraph(diagram: diagram, measured: measured, titleText: nodeText, titleWidth: isTight ? max(80, titleRoom / 2) : unwrapped,
-                                  isTight: isTight, edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: titleText, maximumWidth: titleRoom) }
-        return LaneLayout.withPlacement(graph.graph, spacing: isTight ? tightSpacing : spacing) { placement in
-            DiagramScratchArena.withCurrentThread { arena in
-                SwimlanePageAssembly(diagram: diagram, measured: measured, graph: graph, placement: placement, arena: arena)
-                    .finished(font: font, title: title, padding: padding, titleGap: titleGap)
-            }
+        return DiagramScratchArena.withCurrentThread { arena in
+            let graph = SwimlaneGraph(diagram: diagram, measured: measured, titleText: nodeText, titleWidth: isTight ? max(80, titleRoom / 2) : unwrapped,
+                                      isTight: isTight, edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom, arena: arena)
+            let placement = LaneLayout.placed(graph.graph, spacing: isTight ? tightSpacing : spacing, arena: arena)
+            let page = SwimlanePageFrame(placementSize: placement.size, title: title, padding: padding, titleGap: titleGap)
+            return SwimlanePageAssembly(diagram: diagram, measured: measured, graph: graph, placement: placement, page: page, arena: arena)
+                .finished(font: font)
         }
     }
 }
