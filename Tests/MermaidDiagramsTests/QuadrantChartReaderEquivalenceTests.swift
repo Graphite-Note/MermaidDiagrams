@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: The quadrant reader, whose tokens hold ranges of the text's bytes, gives the chart 0.7.0's reader gave
  *              with Strings, or its error with its line and excerpt, on every corpus input and spec text, thousands of
- *              them changed at random, random charts of every statement, and long and many hostile ones.
+ *              them changed at random, random charts of every statement, and long and many hostile ones, long runs of
+ *              white space among them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -102,6 +103,34 @@ final class QuadrantChartReaderEquivalenceTests: XCTestCase {
         ]
         for source in cases {
             XCTAssertTrue(assertReadAsTheReference(source), String(source.prefix(40)))
+            guard let cursor = cursor(of: source) else { continue }
+            let start = Date()
+            _ = try? QuadrantChartParser.parse(cursor, limits: .standard)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 1, String(source.prefix(40)))
+        }
+    }
+
+    /// Each byte of a run of spaces or of a point's white space is a token alone, and the lexer looks ahead over the rest
+    /// of the run at each of them for a keyword or a point's colon and bracket: a run of 45,000 spaces took 32 s to read
+    /// (debug build) before the run's end was remembered. Short runs read as the frozen reader reads them (which still
+    /// steps them again from each byte), long ones in under a second.
+    func testLongRunsOfWhiteSpaceReadAsTheFrozenReaderQuickly() {
+        func runs(_ count: Int) -> [String] {
+            let spaces = String(repeating: " ", count: count)
+            let half = String(repeating: " ", count: count / 2)
+            return [
+                "quadrantChart\n" + spaces + "x",
+                "quadrantChart\n" + String(repeating: "\t", count: count) + "x",
+                "quadrantChart\n" + String(repeating: " \n", count: count / 2) + "x",
+                "quadrantChart\n" + String(repeating: " \u{0B}\u{0C}\t", count: count / 4) + "x",
+                "quadrantChart\n  P" + half + ":" + half + "x",
+                "quadrantChart\n  P" + half + ":" + half + "[0.5, 0.5]",
+                "quadrantChart\n" + half + "x-axis a" + half + "--> b",
+                "quadrantChart\n  P" + String(repeating: " :", count: count / 2),
+            ]
+        }
+        for source in runs(1_200) { assertReadAsTheReference(source) }
+        for source in runs(45_000) {
             guard let cursor = cursor(of: source) else { continue }
             let start = Date()
             _ = try? QuadrantChartParser.parse(cursor, limits: .standard)

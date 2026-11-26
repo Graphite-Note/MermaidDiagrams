@@ -7,8 +7,8 @@
  *              unconnected parts arranged in rows that keep the whole roughly square.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 extension ArchitectureGridPlacement {
@@ -23,9 +23,9 @@ extension ArchitectureGridPlacement {
             partStart = order.count
             starts.append(partStart)
             // Emptied, their room kept for the next part.
-            cells.removeAll(keepingCapacity: true)
+            cells.removeAll()
             largeItems.removeAll(keepingCapacity: true)
-            reaches.removeAll(keepingCapacity: true)
+            reaches.removeAll()
             put(start, column: 0, row: 0)
             followLinks()
         }
@@ -153,12 +153,8 @@ extension ArchitectureGridPlacement {
             return
         }
         for cellRow in row..<(row + heights[item]) {
-            for cellColumn in column..<(column + widths[item]) { cells[Self.cellKey(cellColumn, cellRow)] = item }
+            for cellColumn in column..<(column + widths[item]) { cells.set(item, for: ArchitectureCellKey(column: cellColumn, row: cellRow)) }
         }
-    }
-
-    private static func cellKey(_ column: Int, _ row: Int) -> Int {
-        (column + (1 << 25)) * (1 << 26) + row + (1 << 25)
     }
 
     private func overlaps(_ item: Int, _ column: Int, _ row: Int, _ width: Int, _ height: Int) -> Bool {
@@ -172,7 +168,7 @@ extension ArchitectureGridPlacement {
         }
         for cellRow in row..<(row + height) {
             for cellColumn in column..<(column + width) {
-                if let hit = cells[Self.cellKey(cellColumn, cellRow)] { return hit }
+                if let hit = cells.value(of: ArchitectureCellKey(column: cellColumn, row: cellRow)) { return hit }
             }
         }
         return largeItems.first { item in overlaps(item, column, row, width, height) }
@@ -182,7 +178,7 @@ extension ArchitectureGridPlacement {
     /// block starting from the same place cannot stop sooner.
     private mutating func slide(_ column: Int, _ row: Int, _ width: Int, _ height: Int, _ stepX: Int, _ stepY: Int) -> Int {
         let key = ArchitectureSlideKey(column: column, row: row, width: width, height: height, stepX: stepX, stepY: stepY)
-        var distance = reaches[key] ?? 0
+        var distance = reaches.value(of: key) ?? 0
         while let hit = collision(column + distance * stepX, row + distance * stepY, width, height) {
             if stepX > 0 {
                 distance = x[hit] + widths[hit] - column
@@ -194,7 +190,7 @@ extension ArchitectureGridPlacement {
                 distance = row + height - y[hit]
             }
         }
-        reaches[key] = distance
+        reaches.set(distance, for: key)
         return distance
     }
 

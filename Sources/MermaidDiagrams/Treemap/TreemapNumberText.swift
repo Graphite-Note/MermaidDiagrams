@@ -6,8 +6,8 @@
  *              double half up.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -140,6 +140,15 @@ enum TreemapNumberText {
         let rounded = ExactDecimal(magnitude).rounded(toDigits: count)
         let digits = String(decoding: rounded.digits.map { digit in UInt8(ascii: "0") + digit }, as: UTF8.self)
         return Double(digits.prefix(1) + "." + digits.dropFirst() + "e" + String(rounded.exponent)) ?? magnitude
+    }
+
+    /// `shortest(significant(magnitude, digits: count))`, the shortest digits read once where they are already at most
+    /// `count` and the double is not a power of two.
+    static func shortestOfSignificant(_ magnitude: Double, digits count: Int) -> String {
+        guard magnitude.isFinite, magnitude > 0, magnitude.significandBitPattern != 0 else { return shortest(significant(magnitude, digits: count)) }
+        let (digits, pointPosition) = JavaScriptNumberText.shortestDigits(of: magnitude)
+        guard digits.utf8.count <= count else { return shortest(exactlyRoundedSignificant(magnitude, digits: count)) }
+        return JavaScriptNumberText.text(ofDigits: digits, pointPosition: pointPosition, sign: "")
     }
 
     /// `String(number)` in JavaScript.

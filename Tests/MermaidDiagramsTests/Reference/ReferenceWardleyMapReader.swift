@@ -6,8 +6,8 @@
  *              read them, which the Wardley map reader is compared with.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -287,7 +287,7 @@ extension ReferenceWardleyMapParser {
         let arrow = isAt(.linkArrow) || isAt(.arrow) ? take() : nil
         let to = try readName()
         let toPort = isAt(.linkPort) ? take() : nil
-        let label = isAt(.linkLabel) ? PlaneMapText.trimmed(String(take().dropFirst())) : nil
+        let label = isAt(.linkLabel) ? ReferencePlaneMapText.trimmed(String(take().dropFirst())) : nil
         guard statements.links.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
         statements.links.append(.init(from: from, fromPort: fromPort, arrow: arrow, to: to, toPort: toPort, label: label))
     }
@@ -297,13 +297,13 @@ extension ReferenceWardleyMapParser {
 enum ReferencePlaneMapTerminalValues {
     /// A title's text: after `title`, trimmed, runs of spaces and tabs made one space.
     static func title(_ token: String) -> String {
-        PlaneMapText.singleSpaced(String(token.dropFirst("title".count)))
+        ReferencePlaneMapText.singleSpaced(String(token.dropFirst("title".count)))
     }
 
     /// An accessibility title's text: after its colon, trimmed, runs of blanks made one.
     static func accessibilityTitle(_ token: String) -> String {
         guard let colon = token.firstIndex(of: ":") else { return "" }
-        return PlaneMapText.singleSpaced(String(token[token.index(after: colon)...]))
+        return ReferencePlaneMapText.singleSpaced(String(token[token.index(after: colon)...]))
     }
 
     /// An accessibility description's text: after its colon as a title's, or between its braces each line trimmed, the
@@ -311,10 +311,10 @@ enum ReferencePlaneMapTerminalValues {
     static func accessibilityDescription(_ token: String) -> String {
         let afterKeyword = token.dropFirst("accDescr".count)
         let start = afterKeyword.drop { character in character == " " || character == "\t" }
-        if start.first == ":" { return PlaneMapText.singleSpaced(String(start.dropFirst())) }
+        if start.first == ":" { return ReferencePlaneMapText.singleSpaced(String(start.dropFirst())) }
         guard let opening = token.firstIndex(of: "{"), let closing = token.lastIndex(of: "}"), opening < closing else { return "" }
         let lines = token[token.index(after: opening)..<closing].split(whereSeparator: { character in character == "\n" || character == "\r" || character == "\r\n" })
-        return lines.map { line in PlaneMapText.singleSpaced(String(line)) }.filter { line in !line.isEmpty }.joined(separator: "\n")
+        return lines.map { line in ReferencePlaneMapText.singleSpaced(String(line)) }.filter { line in !line.isEmpty }.joined(separator: "\n")
     }
 
     /// A string's text without its quotation marks, each backslash replaced by the character it escapes (`\n` a line

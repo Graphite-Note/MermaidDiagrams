@@ -6,8 +6,8 @@
  *              quoted strings, numbers, the text of a line, accessibility descriptions, spaces and comments.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import Foundation
@@ -89,9 +89,16 @@ enum PieChartStatementText {
     }
 
     /// A string between quotation marks or apostrophes, which may span lines, with a backslash escaping the next
-    /// character. The cursor is on the opening mark.
+    /// character. The cursor is on the opening mark. A string without a backslash is its bytes, made a String at once.
     static func readString(_ cursor: inout MermaidTextCursor) throws(MermaidDiagramReadError) -> String {
         guard let quotation = cursor.peek() else { throw .invalidSyntax(line: cursor.line, problem: .unclosedQuotation) }
+        var end = 1
+        while let byte = cursor.peek(end), byte != quotation, byte != backslash { end += 1 }
+        if cursor.peek(end) == quotation {
+            let text = cursor.text(from: cursor.position + 1, to: cursor.position + end)
+            cursor.advance(by: end + 1)
+            return text
+        }
         let openingLine = cursor.line
         cursor.advance()
         var bytes: [UInt8] = []
@@ -125,7 +132,9 @@ enum PieChartStatementText {
         } else if integerDigitCount > 1, lookahead.bytes[integerStart] == zero {
             return nil
         }
-        guard lookahead.peek() != MermaidByte.period, let number = Double(lookahead.text(from: start, to: lookahead.position)) else { return nil }
+        guard lookahead.peek() != MermaidByte.period,
+              let number = ChartDecimalText.value(of: lookahead.bytes, from: start, to: lookahead.position)
+                ?? Double(lookahead.text(from: start, to: lookahead.position)) else { return nil }
         cursor = lookahead
         return number
     }

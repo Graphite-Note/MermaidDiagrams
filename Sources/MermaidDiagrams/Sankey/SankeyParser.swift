@@ -2,11 +2,12 @@
  * File: SankeyParser.swift
  * ------------------------
  * Layer: Core
- * Description: Reads a Sankey diagram's rows after its keyword, as Mermaid's grammar and Pele's parser do.
+ * Description: Reads a Sankey diagram's rows after its keyword, as Mermaid's grammar and Pele's parser do, handing
+ *              its builder the ranges of the names' bytes in an ASCII text.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// Reads a Sankey diagram's rows after its `sankey` or `sankey-beta` keyword, as Mermaid's grammar and Pele's parser do,
@@ -18,33 +19,52 @@ struct SankeyParser {
     private let tokens: [SankeyLexer.Token]
     private var index = 0
     private var builder: SankeyDiagramBuilder
+    /// Whether names are handed to the builder as the ranges of their bytes only (`SankeyDiagramBuilder`).
+    private let namesAreBytes: Bool
 
-    private init(text: SankeyPreparedText, limits: MermaidDiagramLimits) {
+    private init(text: SankeyPreparedText, limits: MermaidDiagramLimits, namesAreBytes: Bool) {
         self.text = text
         tokens = SankeyLexer.tokens(of: text.bytes)
-        builder = SankeyDiagramBuilder(limits: limits)
+        self.namesAreBytes = namesAreBytes
+        builder = SankeyDiagramBuilder(limits: limits, namesAreBytes: namesAreBytes)
     }
 
     /// Reads the Sankey diagram whose keyword ends at the cursor.
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> SankeyDiagram {
-        var parser = SankeyParser(text: SankeyPreparedText(after: cursor), limits: limits)
-        try parser.expect(.newline)
-        try parser.readRows()
-        var diagram = parser.builder.diagram
+        let text = SankeyPreparedText(after: cursor)
+        let bytes = text.bytes
+        var diagram = try bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
+            var parser = SankeyParser(text: text, limits: limits, namesAreBytes: Self.namesAreBytes(in: buffer))
+            try parser.expect(.newline)
+            try parser.readRows(in: buffer)
+            return parser.builder.diagram
+        }
         diagram.options = SankeyOptions(MermaidConfigurationOptions(section: "sankey", in: cursor))
         return diagram
     }
 
+    /// Whether names can be compared by their bytes: the text is ASCII, where two Strings are equal exactly when their
+    /// bytes are, and holds no doubled quotation mark, the one thing that makes a name other than its field's bytes.
+    private static func namesAreBytes(in bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        guard GraphDiagramNameTable.isASCII(bytes) else { return false }
+        var index = 1
+        while index < bytes.count {
+            if bytes[index] == MermaidByte.quotationMark, bytes[index - 1] == MermaidByte.quotationMark { return false }
+            index += 1
+        }
+        return true
+    }
+
     private var kind: SankeyLexer.Kind { tokens[index].kind }
 
-    private mutating func readRows() throws(MermaidDiagramReadError) {
+    private mutating func readRows(in bytes: UnsafeBufferPointer<UInt8>) throws(MermaidDiagramReadError) {
         while true {
             let source = try readName()
             try expect(.comma)
             let target = try readName()
             try expect(.comma)
             let value = try readField()
-            try builder.addLink(from: source, to: target, value: JavaScriptNumberReading.parseFloat(text.bytes[value]))
+            try builder.addLink(from: source, to: target, value: JavaScriptNumberReading.parseFloat(text.bytes[value]), in: bytes)
             guard kind == .newline else { break }
             index += 1
         }
@@ -54,15 +74,19 @@ struct SankeyParser {
 
     /// A field without the spaces at either end, a doubled quotation mark read as one; an error when a character
     /// Mermaid refuses in a name (a control character, an unpaired surrogate) is there once entity codes are decoded.
-    private mutating func readName() throws(MermaidDiagramReadError) -> String {
+    /// The name is its range, and its String too when names are compared as Strings (`SankeyDiagramBuilder`).
+    private mutating func readName() throws(MermaidDiagramReadError) -> SankeyFieldName {
         let start = tokens[index]
         let field = JavaScriptWhitespace.trimmed(text.bytes[try readField()])
-        let name = field.contains(MermaidByte.quotationMark) ? Self.withSingleQuotationMarks(field) : String(decoding: field, as: UTF8.self)
+        let range = MermaidTextRange(start: field.startIndex, end: field.endIndex)
         // Only an entity code (`#1;`) can bring a character the lexer refuses into a name.
-        guard !field.contains(MermaidByte.semicolon) || !DiagramLabelDecoder.decodingEntities(name).unicodeScalars.contains(where: Self.isRefusedInName) else {
+        let mayBringRefusedCharacter = field.contains(MermaidByte.semicolon)
+        guard !namesAreBytes || mayBringRefusedCharacter else { return SankeyFieldName(range: range, text: nil) }
+        let name = field.contains(MermaidByte.quotationMark) ? Self.withSingleQuotationMarks(field) : String(decoding: field, as: UTF8.self)
+        guard !mayBringRefusedCharacter || !DiagramLabelDecoder.decodingEntities(name).unicodeScalars.contains(where: Self.isRefusedInName) else {
             throw .invalidSyntax(line: text.line(at: start.start), problem: .unexpectedText(excerpt(at: start)))
         }
-        return name
+        return SankeyFieldName(range: range, text: namesAreBytes ? nil : name)
     }
 
     /// The text with each doubled quotation mark read as one.

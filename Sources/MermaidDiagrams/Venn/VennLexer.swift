@@ -4,11 +4,11 @@
  * Layer: Core
  * Description: Reads a Venn diagram's tokens one at a time, as Mermaid's Jison lexer for Venn diagrams does (Pele's
  *              lexer.ts): keywords in any case, bracket labels, numbers, colors, and the indented `text` that continues
- *              a set.
+ *              a set; a keyword is tried only where its first letter is.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// The kinds of a Venn diagram's tokens, in the order of Mermaid's grammar (`venn.jison`).
@@ -171,8 +171,11 @@ struct VennLexer {
                 return VennToken(kind: .title, text: text(from: textStart, to: end), start: start)
             }
         }
-        for (word, kind) in Self.keywords where isKeyword(word, at: start) && byte(start + word.utf8.count) != PlaneMapByte.hyphen {
-            return token(kind, from: start, to: start + word.utf8.count)
+        // The keywords start with different letters but `set` and `style`, which differ at their second: trying only the
+        // ones whose first letter is there takes the one the rules' order takes.
+        if let (word, kind) = keyword(at: start),
+           byte(start + word.utf8CodeUnitCount) != PlaneMapByte.hyphen {
+            return token(kind, from: start, to: start + word.utf8CodeUnitCount)
         }
         if matchesWord("rgb", at: start) {
             let hasAlpha = byte(start + 3).map(PlaneMapByte.lowercased) == UInt8(ascii: "a")
@@ -242,15 +245,23 @@ struct VennLexer {
     }
 
     /// Whether `word` (lowercase) is at `start`, ASCII letters compared without regard to case.
-    private func matchesWord(_ word: String, at start: Int) -> Bool {
-        for (offset, expected) in word.utf8.enumerated() {
-            guard let actual = byte(start + offset), PlaneMapByte.lowercased(actual) == expected else { return false }
+    private func matchesWord(_ word: StaticString, at start: Int) -> Bool {
+        let letters = word.utf8Start
+        for offset in 0..<word.utf8CodeUnitCount {
+            guard let actual = byte(start + offset), PlaneMapByte.lowercased(actual) == letters[offset] else { return false }
         }
         return true
     }
 
-    private func isKeyword(_ word: String, at start: Int) -> Bool {
-        matchesWord(word, at: start) && byte(start + word.utf8.count).map(PlaneMapByte.isWord) != true
+    private func isKeyword(_ word: StaticString, at start: Int) -> Bool {
+        matchesWord(word, at: start) && byte(start + word.utf8CodeUnitCount).map(PlaneMapByte.isWord) != true
+    }
+
+    /// The keyword at `start`, tried among those that start with its letter, in the rules' order, or nil.
+    private func keyword(at start: Int) -> (StaticString, VennTokenKind)? {
+        let first = PlaneMapByte.lowercased(bytes[start])
+        for (word, kind) in Self.keywords where word.utf8Start[0] == first && isKeyword(word, at: start) { return (word, kind) }
+        return nil
     }
 
     /// Whether only spaces and tabs lie between the last line feed and `start`.
@@ -273,5 +284,5 @@ struct VennLexer {
         String(decoding: bytes[min(start, end)..<end], as: UTF8.self)
     }
 
-    private static let keywords: [(String, VennTokenKind)] = [("venn-beta", .venn), ("set", .set), ("union", .union), ("text", .text), ("style", .style)]
+    private static let keywords: [(StaticString, VennTokenKind)] = [("venn-beta", .venn), ("set", .set), ("union", .union), ("text", .text), ("style", .style)]
 }

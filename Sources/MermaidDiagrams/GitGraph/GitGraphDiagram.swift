@@ -5,8 +5,8 @@
  * Description: A Git graph as its text describes it once its statements are played: commits, branches and options.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 /// A Mermaid Git graph (`gitGraph`) as its text describes it, once its statements have been played as Mermaid plays
@@ -67,7 +67,7 @@ public struct GitGraphCommit: Equatable, Sendable {
     /// (`cherry-pick:<id>|parent:<id>` for a merge).
     public let tags: [DiagramLabel]
     /// The branch it was made on, an index into `GitGraphDiagram.branches`.
-    public let branchIndex: Int
+    public internal(set) var branchIndex: Int
     /// The commits it follows, as indices into `GitGraphDiagram.commits`, each before it: the branch's previous last
     /// commit (none for the first commit of a branch made from nothing); then, for a merge, the merged branch's last
     /// commit, and for a cherry-pick, the commit it copies.
