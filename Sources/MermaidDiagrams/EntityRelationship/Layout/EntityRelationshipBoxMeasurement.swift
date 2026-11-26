@@ -5,8 +5,8 @@
  * Description: An entity's box sized around its name and attribute table, Pele's, its rows placed when the box is.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -59,7 +59,7 @@ enum EntityRelationshipBoxMeasurement {
     /// - Parameter minimumSize: The least size the entity's loops need; its height counts for a box without
     ///   attributes only, which loops out of its right side.
     static func box<Measurer>(for entity: EntityRelationshipEntity, measurers: EntityRelationshipTextMeasurers<Measurer>,
-                              minimumSize: CGSize) -> EntityRelationshipMeasuredBox {
+                              minimumSize: CGSize, cells constantCells: inout EntityRelationshipConstantCells) -> EntityRelationshipMeasuredBox {
         var name = DiagramTextBlock(label: entity.label, measurer: measurers.name, maximumWidth: nameWrappingWidth)
         let nameHeight = max(name.size.height, measurers.name.lineHeight)
         let narrowest = max(minimumWidth, minimumSize.width, name.size.width + 2 * nameHorizontalPadding)
@@ -70,10 +70,7 @@ enum EntityRelationshipBoxMeasurement {
         }
         var cells: [DiagramTextBlock] = []
         cells.reserveCapacity(entity.attributes.count * EntityRelationshipAttributeTable.cellsPerRow)
-        // A comment that is not written, and keys that are not, are the same empty label for every attribute.
-        let noLines = DiagramLabel(lines: [])
-        let noKeys = DiagramLabel("")
-        for attribute in entity.attributes { appendCells(of: attribute, measurers: measurers, noLines: noLines, noKeys: noKeys, to: &cells) }
+        for attribute in entity.attributes { appendCells(of: attribute, measurers: measurers, constantCells: &constantCells, to: &cells) }
         let table = EntityRelationshipAttributeTable(cells: cells, rowLineHeight: measurers.row.lineHeight)
         let width = max(narrowest, table.filledWidth + 2 * cellHorizontalPadding)
         let headerHeight = nameHeight + 2 * headerVerticalPadding
@@ -82,15 +79,19 @@ enum EntityRelationshipBoxMeasurement {
                                              headerHeight: headerHeight, rowFontSize: measurers.row.fontSize)
     }
 
-    /// An attribute's type, name, keys and comment, measured in that order; a cell with nothing to show has no lines.
+    /// An attribute's type, name, keys and comment, measured in that order; a cell with nothing to show has no lines. The
+    /// keys and a comment that is not written are blocks of a closed set, measured once a diagram (`constantCells`).
     private static func appendCells<Measurer>(of attribute: EntityRelationshipAttribute, measurers: EntityRelationshipTextMeasurers<Measurer>,
-                                              noLines: DiagramLabel, noKeys: DiagramLabel, to cells: inout [DiagramTextBlock]) {
+                                              constantCells: inout EntityRelationshipConstantCells, to cells: inout [DiagramTextBlock]) {
         let unwrapped = CGFloat.greatestFiniteMagnitude
-        let keys = attribute.keys.isEmpty ? noKeys : DiagramLabel(attribute.keys.map(\.mermaidKeyword).joined(separator: ", "))
         cells.append(DiagramTextBlock(label: lines(of: attribute.type), measurer: measurers.row, maximumWidth: unwrapped))
         cells.append(DiagramTextBlock(label: lines(of: attribute.name), measurer: measurers.row, maximumWidth: unwrapped))
-        cells.append(DiagramTextBlock(label: keys, measurer: measurers.key, maximumWidth: unwrapped))
-        cells.append(DiagramTextBlock(label: attribute.comment ?? noLines, measurer: measurers.row, maximumWidth: commentWrappingWidth))
+        cells.append(constantCells.keys(attribute.keys, measurer: measurers.key))
+        if let comment = attribute.comment {
+            cells.append(DiagramTextBlock(label: comment, measurer: measurers.row, maximumWidth: commentWrappingWidth))
+        } else {
+            cells.append(constantCells.noComment(measurer: measurers.row))
+        }
     }
 
     /// A type or a name in backticks may hold line breaks; each starts a line. A text without a line break or a final

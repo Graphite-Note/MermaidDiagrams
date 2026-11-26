@@ -5,8 +5,8 @@
  * Description: Relations that leave a class close to its namespace's border run straight to it, as Pele's class renderer draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -25,15 +25,18 @@ struct ClassDiagramBorderRuns {
     let nodeNamespaces: [Int?]
     let namespaceParents: [Int?]
     let clusterFrames: [CGRect]
-    /// How many relation ends share each side of each node, keyed by `key(node:side:)`.
-    let endCounts: [Int: Int]
+    /// How many relation ends share each side of each node, at `slot(node:side:)`: four sides for each node from the
+    /// first to the last an end is at.
+    let endCounts: [Int32]
 
     init(nodeNamespaces: [Int?], namespaceParents: [Int?], clusterFrames: [CGRect], ends: [ClassDiagramEdgePorts.End]) {
         self.nodeNamespaces = nodeNamespaces
         self.namespaceParents = namespaceParents
         self.clusterFrames = clusterFrames
-        var endCounts: [Int: Int] = [:]
-        for end in ends { endCounts[Self.key(node: end.node, side: end.side), default: 0] += 1 }
+        var nodeCount = 0
+        for end in ends { nodeCount = max(nodeCount, end.node + 1) }
+        var endCounts = [Int32](repeating: 0, count: 4 * nodeCount)
+        for end in ends { endCounts[Self.slot(node: end.node, side: end.side)] += 1 }
         self.endCounts = endCounts
     }
 
@@ -42,30 +45,41 @@ struct ClassDiagramBorderRuns {
     func straightened(_ points: [CGPoint], source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End) -> [CGPoint] {
         guard points.count > 2 else { return points }
         var moved = points
-        moveRun(of: &moved, end: source, interior: Array(1..<(points.count - 1)))
-        moveRun(of: &moved, end: target, interior: Array((1..<(points.count - 1)).reversed()))
+        moveRun(of: &moved, end: source, first: 1, step: 1, count: points.count - 2)
+        moveRun(of: &moved, end: target, first: points.count - 2, step: -1, count: points.count - 2)
         return moved
     }
 
-    /// Moves the run of `interior` points (from the end outward) in line with the first of them into line with the end,
-    /// when the run reaches a border of a namespace around the end's class within `reach` of the end.
-    private func moveRun(of points: inout [CGPoint], end: ClassDiagramEdgePorts.End, interior: [Int]) {
-        guard (endCounts[Self.key(node: end.node, side: end.side)] ?? 0) >= 2, let first = interior.first else { return }
+    /// Moves the run of the `count` interior points from `first` by `step` (from the end outward) in line with the first
+    /// of them into line with the end, when the run reaches a border of a namespace around the end's class within `reach`
+    /// of the end.
+    private func moveRun(of points: inout [CGPoint], end: ClassDiagramEdgePorts.End, first: Int, step: Int, count: Int) {
+        let slot = Self.slot(node: end.node, side: end.side)
+        guard slot < endCounts.count, endCounts[slot] >= 2, count > 0 else { return }
         let endPoint = end.isSourceEnd ? points[0] : points[points.count - 1]
-        let alongSide: (CGPoint) -> CGFloat = end.side.isHorizontal ? { point in point.x } : { point in point.y }
-        let line = alongSide(points[first])
-        guard abs(line - alongSide(endPoint)) <= Self.reach else { return }
-        var run: [Int] = []
-        for index in interior {
-            guard abs(alongSide(points[index]) - line) < Self.tolerance else { return }
-            run.append(index)
+        let isHorizontal = end.side.isHorizontal
+        let line = Self.alongSide(points[first], isHorizontal: isHorizontal)
+        guard abs(line - Self.alongSide(endPoint, isHorizontal: isHorizontal)) <= Self.reach else { return }
+        var index = first
+        for _ in 0..<count {
+            guard abs(Self.alongSide(points[index], isHorizontal: isHorizontal) - line) < Self.tolerance else { return }
             if isOnBorder(points[index], aroundNode: end.node) {
-                for moved in run {
-                    if end.side.isHorizontal { points[moved].x = endPoint.x } else { points[moved].y = endPoint.y }
+                // The run is every point from the first to this one.
+                var moved = first
+                while true {
+                    if isHorizontal { points[moved].x = endPoint.x } else { points[moved].y = endPoint.y }
+                    if moved == index { break }
+                    moved += step
                 }
                 return
             }
+            index += step
         }
+    }
+
+    /// A point's coordinate along a side: x along the top or bottom, y along the left or right.
+    private static func alongSide(_ point: CGPoint, isHorizontal: Bool) -> CGFloat {
+        isHorizontal ? point.x : point.y
     }
 
     /// Whether `point` lies on the border of one of the namespaces' boxes around `node`.
@@ -85,7 +99,7 @@ struct ClassDiagramBorderRuns {
         return false
     }
 
-    private static func key(node: Int, side: DiagramSide) -> Int {
+    private static func slot(node: Int, side: DiagramSide) -> Int {
         let sideNumber = switch side {
         case .top: 0
         case .right: 1

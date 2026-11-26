@@ -5,8 +5,8 @@
  * Description: Puts an entity relationship diagram laid out in its groups' boxes on the page: boxes, relationships, groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -16,9 +16,7 @@ extension EntityRelationshipPageAssembly {
     mutating func placeBoxes(clustered: EntityRelationshipClusterGraph, compound: LayeredCompoundLayout) {
         representedSubgraphs = clustered.representedSubgraphs
         let nodeCount = clustered.graph.nodeCount
-        for (entity, subgraph) in clustered.representedSubgraphs.enumerated() {
-            if let subgraph { representedBoxSizes[entity] = compound.nodes[nodeCount + subgraph].frame.size }
-        }
+        representedBoxSizes = clustered.representedSubgraphs.map { subgraph in subgraph.map { subgraph in compound.nodes[nodeCount + subgraph].frame.size } }
         boxCenters = diagram.entities.indices.map { entity in
             if let subgraph = clustered.representedSubgraphs[entity] {
                 let frame = compound.nodes[nodeCount + subgraph].frame

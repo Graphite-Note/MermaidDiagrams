@@ -5,8 +5,8 @@
  * Description: An entity relationship diagram's text measured and its boxes sized.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -43,11 +43,12 @@ struct EntityRelationshipMeasurement {
             indices.map { index in EntityRelationshipSelfLoops.band(labelSize: labels[index]?.size, leavesBelow: loopsLeaveBelow[entity]) }
         }
         let loopBands = loopBands
+        var constantCells = EntityRelationshipConstantCells()
         boxes = diagram.entities.indices.map { index in
             let bands = loopBands[index]
             let bandsLength = bands.isEmpty ? 0 : bands.reduce(0, +) + EntityRelationshipSelfLoops.sideMargin
             let minimumSize = loopsLeaveBelow[index] ? CGSize(width: bandsLength, height: 0) : CGSize(width: 0, height: bandsLength)
-            return EntityRelationshipBoxMeasurement.box(for: diagram.entities[index], measurers: measurers, minimumSize: minimumSize)
+            return EntityRelationshipBoxMeasurement.box(for: diagram.entities[index], measurers: measurers, minimumSize: minimumSize, cells: &constantCells)
         }
     }
 

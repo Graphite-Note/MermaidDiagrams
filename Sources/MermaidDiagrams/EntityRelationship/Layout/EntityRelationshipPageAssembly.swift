@@ -5,8 +5,8 @@
  * Description: Puts a placed entity relationship diagram on the page.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -27,8 +27,9 @@ struct EntityRelationshipPageAssembly {
     var relationshipPoints: [[CGPoint]] = []
     /// The groups' boxes.
     var subgraphBoxes: [FlowchartLayoutCluster] = []
-    /// For each entity that stands for a group, the size of the group's box, which its loops hang off.
-    var representedBoxSizes: [Int: CGSize] = [:]
+    /// For each entity, the size of the group's box when it stands for a group, which its loops hang off, else nil;
+    /// empty for a diagram without groups.
+    var representedBoxSizes: [CGSize?] = []
     /// How far beyond its box each group's loops reach, which the drawing makes room for as Pele widens it.
     private var loopReaches: [CGRect] = []
     /// The relationships that loop off a group's box, whose labels take no room beyond their reach.
@@ -164,8 +165,9 @@ struct EntityRelationshipPageAssembly {
     mutating func placeSelfRelationships() {
         for (entity, indices) in measured.selfRelationshipIndices.enumerated() where !indices.isEmpty {
             let labelSizes = indices.map { index in measured.labels[index]?.size }
-            let boxSize = representedBoxSizes[entity] ?? measured.boxes[entity].size
-            if representedBoxSizes[entity] != nil {
+            let representedSize = entity < representedBoxSizes.count ? representedBoxSizes[entity] : nil
+            let boxSize = representedSize ?? measured.boxes[entity].size
+            if representedSize != nil {
                 let reach = EntityRelationshipSelfLoops.room(labelSizes: labelSizes, leavesBelow: false)
                 loopReaches.append(CGRect(x: boxCenters[entity].x + boxSize.width / 2, y: boxCenters[entity].y, width: reach, height: 0))
                 groupLoopIndices.formUnion(indices)
