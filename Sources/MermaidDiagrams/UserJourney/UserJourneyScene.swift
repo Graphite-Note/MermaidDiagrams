@@ -6,8 +6,8 @@
  *              them.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -40,7 +40,7 @@ enum UserJourneySceneRecording {
         let lineWidth = UserJourneyDrawingParts.lineWidth
         let roundJoin = DiagramStroke(lineWidth: lineWidth, lineJoin: .round)
         builder.stroke(paths.scaleLines, .alternateSurface, DiagramStroke(lineWidth: lineWidth), part: .axis)
-        for level in layout.scaleLevels { builder.text(level.text, .muted, part: .axisLabel) }
+        for text in layout.scale.texts { builder.text(text, .muted, part: .axisLabel) }
         builder.stroke(paths.stems, .border, DiagramStroke(lineWidth: lineWidth, dashLengths: UserJourneyDrawingParts.stemDashLengths), part: .edge)
         builder.stroke(paths.scoreLine, .line, roundJoin, part: .edge)
         builder.fillAndStroke(paths.faces, fill: .background, stroke: .line, roundJoin, part: .node)
@@ -49,7 +49,7 @@ enum UserJourneySceneRecording {
         builder.fill(paths.sectionBands, .alternateSurface, part: .cluster)
         for section in layout.sections { builder.text(section.text, .foreground, isBold: true, part: .clusterLabel) }
         builder.fillAndStroke(paths.cards, fill: .surface, stroke: .border, roundJoin, part: .node)
-        for task in layout.tasks { builder.text(task.text, .foreground, part: .label) }
+        for task in layout.placedTasks { builder.text(task.text, .foreground, part: .label) }
         for (index, dots) in paths.cardDotsBySeries.enumerated() { builder.fillAndStroke(dots, fill: .series(index), stroke: .surface, roundJoin, part: .marker) }
         for (index, dots) in paths.legendDotsBySeries.enumerated() { builder.fill(dots, .series(index), part: .legend) }
         for entry in layout.legend { builder.text(entry.text, .foreground, part: .legend) }

@@ -6,8 +6,8 @@
  *              screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -31,12 +31,13 @@ extension MermaidDiagramAccessibility {
     init(userJourney diagram: UserJourneyDiagram, layout: UserJourneyLayout) {
         // The legend and the tasks alone are taken into the work, not the whole layout.
         let legend = layout.legend
-        let placedTasks = layout.tasks
+        let placedTasks = layout.placedTasks
+        let dots = layout.dots
         self.init(kind: .userJourney, title: diagram.accessibilityTitle ?? diagram.title,
                   description: diagram.accessibilityDescription, summarySeparator: "; ") {
             let taskTexts = zip(diagram.taskRecords, placedTasks).map { task, placed in
                 let text = task.score != nil ? Self.joined(task.label.spokenText, ": ", Self.written(task.level)) : task.label.spokenText
-                let actors = placed.actorDots.compactMap { dot in
+                let actors = dots[placed.dotIndices].compactMap { dot in
                     legend.indices.contains(dot.seriesIndex) ? legend[dot.seriesIndex].text.lines.joined(separator: " ") : nil
                 }
                 return actors.isEmpty ? text : Self.joined(text, " (", actors.joined(separator: ", "), ")")
