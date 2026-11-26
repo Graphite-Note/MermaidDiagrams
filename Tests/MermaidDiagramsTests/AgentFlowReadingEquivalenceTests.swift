@@ -5,10 +5,11 @@
  * Description: The agent flow reader on bytes against 0.7.0's reader on UTF-16 code units kept as the reference: every
  *              corpus input, Pele's reference inputs, random and mutated texts (beyond ASCII and kept to it), spellings
  *              Swift holds equal, each the same model, list for list, or the same error; hostile texts read in time
- *              that grows with their length, and readings on many threads at once alike.
+ *              that grows with their length, and readings on many threads at once alike; names Swift holds equal
+ *              that the grammar reads, one name.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -58,6 +59,35 @@ final class AgentFlowReadingEquivalenceTests: XCTestCase {
             "agentflow-beta\n  n1@{ shape: T\u{301}ool }\n  n2@{ shape: \u{212A} }",
         ]
         XCTAssertEqual(Self.assertReadAlike(sources), sources.count)
+    }
+
+    /// Names the grammar reads and Swift holds equal though their bytes differ (the Kelvin sign and `K`, the Angstrom
+    /// sign and `Å`, a Greek letter with oxia and with tonos, a Hangul syllable and its jamo) are one node, one flow, one
+    /// class, one connector, one global node, one edge identifier and one made edge identifier (`L_start_end_n`), as
+    /// 0.7.0's String keys made them. The grammar refuses an identifier that starts beyond ASCII or holds a combining
+    /// mark, so the texts above that write them are refused alike and name nothing; each of these is read by the
+    /// reference, and with its names compared by their bytes the reader would make two of each.
+    func testNamesSwiftHoldsEqualThatTheGrammarReadsAreOneName() throws {
+        let sources = [
+            "agentflow-beta\n  x\u{212A} --> xK\n  xK@{ shape: tool }\n  x\u{212A}[Kelvin]\n  a\u{212B} --> a\u{C5}\n  g\u{1F71} --> g\u{3AC}\n"
+                + "  h\u{D55C} --> h\u{1112}\u{1161}\u{11AB}",
+            "agentflow-beta\n  flow f\u{212A}[Flow]\n    a\u{212A} --> aK\n  end\n  flow fK\n    b\n  end\n  style aK fill:#f00\n  class a\u{212A},b hot\u{212A}\n"
+                + "  classDef hotK fill:#0f0\n  classDef hot\u{212A} color:red",
+            "agentflow-beta\n  a x\u{212A}1@--> b\n  xK1@{ curve: linear }\n  a xK1@--> c",
+            "agentflow-beta\n  x\u{212A} --> y\n  L_xK_y_0@{ curve: linear }\n  class L_x\u{212A}_y_0 hot\n  xK --> y\n  L_xK_y_2@{ curve: basis }\n  classDef hot fill:#f00",
+            "agentflow-beta\n  connector c\u{212A}[\"C\"]\n  cK --> d\u{212A}\n  global\n    dK\n  end\n  flow f\n    d\u{212A} --> q\n  end",
+            "agentflow-beta\n  click n\u{212A} href \"u\" \"tip\"\n  nK[N]",
+            "agentflow-beta\n  a\u{D55C} e\u{1112}\u{1161}\u{11AB}@--> b\n  e\u{D55C}@{ curve: linear }",
+        ]
+        let read = try sources.map { source in try XCTUnwrap(try ReferenceAgentFlowReading.read(source, limits: .standard), source) }
+        // The reference makes one of each pair: four nodes of eight spellings, one flow and one class of two each, one
+        // edge for the two identifiers that name it.
+        XCTAssertEqual(read[0].vertices.count, 4)
+        XCTAssertEqual(read[1].flows.count, 1)
+        XCTAssertEqual(read[1].classDefinitions.count, 1)
+        XCTAssertEqual(read[3].edges.compactMap(\.interpolation), ["linear", "basis"])
+        XCTAssertEqual(Self.assertReadAlike(sources), sources.count)
+        XCTAssertEqual(Self.assertReadAlike(sources.map { source in source.replacingOccurrences(of: "\n", with: "\r\n") }), sources.count)
     }
 
     /// Statements few corpus inputs write: long and split arrows, link styles by index and by default, clicks of every
