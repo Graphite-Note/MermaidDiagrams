@@ -27,6 +27,12 @@ struct UseCaseMeasuredLabels {
         guard !label.text.isEmpty else { return UseCaseTextLabel.empty(measurer) }
         lines.removeAll()
         let flat = DiagramFlatMeasurer(measurer)
+        #if DEBUG
+        // The tests that check every text the corpora measure watch the decoder, which the fast path does not call.
+        if label.type == .markdown, DiagramLabelDecodingObservation.observer != nil {
+            _ = DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[Int(label.text.start)..<Int(label.text.end)]), form: .markdown)
+        }
+        #endif
         let measured: DiagramMeasuredText? = label.type == .markdown
             ? DiagramFlatTextMeasuring.measure(markdown: bytes, label.text, measurer: flat, maximumWidth: room, into: &lines)
             : Self.plainOnFastPath(bytes, label.text, measurer: flat, room: room, into: &lines)

@@ -102,13 +102,22 @@ struct C4TextMeasuring<Measurer: DiagramTextMeasuring> {
 
     /// A kind's name in `maximumWidth`, as `C4TextLabel.block(kind.guillemetedName, measurer: smallest, ...)` measures it.
     func measureKindName(_ kind: C4ShapeKind, maximumWidth: CGFloat, into lines: inout DiagramMeasuredLines) -> DiagramMeasuredText {
-        kindNameWidths.measure(C4KindNames.index(of: kind), measurer: smallest, maximumWidth: maximumWidth, into: &lines)
+        #if DEBUG
+        if DiagramLabelDecodingObservation.observer != nil { _ = DiagramLabelDecoder.label(from: kind.guillemetedName, form: .plain) }
+        #endif
+        return kindNameWidths.measure(C4KindNames.index(of: kind), measurer: smallest, maximumWidth: maximumWidth, into: &lines)
     }
 
     /// The text of `bytes[range]` measured, or, for a text that measures to no line (white space or breaks alone), the
     /// lines Pele lays out for it: one empty line for each part between breaks, as `C4TextLabel` makes them.
     private func measured(_ bytes: UnsafeBufferPointer<UInt8>, _ range: MermaidTextRange, with measurer: DiagramFlatMeasurer<Measurer>,
                           maximumWidth: CGFloat, into lines: inout DiagramMeasuredLines) -> DiagramMeasuredText {
+        #if DEBUG
+        // The tests that check every text the corpora measure watch the decoder, which the fast path does not call.
+        if DiagramLabelDecodingObservation.observer != nil {
+            _ = DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[Int(range.start)..<Int(range.end)]), form: .plain)
+        }
+        #endif
         let measured = DiagramFlatTextMeasuring.measure(bytes, range, form: .plain, measurer: measurer, maximumWidth: maximumWidth, into: &lines)
         guard measured.lineCount == 0 else { return measured }
         let label = DiagramLabelDecoder.label(fromUTF8: UnsafeBufferPointer(rebasing: bytes[Int(range.start)..<Int(range.end)]), form: .plain)
