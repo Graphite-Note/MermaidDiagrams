@@ -7,8 +7,8 @@
  *              already there.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -36,7 +36,7 @@ extension C4Router {
         lanes.claim(first, side: best.startSide, at: best.isUpright ? best.points[1] : best.points[0])
         lanes.claim(second, side: best.endSide, at: best.isUpright ? best.points[7] : best.points[6])
         // The label sits on the middle stretch, across the gap.
-        var route = Self.bent(Array(best.points), labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
+        var route = Self.bent(best.points, labelStretch: 2, startTrim: startTrim, endTrim: endTrim)
         route.labelRoom = best.isUpright ? C4Metrics.narrowLabelWidth : C4Metrics.wideLabelWidth
         return route
     }

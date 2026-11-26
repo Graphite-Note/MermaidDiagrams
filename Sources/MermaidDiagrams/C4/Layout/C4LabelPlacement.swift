@@ -4,11 +4,12 @@
  * Layer: Core
  * Description: Places the C4 headings and relation labels as Pele's render.ts does: a boundary's heading at the left,
  *              the middle or the right of its top, the first no line crosses; a relation's label on its line or beside
- *              it, slid along the line to the place that covers least of the shapes, arrowheads and labels already there.
+ *              it, slid along the line to the place that covers least of the shapes, arrowheads and labels already
+ *              there.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -16,8 +17,8 @@ import CoreGraphics
 /// A relation's label placed: the patch behind it and its two texts, the label then the technology.
 struct C4PlacedLabel {
     let frame: CGRect
-    let label: DiagramTextBlock?
-    let technology: DiagramTextBlock?
+    let label: DiagramMeasuredText?
+    let technology: DiagramMeasuredText?
 }
 
 extension C4DrawingPass {
@@ -25,7 +26,7 @@ extension C4DrawingPass {
     mutating func placeHeadings() {
         guard isCareful else { return }
         for groupIndex in groups.indices {
-            guard let boxIndex = groupBoxIndices[groupIndex], groups[groupIndex].headingWidth > 0 else { continue }
+            guard let boxIndex = boxIndex(ofGroup: groupIndex), groups[groupIndex].headingWidth > 0 else { continue }
             let box = boxes[boxIndex]
             let width = groups[groupIndex].headingWidth
             let top = box.y + C4Metrics.headingTop
@@ -42,31 +43,36 @@ extension C4DrawingPass {
                 if count == 0 { break }
             }
             let left = box.x + groups[groupIndex].headingLeft
-            taken.append(CGRect(x: left - 4, y: top, width: width + 8, height: bottom - top))
+            taken.append(C4TakenArea(CGRect(x: left - 4, y: top, width: width + 8, height: bottom - top)))
         }
     }
 
-    /// Each relation's label, nil for one with neither a label nor a technology. A dynamic diagram numbers its labels.
-    mutating func placeLabels() -> [C4PlacedLabel?] {
-        relations.map { relation in placeLabel(of: relation) }
+    /// Each relation's label, nil for one with neither a label nor a technology, its texts measured into `lines`. A
+    /// dynamic diagram numbers its labels.
+    mutating func placeLabels(into lines: inout DiagramMeasuredLines) -> [C4PlacedLabel?] {
+        var labels: [C4PlacedLabel?] = []
+        labels.reserveCapacity(relations.count)
+        for relation in relations { labels.append(placeLabel(of: relation, into: &lines)) }
+        return labels
     }
 
-    private mutating func placeLabel(of routed: C4RoutedRelation) -> C4PlacedLabel? {
+    private mutating func placeLabel(of routed: C4RoutedRelation, into lines: inout DiagramMeasuredLines) -> C4PlacedLabel? {
         let relation = diagram.relationRecords[routed.relationIndex]
         let route = routed.route
         let number = diagram.level == .dynamic ? routed.relationIndex + 1 : 0
-        let label = C4TextLabel.numberedBlock(relation.label, number: number, in: diagram, measurer: measurers.small, maximumWidth: route.labelRoom)
-        let technology = C4TextLabel.bracketedBlock(relation.technology, in: diagram, measurer: measurers.italicSmall, maximumWidth: route.labelRoom)
+        let label = measuring.measureNumbered(relation.label, number: number, in: diagram, maximumWidth: route.labelRoom, into: &lines)
+        let technology = measuring.measureBracketed(relation.technology, in: diagram, with: measuring.italicSmall, maximumWidth: route.labelRoom,
+                                                    into: &lines)
         let width = max(label.measuredWidth, technology.measuredWidth) + C4Metrics.labelPadding
         let height = label.measuredHeight + technology.measuredHeight
         guard height > 0 else { return nil }
         let center = labelCenter(of: route, relation: relation, size: CGSize(width: width, height: height))
         let frame = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
-        if isCareful { taken.append(frame) }
+        if isCareful { taken.append(C4TakenArea(frame)) }
         grow(frame)
-        let placedLabel = label.map { block in PlaneMapLabel.placed(block, at: CGPoint(x: center.x, y: frame.minY + block.size.height / 2)) }
-        let placedTechnology = technology.map { block in
-            PlaneMapLabel.placed(block, at: CGPoint(x: center.x, y: frame.minY + label.measuredHeight + block.size.height / 2))
+        let placedLabel = label.map { text in text.centered(at: CGPoint(x: center.x, y: frame.minY + text.height / 2)) }
+        let placedTechnology = technology.map { text in
+            text.centered(at: CGPoint(x: center.x, y: frame.minY + label.measuredHeight + text.height / 2))
         }
         return C4PlacedLabel(frame: frame, label: placedLabel, technology: placedTechnology)
     }
@@ -109,11 +115,12 @@ extension C4DrawingPass {
 
     /// How much of the rectangle the shapes, arrowheads, headings and labels taken cover, added up.
     private func covered(_ rectangle: CGRect) -> CGFloat {
+        let placed = C4TakenArea(rectangle)
         var area: CGFloat = 0
         for other in taken {
-            let width = min(rectangle.maxX, other.maxX) - max(rectangle.minX, other.minX)
+            let width = min(placed.maximumX, other.maximumX) - max(placed.minimumX, other.minimumX)
             guard width > 0 else { continue }
-            let height = min(rectangle.maxY, other.maxY) - max(rectangle.minY, other.minY)
+            let height = min(placed.maximumY, other.maximumY) - max(placed.minimumY, other.minimumY)
             if height > 0 { area += width * height }
         }
         return area
@@ -123,5 +130,21 @@ extension C4DrawingPass {
     private static func offset(_ value: Double?) -> CGFloat {
         guard let value, value != 0, !value.isNaN else { return 0 }
         return CGFloat(max(-Double(C4Metrics.largestLabelOffset), min(Double(C4Metrics.largestLabelOffset), value)))
+    }
+}
+
+/// A rectangle a label should not cover, by its edges, read once from the rectangle as `CGRect`'s `minX`, `maxX`, `minY`
+/// and `maxY` give them rather than at each comparison.
+struct C4TakenArea {
+    let minimumX: CGFloat
+    let minimumY: CGFloat
+    let maximumX: CGFloat
+    let maximumY: CGFloat
+
+    init(_ rectangle: CGRect) {
+        minimumX = rectangle.minX
+        minimumY = rectangle.minY
+        maximumX = rectangle.maxX
+        maximumY = rectangle.maxY
     }
 }

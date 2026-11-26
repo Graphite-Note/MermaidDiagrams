@@ -2,13 +2,13 @@
  * File: ReferenceUseCaseLayoutEngine.swift
  * ----------------------------------------
  * Layer: Tests
- * Description: The 0.7.0 UseCaseLayoutEngine kept as the reference the 0.8.0 layout is checked against:
- *              lays a use case diagram out as Pele's renderUsecase does: its nodes measured, its system boundaries as
- *              boxes of the layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
+ * Description: The 0.7.0 UseCaseLayoutEngine kept as the reference the 0.8.0 layout is checked against: lays a use case
+ *              diagram out as Pele's renderUsecase does: its nodes measured, its system boundaries as boxes of the
+ *              layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -78,11 +78,11 @@ enum ReferenceUseCaseLayoutEngine {
 /// the cluster layout placed put on the page.
 struct ReferenceUseCaseLayoutPass {
     let diagram: UseCaseDiagram
-    let graph: UseCaseGraph
+    let graph: ReferenceUseCaseGraph
     let fontSize: CGFloat
     let font: DiagramFont
     let isSideways: Bool
-    var views: [UseCaseNodeView] = []
+    var views: [ReferenceUseCaseNodeView] = []
     /// By node, its size in the layout: what is drawn, grown to hold its loops.
     var layoutSizes: [CGSize] = []
     /// The edges drawn (both ends known), by their place in the graph, with their ends' nodes and labels.
@@ -94,7 +94,7 @@ struct ReferenceUseCaseLayoutPass {
 
     init<Measurer>(diagram: UseCaseDiagram, measurers: inout ReferenceUseCaseTextMeasurers<Measurer>) {
         self.diagram = diagram
-        graph = UseCaseGraph(diagram)
+        graph = ReferenceUseCaseGraph(diagram)
         font = measurers.font
         fontSize = measurers.font.size
         isSideways = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
@@ -125,9 +125,9 @@ struct ReferenceUseCaseLayoutPass {
                 views[source].loopCount += 1
                 let size = label.size
                 if isSideways {
-                    layoutSizes[source].height += 2 * (UseCaseSelfLoops.reach + (size.height > 0 ? size.height + 8 : 0))
+                    layoutSizes[source].height += 2 * (ReferenceUseCaseSelfLoops.reach + (size.height > 0 ? size.height + 8 : 0))
                 } else {
-                    layoutSizes[source].width += 2 * (UseCaseSelfLoops.reach + (size.width > 0 ? size.width + 12 : 0))
+                    layoutSizes[source].width += 2 * (ReferenceUseCaseSelfLoops.reach + (size.width > 0 ? size.width + 12 : 0))
                 }
             }
             drawnEdges.append((place, source, target, label))

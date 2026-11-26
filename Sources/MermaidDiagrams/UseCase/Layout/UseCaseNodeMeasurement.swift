@@ -7,8 +7,8 @@
  *              title and padding.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -56,40 +56,42 @@ enum UseCaseNodeMeasurement {
     static func smallSize(_ size: CGFloat) -> CGFloat { (size * 0.875).rounded() }
     static func stereotypeSize(_ size: CGFloat) -> CGFloat { (size * 0.8125).rounded() }
 
-    /// `node` measured in the look of its styles, `look`.
-    static func view<Measurer>(of node: UseCaseGraphNode, look: UseCaseLook, size: CGFloat, measurers: inout UseCaseTextMeasurers<Measurer>)
-        -> UseCaseNodeView {
+    /// `node` measured in the look of its styles, `look`, its texts read from `bytes`, the diagram's text.
+    static func view<Measurer>(of node: UseCaseGraphNode, look: UseCaseLook, size: CGFloat, measurers: inout UseCaseTextMeasurers<Measurer>,
+                               labels: inout UseCaseMeasuredLabels, bytes: UnsafeBufferPointer<UInt8>) -> UseCaseNodeView {
         let fontSize = look.fontSize ?? size
         let stereotypeMeasurer = measurers.measurer(size: stereotypeSize(size), isBold: look.isBold, isItalic: look.isItalic)
-        let stereotype = UseCaseTextLabel.block(node.stereotype.map { stereotype in "«\(stereotype)»" }, measurer: stereotypeMeasurer, room: stereotypeRoom)
+        let stereotypeText = node.stereotype.map { range in "«" + String(decoding: UnsafeBufferPointer(rebasing: bytes[Int(range.start)..<Int(range.end)]), as: UTF8.self) + "»" }
+        let stereotype = UseCaseTextLabel.block(stereotypeText, measurer: stereotypeMeasurer, room: stereotypeRoom)
         var view = UseCaseNodeView(node: node, look: look, label: stereotype, stereotype: stereotype)
         let labelMeasurer = measurers.measurer(size: fontSize, isBold: look.isBold, isItalic: look.isItalic)
         if node.isGroup {
             view.form = .boundary
-            view.label = UseCaseTextLabel.block(node.label, labelType: node.labelType, measurer: labelMeasurer, room: titleRoom)
+            view.label = labels.block(node.label, in: bytes, measurer: labelMeasurer, room: titleRoom)
             let titleHeight = view.label.size.height
             let top = node.boundaryType == .package ? titleHeight + 2 * tabPadding + 16 : titleHeight > 0 ? titleHeight + 16 : boundaryPadding
             view.clusterPadding = LayeredClusterPadding(side: boundaryPadding, top: top, bottom: boundaryPadding)
             view.clusterMinimumWidth = view.label.size.width + 2 * boundaryPadding
         } else if let rows = node.jsonRows {
-            measureTable(rows, of: &view, size: size, fontSize: fontSize, measurers: &measurers)
+            measureTable(rows, of: &view, size: size, fontSize: fontSize, measurers: &measurers, labels: &labels, bytes: bytes)
         } else if node.actorType != nil {
             view.form = .actor
-            view.label = UseCaseTextLabel.block(node.label, labelType: node.labelType, measurer: labelMeasurer, room: actorRoom)
+            view.label = labels.block(node.label, in: bytes, measurer: labelMeasurer, room: actorRoom)
             view.size = CGSize(width: max(figureWidth, view.label.size.width, stereotype.size.width),
                                height: figureHeight + figureGap + stereotype.size.height + view.label.size.height)
         } else {
-            measureOutlined(&view, size: size, fontSize: fontSize, measurers: &measurers)
+            measureOutlined(&view, size: size, fontSize: fontSize, measurers: &measurers, labels: &labels, bytes: bytes)
         }
         return view
     }
 
     /// An oval, a box or a note around its stereotype and label.
     private static func measureOutlined<Measurer>(_ view: inout UseCaseNodeView, size: CGFloat, fontSize: CGFloat,
-                                                  measurers: inout UseCaseTextMeasurers<Measurer>) {
+                                                  measurers: inout UseCaseTextMeasurers<Measurer>, labels: inout UseCaseMeasuredLabels,
+                                                  bytes: UnsafeBufferPointer<UInt8>) {
         let node = view.node
         let measurer = measurers.measurer(size: node.shape == .note ? smallSize(size) : fontSize, isBold: view.look.isBold, isItalic: view.look.isItalic)
-        view.label = UseCaseTextLabel.block(node.label, labelType: node.labelType, measurer: measurer, room: textRoom)
+        view.label = labels.block(node.label, in: bytes, measurer: measurer, room: textRoom)
         let textWidth = max(view.label.size.width, view.stereotype.size.width)
         let textHeight = view.label.size.height + view.stereotype.size.height
         switch node.shape {
@@ -104,11 +106,12 @@ enum UseCaseNodeMeasurement {
 
     /// A JSON table: its name in bold over a row for each leaf, keys in a column of their own when any has one.
     private static func measureTable<Measurer>(_ rows: [UseCaseJSONRow], of view: inout UseCaseNodeView, size: CGFloat, fontSize: CGFloat,
-                                               measurers: inout UseCaseTextMeasurers<Measurer>) {
+                                               measurers: inout UseCaseTextMeasurers<Measurer>, labels: inout UseCaseMeasuredLabels,
+                                               bytes: UnsafeBufferPointer<UInt8>) {
         view.form = .json
         let look = view.look
-        view.label = UseCaseTextLabel.block(view.node.label, measurer: measurers.measurer(size: fontSize, isBold: true, isItalic: look.isItalic),
-                                            room: titleRoom)
+        view.label = labels.block(view.node.label, in: bytes, measurer: measurers.measurer(size: fontSize, isBold: true, isItalic: look.isItalic),
+                                  room: titleRoom)
         let small = smallSize(size)
         let cellMeasurer = measurers.measurer(size: small, isBold: look.isBold, isItalic: look.isItalic)
         let leastRowHeight = (small * 1.5).rounded()

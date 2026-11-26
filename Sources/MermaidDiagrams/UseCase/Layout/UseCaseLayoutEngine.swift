@@ -7,8 +7,8 @@
  *              grown into their nodes' boxes, then the page assembled from the arena's lists.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -102,27 +102,44 @@ struct UseCaseLayoutPass {
         isSideways = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
         views.reserveCapacity(graph.nodes.count)
         layoutSizes.reserveCapacity(graph.nodes.count)
-        for node in graph.nodes {
-            let view = UseCaseNodeMeasurement.view(of: node, look: UseCaseLook.of(node.styles, made: &looks), size: fontSize, measurers: &measurers)
-            layoutSizes.append(view.size)
-            views.append(view)
+        var labels = UseCaseMeasuredLabels()
+        diagram.text.bytes.withUnsafeBufferPointer { bytes in
+            for node in graph.nodes {
+                let view = UseCaseNodeMeasurement.view(of: node, look: UseCaseLook.of(node.styles, made: &looks), size: fontSize, measurers: &measurers,
+                                                       labels: &labels, bytes: bytes)
+                layoutSizes.append(view.size)
+                views.append(view)
+            }
+            measureEdges(measurers: &measurers, labels: &labels, bytes: bytes)
         }
-        measureEdges(measurers: &measurers)
     }
 
     /// Each edge's label, and each loop grown into its node's box: across the flow, by the loop and its label.
-    private mutating func measureEdges<Measurer>(measurers: inout UseCaseTextMeasurers<Measurer>) {
+    private mutating func measureEdges<Measurer>(measurers: inout UseCaseTextMeasurers<Measurer>, labels: inout UseCaseMeasuredLabels,
+                                                 bytes: UnsafeBufferPointer<UInt8>) {
         var places: [String: Int] = [:]
         places.reserveCapacity(graph.nodes.count)
         for (place, node) in graph.nodes.enumerated() where places[node.identifier] == nil { places[node.identifier] = place }
         let labelMeasurer = measurers.measurer(size: UseCaseNodeMeasurement.smallSize(fontSize))
+        // An include's and an extend's labels are their kinds', each measured once.
+        var kindLabels: [(type: UseCaseRelationshipType, label: DiagramTextBlock)] = []
         drawnEdges.reserveCapacity(graph.edges.count)
         laidOutEdges.reserveCapacity(graph.edges.count)
         for (place, edge) in graph.edges.enumerated() {
             guard let source = places[edge.start], let target = places[edge.end] else { continue }
-            let written = edge.isSemantic ? edge.label.map { label in "«\(label)»" } : edge.label
-            let label = UseCaseTextLabel.block(written, labelType: edge.labelType ?? .text, measurer: labelMeasurer,
-                                               room: UseCaseLayoutEngine.edgeLabelRoomWidth)
+            let label: DiagramTextBlock
+            if let writtenLabel = edge.writtenLabel {
+                label = labels.block(writtenLabel, in: bytes, measurer: labelMeasurer, room: UseCaseLayoutEngine.edgeLabelRoomWidth)
+            } else if edge.isSemantic, let type = edge.relationshipType {
+                label = kindLabels.first { known in known.type == type }?.label ?? {
+                    let made = UseCaseTextLabel.block(edge.label.map { kind in "«\(kind)»" }, labelType: .text, measurer: labelMeasurer,
+                                                      room: UseCaseLayoutEngine.edgeLabelRoomWidth)
+                    kindLabels.append((type, made))
+                    return made
+                }()
+            } else {
+                label = UseCaseTextLabel.empty(labelMeasurer)
+            }
             if source == target {
                 views[source].loopCount += 1
                 let size = label.size
