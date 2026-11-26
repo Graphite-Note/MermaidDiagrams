@@ -6,8 +6,8 @@
  *              accessibility values, the direction after the keyword, clicks and callbacks, and metadata.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 extension AgentFlowLexer {
@@ -39,7 +39,7 @@ extension AgentFlowLexer {
             readQuotationMark()
         } else {
             var end = position + 1
-            while end < count, Int(units[end]) != Unit.graveAccent, Int(units[end]) != Unit.quotationMark { end += 1 }
+            while end < count, Int(bytes[end]) != Unit.graveAccent, Int(bytes[end]) != Unit.quotationMark { end += 1 }
             emit(.markdownString, to: end)
         }
         return true
@@ -86,7 +86,7 @@ extension AgentFlowLexer {
         let end = whitespaceEnd(from: position)
         var index = end - 1
         while index >= position {
-            if Int(units[index]) == Unit.lineFeed { return index + 1 }
+            if Int(bytes[index]) == Unit.lineFeed { return index + 1 }
             index -= 1
         }
         return nil
@@ -97,7 +97,7 @@ extension AgentFlowLexer {
         let start = whitespaceEnd(from: position)
         let first = character(at: start)
         let second = character(at: start + 1)
-        if first >= 0, second >= 0, Self.directionPairs.contains([UInt16(first), UInt16(second)]), !Unit.isWord(character(at: start + 2)) {
+        if first >= 0, first < 128, second >= 0, second < 128, Self.isDirectionPair(first, second), !Unit.isWord(character(at: start + 2)) {
             return start + 2
         }
         if first == Unit.lessThan || first == Unit.greaterThan || first == Unit.circumflex { return start + 1 }
@@ -111,10 +111,10 @@ extension AgentFlowLexer {
             readQuotationMark()
         } else if Unit.isSpace(character) {
             pop()
-            advance(to: position + 1)
+            advance(to: position + characterLength(at: position))
         } else {
             var end = position + 1
-            while end < count, !Unit.isSpace(Int(units[end])) { end += 1 }
+            while end < count, !isSpace(at: end) { end += 1 }
             emitFlat(.click, to: end)
         }
     }
@@ -156,7 +156,7 @@ extension AgentFlowLexer {
             return false
         } else {
             var end = position + 1
-            while end < count, Int(units[end]) != Unit.closingBrace, Int(units[end]) != Unit.circumflex, Int(units[end]) != Unit.quotationMark { end += 1 }
+            while end < count, Int(bytes[end]) != Unit.closingBrace, Int(bytes[end]) != Unit.circumflex, Int(bytes[end]) != Unit.quotationMark { end += 1 }
             emit(.shapeData, to: end)
         }
         return true
@@ -170,31 +170,40 @@ extension AgentFlowLexer {
             return
         }
         let end = index(of: Unit.quotationMark, from: position) ?? count
-        var text = ""
+        // Without a line break the string's text is its bytes.
+        guard bytes[position..<end].contains(UInt8(Unit.lineFeed)) else {
+            emit(.shapeData, to: end)
+            return
+        }
+        let textStart = derived.count
         var index = position
         while index < end {
-            if Int(units[index]) == Unit.lineFeed {
-                text += "<br/>"
+            if Int(bytes[index]) == Unit.lineFeed {
+                derived += Self.lineBreakTag
                 index += 1
-                while index < end, Unit.isSpace(Int(units[index])) { index += 1 }
+                while index < end, case let length = spaceLength(at: index), length > 0 { index += length }
             } else {
                 var runEnd = index
-                while runEnd < end, Int(units[runEnd]) != Unit.lineFeed { runEnd += 1 }
-                text += UnicodeScalarText.string(utf16: units[index..<runEnd])
+                while runEnd < end, Int(bytes[runEnd]) != Unit.lineFeed { runEnd += 1 }
+                derived += bytes[index..<runEnd]
                 index = runEnd
             }
         }
-        emit(.shapeData, text: text, to: end)
+        emitShapeData(textFrom: textStart, to: end)
     }
 
     func index(of character: Int, from start: Int) -> Int? {
-        var index = start
-        while index < count {
-            if Int(units[index]) == character { return index }
-            index += 1
-        }
-        return nil
+        guard start < count else { return nil }
+        return bytes[start...].firstIndex(of: UInt8(truncatingIfNeeded: character))
     }
 
-    static let directionPairs: Set<[UInt16]> = Set(["LR", "RL", "TB", "BT", "TD", "BR"].map { pair in Array(pair.utf16) })
+    /// Whether two ASCII letters are `LR`, `RL`, `TB`, `BT`, `TD` or `BR`.
+    private static func isDirectionPair(_ first: Int, _ second: Int) -> Bool {
+        switch (first, second) {
+        case (76, 82), (82, 76), (84, 66), (66, 84), (84, 68), (66, 82): true
+        default: false
+        }
+    }
+
+    static let lineBreakTag = Array("<br/>".utf8)
 }

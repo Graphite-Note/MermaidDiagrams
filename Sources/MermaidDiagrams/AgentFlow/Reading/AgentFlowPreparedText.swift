@@ -2,38 +2,39 @@
  * File: AgentFlowPreparedText.swift
  * ---------------------------------
  * Layer: Core
- * Description: An agent flow's text as Pele hands it to its parser, the token sets its grammar uses, and where a
- *              syntax error sits.
+ * Description: An agent flow's text as Pele hands it to its parser, on UTF-8 bytes, the token sets its grammar uses,
+ *              and where a syntax error sits.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
-/// The text Pele's parser reads: line breaks made `\n`, directives taken out (here blanked, so lines keep their
-/// numbers), a line break added at the end, and the spaces between a closing brace and the end of its line removed, as
-/// Mermaid trims them before parsing. Comments stay: the agent flow's grammar reads them.
+/// The text Pele's parser reads: line breaks made `\n`, directives taken out (here blanked, a space for each UTF-16 code
+/// unit, so that lines keep their numbers and columns their counts), a line break added at the end, and the spaces
+/// between a closing brace and the end of its line removed, as Mermaid trims them before parsing. Comments stay: the
+/// agent flow's grammar reads them.
 enum AgentFlowPreparedText {
-    /// The prepared code units of the text's UTF-8 `bytes`, those of a string.
-    static func units(of bytes: ArraySlice<UInt8>) -> [UInt16] {
-        // Text in ASCII has a UTF-16 code unit per byte, of the same value: it is read from its bytes.
-        var units: [UInt16]
-        if bytes.allSatisfy({ byte in byte < 0x80 }) {
-            units = withLineFeeds(asciiBytes: bytes)
-        } else {
-            let text = String(decoding: bytes, as: UTF8.self)
-            units = withLineFeeds(text.utf16, capacity: text.utf16.count + 1)
-        }
-        blankDirectives(in: &units)
-        units.append(10)
-        removeSpaceAfterClosingBraces(in: &units)
-        return units
+    /// The prepared UTF-8 bytes of the text's `bytes`, and whether they are all ASCII.
+    static func bytes(of source: ArraySlice<UInt8>) -> (bytes: [UInt8], isASCII: Bool) {
+        var bytes = withLineFeeds(source)
+        let isASCII = bytes.withUnsafeBufferPointer(GraphDiagramNameTable.isASCII)
+        blankDirectives(in: &bytes, isASCII: isASCII)
+        bytes.append(10)
+        removeSpaceAfterClosingBraces(in: &bytes)
+        return (bytes, isASCII)
     }
 
-    /// The code units of bytes all in ASCII, with each `\r\n` and `\r` made `\n`, written in one pass into room for one
-    /// more unit.
-    private static func withLineFeeds(asciiBytes bytes: ArraySlice<UInt8>) -> [UInt16] {
-        [UInt16](unsafeUninitializedCapacity: bytes.count + 1) { buffer, count in
+    /// The bytes with each `\r\n` and `\r` made `\n`, written in one pass into room for one more byte.
+    private static func withLineFeeds(_ bytes: ArraySlice<UInt8>) -> [UInt8] {
+        // Most texts have no carriage return: their bytes are copied whole.
+        guard bytes.contains(13) else {
+            var copied: [UInt8] = []
+            copied.reserveCapacity(bytes.count + 1)
+            copied.append(contentsOf: bytes)
+            return copied
+        }
+        return [UInt8](unsafeUninitializedCapacity: bytes.count + 1) { buffer, count in
             var written = 0
             var previousWasCarriageReturn = false
             for byte in bytes {
@@ -48,70 +49,92 @@ enum AgentFlowPreparedText {
                     continue
                 }
                 previousWasCarriageReturn = false
-                buffer[written] = UInt16(byte)
+                buffer[written] = byte
                 written += 1
             }
             count = written
         }
     }
 
-    /// The code units with each `\r\n` and `\r` made `\n`.
-    private static func withLineFeeds(_ written: some Sequence<UInt16>, capacity: Int) -> [UInt16] {
-        var units: [UInt16] = []
-        units.reserveCapacity(capacity)
-        var previousWasCarriageReturn = false
-        for unit in written {
-            if unit == 13 {
-                units.append(10)
-                previousWasCarriageReturn = true
-                continue
-            }
-            if unit == 10, previousWasCarriageReturn {
-                previousWasCarriageReturn = false
-                continue
-            }
-            previousWasCarriageReturn = false
-            units.append(unit)
-        }
-        return units
-    }
-
     /// Each `%%{ … }%%` made spaces, its line breaks kept; one never closed runs to the end, as Pele's expression takes it.
-    private static func blankDirectives(in units: inout [UInt16]) {
-        var index = 0
-        while index + 2 < units.count {
-            guard units[index] == 37, units[index + 1] == 37, units[index + 2] == 123 else {
+    /// A character beyond ASCII becomes a space for each of its UTF-16 code units, as Pele blanks code units.
+    private static func blankDirectives(in bytes: inout [UInt8], isASCII: Bool) {
+        // Bytes before the first directive stay where they are.
+        guard let first = firstDirective(in: bytes) else { return }
+        var kept = first
+        var index = first
+        while index < bytes.count {
+            guard index + 2 < bytes.count, bytes[index] == 37, bytes[index + 1] == 37, bytes[index + 2] == 123 else {
+                bytes[kept] = bytes[index]
+                kept += 1
                 index += 1
                 continue
             }
             var end = index + 3
-            while end + 2 < units.count, !(units[end] == 125 && units[end + 1] == 37 && units[end + 2] == 37) { end += 1 }
-            end = end + 2 < units.count ? end + 3 : units.count
-            for blank in index..<end where units[blank] != 10 { units[blank] = 32 }
+            while end + 2 < bytes.count, !(bytes[end] == 125 && bytes[end + 1] == 37 && bytes[end + 2] == 37) { end += 1 }
+            end = end + 2 < bytes.count ? end + 3 : bytes.count
+            // Each character is read by its first byte and stepped over whole, before the spaces written for it, which
+            // never reach past it, could be read: a four-byte character is two code units.
+            var blank = index
+            while blank < end {
+                let byte = bytes[blank]
+                let length = isASCII || byte < 0xC0 ? 1 : byte < 0xE0 ? 2 : byte < 0xF0 ? 3 : 4
+                bytes[kept] = byte == 10 ? 10 : 32
+                kept += 1
+                if length == 4 {
+                    bytes[kept] = 32
+                    kept += 1
+                }
+                blank += length
+            }
             index = end
         }
+        bytes.removeLast(bytes.count - kept)
     }
 
-    /// `}[^\S\n]*\n` made `}\n`, in place: the units kept are moved down over those removed, which only ever lie ahead
-    /// of the unit being read.
-    private static func removeSpaceAfterClosingBraces(in units: inout [UInt16]) {
-        // Without a closing brace there is nothing to remove.
-        guard let firstBrace = units.firstIndex(of: 125) else { return }
+    /// Where the first `%%{` starts, or nil.
+    private static func firstDirective(in bytes: [UInt8]) -> Int? {
+        var index = 0
+        while index + 2 < bytes.count {
+            guard let percent = bytes[index..<(bytes.count - 2)].firstIndex(of: 37) else { return nil }
+            if bytes[percent + 1] == 37, bytes[percent + 2] == 123 { return percent }
+            index = percent + 1
+        }
+        return nil
+    }
+
+    /// `}[^\S\n]*\n` made `}\n`, in place: the bytes kept are moved down over those removed, which only ever lie ahead
+    /// of the byte being read.
+    private static func removeSpaceAfterClosingBraces(in bytes: inout [UInt8]) {
+        // Bytes before the first brace with spaces to remove after it stay where they are.
+        guard let firstBrace = firstBraceWithSpaceAfter(in: bytes) else { return }
         var kept = firstBrace
         var index = firstBrace
-        while index < units.count {
-            let unit = units[index]
-            units[kept] = unit
+        while index < bytes.count {
+            let byte = bytes[index]
+            bytes[kept] = byte
             kept += 1
-            guard unit == 125 else {
+            guard byte == 125 else {
                 index += 1
                 continue
             }
             var end = index + 1
-            while end < units.count, units[end] != 10, C4Characters.isSpace(units[end]) { end += 1 }
-            index = end < units.count && units[end] == 10 ? end : index + 1
+            while end < bytes.count, bytes[end] != 10, case let length = JavaScriptWhitespace.length(in: bytes, at: end), length > 0 { end += length }
+            index = end < bytes.count && bytes[end] == 10 ? end : index + 1
         }
-        units.removeLast(units.count - kept)
+        bytes.removeLast(bytes.count - kept)
+    }
+
+    /// The first closing brace that white space other than line feeds follows up to a line feed, or nil.
+    private static func firstBraceWithSpaceAfter(in bytes: [UInt8]) -> Int? {
+        var start = 0
+        while let brace = bytes[start...].firstIndex(of: 125) {
+            var end = brace + 1
+            while end < bytes.count, bytes[end] != 10, case let length = JavaScriptWhitespace.length(in: bytes, at: end), length > 0 { end += length }
+            if end > brace + 1, end < bytes.count, bytes[end] == 10 { return brace }
+            start = brace + 1
+        }
+        return nil
     }
 }
 
@@ -120,12 +143,12 @@ extension AgentFlowParser {
     /// for the end of the text on its last line with content; text the lexer did not read is unrecognized.
     func failure(expecting expected: String) -> MermaidDiagramReadError {
         let kind = current
-        var offset = index < tokens.count ? tokens.starts[index] : units.count
+        var offset = index < tokens.count ? tokens.start(at: index) : preparedCount
         if kind == .endOfFile || kind == .end {
             // Comments are tokens here, so trailing ones are skipped.
             var last = index
             while last > 0, Self.trailingTokens.contains(self.kind(at: last - 1)) { last -= 1 }
-            offset = trimmedLength(upTo: last < tokens.count ? tokens.starts[last] : units.count)
+            offset = trimmedLength(upTo: last < tokens.count ? tokens.start(at: last) : preparedCount)
         }
         let line = builder.lineOffset + lineNumber(at: offset)
         if kind == .error { return .invalidSyntax(line: line, problem: .agentFlow(.unrecognizedText)) }
@@ -134,17 +157,18 @@ extension AgentFlowParser {
 
     /// The length of the text before `end` without the white space at its end.
     private func trimmedLength(upTo end: Int) -> Int {
-        var length = min(end, units.count)
-        while length > 0, C4Characters.isSpace(units[length - 1]) { length -= 1 }
+        let bytes = builder.model.text.bytes
+        var length = min(end, preparedCount)
+        while length > 0, case let last = JavaScriptWhitespace.lengthOfLast(in: bytes[..<length]), last > 0 { length -= last }
         return length
     }
 
     /// The line of an offset, kept on the last line with content when it is past it, as Pele's `locate` does.
     private func lineNumber(at offset: Int) -> Int {
-        let contentEnd = trimmedLength(upTo: units.count)
+        let contentEnd = trimmedLength(upTo: preparedCount)
         let place = contentEnd > 0 && offset >= contentEnd ? contentEnd - 1 : offset
         var line = 1
-        for unit in units[..<min(place, units.count)] where unit == 10 { line += 1 }
+        for byte in builder.model.text.bytes[..<min(place, preparedCount)] where byte == 10 { line += 1 }
         return line
     }
 

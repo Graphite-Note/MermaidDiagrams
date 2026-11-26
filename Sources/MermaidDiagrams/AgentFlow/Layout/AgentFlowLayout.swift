@@ -3,11 +3,11 @@
  * ---------------------------
  * Layer: Core
  * Description: An agent flow laid out on a page: its flows' boxes, its nodes in their kinds' palette slots, and its
- *              edges by meaning.
+ *              edges by meaning, each identifier a range of the model's bytes until it is read.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -28,7 +28,8 @@ public struct AgentFlowLayout: Equatable, Sendable {
 
 /// An open flow's box: a light wash of its palette color with an outline in it, and its title along the top.
 public struct AgentFlowLayoutFlow: Equatable, Sendable {
-    public let identifier: String
+    /// Its identifier's bytes, made a String only when read.
+    let identifierText: AgentFlowLayoutIdentifier
     public let frame: CGRect
     public let title: DiagramTextBlock?
     /// The series color of the flow (Pele's container slots).
@@ -37,7 +38,8 @@ public struct AgentFlowLayoutFlow: Equatable, Sendable {
 }
 
 public struct AgentFlowLayoutNode: Equatable, Sendable {
-    public let identifier: String
+    /// Its identifier's bytes, made a String only when read.
+    let identifierText: AgentFlowLayoutIdentifier
     /// The shape the node is drawn in; a collapsed flow is a rounded box with a dashed line and three dots.
     public let shape: FlowchartNodeShape
     public let isCollapsedFlow: Bool
@@ -54,7 +56,8 @@ public struct AgentFlowLayoutNode: Equatable, Sendable {
 }
 
 public struct AgentFlowLayoutEdge: Equatable, Sendable {
-    public let identifier: String
+    /// Its identifier's bytes, made a String only when read.
+    let identifierText: AgentFlowLayoutIdentifier
     /// What it means as Pele draws it: dotted is a reference, a cross a failure, else a step.
     public let semantic: AgentFlowEdgeSemantic
     public let isDotted: Bool
@@ -64,4 +67,56 @@ public struct AgentFlowLayoutEdge: Equatable, Sendable {
     /// The edge's text on a patch of the page's color, or nil.
     public let text: DiagramTextBlock?
     public let style: DiagramElementStyle?
+}
+
+/// An identifier of a laid-out agent flow's flow, node or edge: a range of the model's bytes, which it holds, made a
+/// String only when read, so that a layout whose identifiers are not read makes none.
+struct AgentFlowLayoutIdentifier: Equatable, Sendable {
+    private let bytes: [UInt8]
+    private let range: MermaidTextRange
+
+    init(bytes: [UInt8], range: MermaidTextRange) {
+        self.bytes = bytes
+        self.range = range
+    }
+
+    init(_ string: String) {
+        bytes = Array(string.utf8)
+        range = MermaidTextRange(start: 0, end: bytes.count)
+    }
+
+    var string: String { String(decoding: bytes[range.lowerBound..<range.upperBound], as: UTF8.self) }
+
+    static func == (left: AgentFlowLayoutIdentifier, right: AgentFlowLayoutIdentifier) -> Bool { left.string == right.string }
+}
+
+extension AgentFlowLayoutFlow {
+    /// The flow's identifier.
+    public var identifier: String { identifierText.string }
+
+    init(identifier: String, frame: CGRect, title: DiagramTextBlock?, paletteSlot: Int, style: DiagramElementStyle?) {
+        self.init(identifierText: AgentFlowLayoutIdentifier(identifier), frame: frame, title: title, paletteSlot: paletteSlot, style: style)
+    }
+}
+
+extension AgentFlowLayoutNode {
+    /// The node's identifier.
+    public var identifier: String { identifierText.string }
+
+    init(identifier: String, shape: FlowchartNodeShape, isCollapsedFlow: Bool, frame: CGRect, text: DiagramTextBlock, paletteSlot: Int,
+         kind: AgentFlowVertexKind?, style: DiagramElementStyle?, isBold: Bool, isItalic: Bool) {
+        self.init(identifierText: AgentFlowLayoutIdentifier(identifier), shape: shape, isCollapsedFlow: isCollapsedFlow, frame: frame, text: text,
+                  paletteSlot: paletteSlot, kind: kind, style: style, isBold: isBold, isItalic: isItalic)
+    }
+}
+
+extension AgentFlowLayoutEdge {
+    /// The edge's identifier.
+    public var identifier: String { identifierText.string }
+
+    init(identifier: String, semantic: AgentFlowEdgeSemantic, isDotted: Bool, path: DiagramPath, targetMark: DiagramEdgeMark?, text: DiagramTextBlock?,
+         style: DiagramElementStyle?) {
+        self.init(identifierText: AgentFlowLayoutIdentifier(identifier), semantic: semantic, isDotted: isDotted, path: path, targetMark: targetMark,
+                  text: text, style: style)
+    }
 }

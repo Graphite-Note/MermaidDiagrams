@@ -2,12 +2,12 @@
  * File: AgentFlowGraph.swift
  * --------------------------
  * Layer: Core
- * Description: What an agent flow draws, as Pele's graph.ts resolves it, and the diagnostics Mermaid's vocabulary
- *              names.
+ * Description: What an agent flow draws, as Pele's graph.ts resolves it, as the model gives it and as the reader keeps
+ *              it, and the diagnostics Mermaid's vocabulary names.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 /// The nodes and edges an agent flow draws: its flows as groups (innermost first, as Pele lists them, the last closed
@@ -97,4 +97,51 @@ public struct AgentFlowDiagnostic: Equatable, Sendable {
     public let nodeIdentifier: String?
     /// Where the node it is about was first named, or nil.
     public let position: AgentFlowElementPosition?
+}
+
+/// A node of the graph drawn, as the reader keeps it: its name and identifier, its text, its shape as a number of
+/// `AgentFlowShapeNames`, the flow holding it, where its styles come from, its palette slot and kind.
+struct AgentFlowGraphNodeRecord {
+    var name: Int32
+    var identifier: MermaidTextRange
+    var label: MermaidTextRange
+    var labelType: AgentFlowLabelType
+    var shape: Int16
+    var isGroup: Bool
+    /// The graph node of the flow holding it, or -1.
+    var parent: Int32 = -1
+    /// The node and the flow it was made of (a flow and a node of one identifier make one graph node), or -1.
+    var vertex: Int32 = -1
+    var flow: Int32 = -1
+    /// Its class styles then its own styles, two runs of the graph's style ranges.
+    var compiledStyles: Range<Int32> = 0..<0
+    var styles: Range<Int32> = 0..<0
+    /// A node's `click` tooltip; a flow has none.
+    var tooltip: MermaidTextRange?
+    var colorIndex: Int32 = -1
+    var containerNumber: Int32 = -1
+    var kind: AgentFlowVertexKind?
+}
+
+/// An edge of the graph drawn, as the reader keeps it: the model's edge it draws, its ends once collapsed flows stand
+/// for what they hold (their graph nodes, -1 for an end no node is drawn for), its arrowhead and styles.
+struct AgentFlowGraphEdgeRecord {
+    var edge: Int32
+    var identifier: MermaidTextRange
+    var start: AgentFlowNamedText
+    var end: AgentFlowNamedText
+    var startNode: Int32
+    var endNode: Int32
+    var arrowTypeEnd: FlowchartArrowhead
+    var compiledStyles: Range<Int32>
+    var style: Range<Int32>
+    var curve: MermaidTextRange?
+}
+
+/// The graph drawn, as the reader keeps it.
+struct AgentFlowGraphRecords {
+    var nodes: [AgentFlowGraphNodeRecord] = []
+    var edges: [AgentFlowGraphEdgeRecord] = []
+    /// The ranges of the nodes' and edges' styles, which they take runs of.
+    var styleRanges: [MermaidTextRange] = []
 }

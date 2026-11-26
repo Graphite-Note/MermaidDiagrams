@@ -6,8 +6,8 @@
  *              Mermaid's v0.8.1, those allowed, and each node's shape reduced to one of them with its diagnostic.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 enum AgentFlowShapes {
@@ -31,7 +31,7 @@ enum AgentFlowShapes {
     static let defaultShape = "roundedRect"
 
     /// The shapes Mermaid's flowchart accepts by name without documenting them (Pele's `INTERNAL`).
-    private static let undocumentedShapes: Set<String> = [
+    static let undocumentedShapeNames: Set<String> = [
         "state", "choice", "note", "composite", "rectWithTitle", "labelRect", "block_arrow", "collapsedGroup", "iconSquare", "iconCircle",
         "icon", "iconRounded", "imageSquare", "anchor", "kanbanItem", "mindmapCircle", "defaultMindmapNode", "classBox", "erBox",
         "requirementBox", "usecaseActor", "usecaseActorHollow", "usecaseActorAwesome", "usecaseActorIcon", "usecaseBusiness",
@@ -45,7 +45,7 @@ enum AgentFlowShapes {
     /// Whether Mermaid's flowchart knows the shape; it looks a name up with `in` on a plain object, so `constructor`
     /// passes too.
     static func isValidShape(_ name: String) -> Bool {
-        FlowchartNodeShape(shapeName: name) != nil || undocumentedShapes.contains(name) || name == "constructor"
+        FlowchartNodeShape(shapeName: name) != nil || undocumentedShapeNames.contains(name) || name == "constructor"
     }
 
     /// A node's shape reduced to one an agent flow draws, and the diagnostic with Pele's words when it was removed or is
@@ -73,8 +73,13 @@ enum AgentFlowShapes {
     /// What a node means by its shape: a tool definition, an action, an input, a reference document, a decision, or a
     /// task (Pele's `vertexKind`).
     static func kind(of vertex: AgentFlowVertex) -> AgentFlowVertexKind {
-        if let type = vertex.type, toolShapes.contains(type) { return .tool }
-        switch vertex.type.map(resolvingAlias) {
+        vertex.type.map(kind(ofType:)) ?? .task
+    }
+
+    /// What a node of the shape name `type` means.
+    static func kind(ofType type: String) -> AgentFlowVertexKind {
+        if toolShapes.contains(type) { return .tool }
+        switch resolvingAlias(type) {
         case "hexagon", "hex": return .action
         case "lean-right", "lean_right": return .input
         case "lin-doc", "lined-document": return .refdoc

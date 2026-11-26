@@ -6,8 +6,8 @@
  *              column when it runs across, and what a screen reader says of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -35,11 +35,11 @@ extension MermaidDiagramAccessibility {
     /// left out.
     init(agentFlow diagram: AgentFlowDiagram) {
         self.init(kind: .agentFlow, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let texts = diagram.graph.nodes.compactMap { node -> String? in
-                let spoken = AgentFlowMeasurement.label(node.label, type: node.labelType).spokenText
+            let model = diagram.model
+            return model.graph.nodes.compactMap { node -> String? in
+                let spoken = AgentFlowMeasurement.label(node.label, type: node.labelType, in: model.text).spokenText
                 return spoken.isEmpty ? nil : spoken
             }
-            return texts
         }
     }
 }

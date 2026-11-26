@@ -6,8 +6,8 @@
  *              link identifiers, numbers, punctuation, white space, node strings and Unicode letters.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension AgentFlowLexer {
@@ -30,7 +30,7 @@ extension AgentFlowLexer {
         }
         if character < 128 { return readNodeString() }
         if Unit.isUnicodeLetter(character) {
-            emitFlat(.unicodeText, to: position + 1)
+            emitFlat(.unicodeText, to: position + characterLength(at: position))
             return true
         }
         return false
@@ -45,7 +45,7 @@ extension AgentFlowLexer {
         case Unit.commercialAt:
             guard self.character(at: position + 1) == Unit.openingBrace else { return false }
             push(.shapeData)
-            emit(.shapeData, text: "", to: position + 2)
+            emitShapeData(textFrom: derived.count, to: position + 2)
             return true
         case 99: return readCallOrClick()
         case Unit.quotationMark:
@@ -78,7 +78,7 @@ extension AgentFlowLexer {
         }
     }
 
-    private mutating func readFlatKeyword(_ word: [UInt16], as kind: AgentFlowTokenKind) -> Bool {
+    private mutating func readFlatKeyword(_ word: [UInt8], as kind: AgentFlowTokenKind) -> Bool {
         guard isKeyword(word) else { return false }
         emitFlat(kind, to: position + word.count)
         return true
@@ -133,7 +133,7 @@ extension AgentFlowLexer {
     }
 
     /// The end of `word\s*` then `separator` then `\s*` at the position, or nil.
-    private mutating func endOfWord(_ word: [UInt16], separator: Int) -> Int? {
+    private mutating func endOfWord(_ word: [UInt8], separator: Int) -> Int? {
         guard startsWith(word, at: position) else { return nil }
         let separatorAt = whitespaceEnd(from: position + word.count)
         guard character(at: separatorAt) == separator else { return nil }
@@ -141,27 +141,27 @@ extension AgentFlowLexer {
     }
 
     /// The end of `word\s+` at the position, or nil.
-    private mutating func endOfWordAndSpace(_ word: [UInt16]) -> Int? {
+    private mutating func endOfWordAndSpace(_ word: [UInt8]) -> Int? {
         guard startsWith(word, at: position), Unit.isSpace(character(at: position + word.count)) else { return nil }
         return whitespaceEnd(from: position + word.count)
     }
 
-    static let accessibilityPrefix = Array("acc".utf16)
-    static let accessibilityTitleWord = Array("accTitle".utf16)
-    static let accessibilityDescriptionWord = Array("accDescr".utf16)
-    static let graphWord = Array("agentflow-beta".utf16)
-    static let callWord = Array("call".utf16)
-    static let classDefinitionWord = Array("classDef".utf16)
-    static let classWord = Array("class".utf16)
-    static let clickWord = Array("click".utf16)
-    static let connectorWord = Array("connector".utf16)
-    static let styleWord = Array("style".utf16)
-    static let defaultWord = Array("default".utf16)
-    static let linkStyleWord = Array("linkStyle".utf16)
-    static let interpolateWord = Array("interpolate".utf16)
-    static let hyperlinkWord = Array("href".utf16)
-    static let flowWord = Array("flow".utf16)
-    static let globalWord = Array("global".utf16)
-    static let endWord = Array("end".utf16)
-    static let linkTargetWords = ["_self", "_blank", "_parent", "_top"].map { word in Array(word.utf16) }
+    static let accessibilityPrefix = Array("acc".utf8)
+    static let accessibilityTitleWord = Array("accTitle".utf8)
+    static let accessibilityDescriptionWord = Array("accDescr".utf8)
+    static let graphWord = Array("agentflow-beta".utf8)
+    static let callWord = Array("call".utf8)
+    static let classDefinitionWord = Array("classDef".utf8)
+    static let classWord = Array("class".utf8)
+    static let clickWord = Array("click".utf8)
+    static let connectorWord = Array("connector".utf8)
+    static let styleWord = Array("style".utf8)
+    static let defaultWord = Array("default".utf8)
+    static let linkStyleWord = Array("linkStyle".utf8)
+    static let interpolateWord = Array("interpolate".utf8)
+    static let hyperlinkWord = Array("href".utf8)
+    static let flowWord = Array("flow".utf8)
+    static let globalWord = Array("global".utf8)
+    static let endWord = Array("end".utf8)
+    static let linkTargetWords = ["_self", "_blank", "_parent", "_top"].map { word in Array(word.utf8) }
 }

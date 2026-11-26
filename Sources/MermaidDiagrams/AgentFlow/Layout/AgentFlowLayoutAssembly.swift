@@ -6,7 +6,7 @@
  *              laid-out edges by meaning, and the edges between a node and a flow around it drawn as Pele draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -15,58 +15,64 @@ import CoreGraphics
 struct AgentFlowLayoutAssembly {
     let layout: AgentFlowLayout
 
-    init(diagram: AgentFlowDiagram, clustered: AgentFlowClusterGraph, measurement: AgentFlowMeasurement, laidOut: FlowchartLayout) {
-        let graph = diagram.graph
-        // Each node's fields are read where it lies in the graph's list, not copied out.
+    init(model: AgentFlowModel, clustered: AgentFlowClusterGraph, measurement: AgentFlowMeasurement, laidOut: FlowchartLayout) {
+        let graph = model.graph
+        // Each node's fields are read where it lies in the graph's records, not copied out.
         let nodes = zip(clustered.drawnGraphIndices, laidOut.nodes).map { graphIndex, placed in
-            let isCollapsed = graph.nodes[graphIndex].shape == "collapsedGroup"
+            let isCollapsed = graph.nodes[graphIndex].shape == AgentFlowShapeNames.collapsedGroup
             let kind = graph.nodes[graphIndex].kind
-            return AgentFlowLayoutNode(identifier: graph.nodes[graphIndex].identifier, shape: placed.shape, isCollapsedFlow: isCollapsed, frame: placed.frame,
-                                       text: placed.text,
-                                       paletteSlot: isCollapsed ? graph.nodes[graphIndex].colorIndex ?? AgentFlowVertexKind.allCases.count : (kind ?? .task).paletteSlot,
-                                       kind: isCollapsed ? nil : kind ?? .task, style: measurement.styles[graphIndex],
-                                       isBold: measurement.textLooks[graphIndex].isBold, isItalic: measurement.textLooks[graphIndex].isItalic)
+            let colorIndex = graph.nodes[graphIndex].colorIndex
+            return AgentFlowLayoutNode(identifierText: model.layoutIdentifier(graph.nodes[graphIndex].identifier), shape: placed.shape, isCollapsedFlow: isCollapsed,
+                                       frame: placed.frame, text: placed.text,
+                                       paletteSlot: isCollapsed ? (colorIndex >= 0 ? Int(colorIndex) : AgentFlowVertexKind.allCases.count) : (kind ?? .task).paletteSlot,
+                                       kind: isCollapsed ? nil : kind ?? .task, style: measurement.style(of: graphIndex),
+                                       isBold: measurement.textLook(of: graphIndex).isBold, isItalic: measurement.textLook(of: graphIndex).isItalic)
         }
         let flows = zip(clustered.subgraphGraphIndices, laidOut.clusters).map { graphIndex, cluster in
-            AgentFlowLayoutFlow(identifier: graph.nodes[graphIndex].identifier, frame: cluster.frame, title: cluster.title,
-                                paletteSlot: graph.nodes[graphIndex].colorIndex ?? AgentFlowVertexKind.allCases.count, style: measurement.styles[graphIndex])
+            let colorIndex = graph.nodes[graphIndex].colorIndex
+            return AgentFlowLayoutFlow(identifierText: model.layoutIdentifier(graph.nodes[graphIndex].identifier), frame: cluster.frame, title: cluster.title,
+                                       paletteSlot: colorIndex >= 0 ? Int(colorIndex) : AgentFlowVertexKind.allCases.count, style: measurement.style(of: graphIndex))
         }
         var edges = zip(clustered.laidOutEdgeIndices, laidOut.edges).map { edgeIndex, placed in
-            Self.edge(graph.edges[edgeIndex], path: placed.path, mark: placed.targetMark, text: placed.text)
+            Self.edge(edgeIndex, of: model, path: placed.path, mark: placed.targetMark, text: placed.text)
         }
         // The edges between a node and a flow around it are routed among the nodes' frames and shapes, made only for them.
         if !clustered.heldEdges.isEmpty {
-            Self.addHeldEdges(to: &edges, graph: graph, clustered: clustered, measurement: measurement, nodes: nodes, flows: flows)
+            Self.addHeldEdges(to: &edges, model: model, clustered: clustered, measurement: measurement, nodes: nodes, flows: flows)
         }
         layout = AgentFlowLayout(size: laidOut.size, font: laidOut.font, title: laidOut.title, flows: flows, nodes: nodes, edges: edges)
     }
 
     /// The edges between a node and a flow around it, routed among the frames of the nodes and flows laid out.
-    private static func addHeldEdges(to edges: inout [AgentFlowLayoutEdge], graph: AgentFlowGraph, clustered: AgentFlowClusterGraph,
+    private static func addHeldEdges(to edges: inout [AgentFlowLayoutEdge], model: AgentFlowModel, clustered: AgentFlowClusterGraph,
                                      measurement: AgentFlowMeasurement, nodes: [AgentFlowLayoutNode], flows: [AgentFlowLayoutFlow]) {
-        var frames = [CGRect](repeating: .null, count: graph.nodes.count)
+        var frames = [CGRect](repeating: .null, count: model.graph.nodes.count)
         for (graphIndex, node) in zip(clustered.drawnGraphIndices, nodes) { frames[graphIndex] = node.frame }
         for (graphIndex, flow) in zip(clustered.subgraphGraphIndices, flows) { frames[graphIndex] = flow.frame }
         let shapes = Dictionary(uniqueKeysWithValues: zip(clustered.drawnGraphIndices, nodes.map(\.shape)))
         let held = AgentFlowHeldEdges(clustered: clustered, frames: frames, shapes: shapes)
-        for (edgeIndex, source, target) in clustered.heldEdges {
-            let edge = graph.edges[edgeIndex]
-            let arrowhead = AgentFlowClusterGraph.arrowhead(of: edge)
-            let route = held.route(source: source, target: target, arrowhead: arrowhead, isCareful: clustered.heldEdges.count * graph.nodes.count < 2_000_000)
+        for heldEdge in clustered.heldEdges {
+            let edgeIndex = heldEdge.edgeIndex
+            let arrowhead = model.graph.edges[edgeIndex].arrowTypeEnd
+            let route = held.route(source: heldEdge.source, target: heldEdge.target, arrowhead: arrowhead, isCareful: clustered.heldEdges.count * model.graph.nodes.count < 2_000_000)
             let text = measurement.heldEdgeTexts[edgeIndex].map { text in
                 var centered = text
                 centered.center = route.textCenter
                 return centered
             }
-            edges.append(Self.edge(edge, path: route.path, mark: route.mark, text: text))
+            edges.append(Self.edge(edgeIndex, of: model, path: route.path, mark: route.mark, text: text))
         }
     }
 
-    private static func edge(_ edge: AgentFlowGraphEdge, path: DiagramPath, mark: DiagramEdgeMark?, text: DiagramTextBlock?) -> AgentFlowLayoutEdge {
-        let isDotted = edge.thickness == "dotted"
-        let semantic: AgentFlowEdgeSemantic = isDotted ? .reference : edge.arrowTypeEnd == "arrow_cross" ? .failure : .sequence
-        return AgentFlowLayoutEdge(identifier: edge.identifier, semantic: semantic, isDotted: isDotted, path: path, targetMark: mark, text: text,
-                                   style: AgentFlowMeasurement.style(edge.compiledStyles + edge.style))
+    /// The graph's edge at `edgeIndex` drawn along `path`.
+    private static func edge(_ edgeIndex: Int, of model: AgentFlowModel, path: DiagramPath, mark: DiagramEdgeMark?, text: DiagramTextBlock?) -> AgentFlowLayoutEdge {
+        let record = model.graph.edges[edgeIndex]
+        let isDotted = model.edges[Int(record.edge)].stroke == .dotted
+        let semantic: AgentFlowEdgeSemantic = isDotted ? .reference : record.arrowTypeEnd == .cross ? .failure : .sequence
+        let hasStyle = !record.compiledStyles.isEmpty || !record.style.isEmpty
+        return AgentFlowLayoutEdge(identifierText: model.layoutIdentifier(record.identifier), semantic: semantic, isDotted: isDotted, path: path, targetMark: mark,
+                                   text: text,
+                                   style: hasStyle ? AgentFlowMeasurement.style(model.graphStyleStrings(record.compiledStyles) + model.graphStyleStrings(record.style)) : nil)
     }
 }
 
@@ -155,5 +161,12 @@ struct AgentFlowHeldEdges {
         case .left: return CGPoint(x: point.x + amount, y: point.y)
         case .right: return CGPoint(x: point.x - amount, y: point.y)
         }
+    }
+}
+
+extension AgentFlowModel {
+    /// A laid-out element's identifier: the range `range` of the model's bytes, which it holds until read.
+    func layoutIdentifier(_ range: MermaidTextRange) -> AgentFlowLayoutIdentifier {
+        AgentFlowLayoutIdentifier(bytes: text.bytes, range: range)
     }
 }

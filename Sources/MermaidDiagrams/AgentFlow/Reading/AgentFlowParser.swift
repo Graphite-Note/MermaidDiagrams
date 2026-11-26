@@ -3,50 +3,70 @@
  * ---------------------------
  * Layer: Core
  * Description: Reads an agent flow (`agentflow-beta`) as Pele's parser.ts does: the text prepared as Pele prepares it,
- *              the header and its direction, then the document's statements, and Jison's errors with their lines.
+ *              the header and its direction, then the document's statements, and Jison's errors with their lines,
+ *              each text a range of the prepared text's bytes.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 /// Reads an agent flow token by token as Pele's hand-written port of Mermaid's agentflow.jison does: blocks nest without
 /// recursion, each statement goes to `AgentFlowDiagramBuilder` as Mermaid's grammar actions call its database, and an
-/// unexpected token fails with Jison's name for it and what was expected, on its line.
+/// unexpected token fails with Jison's name for it and what was expected, on its line. A token's text is a range of
+/// the bytes; texts run together from tokens that do not follow one another are made after them.
 struct AgentFlowParser {
-    let units: [UInt16]
     let tokens: AgentFlowTokens
     var index = 0
     var builder: AgentFlowDiagramBuilder
     /// The metadata body read last, and the tokens it spans.
-    var pendingMetadata: String?
+    var pendingMetadata: MermaidTextRange?
     var metadataFrom = 0
     var metadataTo = 0
+    /// What the open blocks' statements gave them, each block's from where it opened (`Frame.itemsStart`).
+    var items: ScratchList<AgentFlowDocumentItem>
+    /// The nodes of the vertex statement being read, group after group.
+    var statementNodes: ScratchList<AgentFlowNamedText>
+    /// Where each group of the vertex statement being read starts among its nodes.
+    var groupStarts: ScratchList<Int>
 
     static func parse(_ cursor: MermaidTextCursor, keyword: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> AgentFlowDiagram {
         let keywordStart = cursor.position - keyword.utf8.count
         var lineStart = keywordStart
         while lineStart > 0, cursor.bytes[lineStart - 1] != MermaidByte.newline { lineStart -= 1 }
-        let units = AgentFlowPreparedText.units(of: cursor.bytes[lineStart...])
-        var parser = AgentFlowParser(units: units, builder: AgentFlowDiagramBuilder(limits: limits, lineOffset: cursor.line - 1))
-        try parser.readDiagram()
-        parser.builder.diagram.options = AgentFlowOptions(MermaidConfigurationOptions(section: "agentflow", in: cursor))
-        parser.builder.buildGraph()
-        return parser.builder.diagram
+        let (bytes, isASCII) = AgentFlowPreparedText.bytes(of: cursor.bytes[lineStart...])
+        let lineOffset = cursor.line - 1
+        // The tokens and every list the reading needs only while it runs are in the thread's scratch arena.
+        let read = DiagramScratchArena.withCurrentThread { arena in
+            Result { () throws(MermaidDiagramReadError) in
+                let lexed = AgentFlowLexer.tokens(of: bytes, isASCII: isASCII, arena: arena)
+                let text = AgentFlowTextBytes(prepared: bytes, derived: lexed.derived, isASCII: isASCII)
+                let builder = AgentFlowDiagramBuilder(text: text, limits: limits, lineOffset: lineOffset, arena: arena)
+                var parser = AgentFlowParser(tokens: lexed.tokens, builder: builder, arena: arena)
+                try parser.readDiagram()
+                parser.builder.buildGraph()
+                return parser.builder.model
+            }
+        }
+        return AgentFlowDiagram(model: try read.get(), options: AgentFlowOptions(MermaidConfigurationOptions(section: "agentflow", in: cursor)))
     }
 
-    private init(units: [UInt16], builder: AgentFlowDiagramBuilder) {
-        self.units = units
-        tokens = AgentFlowLexer.tokens(of: units)
+    private init(tokens: AgentFlowTokens, builder: AgentFlowDiagramBuilder, arena: DiagramScratchArena) {
+        self.tokens = tokens
         self.builder = builder
         self.builder.reserveRoom(forTokenCount: tokens.count)
+        items = arena.list(capacity: 32)
+        statementNodes = arena.list(capacity: 16)
+        groupStarts = arena.list(capacity: 8)
     }
 
-    var current: AgentFlowTokenKind { index < tokens.count ? tokens.kinds[index] : .end }
+    var preparedCount: Int { builder.model.text.preparedCount }
 
-    func kind(at position: Int) -> AgentFlowTokenKind { position < tokens.count ? tokens.kinds[position] : .end }
+    var current: AgentFlowTokenKind { index < tokens.count ? tokens.kind(at: index) : .end }
 
-    func text(at position: Int) -> String { tokens.text(at: position, in: units) }
+    func kind(at position: Int) -> AgentFlowTokenKind { position < tokens.count ? tokens.kind(at: position) : .end }
+
+    func text(at position: Int) -> MermaidTextRange { tokens.textRange(at: position) }
 
     /// `agentflow-beta`, its direction or a line break, then the document to its end.
     private mutating func readDiagram() throws(MermaidDiagramReadError) {
@@ -54,7 +74,7 @@ struct AgentFlowParser {
         _ = try expect(.graph, also: "'SPACE', 'NEWLINE', 'COMMENT'")
         if current == .noDirection {
             index += 1
-            builder.setDirection("TB")
+            builder.setDirection(builder.constant(.topToBottom))
         } else {
             let direction = try expect(.direction, also: "'NODIR'")
             if current == .space {
@@ -72,7 +92,7 @@ struct AgentFlowParser {
 
     // MARK: - Tokens
 
-    mutating func expect(_ kind: AgentFlowTokenKind, also: String = "") throws(MermaidDiagramReadError) -> String {
+    mutating func expect(_ kind: AgentFlowTokenKind, also: String = "") throws(MermaidDiagramReadError) -> MermaidTextRange {
         guard current == kind else { throw failure(expecting: "'\(kind.grammarName)'" + (also.isEmpty ? "" : ", " + also)) }
         index += 1
         return text(at: index - 1)
@@ -84,7 +104,7 @@ struct AgentFlowParser {
     }
 
     /// Tokens of `kinds` run together: an identifier, or what follows `interpolate`.
-    mutating func joined(_ kinds: AgentFlowTokenKindSet) throws(MermaidDiagramReadError) -> String {
+    mutating func joined(_ kinds: AgentFlowTokenKindSet) throws(MermaidDiagramReadError) -> MermaidTextRange {
         guard kinds.contains(current) else { throw failure(expecting: "'NODE_STRING'") }
         let first = index
         index += 1
@@ -92,27 +112,30 @@ struct AgentFlowParser {
         return joinedText(from: first, to: index)
     }
 
-    /// The texts of the tokens from `first` up to `end` run together: one slice of the code units when the tokens follow
-    /// one another with their own texts and no token ends between the two halves of a surrogate pair (each token's
-    /// text is decoded alone, a half alone made U+FFFD); else each token's text joined.
-    func joinedText(from first: Int, to end: Int) -> String {
-        guard end - first > 1 else { return text(at: first) }
-        var isOneSlice = tokens.replacedTexts.isEmpty
+    /// The texts of the tokens from `first` up to `end` run together: one range when they follow one another in the
+    /// bytes (an empty text, the `@{` that opens metadata, adds nothing), else their texts made after the bytes.
+    mutating func joinedText(from first: Int, to end: Int) -> MermaidTextRange {
+        var joined = text(at: first)
         var position = first + 1
-        while isOneSlice, position < end {
-            let boundary = tokens.starts[position]
-            isOneSlice = boundary == tokens.ends[position - 1] && !(boundary > 0 && UTF16.isLeadSurrogate(units[boundary - 1]))
+        while position < end {
+            let next = text(at: position)
+            if next.isEmpty {
+                position += 1
+                continue
+            }
+            if joined.isEmpty { joined = next } else if next.start == joined.end { joined.end = next.end } else { break }
             position += 1
         }
-        guard isOneSlice else {
-            var joined = text(at: first)
-            for position in (first + 1)..<end { joined += text(at: position) }
-            return joined
+        guard position < end else { return joined }
+        let start = builder.model.text.bytes.count
+        for piece in first..<end {
+            let range = text(at: piece)
+            builder.model.text.appendCopy(of: range)
         }
-        return UnicodeScalarText.string(utf16: units[tokens.starts[first]..<tokens.ends[end - 1]])
+        return MermaidTextRange(start: start, end: builder.model.text.bytes.count)
     }
 
-    mutating func identifier() throws(MermaidDiagramReadError) -> String { try joined(Self.identifierTokens) }
+    mutating func identifier() throws(MermaidDiagramReadError) -> MermaidTextRange { try joined(Self.identifierTokens) }
 
     /// A node's text: a string, a Markdown string, or text and tags run together.
     mutating func nodeText() throws(MermaidDiagramReadError) -> AgentFlowText {
@@ -126,7 +149,7 @@ struct AgentFlowParser {
         let first = index
         index += 1
         while Self.nodeTextTokens.contains(current) { index += 1 }
-        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
+        return AgentFlowText(range: joinedText(from: first, to: index), type: type)
     }
 
     mutating func close(_ kind: AgentFlowTokenKind) throws(MermaidDiagramReadError) {
@@ -145,7 +168,7 @@ struct AgentFlowParser {
         let first = index
         index += 1
         while current == .edgeText || current == .unicodeText { index += 1 }
-        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
+        return AgentFlowText(range: joinedText(from: first, to: index), type: type)
     }
 
     /// A flow's or a connector's identifier: words and punctuation without tags, or a string, which is text.
@@ -159,20 +182,16 @@ struct AgentFlowParser {
         let first = index
         index += 1
         while Self.textWithoutTagsTokens.contains(current) { index += 1 }
-        return AgentFlowText(text: joinedText(from: first, to: index), type: type)
+        return AgentFlowText(range: joinedText(from: first, to: index), type: type)
     }
 
     /// A metadata block's body: its tokens' texts run together.
-    mutating func shapeData() -> String {
+    mutating func shapeData() -> MermaidTextRange {
         metadataFrom = index
-        var body = text(at: index)
         index += 1
-        while current == .shapeData {
-            body += text(at: index)
-            index += 1
-        }
+        while current == .shapeData { index += 1 }
         metadataTo = index - 1
-        return body
+        return joinedText(from: metadataFrom, to: index)
     }
 
     func span(from first: Int, to last: Int) -> AgentFlowSourceSpan { tokens.span(from: first, to: last) }
