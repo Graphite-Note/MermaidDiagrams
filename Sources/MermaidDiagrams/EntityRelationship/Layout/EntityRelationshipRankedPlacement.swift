@@ -7,7 +7,7 @@
  *              thread's arena, then drawn into the layout's segments.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -26,7 +26,7 @@ extension EntityRelationshipPageAssembly {
         var longest = 2
         for box in 0..<measured.boxes.count { boxSizes[box] = measured.boxes[box].size }
         for layeredIndex in 0..<layeredIndices.count { longest = max(longest, routes.count(of: layeredIndex)) }
-        let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: model.relationships.count, boxCenters: boxCenters, boxSizes: boxSizes,
+        let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: relationshipRecords.count, boxCenters: boxCenters, boxSizes: boxSizes,
                                                 arena: arena)
         // Room for a route and the two straight runs' points `relationship(at:along:)` adds.
         let routed: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: longest + 2)
@@ -56,7 +56,7 @@ extension EntityRelationshipPageAssembly {
             let second = routes.point(1, count: count, of: layeredIndex)
             let beforeLast = routes.point(count - 2, count: count, of: layeredIndex)
             let last = routes.point(count - 1, count: count, of: layeredIndex)
-            let relationship = model.relationships[index]
+            let relationship = relationshipRecords[index]
             ends[2 * layeredIndex] = EntityRelationshipEdgePorts.End(relationshipIndex: Int32(index), isFirstEntityEnd: true, entity: relationship.firstEntityIndex,
                                                                      side: second.y > first.y ? axes.downstreamSide : axes.upstreamSide, neighborAcross: second.x)
             ends[2 * layeredIndex + 1] = EntityRelationshipEdgePorts.End(relationshipIndex: Int32(index), isFirstEntityEnd: false,

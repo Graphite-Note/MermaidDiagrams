@@ -7,7 +7,7 @@
  *              thread's arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 26/11/2026
  */
 
@@ -19,9 +19,9 @@ extension EntityRelationshipPageAssembly {
     mutating func placeBoxes(clustered: EntityRelationshipClusterGraph, nesting: EntityRelationshipNesting, compound: LayeredCompoundLayout) {
         representedSubgraphs = nesting.representedSubgraphs
         let nodeCount = clustered.graph.nodeCount
-        representedBoxSizes = arena.uninitializedSpan(count: model.entities.count)
-        boxCenters = arena.uninitializedSpan(count: model.entities.count)
-        for entity in 0..<model.entities.count {
+        representedBoxSizes = arena.uninitializedSpan(count: entityCount)
+        boxCenters = arena.uninitializedSpan(count: entityCount)
+        for entity in 0..<entityCount {
             let subgraph = Int(representedSubgraphs[entity])
             if subgraph >= 0 {
                 let frame = compound.nodes[nodeCount + subgraph].frame
@@ -73,17 +73,17 @@ extension EntityRelationshipPageAssembly {
         var ends = arena.list(capacity: 2 * layoutCount, of: EntityRelationshipEdgePorts.End.self)
         for layoutIndex in 0..<layoutCount where !compound.isStray(layoutIndex) {
             let index = clustered.layoutRelationshipIndices[layoutIndex]
-            let relationship = model.relationships[index]
+            let relationship = relationshipRecords[index]
             ends.append(Self.routeEnd(of: layoutIndex, in: compound, relationshipIndex: index, isFirstEntityEnd: true, entity: relationship.firstEntityIndex))
             ends.append(Self.routeEnd(of: layoutIndex, in: compound, relationshipIndex: index, isFirstEntityEnd: false, entity: relationship.secondEntityIndex))
         }
         let nodeCount = clustered.graph.nodeCount
-        let sizes: ScratchSpan<CGSize> = arena.uninitializedSpan(count: model.entities.count)
-        for entity in 0..<model.entities.count {
+        let sizes: ScratchSpan<CGSize> = arena.uninitializedSpan(count: entityCount)
+        for entity in 0..<entityCount {
             let subgraph = Int(representedSubgraphs[entity])
             sizes[entity] = subgraph >= 0 ? compound.nodes[nodeCount + subgraph].frame.size : measured.boxes[entity].size
         }
-        return EntityRelationshipEdgePorts(ends: ends.elements, relationshipCount: model.relationships.count, boxCenters: boxCenters, boxSizes: sizes,
+        return EntityRelationshipEdgePorts(ends: ends.elements, relationshipCount: relationshipRecords.count, boxCenters: boxCenters, boxSizes: sizes,
                                            arena: arena)
     }
 

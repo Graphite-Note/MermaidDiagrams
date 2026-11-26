@@ -6,7 +6,7 @@
  *              rows, cells, labels and loops kept in lists of the thread's scratch arena.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -62,7 +62,9 @@ struct EntityRelationshipMeasurement {
         loopBands = arena.span(count: model.relationships.count, repeating: CGFloat(0))
         (loopStarts, loopRelationships) = Self.loops(of: model, arena: arena)
         lines.reserveCapacity(lines: 2 * model.entities.count + 4 * model.attributes.count + model.relationships.count + 8, derivedBytes: 64)
-        model.text.withUnsafeBufferPointer { bytes in measureTexts(of: model, bytes: bytes, measurers: measurers, arena: arena) }
+        withUnsafePointer(to: model) { model in
+            model.pointee.text.withUnsafeBufferPointer { bytes in measureTexts(of: model, bytes: bytes, measurers: measurers, arena: arena) }
+        }
         self.title = title.map { title in
             DiagramFlatTextMeasuring.measure(DiagramLabel(title), measurer: measurers.name, maximumWidth: .greatestFiniteMagnitude, into: &lines)
         }
@@ -88,14 +90,14 @@ struct EntityRelationshipMeasurement {
     }
 
     /// The relationships' labels, the loops' bands, then the boxes with their cells.
-    private mutating func measureTexts<Measurer>(of model: EntityRelationshipModel, bytes: UnsafeBufferPointer<UInt8>,
+    private mutating func measureTexts<Measurer>(of model: UnsafePointer<EntityRelationshipModel>, bytes: UnsafeBufferPointer<UInt8>,
                                                  measurers: EntityRelationshipFlatMeasurers<Measurer>, arena: DiagramScratchArena) {
-        let cellMeasuring = EntityRelationshipCellMeasuring<Measurer>(model: model, bytes: bytes)
-        for (index, relationship) in model.relationships.enumerated() {
+        let cellMeasuring = EntityRelationshipCellMeasuring<Measurer>(bytes: bytes, model: model)
+        for (index, relationship) in model.pointee.relationships.enumerated() {
             labels[index] = cellMeasuring.label(relationship.label, measurer: measurers.row, maximumWidth: Self.labelWrappingWidth, into: &lines)
         }
         var constantCells = EntityRelationshipConstantCells(arena: arena)
-        for entity in 0..<model.entities.count {
+        for entity in 0..<model.pointee.entities.count {
             let loops = loopIndices(of: entity)
             var bandsLength: CGFloat = 0
             if !loops.isEmpty {
