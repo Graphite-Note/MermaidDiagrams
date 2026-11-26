@@ -2,21 +2,23 @@
  * File: EntityRelationshipClusterGraph.swift
  * ------------------------------------------
  * Layer: Core
- * Description: An entity relationship diagram with groups as a graph of nested boxes to lay out, as Pele's renderer makes it.
+ * Description: An entity relationship diagram with groups as a graph of nested boxes to lay out, as Pele's renderer makes it,
+ *              written into the compound layout's spans.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
 
-/// An entity relationship diagram with `subgraph` groups as a graph of nested boxes to lay out (`LayeredClusterLayout`),
+/// An entity relationship diagram with `subgraph` groups as a graph of nested boxes to lay out (`LayeredCompoundGraph`),
 /// as Pele's entity relationship renderer gives them to its compound layout (`er/render.ts`): each group a box with 20
 /// points of room on its sides and below and its title in a band along its top, at least as wide as its title and
 /// never narrower than an entity's box, running in its own direction or in that of the box around it; each entity in
 /// the box of the group that holds it; an entity whose name is a group's identifier standing for the group, so that a
-/// relationship to it meets the group's box; each relationship between two different ends.
+/// relationship to it meets the group's box; each relationship between two different ends. The nodes, boxes and edges
+/// are written once, straight into the calling thread's arena.
 struct EntityRelationshipClusterGraph {
     /// Pele's `GROUP_PAD`.
     static let padding: CGFloat = 20
@@ -25,7 +27,8 @@ struct EntityRelationshipClusterGraph {
     /// How much narrower than its title and two paddings a box may be.
     static let titleWidthAllowance: CGFloat = 12
 
-    let graph: LayeredClusterGraph
+    /// The entities that do not stand for a group, then the groups' boxes in group order, and the relationships laid out.
+    let graph: LayeredCompoundGraph
     /// For each entity, its node in `graph`, or nil for an entity that stands for a group.
     let layoutNodeIndices: [Int?]
     /// For each entity, the group it stands for, or nil.
@@ -36,75 +39,76 @@ struct EntityRelationshipClusterGraph {
     let titles: [DiagramTextBlock?]
     /// How many group boxes each group's box is inside.
     let depths: [Int]
-    /// For each entity, whether the box it sits in runs across, where its loops leave its box's bottom; a group's loops
-    /// leave its right side whichever way it runs, as Pele hangs them.
-    let entityRunsAcross: [Bool]
 
-    init<Measurer: DiagramTextMeasuring>(diagram: EntityRelationshipDiagram, titleText: Measurer) {
-        let nesting = EntityRelationshipNesting(diagram: diagram)
+    /// - Parameters:
+    ///   - layoutSizes: Each entity's size in its rank.
+    ///   - labelSizes: By relationship, its label's room, or nil for one without a label.
+    init<Measurer: DiagramTextMeasuring>(diagram: EntityRelationshipDiagram, nesting: EntityRelationshipNesting, titleText: Measurer,
+                                         layoutSizes: [CGSize], labelSizes: [CGSize?], arena: DiagramScratchArena) {
         representedSubgraphs = nesting.representedSubgraphs
         depths = nesting.depths
-        entityRunsAcross = zip(nesting.entityDirections, nesting.representedSubgraphs).map { direction, subgraph in
-            subgraph == nil && direction.runsAcross
-        }
         let measuredTitles = diagram.subgraphs.map { subgraph in
             let title = DiagramTextBlock(label: subgraph.title, measurer: titleText, maximumWidth: .greatestFiniteMagnitude)
             return title.lineCount == 0 ? nil : title
         }
         titles = measuredTitles
+        var nodeCount = 0
+        for entity in diagram.entities.indices where nesting.representedSubgraphs[entity] == nil { nodeCount += 1 }
+        let nodes: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodeCount + diagram.subgraphs.count)
         var layoutNodeIndices: [Int?] = []
-        var nodeClusters: [Int?] = []
+        layoutNodeIndices.reserveCapacity(diagram.entities.count)
+        var layoutNode = 0
         for entity in diagram.entities.indices {
             guard nesting.representedSubgraphs[entity] == nil else {
                 layoutNodeIndices.append(nil)
                 continue
             }
-            layoutNodeIndices.append(nodeClusters.count)
-            nodeClusters.append(nesting.entitySubgraphs[entity])
+            layoutNodeIndices.append(layoutNode)
+            nodes[layoutNode] = .member(size: layoutSizes[entity], box: nesting.entitySubgraphs[entity], nodeCount: nodeCount, sequence: layoutNode)
+            layoutNode += 1
         }
         self.layoutNodeIndices = layoutNodeIndices
-        let clusters = diagram.subgraphs.indices.map { index in
-            Self.cluster(parent: nesting.subgraphParents[index], direction: diagram.subgraphs[index].direction, title: measuredTitles[index])
+        for index in diagram.subgraphs.indices {
+            nodes[nodeCount + index] = Self.box(parent: nesting.subgraphParents[index], direction: diagram.subgraphs[index].direction,
+                                                title: measuredTitles[index], nodeCount: nodeCount, sequence: CGFloat(nodeCount + index))
         }
-        let edges = Self.edges(of: diagram, representedSubgraphs: nesting.representedSubgraphs, layoutNodeIndices: layoutNodeIndices)
-        layoutRelationshipIndices = edges.relationshipIndices
-        graph = LayeredClusterGraph(nodeSizes: [], nodeClusters: nodeClusters, clusters: clusters, edges: edges.layout,
-                                    direction: diagram.direction.layeredDirection)
+        var edges = arena.list(capacity: diagram.relationships.count, of: LayeredCompoundSpanEdge.self)
+        layoutRelationshipIndices = Self.edges(of: diagram, representedSubgraphs: nesting.representedSubgraphs, layoutNodeIndices: layoutNodeIndices,
+                                               labelSizes: labelSizes, nodeCount: nodeCount, into: &edges)
+        graph = LayeredCompoundGraph(nodes: nodes, edges: edges.elements, nodeCount: nodeCount, direction: diagram.direction.layeredDirection)
     }
 
-    /// The relationships between two different ends; one from an entity or a group to itself loops beside its box and is
-    /// not laid out.
-    private static func edges(of diagram: EntityRelationshipDiagram, representedSubgraphs: [Int?],
-                              layoutNodeIndices: [Int?]) -> (layout: [LayeredClusterEdge], relationshipIndices: [Int]) {
-        func end(of entity: Int) -> LayeredClusterEnd {
-            if let subgraph = representedSubgraphs[entity] { return .cluster(subgraph) }
-            return .node(layoutNodeIndices[entity] ?? 0)
+    /// For each entity, whether the box it sits in runs across, where its loops leave its box's bottom; a group's loops
+    /// leave its right side whichever way it runs, as Pele hangs them.
+    static func entityRunsAcross(_ nesting: EntityRelationshipNesting) -> [Bool] {
+        zip(nesting.entityDirections, nesting.representedSubgraphs).map { direction, subgraph in subgraph == nil && direction.runsAcross }
+    }
+
+    /// The relationships between two different ends, with their labels' room, appended to `edges`, a group's end at its
+    /// box's node after the `nodeCount` nodes; one from an entity or a group to itself loops beside its box and is not laid
+    /// out. Returns the index of each relationship appended.
+    private static func edges(of diagram: EntityRelationshipDiagram, representedSubgraphs: [Int?], layoutNodeIndices: [Int?], labelSizes: [CGSize?],
+                              nodeCount: Int, into edges: inout ScratchList<LayeredCompoundSpanEdge>) -> [Int] {
+        func end(of entity: Int) -> Int {
+            if let subgraph = representedSubgraphs[entity] { return nodeCount + subgraph }
+            return layoutNodeIndices[entity] ?? 0
         }
-        var edges: [LayeredClusterEdge] = []
         var relationshipIndices: [Int] = []
         for (index, relationship) in diagram.relationships.enumerated() {
             let source = end(of: relationship.firstEntityIndex)
             let target = end(of: relationship.secondEntityIndex)
             guard source != target else { continue }
-            edges.append(LayeredClusterEdge(source: source, target: target, minimumRankSpan: 1, labelSize: nil))
+            edges.append(LayeredCompoundSpanEdge(source: source, target: target, minimumRankSpan: 1, labelSize: labelSizes[index]))
             relationshipIndices.append(index)
         }
-        return (edges, relationshipIndices)
+        return relationshipIndices
     }
 
-    /// The graph with each entity's size in its rank and each relationship's label's room.
-    func sized(nodeSizes: [CGSize], labelSizes: [CGSize?]) -> LayeredClusterGraph {
-        var sized = graph
-        sized.nodeSizes = nodeSizes
-        for (position, index) in layoutRelationshipIndices.enumerated() { sized.edges[position].labelSize = labelSizes[index] }
-        return sized
-    }
-
-    private static func cluster(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?) -> LayeredCluster {
+    private static func box(parent: Int?, direction: FlowchartDirection?, title: DiagramTextBlock?, nodeCount: Int, sequence: CGFloat) -> LayeredCompoundNode {
         let titleSize = title?.size ?? .zero
         let top = title == nil ? padding : titleSize.height + titleRoom
-        return LayeredCluster(parent: parent, direction: direction?.layeredDirection, padding: LayeredClusterPadding(side: padding, top: top, bottom: padding),
-                              minimumWidth: max(titleSize.width + 2 * padding - titleWidthAllowance, EntityRelationshipBoxMeasurement.minimumWidth))
+        return .box(parent: parent, nodeCount: nodeCount, direction: direction?.layeredDirection, padding: LayeredClusterPadding(side: padding, top: top, bottom: padding),
+                    minimumWidth: max(titleSize.width + 2 * padding - titleWidthAllowance, EntityRelationshipBoxMeasurement.minimumWidth), sequence: sequence)
     }
 }
 

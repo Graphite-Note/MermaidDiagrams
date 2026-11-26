@@ -6,8 +6,8 @@
  *              lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -54,7 +54,7 @@ enum ReferenceEntityRelationshipLayoutEngine {
             }
             return LayeredEdge(source: relationship.firstEntityIndex, target: relationship.secondEntityIndex, minimumRankSpan: 1, labelSize: labelSize)
         })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
+        guard let placement = ReferenceLayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = ReferenceEntityRelationshipPageAssembly(diagram: diagram, measured: measured,
@@ -81,8 +81,8 @@ enum ReferenceEntityRelationshipLayoutEngine {
         }
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: spacing,
-                                                       maximumPointCount: limits.maximumLayoutPointCount)
+            placement = try ReferenceLayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: spacing,
+                                                                maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

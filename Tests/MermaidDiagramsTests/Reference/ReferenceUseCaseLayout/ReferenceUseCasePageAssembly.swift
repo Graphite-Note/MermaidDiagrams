@@ -8,7 +8,7 @@
  *              loops beside their nodes, and each node's texts placed.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -33,7 +33,7 @@ extension ReferenceUseCaseLayoutPass {
         var routes = placement.edgeRoutes.map { route in
             LayeredClusterRoute(points: route.points.map { point in point.translated(by: offset) }, segmentsRunVertically: route.segmentsRunVertically)
         }
-        let crossings = UseCaseBoundaryTitles.crossings(of: routes)
+        let crossings = UseCaseBoundaryTitles.crossings(ofPoints: routes.lazy.flatMap(\.points))
         ReferenceUseCaseEdgeEnds.attach(&routes, sources: laidOutEdges.map(\.source), targets: laidOutEdges.map(\.target), centers: centers, views: views)
         let labelCenters = placement.edgeLabelCenters.map { center in center?.translated(by: offset) }
         var boundaries: [UseCaseLayoutBoundary] = []

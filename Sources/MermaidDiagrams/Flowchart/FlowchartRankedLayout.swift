@@ -6,8 +6,8 @@
  *              straight into the flat layout's spans and its layout written once at its place on the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -24,10 +24,10 @@ enum FlowchartRankedLayout {
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let graph = RankedGraph(diagram, measured: measured, axes: flowAxes, arena: arena)
         #if DEBUG
-        record(graph, measured: measured, axes: flowAxes, spacing: spacing, maximumPointCount: maximumPointCount)
+        LayeredLayoutRecording.recordPlacement(nodes: graph.nodes, edges: graph.edges, spacing: spacing, maximumPointCount: maximumPointCount)
         #endif
         var points = arena.list(capacity: 4 * graph.edges.count, of: CGPoint.self)
-        guard let size = LayeredFlatLayout.layout(nodes: graph.nodes, edges: graph.edges, points: &points, options: LayeredLayout.options(spacing),
+        guard let size = LayeredFlatLayout.layout(nodes: graph.nodes, edges: graph.edges, points: &points, options: LayeredFlatOptions(spacing),
                                                   maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
@@ -122,22 +122,6 @@ enum FlowchartRankedLayout {
     private static func selfLoopCounts(nodeCount: Int, measured: FlowchartMeasurement, arena: DiagramScratchArena) -> ScratchSpan<Int32> {
         measured.selfLoopEdgeIndices.isEmpty ? .empty : arena.span(count: nodeCount, repeating: 0)
     }
-
-    #if DEBUG
-    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
-    private static func record(_ graph: RankedGraph, measured: FlowchartMeasurement, axes: FlowchartFlowAxes, spacing: LayeredSpacing,
-                               maximumPointCount: Int) {
-        guard let recording = LayeredLayoutRecording.current else { return }
-        let placed = LayeredGraph(nodeSizes: graph.nodes.map { node in LayeredSize(across: node.width, along: node.height) },
-                                  edges: (0..<graph.edges.count).map { layeredIndex in
-                                      let edge = graph.edges[layeredIndex]
-                                      return LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
-                                                         labelSize: labelFlowSize(of: graph.layeredEdgeIndices[layeredIndex], measured: measured, axes: axes))
-                                  },
-                                  nodeSideSpans: graph.nodes.map { node in CGFloat(node.sideSpan) })
-        recording.placements.append(.init(graph: placed, spacing: spacing, maximumPointCount: maximumPointCount))
-    }
-    #endif
 
     /// The laid-out flat graph read on the page.
     private struct PlacedGraph {

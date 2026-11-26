@@ -5,7 +5,7 @@
  * Description: Puts an entity relationship diagram laid out in its groups' boxes on the page: boxes, relationships, groups.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 25/11/2026
  */
 
@@ -13,43 +13,70 @@ import CoreGraphics
 
 extension EntityRelationshipPageAssembly {
     /// The entities at their centers on the page; an entity that stands for a group at the center of the group's box.
-    mutating func placeBoxes(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
+    mutating func placeBoxes(clustered: EntityRelationshipClusterGraph, compound: LayeredCompoundLayout) {
         representedSubgraphs = clustered.representedSubgraphs
+        let nodeCount = clustered.graph.nodeCount
         for (entity, subgraph) in clustered.representedSubgraphs.enumerated() {
-            if let subgraph { representedBoxSizes[entity] = placement.clusterFrames[subgraph].size }
+            if let subgraph { representedBoxSizes[entity] = compound.nodes[nodeCount + subgraph].frame.size }
         }
         boxCenters = diagram.entities.indices.map { entity in
             if let subgraph = clustered.representedSubgraphs[entity] {
-                let frame = placement.clusterFrames[subgraph]
+                let frame = compound.nodes[nodeCount + subgraph].frame
                 return CGPoint(x: frame.midX, y: frame.midY)
             }
-            return placement.nodeCenters[clustered.layoutNodeIndices[entity] ?? 0]
+            let node = compound.nodes[clustered.layoutNodeIndices[entity] ?? 0]
+            return CGPoint(x: node.x, y: node.y)
         }
+    }
+
+    /// Laid-out edge `edge`'s route: its points, and for each segment whether the flow it follows runs vertically.
+    private static func route(of edge: Int, in compound: LayeredCompoundLayout) -> Route {
+        let range = compound.routeRange(of: edge)
+        var points: [CGPoint] = []
+        var segmentsRunVertically: [Bool] = []
+        points.reserveCapacity(range.count)
+        segmentsRunVertically.reserveCapacity(max(range.count - 1, 0))
+        for index in range {
+            let point = compound.routePoints[index]
+            points.append(point.point)
+            if index > range.lowerBound { segmentsRunVertically.append(!point.runsHorizontally) }
+        }
+        return Route(points: points, segmentsRunVertically: segmentsRunVertically)
+    }
+
+    /// A route through boxes on the page, from the side of its source to the side of its target, and for each segment
+    /// whether the flow it follows runs vertically.
+    private struct Route {
+        let points: [CGPoint]
+        let segmentsRunVertically: [Bool]
     }
 
     /// The relationships along their routes on the page: each end on the side of its box (or group's box) its route
     /// leaves or arrives by, spread along it with the others there, running straight for a mark's length; a
     /// relationship between a group and an entity inside it straight from one center to the other, as Pele draws it.
-    mutating func placeRelationships(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
+    mutating func placeRelationships(clustered: EntityRelationshipClusterGraph, compound: LayeredCompoundLayout) {
+        let routes = (0..<clustered.layoutRelationshipIndices.count).map { layoutIndex in Self.route(of: layoutIndex, in: compound) }
+        let isStray = (0..<clustered.layoutRelationshipIndices.count).map { layoutIndex in compound.isStray(layoutIndex) }
         var ends: [EntityRelationshipEdgePorts.End] = []
         ends.reserveCapacity(2 * clustered.layoutRelationshipIndices.count)
-        for (layoutIndex, index) in clustered.layoutRelationshipIndices.enumerated() where !placement.strayEdgeIndices.contains(layoutIndex) {
+        for (layoutIndex, index) in clustered.layoutRelationshipIndices.enumerated() where !isStray[layoutIndex] {
             let relationship = diagram.relationships[index]
-            let route = placement.edgeRoutes[layoutIndex]
+            let route = routes[layoutIndex]
             ends.append(Self.routeEnd(of: route, relationshipIndex: index, isFirstEntityEnd: true, entity: relationship.firstEntityIndex))
             ends.append(Self.routeEnd(of: route, relationshipIndex: index, isFirstEntityEnd: false, entity: relationship.secondEntityIndex))
         }
+        let nodeCount = clustered.graph.nodeCount
         let sizes = diagram.entities.indices.map { entity in
-            clustered.representedSubgraphs[entity].map { subgraph in placement.clusterFrames[subgraph].size } ?? measured.boxes[entity].size
+            clustered.representedSubgraphs[entity].map { subgraph in compound.nodes[nodeCount + subgraph].frame.size } ?? measured.boxes[entity].size
         }
         let ports = EntityRelationshipEdgePorts(ends: ends, relationshipCount: diagram.relationships.count, boxCenters: boxCenters, boxSizes: sizes)
         // Each relationship's two sides, the first entity's then the second's, by relationship; nil for an end not placed.
         var sidesByEnd = [DiagramSide?](repeating: nil, count: 2 * diagram.relationships.count)
         for end in ends { sidesByEnd[2 * end.relationshipIndex + (end.isFirstEntityEnd ? 0 : 1)] = end.side }
         for (layoutIndex, index) in clustered.layoutRelationshipIndices.enumerated() {
-            let route = placement.edgeRoutes[layoutIndex]
-            let labelCenter = placement.edgeLabelCenters[layoutIndex]
-            guard !placement.strayEdgeIndices.contains(layoutIndex) else {
+            let route = routes[layoutIndex]
+            let labelCenter = compound.labelCenter(of: layoutIndex)
+            guard !isStray[layoutIndex] else {
                 placeStrayRelationship(at: index, along: route.points, labelCenter: labelCenter ?? route.points[0])
                 continue
             }
@@ -75,7 +102,7 @@ extension EntityRelationshipPageAssembly {
 
     /// A route through boxes from `start` to `end` through its inner points, running straight out of each box for a
     /// mark's length, and each segment's flow: the straight runs' across their sides, the others the route's.
-    private static func stubbed(_ route: LayeredClusterRoute, interior: ArraySlice<CGPoint>, start: CGPoint, startSide: DiagramSide, end: CGPoint,
+    private static func stubbed(_ route: Route, interior: ArraySlice<CGPoint>, start: CGPoint, startSide: DiagramSide, end: CGPoint,
                                 endSide: DiagramSide) -> (points: [CGPoint], segmentsRunVertically: [Bool]) {
         let straight = EntityRelationshipCardinalityMark.length
         let leaving = EntityRelationshipEdgePorts.outward(from: startSide)
@@ -116,7 +143,7 @@ extension EntityRelationshipPageAssembly {
 
     /// An end of a route through boxes: the side of its box its first or last segment leaves or arrives by, along that
     /// segment's flow, and where across that side the route goes next.
-    private static func routeEnd(of route: LayeredClusterRoute, relationshipIndex: Int, isFirstEntityEnd: Bool, entity: Int) -> EntityRelationshipEdgePorts.End {
+    private static func routeEnd(of route: Route, relationshipIndex: Int, isFirstEntityEnd: Bool, entity: Int) -> EntityRelationshipEdgePorts.End {
         let points = route.points
         let end = isFirstEntityEnd ? points[0] : points[points.count - 1]
         let next = isFirstEntityEnd ? points[1] : points[points.count - 2]
@@ -128,9 +155,11 @@ extension EntityRelationshipPageAssembly {
 
     /// The groups' boxes, each title along its box's top where the relationships leave it room; Pele's titles are never
     /// struck through.
-    mutating func placeSubgraphs(clustered: EntityRelationshipClusterGraph, placement: LayeredClusterPlacement) {
+    mutating func placeSubgraphs(clustered: EntityRelationshipClusterGraph, compound: LayeredCompoundLayout) {
         let crossings = FlowchartRoutePointIndex(relationshipPoints)
-        subgraphBoxes = placement.clusterFrames.enumerated().map { index, frame in
+        let nodeCount = clustered.graph.nodeCount
+        subgraphBoxes = (0..<clustered.graph.boxCount).map { index in
+            let frame = compound.nodes[nodeCount + index].frame
             let title = clustered.titles[index].map { title in FlowchartClusterTitles.placed(title, in: frame, crossings: crossings).title }
             return FlowchartLayoutCluster(frame: frame, title: title, depth: clustered.depths[index], isTitleCrossed: false)
         }

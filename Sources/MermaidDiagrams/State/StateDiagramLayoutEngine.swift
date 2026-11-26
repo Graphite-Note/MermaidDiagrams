@@ -6,8 +6,8 @@
  *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -56,22 +56,26 @@ public enum StateDiagramLayoutEngine {
         let measured = StateDiagramMeasurement(diagram: diagram, nameText: nameText, smallText: smallText, flowIsVertical: flowAxes.flowIsVertical,
                                                wrappingWidth: wrappingWidth, noteWrappingWidth: noteWrappingWidth)
         let surroundings = StateDiagramSurroundings(diagram: diagram, measured: measured, axes: flowAxes)
-        let clustered = diagram.composites.isEmpty ? nil
-            : try StateDiagramClusterGraph(diagram: diagram, measured: measured, surroundings: surroundings, flowIsVertical: flowAxes.flowIsVertical,
-                                           titleText: nameText)
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
-        let laidOut = DiagramScratchArena.withCurrentThread { arena in
-            guard let clustered else {
-                return StateDiagramRankedLayout.layout(diagram, measured: measured, surroundings: surroundings, title: title, font: font,
-                                                       maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
+        let laidOut = DiagramScratchArena.withCurrentThread { arena -> Result<StateDiagramLayout?, StateDiagramLayoutError> in
+            guard !diagram.composites.isEmpty else {
+                return .success(StateDiagramRankedLayout.layout(diagram, measured: measured, surroundings: surroundings, title: title, font: font,
+                                                                maximumPointCount: limits.maximumLayoutPointCount, arena: arena))
             }
             // Each composite a box laid out on its own and placed in the box around it, its concurrent regions boxes side by
             // side inside it; what is not laid out fails with `compositeStatesNotLaidOut`.
-            return StateDiagramBoxedLayout.layout(diagram, clustered: clustered, measured: measured, surroundings: surroundings, title: title,
-                                                  font: font, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
+            let clustered: StateDiagramClusterGraph
+            do throws(StateDiagramLayoutError) {
+                clustered = try StateDiagramClusterGraph(diagram: diagram, measured: measured, surroundings: surroundings,
+                                                         flowIsVertical: flowAxes.flowIsVertical, titleText: nameText, arena: arena)
+            } catch {
+                return .failure(error)
+            }
+            return .success(StateDiagramBoxedLayout.layout(diagram, clustered: clustered, measured: measured, surroundings: surroundings, title: title,
+                                                           font: font, maximumPointCount: limits.maximumLayoutPointCount, arena: arena))
         }
-        guard let laidOut else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
-        return laidOut
+        guard let layout = try laidOut.get() else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
+        return layout
     }
 
     /// The states in the order the layout takes them, Pele's: starts first, then the others in the order transitions

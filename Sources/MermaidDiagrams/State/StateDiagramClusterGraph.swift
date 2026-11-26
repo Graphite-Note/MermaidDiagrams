@@ -2,21 +2,22 @@
  * File: StateDiagramClusterGraph.swift
  * ------------------------------------
  * Layer: Core
- * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are.
+ * Description: A state diagram with composite states as nested boxes to lay out, as a flowchart's subgraphs are, written
+ *              into the compound layout's spans.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
 
-/// A state diagram with composite states as a graph of nested boxes to lay out (`LayeredClusterLayout`), as a flowchart's
+/// A state diagram with composite states as a graph of nested boxes to lay out (`LayeredCompoundGraph`), as a flowchart's
 /// subgraphs are: each composite state a box with Pele's 16 points of room inside it and its name in a band along its
 /// top, running in its own direction or in that of the box around it; each concurrent region of a body that has several
 /// a box of its own inside it, without a title; every other state in the box of the composite or region it was last
 /// named in; and each transition between two different states or boxes, a transition to or from a composite state
-/// meeting its box.
+/// meeting its box. The nodes, boxes and edges are written once, straight into the calling thread's arena.
 struct StateDiagramClusterGraph {
     /// The room inside a region's box around its states: less than a composite's, as the region's box is not drawn
     /// (Pele's `REGION_PAD`).
@@ -26,11 +27,15 @@ struct StateDiagramClusterGraph {
     /// The room a composite's title takes beyond its line, half above it and half below (Pele's `titleH`).
     static let titleRoom: CGFloat = 12
 
-    let graph: LayeredClusterGraph
+    /// The states that are not composites and the anchors' and notes' points, then the boxes: composites first, then
+    /// regions, then the unseen boxes around composites; and the transitions and notes' ties laid out.
+    let graph: LayeredCompoundGraph
+    /// Each node's size on the page, by its index in `graph`.
+    let layoutSizes: ScratchSpan<CGSize>
     /// For each state, its node in `graph`, or nil for a composite state, which is its box.
     let layoutNodeIndices: [Int?]
-    /// For each state, the composite it is (its index in `StateDiagram.composites`, which is its box's in
-    /// `graph.clusters`), or nil.
+    /// For each state, the composite it is (its index in `StateDiagram.composites`, which is its box's among `graph`'s
+    /// boxes), or nil.
     let compositeOfState: [Int?]
     /// The transitions laid out, in the order of `graph.edges`; a transition from a state to itself loops beside it.
     let layoutTransitionIndices: [Int]
@@ -38,7 +43,7 @@ struct StateDiagramClusterGraph {
     let titles: [DiagramTextBlock?]
     /// How many composite boxes each composite's box is inside.
     let depths: [Int]
-    /// For each composite whose states sit in several regions, its regions' boxes in `graph.clusters`, in region order.
+    /// For each composite whose states sit in several regions, its regions' boxes among `graph`'s boxes, in region order.
     let regionClusterIndices: [[Int]]
     /// By transition index, for a transition between a composite and a state inside it, its anchor with the node in
     /// `graph` of the point inside the composite it runs from or to; nil for the other transitions.
@@ -57,44 +62,45 @@ struct StateDiagramClusterGraph {
     /// Fails with `StateDiagramLayoutError.compositeStatesNotLaidOut` for a composite inside itself through its states.
     /// A composite with notes or loops sits in an unseen box with its notes (`StateDiagramCompositeSurroundings`).
     init<Measurer: DiagramTextMeasuring>(diagram: StateDiagram, measured: StateDiagramMeasurement, surroundings: StateDiagramSurroundings,
-                                         flowIsVertical: Bool, titleText: Measurer) throws(StateDiagramLayoutError) {
+                                         flowIsVertical: Bool, titleText: Measurer, arena: DiagramScratchArena) throws(StateDiagramLayoutError) {
         var compositeOfState = [Int?](repeating: nil, count: diagram.states.count)
         for (compositeIndex, composite) in diagram.composites.enumerated() { compositeOfState[composite.stateIndex] = compositeIndex }
         self.compositeOfState = compositeOfState
         let measuredTitles = Self.titles(of: diagram, titleText: titleText)
         titles = measuredTitles
-        var clusters = diagram.composites.indices.map { compositeIndex in
-            Self.compositeCluster(direction: diagram.composites[compositeIndex].direction, title: measuredTitles[compositeIndex])
-        }
-        let regions = Self.regionClusters(of: diagram, startingAt: clusters.count)
-        regionClusterIndices = regions.indicesByComposite
-        clusters += regions.indicesByComposite.enumerated().flatMap { compositeIndex, regionIndices in
-            regionIndices.map { _ in
-                LayeredCluster(parent: compositeIndex, direction: nil,
-                               padding: LayeredClusterPadding(side: Self.regionPadding, top: Self.regionPadding, bottom: Self.regionPadding), minimumWidth: 0)
-            }
-        }
-        let containers = diagram.composites.map { composite in regions.container(of: composite.stateIndex, in: diagram) }
-        for compositeIndex in diagram.composites.indices { clusters[compositeIndex].parent = containers[compositeIndex] }
         depths = try Self.depths(of: diagram)
         compositeDirections = StateDiagramCompositeAnchors.compositeDirections(of: diagram)
+        let regions = Self.regionClusters(of: diagram, startingAt: diagram.composites.count)
+        regionClusterIndices = regions.indicesByComposite
         let anchors = StateDiagramCompositeAnchors.anchors(of: diagram, compositeOfState: compositeOfState)
         let nodes = Self.nodes(of: diagram, compositeOfState: compositeOfState, surroundings: surroundings, flowIsVertical: flowIsVertical, regions: regions,
                                anchors: anchors)
         layoutNodeIndices = nodes.layoutNodeIndices
         self.anchors = nodes.anchors
-        let edges = try Self.edges(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, compositeOfState: compositeOfState,
-                                   anchors: nodes.anchors)
-        let surroundings = Self.wrapComposites(of: diagram, measured: measured, compositeOfState: compositeOfState, containers: containers,
-                                               directions: compositeDirections, clusters: &clusters, firstNode: nodes.sizes.count)
-        compositeSurroundings = surroundings
-        layoutTransitionIndices = edges.transitionIndices
-        let nodeSideSpans = Self.sideSpans(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, directions: compositeDirections,
-                                           nodeCount: nodes.sizes.count + surroundings.nodeSizes.count)
-        graph = LayeredClusterGraph(nodeSizes: nodes.sizes + surroundings.nodeSizes, nodeSideSpans: nodeSideSpans,
-                                    nodeClusters: nodes.clusters + surroundings.nodeClusters,
-                                    clusters: clusters, edges: edges.layout + surroundings.edges,
-                                    direction: diagram.direction.layeredDirection)
+        // The notes beside composites are nodes too, after the states and anchors; the boxes' group nodes follow them all.
+        let nodeCount = nodes.sizes.count + StateDiagramCompositeSurroundings.noteNodeCount(of: diagram, compositeOfState: compositeOfState)
+        let containers = diagram.composites.map { composite in regions.container(of: composite.stateIndex, in: diagram) }
+        var boxes = Self.boxes(of: diagram, titles: measuredTitles, containers: containers, regions: regions, nodeCount: nodeCount)
+        let compositeSurroundings = Self.wrapComposites(of: diagram, measured: measured, compositeOfState: compositeOfState, containers: containers,
+                                                        directions: compositeDirections, boxes: &boxes, firstNode: nodes.sizes.count, nodeCount: nodeCount)
+        self.compositeSurroundings = compositeSurroundings
+        var edges = arena.list(capacity: diagram.transitions.count + compositeSurroundings.edges.count, of: LayeredCompoundSpanEdge.self)
+        layoutTransitionIndices = Self.edges(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, compositeOfState: compositeOfState,
+                                             anchors: nodes.anchors, nodeCount: nodeCount, into: &edges)
+        for edge in compositeSurroundings.edges { edges.append(edge) }
+        let sideSpans = Self.sideSpans(of: diagram, measured: measured, layoutNodeIndices: nodes.layoutNodeIndices, directions: compositeDirections,
+                                       nodeCount: nodeCount)
+        layoutSizes = arena.uninitializedSpan(count: nodeCount)
+        for node in 0..<nodeCount {
+            layoutSizes[node] = node < nodes.sizes.count ? nodes.sizes[node] : compositeSurroundings.nodeSizes[node - nodes.sizes.count]
+        }
+        let compoundNodes: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodeCount + boxes.count)
+        for node in 0..<nodeCount {
+            let box = node < nodes.sizes.count ? nodes.clusters[node] : compositeSurroundings.nodeClusters[node - nodes.sizes.count]
+            compoundNodes[node] = .member(size: layoutSizes[node], box: box, nodeCount: nodeCount, sequence: node, sideSpan: sideSpans[node])
+        }
+        for (index, box) in boxes.enumerated() { compoundNodes[nodeCount + index] = box }
+        graph = LayeredCompoundGraph(nodes: compoundNodes, edges: edges.elements, nodeCount: nodeCount, direction: diagram.direction.layeredDirection)
     }
 
     /// Each composite's name, measured, or nil for an empty one.
@@ -118,21 +124,39 @@ struct StateDiagramClusterGraph {
         return spans
     }
 
+    /// The composites' boxes, each directly in its container, then for each composite whose states sit in several regions
+    /// its regions' boxes, in region order, every one's place in the declaration order after the `nodeCount` nodes.
+    private static func boxes(of diagram: StateDiagram, titles: [DiagramTextBlock?], containers: [Int?], regions: RegionClusters,
+                              nodeCount: Int) -> [LayeredCompoundNode] {
+        var boxes = diagram.composites.indices.map { compositeIndex in
+            compositeBox(direction: diagram.composites[compositeIndex].direction, title: titles[compositeIndex], container: containers[compositeIndex],
+                         nodeCount: nodeCount, sequence: nodeCount + compositeIndex)
+        }
+        let padding = LayeredClusterPadding(side: regionPadding, top: regionPadding, bottom: regionPadding)
+        for (compositeIndex, regionIndices) in regions.indicesByComposite.enumerated() {
+            for _ in regionIndices {
+                boxes.append(.box(parent: compositeIndex, nodeCount: nodeCount, direction: nil, padding: padding, minimumWidth: 0,
+                                  sequence: CGFloat(nodeCount + boxes.count)))
+            }
+        }
+        return boxes
+    }
+
     /// Puts each composite with notes or loops in an unseen box of its own, which runs across while the composite keeps
-    /// running as the box it was in did, and appends those boxes to `clusters`.
+    /// running as the box it was in did, and appends those boxes to `boxes`.
     private static func wrapComposites(of diagram: StateDiagram, measured: StateDiagramMeasurement, compositeOfState: [Int?], containers: [Int?],
-                                       directions: [FlowchartDirection], clusters: inout [LayeredCluster],
-                                       firstNode: Int) -> StateDiagramCompositeSurroundings {
+                                       directions: [FlowchartDirection], boxes: inout [LayeredCompoundNode], firstNode: Int,
+                                       nodeCount: Int) -> StateDiagramCompositeSurroundings {
         let surroundings = StateDiagramCompositeSurroundings(
             diagram: diagram, measured: measured, compositeOfState: compositeOfState, containers: containers,
             containerRunsVertically: diagram.composites.map { composite in
                 !(diagram.states[composite.stateIndex].compositeIndex.map { directions[$0] } ?? diagram.direction).runsAcross
-            }, firstCluster: clusters.count, firstNode: firstNode)
+            }, firstCluster: boxes.count, firstNode: firstNode, nodeCount: nodeCount)
         for (compositeIndex, wrapper) in surroundings.wrapperClusters {
-            clusters[compositeIndex].parent = wrapper
-            clusters[compositeIndex].direction = directions[compositeIndex].layeredDirection
+            boxes[compositeIndex].parent = nodeCount + wrapper
+            boxes[compositeIndex].direction = directions[compositeIndex].layeredDirection
         }
-        clusters += surroundings.clusters
+        boxes += surroundings.clusters
         return surroundings
     }
 
@@ -172,13 +196,16 @@ struct StateDiagramClusterGraph {
     }
 
     /// A composite's box, as Pele's state diagrams have it: 16 points of room, its name's band along the top (the name
-    /// and 12 points), at least as wide as its name and the room on both sides.
-    private static func compositeCluster(direction: FlowchartDirection?, title: DiagramTextBlock?) -> LayeredCluster {
+    /// and 12 points), at least as wide as its name and the room on both sides; directly in box `container`, or at the
+    /// top level.
+    private static func compositeBox(direction: FlowchartDirection?, title: DiagramTextBlock?, container: Int?, nodeCount: Int,
+                                     sequence: Int) -> LayeredCompoundNode {
         let padding = compositePadding
         let titleSize = title?.size ?? .zero
         let top = (title == nil ? 0 : titleSize.height + titleRoom) + padding
-        return LayeredCluster(parent: nil, direction: direction?.layeredDirection, padding: LayeredClusterPadding(side: padding, top: top, bottom: padding),
-                              minimumWidth: titleSize.width + 2 * padding)
+        return .box(parent: container, nodeCount: nodeCount, direction: direction?.layeredDirection,
+                    padding: LayeredClusterPadding(side: padding, top: top, bottom: padding), minimumWidth: titleSize.width + 2 * padding,
+                    sequence: CGFloat(sequence))
     }
 
     /// The regions' boxes: for each composite whose states (composite ones included) sit in more than one region, one box per
@@ -266,34 +293,32 @@ struct StateDiagramClusterGraph {
         }
     }
 
-    /// The transitions between two different ends, with their texts' room; a transition from a composite state to
-    /// itself fails, and one from another state to itself loops beside it.
+    /// The transitions between two different ends, with their texts' room, appended to `edges`, a composite's end at its
+    /// box's node after the `nodeCount` nodes; a transition from a state or a composite to itself loops beside it and is
+    /// not laid out. Returns the index of each transition appended.
     private static func edges(of diagram: StateDiagram, measured: StateDiagramMeasurement, layoutNodeIndices: [Int?], compositeOfState: [Int?],
-                              anchors: [PlacedAnchor?])
-        throws(StateDiagramLayoutError) -> (layout: [LayeredClusterEdge], transitionIndices: [Int]) {
-        func end(of state: Int) -> LayeredClusterEnd {
-            if let compositeIndex = compositeOfState[state] { return .cluster(compositeIndex) }
-            return .node(layoutNodeIndices[state] ?? 0)
+                              anchors: [PlacedAnchor?], nodeCount: Int, into edges: inout ScratchList<LayeredCompoundSpanEdge>) -> [Int] {
+        func end(of state: Int) -> Int {
+            if let compositeIndex = compositeOfState[state] { return nodeCount + compositeIndex }
+            return layoutNodeIndices[state] ?? 0
         }
         let room = StateDiagramLayoutEngine.transitionTextRoom
-        var layout: [LayeredClusterEdge] = []
         var transitionIndices: [Int] = []
-        layout.reserveCapacity(diagram.transitions.count)
         transitionIndices.reserveCapacity(diagram.transitions.count)
         for (transitionIndex, transition) in diagram.transitions.enumerated() {
             var source = end(of: transition.sourceIndex)
             var target = end(of: transition.targetIndex)
             if transitionIndex < anchors.count, let anchored = anchors[transitionIndex] {
-                if anchored.anchor.isInward { source = .node(anchored.layoutNodeIndex) } else { target = .node(anchored.layoutNodeIndex) }
+                if anchored.anchor.isInward { source = anchored.layoutNodeIndex } else { target = anchored.layoutNodeIndex }
             }
             // A loop on a state or a composite hangs beside it and is not laid out.
             guard source != target else { continue }
             let labelSize = measured.transitionTexts[transitionIndex].map { text in
                 CGSize(width: text.size.width + room.width, height: text.size.height + room.height)
             }
-            layout.append(LayeredClusterEdge(source: source, target: target, minimumRankSpan: 1, labelSize: labelSize))
+            edges.append(LayeredCompoundSpanEdge(source: source, target: target, minimumRankSpan: 1, labelSize: labelSize))
             transitionIndices.append(transitionIndex)
         }
-        return (layout, transitionIndices)
+        return transitionIndices
     }
 }

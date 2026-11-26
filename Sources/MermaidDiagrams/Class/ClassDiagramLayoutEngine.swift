@@ -6,8 +6,8 @@
  *              turned, tightened and its unjoined parts set in rows as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
- * Date: 24/11/2026
+ * Version: 0.6
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -68,15 +68,15 @@ public enum ClassDiagramLayoutEngine {
         var layeredSpacing = spacing(for: measured)
         // A diagram with namespaces: each a box laid out on its own and placed in the box around it, as Pele's class
         // renderer does.
-        let clustered = diagram.namespaces.isEmpty ? nil
-            : ClassDiagramClusterGraph(tree: ClassDiagramNamespaceTree(diagram: diagram), measured: measured, layoutSizes: measured.layoutSizes(selfLoops: selfLoops),
-                                       direction: diagram.direction, titleText: measurers.namespaceTitles, edgeTextRoom: edgeTextRoom, isTight: isTight)
-        if clustered != nil { layeredSpacing.borderSeparation = ClassDiagramClusterGraph.padding }
+        if !diagram.namespaces.isEmpty { layeredSpacing.borderSeparation = ClassDiagramClusterGraph.padding }
         let page = DiagramScratchArena.withCurrentThread { arena in
-            guard let clustered else {
+            guard !diagram.namespaces.isEmpty else {
                 return ClassDiagramRankedLayout.page(diagram, measured: measured, selfLoops: selfLoops, spacing: layeredSpacing,
                                                      markRowHeight: measurers.markRowHeight, maximumPointCount: limits.maximumLayoutPointCount, arena: arena)
             }
+            let clustered = ClassDiagramClusterGraph(tree: ClassDiagramNamespaceTree(diagram: diagram), measured: measured,
+                                                     layoutSizes: measured.layoutSizes(selfLoops: selfLoops), direction: diagram.direction,
+                                                     titleText: measurers.namespaceTitles, edgeTextRoom: edgeTextRoom, isTight: isTight, arena: arena)
             return ClassDiagramRankedLayout.boxedPage(clustered: clustered, measured: measured, selfLoops: selfLoops, spacing: layeredSpacing,
                                                       markRowHeight: measurers.markRowHeight, direction: diagram.direction,
                                                       maximumPointCount: limits.maximumLayoutPointCount, arena: arena)

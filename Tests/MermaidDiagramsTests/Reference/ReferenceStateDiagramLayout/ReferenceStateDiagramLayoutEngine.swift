@@ -7,8 +7,8 @@
  *              for a narrow container as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -78,7 +78,7 @@ enum ReferenceStateDiagramLayoutEngine {
                                                         minimumRankSpan: 1, labelSize: labelSize)
                                  },
                                  nodeSideSpans: order.map { state in measured.sideSpan(of: state, in: diagram, flowIsVertical: flowAxes.flowIsVertical) })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
+        guard let placement = ReferenceLayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = ReferenceStateDiagramPageAssembly(diagram: diagram, measured: measured, surroundings: surroundings,
@@ -101,7 +101,7 @@ enum ReferenceStateDiagramLayoutEngine {
                                                      flowIsVertical: axes.flowIsVertical, titleText: nameText)
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
+            placement = try ReferenceLayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

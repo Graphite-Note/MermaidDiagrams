@@ -7,7 +7,7 @@
  *              the routes an array of the cluster layout's or a use case layout's in a scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 25/11/2026
  */
 
@@ -29,12 +29,8 @@ enum UseCaseEdgeEnds {
         var place: Int32
     }
 
-    /// Each route's first and last points moved onto the outlines of `sources[route]` and `targets[route]`.
-    static func attach(_ routes: inout [LayeredClusterRoute], sources: [Int], targets: [Int], centers: [CGPoint], views: [UseCaseNodeView]) {
-        DiagramScratchArena.withCurrentThread { arena in attach(&routes, sources: sources, targets: targets, centers: centers, views: views, arena: arena) }
-    }
-
-    /// `attach` of routes kept in a scratch arena, with the nodes' places and centers in spans of it.
+    /// Each route's first and last points moved onto the outlines of `sources[route]` and `targets[route]`: routes kept in
+    /// a scratch arena, with the nodes' places and centers in spans of it.
     static func attach(_ routes: inout UseCaseRoutes, sources: ScratchSpan<Int>, targets: ScratchSpan<Int>, centers: ScratchSpan<CGPoint>,
                        views: [UseCaseNodeView]) {
         DiagramScratchArena.withCurrentThread { arena in attach(&routes, sources: sources, targets: targets, centers: centers, views: views, arena: arena) }
@@ -143,22 +139,13 @@ enum UseCaseEdgeEnds {
     }
 }
 
-/// Routes whose ends `UseCaseEdgeEnds` moves: an array of the cluster layout's routes, or a use case layout's routes in a
-/// scratch arena.
+/// Routes whose ends `UseCaseEdgeEnds` moves: a use case layout's routes in a scratch arena.
 protocol UseCaseAttachedRoutes {
     var routeCount: Int { get }
     func pointCount(ofRoute route: Int) -> Int
     func point(_ index: Int, ofRoute route: Int) -> CGPoint
     func segmentRunsVertically(_ segment: Int, ofRoute route: Int) -> Bool
     mutating func setPoint(_ point: CGPoint, at index: Int, ofRoute route: Int)
-}
-
-extension Array: UseCaseAttachedRoutes where Element == LayeredClusterRoute {
-    var routeCount: Int { count }
-    func pointCount(ofRoute route: Int) -> Int { self[route].points.count }
-    func point(_ index: Int, ofRoute route: Int) -> CGPoint { self[route].points[index] }
-    func segmentRunsVertically(_ segment: Int, ofRoute route: Int) -> Bool { self[route].segmentsRunVertically[segment] }
-    mutating func setPoint(_ point: CGPoint, at index: Int, ofRoute route: Int) { self[route].points[index] = point }
 }
 
 extension UseCaseRoutes: UseCaseAttachedRoutes {

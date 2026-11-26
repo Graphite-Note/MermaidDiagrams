@@ -7,7 +7,7 @@
  *              grown into their nodes' boxes, then the page assembled from the arena's lists.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 25/11/2026
  */
 
@@ -53,11 +53,6 @@ public enum UseCaseLayoutEngine {
         var pass = UseCaseLayoutPass(diagram: diagram, measurers: &measurers)
         let spacing = LayeredSpacing(nodeSeparation: diagram.nodeSpacing.map { CGFloat($0) } ?? nodeSeparation, edgeSeparation: edgeSeparation,
                                      rankSeparation: diagram.rankSpacing.map { CGFloat($0) } ?? rankSeparation, borderSeparation: borderSeparation)
-        #if DEBUG
-        if let recording = LayeredLayoutRecording.current {
-            recording.clusterPlacements.append(.init(graph: pass.clusterGraph(), spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount))
-        }
-        #endif
         let laidOut: UseCaseLayout? = DiagramScratchArena.withCurrentThread { arena in
             guard let placed = UseCasePlacedGraph(pass: &pass, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount, arena: arena) else {
                 return nil
@@ -140,41 +135,5 @@ struct UseCaseLayoutPass {
             drawnEdges.append((place, source, target, label))
             if source != target { laidOutEdges.append((place, source, target, label)) }
         }
-    }
-
-    /// The boundaries as clusters, every other node in the cluster of its boundary, and the edges between two nodes: the
-    /// graph `UseCasePlacedGraph` lays out, as the layered layouts' recording keeps it for the tests.
-    mutating func clusterGraph() -> LayeredClusterGraph {
-        var clusterPlaces: [String: Int] = [:]
-        var clusters: [LayeredCluster] = []
-        var nodeSizes: [CGSize] = []
-        nodeSizes.reserveCapacity(views.count)
-        layoutPlaces = []
-        layoutPlaces.reserveCapacity(views.count)
-        for (place, view) in views.enumerated() {
-            if view.node.isGroup {
-                clusterPlaces[view.node.identifier] = clusters.count
-                layoutPlaces.append(clusters.count)
-                clusters.append(LayeredCluster(parent: nil, direction: nil, padding: view.clusterPadding, minimumWidth: view.clusterMinimumWidth))
-            } else {
-                layoutPlaces.append(nodeSizes.count)
-                nodeSizes.append(layoutSizes[place])
-            }
-        }
-        // Every boundary is known by now, so that a node finds its boundary's cluster wherever the boundary was listed.
-        var nodeClusters: [Int?] = []
-        nodeClusters.reserveCapacity(nodeSizes.count)
-        for view in views where !view.node.isGroup {
-            nodeClusters.append(clusterPlaces.isEmpty ? nil : view.node.parentIdentifier.flatMap { parent in clusterPlaces[parent] })
-        }
-        let edges = laidOutEdges.map { drawn in
-            let labelSize = drawn.label.size.width > 0
-                ? CGSize(width: drawn.label.size.width + UseCaseLayoutEngine.edgeLabelRoom.width, height: drawn.label.size.height + UseCaseLayoutEngine.edgeLabelRoom.height)
-                : nil
-            return LayeredClusterEdge(source: .node(layoutPlaces[drawn.source]), target: .node(layoutPlaces[drawn.target]),
-                                      minimumRankSpan: graph.edges[drawn.edge].minimumLength, labelSize: labelSize)
-        }
-        return LayeredClusterGraph(nodeSizes: nodeSizes, nodeClusters: nodeClusters, clusters: clusters, edges: edges,
-                                   direction: UseCaseLayoutEngine.layeredDirection(of: diagram.direction))
     }
 }

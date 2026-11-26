@@ -7,12 +7,12 @@
  *              between a node and a flow around it held back to be drawn afterwards.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 /// An agent flow's graph as a flowchart (`FlowchartDiagram`) to lay out with the flowchart's boxes
-/// (`LayeredClusterLayout`): the graph's nodes that are not open flows first, in the graph's order, then one node
+/// (`FlowchartClusterGraph`): the graph's nodes that are not open flows first, in the graph's order, then one node
 /// standing for each open flow (`representingNodeIndex`), which edges to the flow meet; the flows as subgraphs, each
 /// before the flows inside it. An edge between a node and a flow around it has no place in the layout (Pele's `held`
 /// edges): it is left out and drawn afterwards. The flowchart's model is written straight from the graph, its records

@@ -7,8 +7,8 @@
  *              turned, tightened and its unjoined parts set in rows as Pele fits it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -81,7 +81,7 @@ enum ReferenceClassDiagramLayoutEngine {
                                      }
                                      return LayeredEdge(source: edge.source, target: edge.target, minimumRankSpan: 1, labelSize: labelSize)
                                  })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing(for: measured), maximumPointCount: limits.maximumLayoutPointCount) else {
+        guard let placement = ReferenceLayeredLayout.place(graph, spacing: spacing(for: measured), maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = ReferenceClassDiagramPageAssembly(measured: measured, markRowHeight: measurers.markRowHeight,
@@ -120,7 +120,7 @@ enum ReferenceClassDiagramLayoutEngine {
         clusterSpacing.borderSeparation = ReferenceClassDiagramClusterGraph.padding
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
+            placement = try ReferenceLayeredClusterLayout.place(clustered.graph, spacing: clusterSpacing, maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

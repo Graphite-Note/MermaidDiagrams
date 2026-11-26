@@ -7,7 +7,7 @@
  *              the lines given as routes or as their points one route after the other.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -19,12 +19,8 @@ enum UseCaseBoundaryTitles {
     /// Between the box's top and its title.
     static let titleMargin: CGFloat = 8
 
-    /// Where lines cross the page's rows: the x of each point of every route, by its y rounded (Pele's `markCrossings`).
-    static func crossings(of routes: [LayeredClusterRoute]) -> [Int: [CGFloat]] {
-        crossings(ofPoints: routes.lazy.flatMap(\.points))
-    }
-
-    /// `crossings(of:)` of routes given as their points one route after the other.
+    /// Where lines cross the page's rows: the x of each point of every route, given as their points one route after the
+    /// other, by its y rounded (Pele's `markCrossings`).
     static func crossings<Points: Sequence<CGPoint>>(ofPoints points: Points) -> [Int: [CGFloat]] {
         var crossings: [Int: [CGFloat]] = [:]
         for point in points where point.y.isFinite { crossings[Int(point.y.rounded()), default: []].append(point.x) }

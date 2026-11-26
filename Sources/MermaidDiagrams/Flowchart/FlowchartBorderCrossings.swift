@@ -6,8 +6,8 @@
  *              ends at a box keep clear of, in the scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -27,15 +27,8 @@ enum FlowchartBorderCrossings {
         let offset: CGFloat
     }
 
-    /// The crossings sorted by side, each side's in the order of the points' indices along the routes.
-    static func crossings(routes: [LayeredClusterRoute], frames: [CGRect], firstBoxNode: Int,
-                          arena: DiagramScratchArena) -> ScratchSpan<FlowchartEdgePorts.KeptPoint> {
-        let frameSpan: ScratchSpan<CGRect> = arena.uninitializedSpan(count: frames.count)
-        for (box, frame) in frames.enumerated() { frameSpan[box] = frame }
-        return crossings(innerPoints: innerPoints(of: routes, arena: arena), frames: frameSpan, firstBoxNode: firstBoxNode, arena: arena)
-    }
-
-    /// The crossings of the routes passing `points` (between their ends) with the borders of `frames`.
+    /// The crossings of the routes passing `points` (between their ends) with the borders of `frames`, sorted by side,
+    /// each side's in the order of the points' indices along the routes.
     static func crossings(innerPoints points: ScratchSpan<CGPoint>, frames: ScratchSpan<CGRect>, firstBoxNode: Int,
                           arena: DiagramScratchArena) -> ScratchSpan<FlowchartEdgePorts.KeptPoint> {
         let pointCount = points.count
@@ -74,21 +67,6 @@ enum FlowchartBorderCrossings {
         let kept: ScratchSpan<FlowchartEdgePorts.KeptPoint> = arena.uninitializedSpan(count: found.count)
         for index in 0..<found.count { kept[index] = FlowchartEdgePorts.KeptPoint(sideKey: ordered[index].sideKey, offset: ordered[index].offset) }
         return kept
-    }
-
-    /// The points the routes pass between their ends, route after route.
-    private static func innerPoints(of routes: [LayeredClusterRoute], arena: DiagramScratchArena) -> ScratchSpan<CGPoint> {
-        var pointCount = 0
-        for route in routes { pointCount += max(route.points.count - 2, 0) }
-        let points: ScratchSpan<CGPoint> = arena.uninitializedSpan(count: pointCount)
-        var next = 0
-        for route in routes where route.points.count > 2 {
-            for index in 1..<(route.points.count - 1) {
-                points[next] = route.points[index]
-                next += 1
-            }
-        }
-        return points
     }
 
     /// The indices of `points` in the order `isOrdered` sorts them.

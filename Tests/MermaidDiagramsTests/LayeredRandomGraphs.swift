@@ -6,8 +6,8 @@
  *              that compare the layout with the 0.7.0 reference.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -74,8 +74,8 @@ enum LayeredRandomGraphs {
         return options
     }
 
-    /// A graph to place through `LayeredLayout.place`, with side spans, offsets and labels, and each routing.
-    static func placement(_ index: Int, using generator: inout LayeredEquivalenceGenerator) -> LayeredLayoutRecording.Placement {
+    /// A graph to place on the flat layout, with side spans, offsets and labels, and each routing.
+    static func placement(_ index: Int, using generator: inout LayeredEquivalenceGenerator) -> LayeredPlacementInput {
         let nodeCount = Int.random(in: 1...16, using: &generator)
         let sizes = (0..<nodeCount).map { _ in
             LayeredSize(across: CGFloat(Int.random(in: 10...90, using: &generator)), along: CGFloat(Int.random(in: 10...40, using: &generator)))
@@ -95,7 +95,7 @@ enum LayeredRandomGraphs {
         spacing.routing.isStraight = index % 7 == 3
         spacing.routing.keepsTwinsApart = index % 5 == 4
         spacing.routing.headRoom = 8
-        return LayeredLayoutRecording.Placement(graph: LayeredGraph(nodeSizes: sizes, edges: edges, nodeSideSpans: spans), spacing: spacing,
-                                                maximumPointCount: index % 17 == 5 ? nodeCount + 1 : 50_000)
+        return LayeredPlacementInput(graph: LayeredGraph(nodeSizes: sizes, edges: edges, nodeSideSpans: spans), spacing: spacing,
+                                     maximumPointCount: index % 17 == 5 ? nodeCount + 1 : 50_000)
     }
 }

@@ -5,7 +5,7 @@
  * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 25/11/2026
  */
 
@@ -170,7 +170,7 @@ struct ClassDiagramPageAssembly {
     /// route leaves or arrives by, spread along it with the others there, running straight to its namespace's border
     /// where that is close (`ClassDiagramBorderRuns`); each segment an S along its own flow.
     mutating func placeEdges(clustered: ClassDiagramClusterGraph, compound: LayeredCompoundLayout, clusterFrames: [CGRect]) {
-        var routes: [LayeredClusterRoute] = []
+        var routes: [Route] = []
         routes.reserveCapacity(clustered.layoutEdgeIndices.count)
         var ends: [ClassDiagramEdgePorts.End] = []
         ends.reserveCapacity(2 * clustered.layoutEdgeIndices.count)
@@ -181,23 +181,22 @@ struct ClassDiagramPageAssembly {
         }
         let ports = ClassDiagramEdgePorts(ends: ends, edgeCount: measured.edges.count, nodeCenters: nodeCenters, sizes: measured.sizes,
                                           markRowHeight: markRowHeight)
-        let borderRuns = ClassDiagramBorderRuns(graph: clustered.graph, clusterFrames: clusterFrames, ends: ends)
+        let borderRuns = ClassDiagramBorderRuns(nodeNamespaces: clustered.nodeNamespaces, namespaceParents: clustered.namespaceParents,
+                                                clusterFrames: clusterFrames, ends: ends)
         for (layoutIndex, edgeIndex) in clustered.layoutEdgeIndices.enumerated() {
             let route = routes[layoutIndex]
             guard let sourcePort = ports.sourcePoints[edgeIndex], let targetPort = ports.targetPoints[edgeIndex] else { continue }
             let points = borderRuns.straightened([sourcePort] + route.points.dropFirst().dropLast() + [targetPort],
                                                  source: ends[2 * layoutIndex], target: ends[2 * layoutIndex + 1])
             edgePoints.append(points)
-            let laidOut = compound.edges[layoutIndex]
-            let textCenter = laidOut.labelWidth > 0 || compound.isStray(layoutIndex) ? laidOut.labelCenter
-                : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
+            let textCenter = compound.labelCenter(of: layoutIndex) ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
             edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
                                          segmentsRunVertically: route.segmentsRunVertically)
         }
     }
 
     /// Laid-out edge `edge`'s route: its points, and for each segment whether the flow it follows runs vertically.
-    private static func route(of edge: Int, in compound: LayeredCompoundLayout) -> LayeredClusterRoute {
+    private static func route(of edge: Int, in compound: LayeredCompoundLayout) -> Route {
         let range = compound.routeRange(of: edge)
         var points: [CGPoint] = []
         var segmentsRunVertically: [Bool] = []
@@ -208,11 +207,18 @@ struct ClassDiagramPageAssembly {
             points.append(point.point)
             if index > range.lowerBound { segmentsRunVertically.append(!point.runsHorizontally) }
         }
-        return LayeredClusterRoute(points: points, segmentsRunVertically: segmentsRunVertically)
+        return Route(points: points, segmentsRunVertically: segmentsRunVertically)
+    }
+
+    /// A route through namespaces' boxes on the page, from the side of its source to the side of its target, and for
+    /// each segment whether the flow it follows runs vertically.
+    private struct Route {
+        let points: [CGPoint]
+        let segmentsRunVertically: [Bool]
     }
 
     /// The two ends of a route on the page, each on the side its first or last segment leaves or arrives by.
-    private func pageRouteEnds(of edgeIndex: Int, route: LayeredClusterRoute) -> [ClassDiagramEdgePorts.End] {
+    private func pageRouteEnds(of edgeIndex: Int, route: Route) -> [ClassDiagramEdgePorts.End] {
         let edge = measured.edges[edgeIndex]
         func end(isSourceEnd: Bool) -> ClassDiagramEdgePorts.End {
             let points = route.points

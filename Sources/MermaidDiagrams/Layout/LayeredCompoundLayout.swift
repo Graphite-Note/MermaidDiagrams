@@ -6,8 +6,8 @@
  *              levels, ports, routes and keys in the calling thread's scratch arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -79,6 +79,9 @@ struct LayeredCompoundLayout {
     /// Lays the graph out in place in the arena and returns its width and height, or nil when a level would need more
     /// vertices than the limit. Each edge's route is then a range of `routePoints`.
     static func layout(_ layout: inout LayeredCompoundLayout) -> (width: Double, height: Double)? {
+        #if DEBUG
+        record(layout)
+        #endif
         layout.buildLevels()
         let ports = layout.budgetPorts()
         layout.assignEdges()
@@ -110,6 +113,19 @@ struct LayeredCompoundLayout {
             return size
         }
     }
+
+    #if DEBUG
+    /// The layout's input, for the tests that lay every compound graph of the corpora out again with the 0.7.0 layout.
+    private static func record(_ layout: LayeredCompoundLayout) {
+        guard let recording = LayeredLayoutRecording.current else { return }
+        let edges = layout.edges.map { edge in
+            LayeredCompoundEdge(source: edge.source, target: edge.target, minimumLength: edge.minimumLength, labelWidth: edge.labelWidth,
+                                labelHeight: edge.labelHeight)
+        }
+        recording.compoundLayouts.append(.init(nodes: Array(layout.nodes), edges: edges, rootDirection: layout.rootDirection, options: layout.options,
+                                               maximumVertexCount: layout.maximumVertexCount))
+    }
+    #endif
 
     /// Where the route of `edge` is in `routePoints`.
     @inline(__always)

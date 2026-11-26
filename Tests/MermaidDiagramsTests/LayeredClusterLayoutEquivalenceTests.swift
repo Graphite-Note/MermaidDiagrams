@@ -2,12 +2,12 @@
  * File: LayeredClusterLayoutEquivalenceTests.swift
  * ------------------------------------------------
  * Layer: Tests
- * Description: Every cluster graph the corpora place, and random cluster graphs with nested clusters in every direction,
- *              get to the bit the placement the 0.7.0 compound layout gives them.
+ * Description: Every compound graph the corpora lay out, and random cluster graphs with nested clusters in every
+ *              direction, get to the bit the layout and placement the 0.7.0 compound layout gives them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -15,15 +15,18 @@ import XCTest
 @testable import MermaidDiagrams
 
 final class LayeredClusterLayoutEquivalenceTests: XCTestCase {
-    /// Every cluster graph of every corpus (flowcharts with subgraphs, state, class, ER and use case diagrams, regular
-    /// and narrow), placed by the layout and by the 0.7.0 reference, alike to the bit.
-    func testEveryClusterPlacementOfTheCorporaMatchesTheReferenceBitForBit() throws {
+    /// Every compound graph of every corpus (flowcharts and agent flows with subgraphs, state diagrams with composites,
+    /// class diagrams with namespaces, ER diagrams with groups and use case diagrams with boundaries, regular and narrow),
+    /// as each diagram's layout wrote it into the compound layout's spans, laid out by the layout and by the 0.7.0
+    /// reference: every node's place and size, every edge's route and text's center, the size, alike to the bit.
+    func testEveryCompoundLayoutOfTheCorporaMatchesTheReferenceBitForBit() throws {
         let recording = try LayeredCorpusRecording.shared()
-        XCTAssertGreaterThan(recording.clusterPlacements.filter { input in !input.graph.clusters.isEmpty }.count, 100)
+        XCTAssertGreaterThan(recording.compoundLayouts.filter { input in input.nodes.contains { node in node.isGroup } }.count, 100)
         var mismatches = 0
-        for (index, input) in recording.clusterPlacements.enumerated() where Self.placed(input) != Self.referencePlaced(input) {
+        for (index, input) in recording.compoundLayouts.enumerated()
+        where LayeredCompoundOutcome(input, isReference: false) != LayeredCompoundOutcome(input, isReference: true) {
             mismatches += 1
-            if mismatches <= 5 { XCTFail("cluster placement \(index) (\(input.graph.nodeSizes.count) nodes, \(input.graph.clusters.count) clusters) differs") }
+            if mismatches <= 5 { XCTFail("compound layout \(index) (\(input.nodes.count) nodes, \(input.edges.count) edges) differs") }
         }
         XCTAssertEqual(mismatches, 0)
     }
@@ -38,19 +41,17 @@ final class LayeredClusterLayoutEquivalenceTests: XCTestCase {
         }
     }
 
-    private static func placed(_ input: LayeredLayoutRecording.ClusterPlacement) -> LayeredClusterPlacementBits {
-        LayeredClusterPlacementBits { () throws(LayeredClusterLayoutError) in
-            try LayeredClusterLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
-        }
+    private static func placed(_ input: LayeredClusterPlacementInput) -> LayeredClusterPlacementBits {
+        LayeredClusterPlacementBits { () throws(LayeredClusterLayoutError) in try LayeredSpanPlacement.placeClusters(input) }
     }
 
-    private static func referencePlaced(_ input: LayeredLayoutRecording.ClusterPlacement) -> LayeredClusterPlacementBits {
+    private static func referencePlaced(_ input: LayeredClusterPlacementInput) -> LayeredClusterPlacementBits {
         LayeredClusterPlacementBits { () throws(LayeredClusterLayoutError) in
             try ReferenceLayeredClusterLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
         }
     }
 
-    private static func randomInput(_ index: Int, using generator: inout LayeredEquivalenceGenerator) -> LayeredLayoutRecording.ClusterPlacement {
+    private static func randomInput(_ index: Int, using generator: inout LayeredEquivalenceGenerator) -> LayeredClusterPlacementInput {
         let directions: [LayeredDirection] = [.topToBottom, .bottomToTop, .leftToRight, .rightToLeft]
         let nodeCount = Int.random(in: 1...12, using: &generator)
         let clusterCount = Int.random(in: 0...4, using: &generator)
@@ -82,6 +83,30 @@ final class LayeredClusterLayoutEquivalenceTests: XCTestCase {
         spacing.routing.runsOnTracks = index % 5 == 1
         spacing.routing.isStraight = index % 7 == 3
         spacing.routing.keepsTwinsApart = index % 6 == 2
-        return LayeredLayoutRecording.ClusterPlacement(graph: graph, spacing: spacing, maximumPointCount: index % 17 == 4 ? nodeCount + 2 : 50_000)
+        return LayeredClusterPlacementInput(graph: graph, spacing: spacing, maximumPointCount: index % 17 == 4 ? nodeCount + 2 : 50_000)
+    }
+}
+
+/// Every number a compound layout gives back, as bit patterns, so that -0 and 0 differ and NaN equals NaN: each node's
+/// place and size, each edge's text's center and route, the size, or nothing for a refused layout.
+struct LayeredCompoundOutcome: Equatable {
+    var bits: [UInt64]?
+
+    init(_ input: LayeredLayoutRecording.CompoundLayout, isReference: Bool) {
+        var nodes = input.nodes
+        var edges = input.edges
+        let size = isReference
+            ? ReferenceLayeredCompoundLayout.layout(nodes: &nodes, edges: &edges, rootDirection: input.rootDirection, options: input.options,
+                                                    maximumVertexCount: input.maximumVertexCount)
+            : LayeredCompoundLayout.layout(nodes: &nodes, edges: &edges, rootDirection: input.rootDirection, options: input.options,
+                                           maximumVertexCount: input.maximumVertexCount)
+        guard let size else { return }
+        var bits = [size.width.bitPattern, size.height.bitPattern]
+        for node in nodes { bits += [node.x.bitPattern, node.y.bitPattern, node.width.bitPattern, node.height.bitPattern] }
+        for edge in edges {
+            bits += [Double(edge.labelCenter.x).bitPattern, Double(edge.labelCenter.y).bitPattern, UInt64(edge.route.count)]
+            for point in edge.route { bits += [Double(point.point.x).bitPattern, Double(point.point.y).bitPattern, point.runsHorizontally ? 1 : 0] }
+        }
+        self.bits = bits
     }
 }

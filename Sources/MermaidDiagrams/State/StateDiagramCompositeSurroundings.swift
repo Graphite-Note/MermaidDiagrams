@@ -6,8 +6,8 @@
  *              Pele's state renderer lays them out.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -18,25 +18,33 @@ import CoreGraphics
 /// it to the right note, and it has room on both sides across the flow for the loops, which hang off the composite's
 /// own box.
 struct StateDiagramCompositeSurroundings {
-    /// For each composite with notes or loops, the unseen box around it (its index in the cluster graph's clusters).
+    /// For each composite with notes or loops, the unseen box around it (its index among the cluster graph's boxes).
     private(set) var wrapperClusters: [Int: Int] = [:]
-    /// The unseen boxes, to append to the graph's clusters.
-    private(set) var clusters: [LayeredCluster] = []
+    /// The unseen boxes as the compound layout's group nodes, to append to the graph's boxes.
+    private(set) var clusters: [LayeredCompoundNode] = []
     /// For each note on a composite, its node among those appended to the graph's nodes, numbered from `firstNode`.
     private(set) var noteNodes: [Int: Int] = [:]
     /// The notes' sizes and boxes, to append to the graph's nodes.
     private(set) var nodeSizes: [CGSize] = []
     private(set) var nodeClusters: [Int?] = []
-    /// The edges tying each note to its composite, to append to the graph's edges.
-    private(set) var edges: [LayeredClusterEdge] = []
+    /// The edges tying each note to its composite's box, to append to the graph's edges.
+    private(set) var edges: [LayeredCompoundSpanEdge] = []
     /// For each composite, whether the box around it runs down or up: its loops then hang off its right, else its bottom.
     let containerRunsVertically: [Bool]
+
+    /// How many notes the surroundings lay out as nodes: every note on a composite, as each sits beside its composite.
+    static func noteNodeCount(of diagram: StateDiagram, compositeOfState: [Int?]) -> Int {
+        var count = 0
+        for note in diagram.notes where compositeOfState[note.stateIndex] != nil { count += 1 }
+        return count
+    }
 
     /// - Parameters:
     ///   - containers: For each composite, the box it sits directly in, or nil at the top level.
     ///   - containerRunsVertically: For each composite, whether the box around it runs down or up.
+    ///   - nodeCount: How many nodes the graph has, these notes' included: its boxes' group nodes follow them.
     init(diagram: StateDiagram, measured: StateDiagramMeasurement, compositeOfState: [Int?], containers: [Int?], containerRunsVertically: [Bool],
-         firstCluster: Int, firstNode: Int) {
+         firstCluster: Int, firstNode: Int, nodeCount: Int) {
         self.containerRunsVertically = containerRunsVertically
         var notesByComposite: [Int: [Int]] = [:]
         for (noteIndex, note) in diagram.notes.enumerated() {
@@ -52,16 +60,17 @@ struct StateDiagramCompositeSurroundings {
             let padding = runsVertically ? LayeredClusterPadding(side: room, top: 0, bottom: 0) : LayeredClusterPadding(side: 0, top: room, bottom: room)
             let wrapper = firstCluster + clusters.count
             wrapperClusters[compositeIndex] = wrapper
-            clusters.append(LayeredCluster(parent: containers[compositeIndex], direction: runsVertically ? .leftToRight : .topToBottom, padding: padding,
-                                           minimumWidth: 0))
+            clusters.append(.box(parent: containers[compositeIndex], nodeCount: nodeCount, direction: runsVertically ? .leftToRight : .topToBottom,
+                                 padding: padding, minimumWidth: 0, sequence: CGFloat(nodeCount + wrapper)))
             for noteIndex in notes {
                 let node = firstNode + nodeSizes.count
                 noteNodes[noteIndex] = node
                 nodeSizes.append(measured.noteSizes[noteIndex])
                 nodeClusters.append(wrapper)
                 let isLeft = diagram.notes[noteIndex].side == .left
-                edges.append(LayeredClusterEdge(source: isLeft ? .node(node) : .cluster(compositeIndex), target: isLeft ? .cluster(compositeIndex) : .node(node),
-                                                minimumRankSpan: 1, labelSize: nil))
+                let compositeNode = nodeCount + compositeIndex
+                edges.append(LayeredCompoundSpanEdge(source: isLeft ? node : compositeNode, target: isLeft ? compositeNode : node, minimumRankSpan: 1,
+                                                     labelSize: nil))
             }
         }
     }

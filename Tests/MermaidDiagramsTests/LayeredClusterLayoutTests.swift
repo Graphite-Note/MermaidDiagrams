@@ -5,8 +5,8 @@
  * Description: Graphs in nested boxes laid out as Pele's compound layout does.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import XCTest
@@ -28,9 +28,9 @@ final class LayeredClusterLayoutTests: XCTestCase {
 
     private func place(nodeClusters: [Int?], clusters: [LayeredCluster], edges: [LayeredClusterEdge],
                        direction: LayeredDirection = .topToBottom) throws -> LayeredClusterPlacement {
-        try LayeredClusterLayout.place(LayeredClusterGraph(nodeSizes: Array(repeating: nodeSize, count: nodeClusters.count), nodeClusters: nodeClusters,
-                                                           clusters: clusters, edges: edges, direction: direction),
-                                       spacing: spacing, maximumPointCount: 1_000)
+        try LayeredSpanPlacement.placeClusters(LayeredClusterGraph(nodeSizes: Array(repeating: nodeSize, count: nodeClusters.count), nodeClusters: nodeClusters,
+                                                                   clusters: clusters, edges: edges, direction: direction),
+                                               spacing: spacing, maximumPointCount: 1_000)
     }
 
     private func frame(of node: Int, in placement: LayeredClusterPlacement) -> CGRect {
@@ -181,22 +181,22 @@ final class LayeredClusterLayoutTests: XCTestCase {
         let edges = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 0)]
         let placement = try place(nodeClusters: [nil, nil, nil, nil], clusters: [],
                                   edges: edges.map { source, target in edge(.node(source), .node(target)) })
-        let layered = try XCTUnwrap(LayeredLayout.place(LayeredGraph(nodeSizes: Array(repeating: LayeredSize(across: 60, along: 40), count: 4),
-                                                                     edges: edges.map { source, target in
-                                                                         LayeredEdge(source: source, target: target, minimumRankSpan: 1, labelSize: nil)
-                                                                     }),
-                                                        spacing: spacing, maximumPointCount: 1_000))
+        let layered = try XCTUnwrap(LayeredSpanPlacement.place(LayeredGraph(nodeSizes: Array(repeating: LayeredSize(across: 60, along: 40), count: 4),
+                                                                            edges: edges.map { source, target in
+                                                                                LayeredEdge(source: source, target: target, minimumRankSpan: 1, labelSize: nil)
+                                                                            }),
+                                                               spacing: spacing, maximumPointCount: 1_000))
         XCTAssertEqual(placement.nodeCenters, layered.nodeCenters)
         XCTAssertEqual(placement.edgeRoutes.map(\.points), layered.edgePaths)
         XCTAssertEqual(placement.size, layered.extent)
     }
 
     func testThePointLimitCountsEveryBox() {
-        XCTAssertThrowsError(try LayeredClusterLayout.place(LayeredClusterGraph(nodeSizes: Array(repeating: nodeSize, count: 4), nodeClusters: [0, 0, 1, 1],
-                                                                                clusters: [cluster(), cluster()],
-                                                                                edges: [edge(.node(0), .node(1)), edge(.node(2), .node(3))],
-                                                                                direction: .topToBottom),
-                                                            spacing: spacing, maximumPointCount: 5)) { error in
+        XCTAssertThrowsError(try LayeredSpanPlacement.placeClusters(LayeredClusterGraph(nodeSizes: Array(repeating: nodeSize, count: 4), nodeClusters: [0, 0, 1, 1],
+                                                                                        clusters: [cluster(), cluster()],
+                                                                                        edges: [edge(.node(0), .node(1)), edge(.node(2), .node(3))],
+                                                                                        direction: .topToBottom),
+                                                                    spacing: spacing, maximumPointCount: 5)) { error in
             XCTAssertEqual(error as? LayeredClusterLayoutError, .tooManyPoints)
         }
     }

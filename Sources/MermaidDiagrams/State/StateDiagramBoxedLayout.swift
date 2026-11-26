@@ -6,7 +6,7 @@
  *              layout's spans read on the page with no placement made in between.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 25/11/2026
  */
 
@@ -20,8 +20,8 @@ enum StateDiagramBoxedLayout {
     static func layout(_ diagram: StateDiagram, clustered: StateDiagramClusterGraph, measured: StateDiagramMeasurement,
                        surroundings: StateDiagramSurroundings, title: DiagramTextBlock?, font: DiagramFont, maximumPointCount: Int,
                        arena: DiagramScratchArena) -> StateDiagramLayout? {
-        guard let compound = LayeredClusterLayout.laidOutInCompoundLayout(clustered.graph, spacing: StateDiagramLayoutEngine.clusterSpacing,
-                                                                          maximumPointCount: maximumPointCount, arena: arena, isRecorded: true) else {
+        guard let compound = clustered.graph.laidOut(spacing: StateDiagramLayoutEngine.clusterSpacing, maximumPointCount: maximumPointCount,
+                                                     arena: arena) else {
             return nil
         }
         let boxes = StateDiagramPlacedBoxes(clustered: clustered, compound: compound, arena: arena)
@@ -46,12 +46,9 @@ struct StateDiagramPlacedBoxes {
     init(clustered: StateDiagramClusterGraph, compound: LayeredCompoundLayout, arena: DiagramScratchArena) {
         self.clustered = clustered
         self.compound = compound
-        let nodeCount = clustered.graph.nodeSizes.count
-        frames = arena.uninitializedSpan(count: clustered.graph.clusters.count)
-        for cluster in 0..<frames.count {
-            let node = compound.nodes[nodeCount + cluster]
-            frames[cluster] = CGRect(x: node.x - node.width / 2, y: node.y - node.height / 2, width: node.width, height: node.height)
-        }
+        let nodeCount = clustered.graph.nodeCount
+        frames = arena.uninitializedSpan(count: clustered.graph.boxCount)
+        for cluster in 0..<frames.count { frames[cluster] = compound.nodes[nodeCount + cluster].frame }
     }
 
     /// The center of layout node `node`.
@@ -83,9 +80,7 @@ struct StateDiagramPlacedBoxes {
 
     /// The center of laid-out edge `edge`'s text, or nil for an edge without text (but one between a box and what it
     /// holds, which has its middle).
-    func labelCenter(of edge: Int) -> CGPoint? {
-        compound.edges[edge].labelWidth > 0 || compound.isStray(edge) ? compound.edges[edge].labelCenter : nil
-    }
+    func labelCenter(of edge: Int) -> CGPoint? { compound.labelCenter(of: edge) }
 }
 
 extension StateDiagramPageAssembly {
@@ -118,7 +113,7 @@ extension StateDiagramPageAssembly {
         func attached(_ end: CGPoint, next: CGPoint, state: Int) -> CGPoint {
             guard clustered.compositeOfState[state] == nil, let node = clustered.layoutNodeIndices[state] else { return end }
             let kind = diagram.states[state].kind
-            return StateDiagramRouteEnds.attached(end, next: next, center: boxes.center(of: node), layoutSize: clustered.graph.nodeSizes[node],
+            return StateDiagramRouteEnds.attached(end, next: next, center: boxes.center(of: node), layoutSize: clustered.layoutSizes[node],
                                                   drawnSize: measured.stateSizes[state], isBar: kind == .fork || kind == .join)
         }
         // Each segment's flow, in one list kept from transition to transition; each route's points in a list of its own,

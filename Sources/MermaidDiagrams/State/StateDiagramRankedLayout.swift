@@ -6,8 +6,8 @@
  *              transitions written straight into the flat layout's spans, and the placed spans read on the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -24,11 +24,12 @@ enum StateDiagramRankedLayout {
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
         let graph = RankedGraph(diagram, measured: measured, surroundings: surroundings, axes: flowAxes, arena: arena)
         #if DEBUG
-        record(graph, maximumPointCount: maximumPointCount)
+        LayeredLayoutRecording.recordPlacement(nodes: graph.nodes, edges: graph.edges, spacing: StateDiagramLayoutEngine.spacing,
+                                               maximumPointCount: maximumPointCount)
         #endif
         var points = arena.list(capacity: 4 * graph.edges.count, of: CGPoint.self)
         guard let size = LayeredFlatLayout.layout(nodes: graph.nodes, edges: graph.edges, points: &points,
-                                                  options: LayeredLayout.options(StateDiagramLayoutEngine.spacing), maximumVertexCount: maximumPointCount,
+                                                  options: LayeredFlatOptions(StateDiagramLayoutEngine.spacing), maximumVertexCount: maximumPointCount,
                                                   arena: arena) else {
             return nil
         }
@@ -87,21 +88,6 @@ enum StateDiagramRankedLayout {
             }
         }
     }
-
-    #if DEBUG
-    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
-    private static func record(_ graph: RankedGraph, maximumPointCount: Int) {
-        guard let recording = LayeredLayoutRecording.current else { return }
-        let placed = LayeredGraph(nodeSizes: graph.nodes.map { node in LayeredSize(across: CGFloat(node.width), along: CGFloat(node.height)) },
-                                  edges: graph.edges.map { edge in
-                                      LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
-                                                  labelSize: edge.labelWidth > 0 || edge.labelHeight > 0
-                                                      ? LayeredSize(across: CGFloat(edge.labelWidth), along: CGFloat(edge.labelHeight)) : nil)
-                                  },
-                                  nodeSideSpans: graph.nodes.map { node in CGFloat(node.sideSpan) })
-        recording.placements.append(.init(graph: placed, spacing: StateDiagramLayoutEngine.spacing, maximumPointCount: maximumPointCount))
-    }
-    #endif
 }
 
 /// The order the layout takes a diagram's states in, Pele's: starts first, then the others in the order transitions
