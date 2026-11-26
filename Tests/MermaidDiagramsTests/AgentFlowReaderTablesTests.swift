@@ -4,10 +4,11 @@
  * Layer: Tests
  * Description: The tables the agent flow reader on bytes keeps instead of String-keyed dictionaries: the edge counts by
  *              pair of names against a dictionary, with pairs that share a name, mirror each other or crowd one start,
- *              and the shape names found by their bytes, every one and none other.
+ *              and the shape names found by their bytes, every one and none other; names that collide in the name
+ *              table's hash read alike and in time.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -61,5 +62,32 @@ final class AgentFlowReaderTablesTests: XCTestCase {
         XCTAssertEqual(AgentFlowShapeNames.number(of: [][...]), -1)
         XCTAssertGreaterThan(AgentFlowShapeNames.names.count, 100)
         XCTAssertEqual(Set(AgentFlowShapeNames.names).count, AgentFlowShapeNames.names.count)
+    }
+
+    /// Agent flows whose 8,192 node names, and so the edges' made identifiers (`L_start_end_0`), collide in the name
+    /// table's hash's low bits for every basis are read as the reference reads them, and in time that grows with their
+    /// count: ten times the names in at most forty times the time. Each text ends by looking up an identifier that could
+    /// be a made one, which names every edge's identifier in the table.
+    func testNamesThatShareTheHashsLowBitsAreReadAlikeAndInTime() {
+        func flow(_ names: [String]) -> String {
+            "agentflow-beta\n" + names.enumerated().map { index, name in "  \(name) --> \(names[(index &* 7 &+ 1) % names.count])" }.joined(separator: "\n")
+                + "\n  L_\(names[0])_\(names[1])_0@{ curve: linear }\n  class L_\(names[1])_\(names[2])_0 hot"
+        }
+        let limits = MermaidDiagramLimits(maximumSourceBytes: 10_000_000, maximumNodeCount: 100_000, maximumEdgeCount: 100_000,
+                                          maximumLayoutPointCount: 1_000_000)
+        let caseVariants = GraphDiagramNameTableTests.caseVariants(of: "abcdefghijklm")
+        let highBitVariants = GraphDiagramNameTableTests.highBitVariants(count: caseVariants.count)
+        let sources = [flow(caseVariants), flow(highBitVariants), flow((0..<caseVariants.count).map { index in "node\(index)" })]
+        XCTAssertEqual(AgentFlowReadingEquivalenceTests.assertReadAlike(sources, limits: limits), sources.count)
+        func seconds(_ source: String) -> Double {
+            let start = Date()
+            for _ in 0..<3 { _ = try? MermaidDiagramReader.read(source, limits: limits) }
+            return Date().timeIntervalSince(start)
+        }
+        for names in [caseVariants, highBitVariants] {
+            let small = flow(Array(names.prefix(names.count / 10)))
+            _ = seconds(small)
+            XCTAssertLessThan(seconds(flow(names)), max(seconds(small), 0.002) * 40)
+        }
     }
 }
