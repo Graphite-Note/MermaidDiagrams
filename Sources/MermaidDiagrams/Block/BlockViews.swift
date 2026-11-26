@@ -6,8 +6,8 @@
  *              text, its shape's or arrow's size around it, a composite's title and the room around it.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -58,6 +58,22 @@ struct BlockViews {
     static let keepsOwnSize: Set<FlowchartNodeShape> = [.circle, .doubleCircle, .diamond]
     /// Shapes that only widen, as their slants and curves are set by their height.
     static let onlyWidens: Set<FlowchartNodeShape> = [.stadium, .hexagon, .asymmetric, .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid]
+
+    /// Whether `shape` is one of `keepsOwnSize`, told without hashing it.
+    static func keepsItsOwnSize(_ shape: FlowchartNodeShape) -> Bool {
+        switch shape {
+        case .circle, .doubleCircle, .diamond: true
+        default: false
+        }
+    }
+
+    /// Whether `shape` is one of `onlyWidens`, told without hashing it.
+    static func onlyWidensItself(_ shape: FlowchartNodeShape) -> Bool {
+        switch shape {
+        case .stadium, .hexagon, .asymmetric, .leanRight, .leanLeft, .trapezoid, .invertedTrapezoid: true
+        default: false
+        }
+    }
 
     init<Measurer: DiagramTextMeasuring>(_ diagram: BlockDiagram, measurers: BlockMeasurers<Measurer>, gap: CGFloat, wrappingWidth: CGFloat,
                                          titleWidth: CGFloat) {

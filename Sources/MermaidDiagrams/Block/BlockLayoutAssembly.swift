@@ -6,8 +6,8 @@
  *              title and clear of the padding, the composites, blocks and arrows with their text, the edges' lines and marks.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -17,12 +17,15 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
     let diagram: BlockDiagram
     let placement: BlockPlacement
     let edges: BlockEdgePlacement
+    /// Each drawn edge's text, as it was measured for the placement.
+    let edgeTexts: [DiagramTextBlock?]
     var cache: BlockMeasurerCache<Measurer>
 
-    init(diagram: BlockDiagram, placement: BlockPlacement, edges: BlockEdgePlacement, cache: BlockMeasurerCache<Measurer>) {
+    init(diagram: BlockDiagram, placement: BlockPlacement, edges: BlockEdgePlacement, edgeTexts: [DiagramTextBlock?], cache: BlockMeasurerCache<Measurer>) {
         self.diagram = diagram
         self.placement = placement
         self.edges = edges
+        self.edgeTexts = edgeTexts
         self.cache = cache
     }
 
@@ -35,6 +38,9 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
         let size = CGSize(width: (inner + 2 * padding).rounded(.up), height: (extent.height + titleHeight + 2 * padding).rounded(.up))
         var composites: [BlockLayoutComposite] = []
         var nodes: [BlockLayoutNode] = []
+        // Every cell but the root is a composite, a block, an arrow or a space: room for each list is made once.
+        composites.reserveCapacity(placement.cells.count - 1)
+        nodes.reserveCapacity(placement.cells.count - 1)
         for index in placement.cells.indices.dropFirst() {
             let view = placement.views[index]
             let identifier = diagram.model.identifier(of: diagram.model.blocks[view.blockIndex])
@@ -61,7 +67,7 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
         let center = cell.center.translated(by: offset)
         let drawn = view.drawnSize
         var text = view.text
-        let keepsOwnSize = if case .leaf(let shape) = view.kind { BlockViews.keepsOwnSize.contains(shape) } else { false }
+        let keepsOwnSize = if case .leaf(let shape) = view.kind { BlockViews.keepsItsOwnSize(shape) } else { false }
         if let measured = view.text, cell.span > 1, measured.size.width > 0, measured.lineCount > 1, drawn.width > cell.neededWidth, !keepsOwnSize {
             let room = measured.size.width + (drawn.width - cell.neededWidth)
             text = diagram.model.textBlock(of: diagram.model.blocks[view.blockIndex].label, measurer: cache.measurer(for: view.appearance), maximumWidth: room)
@@ -96,8 +102,7 @@ struct BlockLayoutAssembly<Measurer: DiagramTextMeasuring> {
             } else {
                 line = BlockEdgePaths.traced(route.points.map { point in point.translated(by: offset) }, startTrim: startTrim, endTrim: endTrim)
             }
-            let text = model.textBlock(of: edge.label, measurer: cache.measurers.edgeText, maximumWidth: BlockLayoutEngine.wrappingWidth)
-                .map { block in PlaneMapLabel.placed(block, at: route.textCenter.translated(by: offset)) }
+            let text = edgeTexts[index].map { block in PlaneMapLabel.placed(block, at: route.textCenter.translated(by: offset)) }
             return BlockLayoutEdge(identifier: model.edgeIdentifier(edge), path: line.path,
                                    sourceMark: Self.mark(sourceArrowhead, at: line.start, pointing: line.startDirection),
                                    targetMark: Self.mark(targetArrowhead, at: line.end, pointing: line.endDirection),
