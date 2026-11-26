@@ -6,8 +6,8 @@
  *              Core Graphics paths or in any kind a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -116,16 +116,16 @@ struct StateDiagramPaths<Path: DiagramPathRecording> {
         arrows = maker.makePath()
         transitionTextPatches = maker.makePath()
         Self.addTransitions(of: layout, lines: transitionLines, arrows: arrows, textPatches: transitionTextPatches, making: maker)
-        for note in layout.notes { Self.add(note.connector, to: noteConnectors, making: maker) }
+        for note in layout.placedNotes { Self.add(note.connector, of: layout.segments, to: noteConnectors, making: maker) }
         stateFills = maker.makePath()
         stateOutlines = maker.makePath()
         endRings = maker.makePath()
         solidMarks = maker.makePath()
         let shapes = (fills: stateFills, outlines: stateOutlines, endRings: endRings, solidMarks: solidMarks)
-        for state in layout.states { Self.addShape(of: state, to: shapes, making: maker) }
+        for state in layout.placedStates { Self.addShape(of: state, to: shapes, making: maker) }
         noteSheets = maker.makePath()
         noteFolds = maker.makePath()
-        for note in layout.notes {
+        for note in layout.placedNotes {
             let madeCount = maker.madePathCount
             noteSheets.addPath(StateDiagramShapeDrawing.noteSheet(in: note.frame, making: maker))
             noteFolds.addPath(StateDiagramShapeDrawing.noteFold(in: note.frame, making: maker))
@@ -138,8 +138,8 @@ struct StateDiagramPaths<Path: DiagramPathRecording> {
                                                                  making maker: Maker) where Maker.Path == Path {
         // A transition's arrow is only filled: nothing is ever stroked.
         let strokedMarks = maker.makePath()
-        for transition in layout.transitions {
-            add(transition.path, to: lines, making: maker)
+        for transition in layout.placedTransitions {
+            add(transition.line, of: layout.segments, to: lines, making: maker)
             DiagramEdgeDrawing.addMark(transition.arrow, filled: arrows, stroked: strokedMarks)
             if let text = transition.text {
                 let madeCount = maker.madePathCount
@@ -160,8 +160,18 @@ struct StateDiagramPaths<Path: DiagramPathRecording> {
         maker.givePathsBack(downTo: madeCount)
     }
 
+    /// A line of the layout's segments recorded on its own and added to `grouped`, as `add(_:to:making:)` adds a path.
+    private static func add<Maker: DiagramPathMaking>(_ line: DiagramSegmentRun, of segments: [DiagramPathSegment], to grouped: Path,
+                                                      making maker: Maker) where Maker.Path == Path {
+        let madeCount = maker.madePathCount
+        let drawn = maker.makePath()
+        DiagramRouteSegments.record(line, of: segments, into: drawn)
+        grouped.addPath(drawn)
+        maker.givePathsBack(downTo: madeCount)
+    }
+
     /// A state's shape, by how each part is painted.
-    private static func addShape<Maker: DiagramPathMaking>(of state: StateDiagramLayoutState,
+    private static func addShape<Maker: DiagramPathMaking>(of state: StateDiagramPlacedState,
                                                            to shapes: (fills: Path, outlines: Path, endRings: Path, solidMarks: Path),
                                                            making maker: Maker) where Maker.Path == Path {
         let madeCount = maker.madePathCount
@@ -170,7 +180,9 @@ struct StateDiagramPaths<Path: DiagramPathRecording> {
         switch state.kind {
         case .state:
             shapes.fills.addPath(StateDiagramShapeDrawing.box(in: frame, making: maker), alsoTo: shapes.outlines)
-            if state.details != nil, let name = state.name { shapes.outlines.addPath(StateDiagramShapeDrawing.rule(in: frame, below: name, making: maker)) }
+            if state.details != nil, let name = state.name {
+                shapes.outlines.addPath(StateDiagramShapeDrawing.rule(in: frame, belowNameEndingAt: name.frame.maxY, making: maker))
+            }
         case .choice:
             shapes.fills.addPath(StateDiagramShapeDrawing.diamond(in: frame, making: maker), alsoTo: shapes.outlines)
         case .start: shapes.solidMarks.addEllipse(in: frame)

@@ -3,12 +3,12 @@
  * ----------------------------------
  * Layer: Core
  * Description: The pieces of a state diagram's statements read on its bytes: state references as ranges of the text,
- *              the text after a colon and quoted text, and the labels made of them without a String in a text of ASCII
- *              bytes.
+ *              the text after a colon and quoted text, kept as ranges where the label decoder reads them as written,
+ *              and the labels made of the others without a String in a text of ASCII bytes.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -19,6 +19,27 @@ enum StateDiagramStateReference: Equatable {
     case startOrEnd
     case named(MermaidTextRange)
     case written(String)
+}
+
+/// A text read for a state, a transition or a note: a range of the text that the label decoder reads as written, or the
+/// label it decoded.
+enum StateDiagramReadText: Equatable {
+    case range(MermaidTextRange)
+    case label(DiagramLabel)
+
+    /// Whether the text draws no line: a range of white space alone (in ASCII, the decoder trims JavaScript's white
+    /// space, the space and tab to carriage return), or an empty label.
+    func isEmpty(in bytes: GraphDiagramBytes) -> Bool {
+        switch self {
+        case .label(let label): return label.isEmpty
+        case .range(let range):
+            for index in range.lowerBound..<range.upperBound {
+                let byte = bytes.buffer[index]
+                if byte != MermaidByte.space, !(0x09...0x0D).contains(byte) { return false }
+            }
+            return true
+        }
+    }
 }
 
 /// Reads the pieces of a state diagram's statements: state references, the text after a colon, and quoted text. An
@@ -51,13 +72,13 @@ enum StateDiagramTextSyntax {
     /// The text after a colon at the position (`A : text`, `A --> B : text`), to the end of the line or a semicolon,
     /// or nil when no colon is there or nothing but spaces follows it. Only the first colon is taken off: the text
     /// may hold others (`error (ex: timeout)`).
-    static func readColonText(_ bytes: inout GraphDiagramBytes) -> DiagramLabel? {
+    static func readColonText(_ bytes: inout GraphDiagramBytes) -> StateDiagramReadText? {
         guard bytes.peek() == MermaidByte.colon else { return nil }
         bytes.advance()
         let start = bytes.position
         while let byte = bytes.peek(), byte != MermaidByte.newline, byte != MermaidByte.semicolon { bytes.advance() }
         let text = bytes.trimmed(from: start, to: bytes.position)
-        return text.isEmpty ? nil : label(bytes, text)
+        return text.isEmpty ? nil : self.text(bytes, text)
     }
 
     /// The range of the text between quotation marks at the position, which may run over several lines; the position
@@ -80,6 +101,16 @@ enum StateDiagramTextSyntax {
         guard bytes.hasCaseInsensitivePrefix(word) else { return false }
         guard let next = bytes.peek(word.utf8CodeUnitCount) else { return true }
         return MermaidByte.isWhitespace(next)
+    }
+
+    /// The text of `range`, written for a state, a transition or a note: the range itself when the label decoder reads
+    /// it as written (ASCII without markup: one line, trimmed), else its label (`label(_:_:)`).
+    static func text(_ bytes: GraphDiagramBytes, _ range: MermaidTextRange) -> StateDiagramReadText {
+        guard bytes.isASCII, DiagramLabelLineBreaks.isUnmarked(UnsafeBufferPointer(rebasing: bytes.buffer[range.lowerBound..<range.upperBound]),
+                                                                isLiteral: false) else {
+            return .label(label(bytes, range))
+        }
+        return .range(range)
     }
 
     /// The drawn lines of the text of `range`, written for a state, a transition or a note: made from the bytes in a

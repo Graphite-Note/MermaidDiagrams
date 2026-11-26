@@ -5,8 +5,8 @@
  * Description: A class diagram's text measured and its nodes sized, before the layout places anything.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 25/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -52,9 +52,9 @@ struct ClassDiagramMeasurement {
         let line: ClassDiagramLineStyle
         /// The relation's index, or nil for a note's line.
         let relationIndex: Int?
-        let text: DiagramTextBlock?
-        let sourceCardinality: DiagramTextBlock?
-        let targetCardinality: DiagramTextBlock?
+        let text: DiagramMeasuredText?
+        let sourceCardinality: DiagramMeasuredText?
+        let targetCardinality: DiagramMeasuredText?
 
         var isSelfLoop: Bool { source == target }
     }
@@ -74,81 +74,90 @@ struct ClassDiagramMeasurement {
     static let crowdedMaximumWidth: CGFloat = 480
 
     private(set) var nodes: [Node] = []
-    /// Each node's drawn size: a class's box, a note's, an interface name's.
     private(set) var sizes: [CGSize] = []
     private(set) var boxes: [ClassDiagramBox] = []
-    private(set) var noteTexts: [DiagramTextBlock] = []
-    private(set) var interfaceTexts: [DiagramTextBlock] = []
+    /// The lines of every text measured here, and the boxes' annotations and members.
+    var texts = ClassDiagramMeasuredTexts()
+    /// The diagram's text, which the lines read as written point into.
+    let source: MermaidSourceText
+    private(set) var noteTexts: [DiagramMeasuredText] = []
+    private(set) var interfaceTexts: [DiagramMeasuredText] = []
     private(set) var edges: [Edge] = []
 
     init<Measurer: DiagramTextMeasuring>(diagram: ClassDiagram, measurers: ClassDiagramTextMeasurers<Measurer>) {
+        let model = diagram.model
+        source = model.text
         // Each relation may name an interface of its own.
-        let nodeCapacity = diagram.classes.count + diagram.notes.count + diagram.relations.count
+        let nodeCapacity = model.classes.count + model.notes.count + model.relations.count
         nodes.reserveCapacity(nodeCapacity)
         sizes.reserveCapacity(nodeCapacity)
-        boxes.reserveCapacity(diagram.classes.count)
-        noteTexts.reserveCapacity(diagram.notes.count)
-        edges.reserveCapacity(diagram.notes.count + diagram.relations.count)
-        for declared in diagram.classes {
-            let box = ClassDiagramBox(declared, measurers: measurers, hidesEmptySections: diagram.hidesEmptyMemberBoxes)
-            nodes.append(.classBox(boxes.count))
-            boxes.append(box)
-            sizes.append(box.size)
+        boxes.reserveCapacity(model.classes.count)
+        noteTexts.reserveCapacity(model.notes.count)
+        edges.reserveCapacity(model.notes.count + model.relations.count)
+        texts.lines.reserveCapacity(lines: model.classes.count + model.members.count + model.notes.count + 2 * model.relations.count,
+                                    derivedBytes: model.memberBytes.count)
+        texts.members.reserveCapacity(model.members.count)
+        model.text.withBytes { source in
+            let measuring = ClassDiagramTextMeasuring(measurers, source: source)
+            for classIndex in model.classes.indices {
+                let box = ClassDiagramBox(classAt: classIndex, of: model, measuring: measuring, hidesEmptySections: diagram.hidesEmptyMemberBoxes, into: &texts)
+                nodes.append(.classBox(boxes.count))
+                boxes.append(box)
+                sizes.append(box.size)
+            }
+            measureNotes(of: model, measuring: measuring)
+            for (relationIndex, relation) in model.relations.enumerated() {
+                let text = relation.label.isNone ? nil
+                    : measuring.measure(relation.label, of: model, measurer: measuring.members, maximumWidth: Self.textWrappingWidth, into: &texts.lines)
+                edges.append(Edge(source: node(for: relation.source, of: model, measuring: measuring), target: node(for: relation.target, of: model, measuring: measuring),
+                                  sourceEnd: relation.sourceEnd, targetEnd: relation.targetEnd, line: relation.line, relationIndex: relationIndex,
+                                  text: text.flatMap { text in text.lineCount == 0 ? nil : text },
+                                  sourceCardinality: cardinality(relation.sourceCardinality, measuring: measuring),
+                                  targetCardinality: cardinality(relation.targetCardinality, measuring: measuring)))
+            }
         }
+    }
+
+    /// The notes' sheets, then the dotted lines from notes to the classes they are for.
+    private mutating func measureNotes<Measurer>(of model: ClassDiagramModel, measuring: ClassDiagramTextMeasuring<Measurer>) {
         let firstNoteNode = nodes.count
-        for note in diagram.notes {
-            let text = DiagramTextBlock(label: note.text, measurer: measurers.members, maximumWidth: Self.noteWrappingWidth)
+        for note in model.notes {
+            let text = measuring.measure(note.text, of: model, measurer: measuring.members, maximumWidth: Self.noteWrappingWidth, into: &texts.lines)
             nodes.append(.note(noteTexts.count))
             noteTexts.append(text)
-            sizes.append(CGSize(width: max(text.size.width + 2 * Self.notePadding.width, Self.noteMinimumWidth),
-                                height: text.size.height + 2 * Self.notePadding.height))
+            sizes.append(CGSize(width: max(text.width + 2 * Self.notePadding.width, Self.noteMinimumWidth), height: text.height + 2 * Self.notePadding.height))
         }
-        for (noteIndex, note) in diagram.notes.enumerated() {
-            guard let classIndex = note.classIndex else { continue }
-            edges.append(Edge(source: firstNoteNode + noteIndex, target: classIndex, sourceEnd: .none, targetEnd: .none, line: .dotted,
+        for (noteIndex, note) in model.notes.enumerated() where note.classIndex >= 0 {
+            edges.append(Edge(source: firstNoteNode + noteIndex, target: Int(note.classIndex), sourceEnd: .none, targetEnd: .none, line: .dotted,
                               relationIndex: nil, text: nil, sourceCardinality: nil, targetCardinality: nil))
         }
-        for (relationIndex, relation) in diagram.relations.enumerated() {
-            edges.append(Edge(source: node(for: relation.source, measurers: measurers), target: node(for: relation.target, measurers: measurers),
-                              sourceEnd: relation.sourceEnd, targetEnd: relation.targetEnd, line: relation.line, relationIndex: relationIndex,
-                              text: relation.label.map { label in
-                                  DiagramTextBlock(label: label, measurer: measurers.members, maximumWidth: Self.textWrappingWidth)
-                              }.flatMap { text in text.lineCount == 0 ? nil : text },
-                              sourceCardinality: cardinality(relation.sourceCardinality, measurers: measurers),
-                              targetCardinality: cardinality(relation.targetCardinality, measurers: measurers)))
+    }
+
+    /// The node an end names: its class's, or a new node for an interface of its own.
+    private mutating func node<Measurer>(for end: Int32, of model: ClassDiagramModel, measuring: ClassDiagramTextMeasuring<Measurer>) -> Int {
+        guard let interface = ClassDiagramRelationRecord.interfaceIndex(of: end) else { return Int(end) }
+        let text = measuring.measureInterface(at: interface, of: model, maximumWidth: Self.textWrappingWidth, into: &texts.lines)
+        nodes.append(.interface(interfaceTexts.count))
+        interfaceTexts.append(text)
+        sizes.append(CGSize(width: max(text.width, Self.interfaceMinimumExtent) + 2 * Self.interfaceMargin, height: max(text.height, Self.interfaceMinimumExtent)))
+        return nodes.count - 1
+    }
+
+    /// A cardinality, as `DiagramLabel(text)` measures in the marks' font, unwrapped.
+    private mutating func cardinality<Measurer>(_ text: String?, measuring: ClassDiagramTextMeasuring<Measurer>) -> DiagramMeasuredText? {
+        text.map { text in
+            DiagramFlatTextMeasuring.measure(writtenLine: text, measurer: measuring.marks, maximumWidth: .greatestFiniteMagnitude, into: &texts.lines)
         }
     }
 
-    /// The node a relation's endpoint is: its class's, or a new interface's.
-    private mutating func node<Measurer: DiagramTextMeasuring>(for endpoint: ClassDiagramRelationEndpoint,
-                                                               measurers: ClassDiagramTextMeasurers<Measurer>) -> Int {
-        switch endpoint {
-        case .classIndex(let index): return index
-        case .interface(let label):
-            let text = DiagramTextBlock(label: label, measurer: measurers.members, maximumWidth: Self.textWrappingWidth)
-            nodes.append(.interface(interfaceTexts.count))
-            interfaceTexts.append(text)
-            sizes.append(CGSize(width: max(text.size.width, Self.interfaceMinimumExtent) + 2 * Self.interfaceMargin,
-                                height: max(text.size.height, Self.interfaceMinimumExtent)))
-            return nodes.count - 1
-        }
-    }
-
-    private func cardinality<Measurer: DiagramTextMeasuring>(_ text: String?, measurers: ClassDiagramTextMeasurers<Measurer>) -> DiagramTextBlock? {
-        text.map { text in DiagramTextBlock(label: DiagramLabel(text), measurer: measurers.marks, maximumWidth: .greatestFiniteMagnitude) }
-    }
-
-    /// Widens each class whose sides many relations meet, so that they and their cardinalities fit side by side
-    /// (in a flow that runs down, as Pele does): edges leaving a class are counted on one side and edges reaching it
-    /// on the other.
     mutating func widenCrowdedClasses() {
         var leaving = [(count: Int, room: CGFloat)](repeating: (0, 0), count: nodes.count)
         var reaching = leaving
         for edge in edges where !edge.isSelfLoop {
             leaving[edge.source].count += 1
-            leaving[edge.source].room = max(leaving[edge.source].room, edge.sourceCardinality?.size.width ?? 0)
+            leaving[edge.source].room = max(leaving[edge.source].room, edge.sourceCardinality?.width ?? 0)
             reaching[edge.target].count += 1
-            reaching[edge.target].room = max(reaching[edge.target].room, edge.targetCardinality?.size.width ?? 0)
+            reaching[edge.target].room = max(reaching[edge.target].room, edge.targetCardinality?.width ?? 0)
         }
         for (node, kind) in nodes.enumerated() {
             guard case .classBox(let boxIndex) = kind else { continue }

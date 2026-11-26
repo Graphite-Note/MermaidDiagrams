@@ -6,8 +6,8 @@
  *              ranges until the diagram keeps them and each error's line counted only when it is reported.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
- * Date: 25/11/2026
+ * Version: 0.7
+ * Date: 26/11/2026
  */
 
 /// Reads a class diagram's statements after its `classDiagram` or `classDiagram-v2` keyword: classes with their
@@ -23,10 +23,13 @@ struct ClassDiagramParser {
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> ClassDiagram {
         var diagram = try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
             let bytes = GraphDiagramBytes(buffer, position: cursor.position)
-            var parser = ClassDiagramParser(cursor: bytes, builder: ClassDiagramBuilder(limits: limits, bytes: bytes))
-            try parser.expectStatementEnd()
-            try parser.readStatements()
-            return parser.builder.finished()
+            return try GraphDiagramReadingScratch.withLists(isASCII: bytes.isASCII) { lists throws(MermaidDiagramReadError) in
+                let builder = ClassDiagramBuilder(text: MermaidSourceText(bytes: cursor.bytes), limits: limits, bytes: bytes, lists: &lists)
+                var parser = ClassDiagramParser(cursor: bytes, builder: builder)
+                try parser.expectStatementEnd()
+                try parser.readStatements()
+                return parser.builder.finished(returning: &lists)
+            }
         }
         let options = MermaidConfigurationOptions(section: "class", in: cursor).values
         if case .boolean(false) = options["hierarchicalNamespaces"] { diagram.hierarchicalNamespaces = false }
@@ -120,7 +123,7 @@ struct ClassDiagramParser {
     }
 
     /// `["Label"]`, the label quoted inside square brackets.
-    private mutating func readBracketedLabel() throws(MermaidDiagramReadError) -> DiagramLabel {
+    private mutating func readBracketedLabel() throws(MermaidDiagramReadError) -> ClassDiagramReadText {
         let opening = cursor.position
         cursor.advance()
         cursor.skipSpaces()
@@ -131,7 +134,7 @@ struct ClassDiagramParser {
             throw .invalidSyntax(line: cursor.line(at: opening), problem: .unclosedShape(closingText: "]"))
         }
         cursor.advance()
-        return DiagramLabelDecoder.label(from: cursor.text(text), form: .plain)
+        return ClassDiagramReadText.text(cursor, text, form: .plain)
     }
 
     /// `{` members, one per line, `}`. A `{` inside is an error, as in Mermaid; a line that starts with `%%` is a comment.
@@ -213,12 +216,12 @@ struct ClassDiagramParser {
         cursor.skipSpaces()
         guard let target = try ClassDiagramNameSyntax.read(&cursor) else { throw .invalidSyntax(line: cursor.line, problem: .expectedName) }
         cursor.skipSpaces()
-        var label: DiagramLabel?
+        var label: ClassDiagramReadText?
         if cursor.peek() == MermaidByte.colon {
             cursor.advance()
             cursor.skipSpaces()
-            let text = cursor.readRestOfLine()
-            label = text.isEmpty ? nil : DiagramLabelDecoder.label(from: text, form: .markdown)
+            let text = cursor.readRestOfLineRange()
+            label = text.isEmpty ? nil : ClassDiagramReadText.text(cursor, text, form: .markdown)
         }
         try builder.addRelation(from: source, to: target, operator: relationOperator, cardinalities: (sourceCardinality, targetCardinality), label: label)
     }
@@ -244,7 +247,7 @@ struct ClassDiagramParser {
             cursor.skipSpaces()
         }
         guard cursor.peek() == MermaidByte.quotationMark else { throw .invalidSyntax(line: cursor.line, problem: .expectedQuotedText) }
-        try builder.addNote(DiagramLabelDecoder.label(from: cursor.text(try readQuotedText()), form: .markdown), forClassIdentifiedBy: classIdentifier)
+        try builder.addNote(ClassDiagramReadText.text(cursor, try readQuotedText(), form: .markdown), forClassIdentifiedBy: classIdentifier)
     }
 
     /// `namespace Name["Title"] { … }` with the classes, notes and namespaces inside it, read with the builder's
@@ -285,7 +288,7 @@ struct ClassDiagramParser {
         cursor.skipSpaces()
         guard cursor.peek() == MermaidByte.openingBrace else { throw .invalidSyntax(line: cursor.line, problem: .unexpectedText(cursor.excerpt())) }
         cursor.advance()
-        try builder.openNamespace(named: cursor.text(name.identifier), title: title)
+        try builder.openNamespace(named: cursor.text(name.identifier), title: title?.label(in: cursor))
     }
 
     /// `direction TB`, `BT`, `LR` or `RL`. Mermaid reads any other word after `direction` as part of a class's name

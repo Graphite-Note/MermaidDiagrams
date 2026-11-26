@@ -3,11 +3,12 @@
  * -----------------------------
  * Layer: Core
  * Description: A laid-out state diagram's scene: its drawing parts back to front in the colors' roles, as Pele paints
- *              them, its paths recorded into lanes of the scene's workspace.
+ *              them, its paths recorded into lanes of the scene's workspace and its texts taken from the layout's
+ *              measured lines.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -51,18 +52,22 @@ enum StateDiagramSceneRecording {
         builder.fill(paths.arrows, .line, part: .marker)
         FlowchartSceneRecording.addCrossedTitles(of: composites, to: &builder)
         builder.fill(paths.transitionTextPatches, .background, part: .labelBackground)
-        for transition in layout.transitions { builder.text(transition.text, .foreground, part: .edgeLabel) }
-        builder.fill(paths.stateFills, .surface, part: .node)
-        builder.stroke(paths.stateOutlines, .border, line, part: .node)
-        builder.fillAndStroke(paths.endRings, fill: .background, stroke: .line, line, part: .node)
-        builder.fill(paths.solidMarks, .line, part: .node)
-        for state in layout.states {
-            builder.text(state.name, .foreground, part: .label)
-            builder.text(state.details, .foreground, part: .label)
+        layout.source.withBytes { source in
+            for transition in layout.placedTransitions {
+                if let text = transition.text { builder.text(text, of: layout.lines, source: source, .foreground, part: .edgeLabel) }
+            }
+            builder.fill(paths.stateFills, .surface, part: .node)
+            builder.stroke(paths.stateOutlines, .border, line, part: .node)
+            builder.fillAndStroke(paths.endRings, fill: .background, stroke: .line, line, part: .node)
+            builder.fill(paths.solidMarks, .line, part: .node)
+            for state in layout.placedStates {
+                if let name = state.name { builder.text(name, of: layout.lines, source: source, .foreground, part: .label) }
+                if let details = state.details { builder.text(details, of: layout.lines, source: source, .foreground, part: .label) }
+            }
+            builder.fillAndStroke(paths.noteSheets, fill: .background, stroke: .border, line, part: .note)
+            builder.stroke(paths.noteFolds, .border, line, part: .note)
+            for note in layout.placedNotes { builder.text(note.text, of: layout.lines, source: source, noteTextPaint, part: .note) }
+            builder.title(layout.placedTitle, of: layout.lines, source: source)
         }
-        builder.fillAndStroke(paths.noteSheets, fill: .background, stroke: .border, line, part: .note)
-        builder.stroke(paths.noteFolds, .border, line, part: .note)
-        for note in layout.notes { builder.text(note.text, noteTextPaint, part: .note) }
-        builder.title(layout.title)
     }
 }

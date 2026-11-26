@@ -1,3 +1,15 @@
+/**
+ * File: ClassDiagramSelfLoops.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: A class diagram's relations from a class to itself, Pele's loops beside the class's box, each its start
+ *              and one curve that the layout writes into its one list of segments.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 import CoreGraphics
 
 /// Relations from a class to itself, as Pele draws them: each loops out of the box's right side and back, the next
@@ -27,7 +39,9 @@ enum ClassDiagramSelfLoops {
     struct Loop {
         let leave: CGPoint
         let back: CGPoint
-        let path: DiagramPath
+        /// Where the loop's line starts, and its one curve.
+        let start: CGPoint
+        let segment: DiagramPathSegment
         let textCenter: CGPoint
     }
 
@@ -38,10 +52,9 @@ enum ClassDiagramSelfLoops {
         let reach = loopReach + CGFloat(loopIndex) * reachStep
         let leave = CGPoint(x: side, y: center.y - spread)
         let back = CGPoint(x: side, y: center.y + spread)
-        let path = DiagramPath(start: CGPoint(x: side + startTrim, y: leave.y), segments: [
-            .curve(to: CGPoint(x: side + endTrim, y: back.y), control1: CGPoint(x: side + reach + startTrim, y: leave.y),
-                   control2: CGPoint(x: side + reach + endTrim, y: back.y)),
-        ])
-        return Loop(leave: leave, back: back, path: path, textCenter: CGPoint(x: side + reach + textGap + (textWidth + textRoom) / 2, y: center.y))
+        let segment = DiagramPathSegment.curve(to: CGPoint(x: side + endTrim, y: back.y), control1: CGPoint(x: side + reach + startTrim, y: leave.y),
+                                               control2: CGPoint(x: side + reach + endTrim, y: back.y))
+        return Loop(leave: leave, back: back, start: CGPoint(x: side + startTrim, y: leave.y), segment: segment,
+                    textCenter: CGPoint(x: side + reach + textGap + (textWidth + textRoom) / 2, y: center.y))
     }
 }

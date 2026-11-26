@@ -2,11 +2,12 @@
  * File: ClassDiagramPageAssembly.swift
  * ------------------------------------
  * Layer: Core
- * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes.
+ * Description: Puts a placed class diagram on the page, in ranks or in its namespaces' boxes, its edges as flat
+ *              records over one list of segments and its texts as measured texts.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
- * Date: 25/11/2026
+ * Version: 0.9
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -31,7 +32,11 @@ struct ClassDiagramPageAssembly {
     let axes: FlowchartFlowAxes
     var nodeCenters: [CGPoint] = []
     /// By the index of the measurement's edge; nil until the edge is placed.
-    var edges: [ClassDiagramLayoutEdge?]
+    var edges: [ClassDiagramPlacedEdge?]
+    /// The segments of every edge placed.
+    var segments: [DiagramPathSegment] = []
+    /// An edge's points on the page, kept from one edge to the next.
+    private var route: [CGPoint] = []
     /// The namespaces' boxes, for a diagram laid out in them.
     var namespaces: [FlowchartLayoutCluster] = []
     /// For each relation placed through boxes, the points it passes: where it crosses a namespace's top.
@@ -45,6 +50,7 @@ struct ClassDiagramPageAssembly {
         self.markRowHeight = markRowHeight
         self.axes = axes
         edges = Array(repeating: nil, count: measured.edges.count)
+        segments.reserveCapacity(4 * measured.edges.count)
     }
 
     /// The nodes of a diagram laid out in ranks, at their flat nodes' centers.
@@ -76,13 +82,11 @@ struct ClassDiagramPageAssembly {
             let laidOutEdge = laidOut[layeredIndex]
             let textCenter = laidOutEdge.labelWidth > 0 ? axes.pagePoint(laidOutEdge.labelCenter)
                 : CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
-            var routePoints: [CGPoint] = []
-            routePoints.reserveCapacity(route.count + 2)
-            routePoints.append(sourcePort)
-            for index in 1..<(route.count - 1) { routePoints.append(axes.pagePoint(route[index])) }
-            routePoints.append(targetPort)
-            edges[edgeIndex] = edgeAlong(routePoints, edgeIndex: edgeIndex, ends: (ends[2 * layeredIndex], ends[2 * layeredIndex + 1]),
-                                         textCenter: textCenter)
+            self.route.removeAll(keepingCapacity: true)
+            self.route.append(sourcePort)
+            for index in 1..<(route.count - 1) { self.route.append(axes.pagePoint(route[index])) }
+            self.route.append(targetPort)
+            edges[edgeIndex] = edgeAlongRoute(edgeIndex: edgeIndex, ends: (ends[2 * layeredIndex], ends[2 * layeredIndex + 1]), textCenter: textCenter)
         }
     }
 
@@ -107,20 +111,22 @@ struct ClassDiagramPageAssembly {
         func isTextAfter(bend: CGFloat) -> Bool { axes.flowIsVertical ? bend >= 0 : bend > 0 }
         ends.append(ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: true, node: edge.source,
                                               side: route[1].y > route[0].y ? axes.downstreamSide : axes.upstreamSide, neighborAlongSide: route[1].x,
-                                              cardinalityWidth: edge.sourceCardinality?.size.width ?? 0, isTextAfter: isTextAfter(bend: route[1].x - route[0].x)))
+                                              cardinalityWidth: edge.sourceCardinality?.width ?? 0, isTextAfter: isTextAfter(bend: route[1].x - route[0].x)))
         ends.append(ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: false, node: edge.target,
                                               side: route[last - 1].y < route[last].y ? axes.upstreamSide : axes.downstreamSide,
-                                              neighborAlongSide: route[last - 1].x, cardinalityWidth: edge.targetCardinality?.size.width ?? 0,
+                                              neighborAlongSide: route[last - 1].x, cardinalityWidth: edge.targetCardinality?.width ?? 0,
                                               isTextAfter: isTextAfter(bend: route[last - 1].x - route[last].x)))
     }
 
     /// The edge through `ports`; `segmentsRunVertically` gives each segment's flow for a route through boxes, else every
     /// segment follows the diagram's.
     /// The route is taken, so that a straight end is put in its own list rather than in a copy.
-    private func edgeAlong(_ ports: consuming [CGPoint], edgeIndex: Int, ends: (source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End),
-                           textCenter: CGPoint, segmentsRunVertically: [Bool]? = nil) -> ClassDiagramLayoutEdge {
+    private mutating func edgeAlongRoute(edgeIndex: Int, ends: (source: ClassDiagramEdgePorts.End, target: ClassDiagramEdgePorts.End),
+                                         textCenter: CGPoint, segmentsRunVertically: [Bool]? = nil) -> ClassDiagramPlacedEdge {
         let edge = measured.edges[edgeIndex]
-        var points = consume ports
+        var points = route
+        route = []
+        defer { route = points }
         var segmentAxes = segmentsRunVertically
         if let straight = straightEnd(from: points[0], toward: points[1], end: ends.source) {
             points.insert(straight, at: 1)
@@ -133,10 +139,10 @@ struct ClassDiagramPageAssembly {
         let startTrim = ClassDiagramMarkGeometry.lineTrim(for: edge.sourceEnd)
         let endTrim = ClassDiagramMarkGeometry.lineTrim(for: edge.targetEnd)
         let drawn = segmentAxes.map { segmentAxes in
-            DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: startTrim, endTrim: endTrim)
-        } ?? DiagramRouteDrawing.path(through: points, flowIsVertical: axes.flowIsVertical, startTrim: startTrim, endTrim: endTrim)
+            DiagramRouteSegments.append(through: points, segmentsRunVertically: segmentAxes, startTrim: startTrim, endTrim: endTrim, into: &segments)
+        } ?? DiagramRouteSegments.append(through: points, flowIsVertical: axes.flowIsVertical, startTrim: startTrim, endTrim: endTrim, into: &segments)
         let leaving = CGVector(dx: -drawn.startDirection.dx, dy: -drawn.startDirection.dy)
-        return ClassDiagramLayoutEdge(line: edge.line, path: drawn.path,
+        return ClassDiagramPlacedEdge(line: edge.line, path: drawn.run,
                                       sourceMark: mark(edge.sourceEnd, tip: points[0], direction: leaving),
                                       targetMark: mark(edge.targetEnd, tip: points[points.count - 1], direction: drawn.endDirection),
                                       text: centeredIfPresent(edge.text, at: textCenter),
@@ -190,8 +196,9 @@ struct ClassDiagramPageAssembly {
                                                  source: ends[2 * layoutIndex], target: ends[2 * layoutIndex + 1])
             edgePoints.append(points)
             let textCenter = compound.labelCenter(of: layoutIndex) ?? CGPoint(x: (sourcePort.x + targetPort.x) / 2, y: (sourcePort.y + targetPort.y) / 2)
-            edges[edgeIndex] = edgeAlong(points, edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
-                                         segmentsRunVertically: route.segmentsRunVertically)
+            self.route = points
+            edges[edgeIndex] = edgeAlongRoute(edgeIndex: edgeIndex, ends: (ends[2 * layoutIndex], ends[2 * layoutIndex + 1]), textCenter: textCenter,
+                                              segmentsRunVertically: route.segmentsRunVertically)
         }
     }
 
@@ -229,7 +236,7 @@ struct ClassDiagramPageAssembly {
             let bend = runsVertically ? next.x - point.x : next.y - point.y
             let cardinality = isSourceEnd ? edge.sourceCardinality : edge.targetCardinality
             return ClassDiagramEdgePorts.End(edgeIndex: edgeIndex, isSourceEnd: isSourceEnd, node: isSourceEnd ? edge.source : edge.target, side: side,
-                                             neighborAlongSide: runsVertically ? next.x : next.y, cardinalityWidth: cardinality?.size.width ?? 0,
+                                             neighborAlongSide: runsVertically ? next.x : next.y, cardinalityWidth: cardinality?.width ?? 0,
                                              isTextAfter: axes.flowIsVertical ? bend >= 0 : bend > 0)
         }
         return [end(isSourceEnd: true), end(isSourceEnd: false)]
@@ -254,10 +261,12 @@ struct ClassDiagramPageAssembly {
                 let loop = ClassDiagramSelfLoops.loop(center: nodeCenters[node], boxSize: measured.sizes[node], loopIndex: loopIndex,
                                                       startTrim: ClassDiagramMarkGeometry.lineTrim(for: edge.sourceEnd),
                                                       endTrim: ClassDiagramMarkGeometry.lineTrim(for: edge.targetEnd),
-                                                      textWidth: edge.text?.size.width ?? 0)
+                                                      textWidth: edge.text?.width ?? 0)
                 let intoBox = CGVector(dx: -1, dy: 0)
-                edges[edgeIndex] = ClassDiagramLayoutEdge(
-                    line: edge.line, path: loop.path, sourceMark: mark(edge.sourceEnd, tip: loop.leave, direction: intoBox),
+                segments.append(loop.segment)
+                let path = DiagramSegmentRun(start: loop.start, firstSegment: Int32(segments.count - 1), segmentCount: 1)
+                edges[edgeIndex] = ClassDiagramPlacedEdge(
+                    line: edge.line, path: path, sourceMark: mark(edge.sourceEnd, tip: loop.leave, direction: intoBox),
                     targetMark: mark(edge.targetEnd, tip: loop.back, direction: intoBox), text: centeredIfPresent(edge.text, at: loop.textCenter),
                     sourceCardinality: cardinality(edge.sourceCardinality, at: loop.leave, side: .right, isTextAfter: false),
                     targetCardinality: cardinality(edge.targetCardinality, at: loop.back, side: .right, isTextAfter: true))
@@ -270,9 +279,9 @@ struct ClassDiagramPageAssembly {
     }
 
     /// A cardinality beside the end at `point`, on the side of its line `isTextAfter` names.
-    private func cardinality(_ text: DiagramTextBlock?, at point: CGPoint, side: DiagramSide, isTextAfter: Bool) -> DiagramTextBlock? {
+    private func cardinality(_ text: DiagramMeasuredText?, at point: CGPoint, side: DiagramSide, isTextAfter: Bool) -> DiagramMeasuredText? {
         guard let text else { return nil }
-        let width = text.size.width
+        let width = text.width
         let after: CGFloat = isTextAfter ? 1 : -1
         let center: CGPoint
         switch side {
@@ -285,17 +294,12 @@ struct ClassDiagramPageAssembly {
             center = CGPoint(x: point.x + after * (Self.besideHorizontalSide.dx + width / 2),
                              y: point.y + outward * (Self.besideHorizontalSide.dy + markRowHeight / 2))
         }
-        return centered(text, at: center)
+        return text.centered(at: center)
     }
 
     /// `text` centered at `center`, or nil when there is no text.
-    private func centeredIfPresent(_ text: DiagramTextBlock?, at center: CGPoint) -> DiagramTextBlock? {
-        text.map { text in centered(text, at: center) }
+    private func centeredIfPresent(_ text: DiagramMeasuredText?, at center: CGPoint) -> DiagramMeasuredText? {
+        text.map { text in text.centered(at: center) }
     }
 
-    func centered(_ text: DiagramTextBlock, at center: CGPoint) -> DiagramTextBlock {
-        var placed = text
-        placed.center = center
-        return placed
-    }
 }

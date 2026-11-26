@@ -6,8 +6,8 @@
  *              layout's spans read on the page with no placement made in between.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -18,7 +18,7 @@ import CoreGraphics
 enum StateDiagramBoxedLayout {
     /// The layout, or nil when the boxes would need more than `maximumPointCount` nodes and passing points.
     static func layout(_ diagram: StateDiagram, clustered: StateDiagramClusterGraph, measured: StateDiagramMeasurement,
-                       surroundings: StateDiagramSurroundings, title: DiagramTextBlock?, font: DiagramFont, maximumPointCount: Int,
+                       surroundings: StateDiagramSurroundings, title: DiagramMeasuredText?, font: DiagramFont, maximumPointCount: Int,
                        arena: DiagramScratchArena) -> StateDiagramLayout? {
         guard let compound = clustered.graph.laidOut(spacing: StateDiagramLayoutEngine.clusterSpacing, maximumPointCount: maximumPointCount,
                                                      arena: arena) else {
@@ -57,10 +57,10 @@ struct StateDiagramPlacedBoxes {
 
     /// The points of laid-out edge `edge`'s route, with `border` before them (`isFirst`) or after them, and each
     /// segment's flow, the border's segment's `runsVertically`, written over `segmentsRunVertically`.
-    func route(of edge: Int, border: (point: CGPoint, isFirst: Bool, runsVertically: Bool)?, segmentsRunVertically axes: inout [Bool]) -> [CGPoint] {
+    func route(of edge: Int, border: (point: CGPoint, isFirst: Bool, runsVertically: Bool)?, into points: inout [CGPoint],
+               segmentsRunVertically axes: inout [Bool]) {
         let range = compound.routeRange(of: edge)
-        var points: [CGPoint] = []
-        points.reserveCapacity(range.count + 1)
+        points.removeAll(keepingCapacity: true)
         axes.removeAll(keepingCapacity: true)
         if let border, border.isFirst {
             points.append(border.point)
@@ -75,7 +75,6 @@ struct StateDiagramPlacedBoxes {
             points.append(border.point)
             axes.append(border.runsVertically)
         }
-        return points
     }
 
     /// The center of laid-out edge `edge`'s text, or nil for an edge without text (but one between a box and what it
@@ -89,16 +88,16 @@ extension StateDiagramPageAssembly {
         let clustered = boxes.clustered
         self.clustered = clustered
         compositeFrames = Array(boxes.frames.part(0..<min(diagram.composites.count, boxes.frames.count)))
-        compositeNoteCenters = Array(repeating: nil, count: diagram.notes.count)
-        for (noteIndex, node) in clustered.compositeSurroundings.noteNodes { compositeNoteCenters[noteIndex] = boxes.center(of: node) }
+        compositeNoteCenters = Array(repeating: nil, count: diagram.noteCount)
+        for note in clustered.compositeSurroundings.noteNodes { compositeNoteCenters[Int(note.note)] = boxes.center(of: Int(note.node)) }
         var centers: [CGPoint] = []
-        centers.reserveCapacity(diagram.states.count)
-        for state in diagram.states.indices {
-            if let compositeIndex = clustered.compositeOfState[state] {
+        centers.reserveCapacity(diagram.stateCount)
+        for state in 0..<diagram.stateCount {
+            if let compositeIndex = clustered.composite(of: state) {
                 let frame = boxes.frames[compositeIndex]
                 centers.append(CGPoint(x: frame.midX, y: frame.midY))
             } else {
-                centers.append(boxes.center(of: clustered.layoutNodeIndices[state] ?? 0))
+                centers.append(boxes.center(of: clustered.layoutNode(of: state) ?? 0))
             }
         }
         placeStates(centers: centers)
@@ -111,15 +110,15 @@ extension StateDiagramPageAssembly {
     mutating func placeTransitions(boxes: StateDiagramPlacedBoxes) {
         let clustered = boxes.clustered
         func attached(_ end: CGPoint, next: CGPoint, state: Int) -> CGPoint {
-            guard clustered.compositeOfState[state] == nil, let node = clustered.layoutNodeIndices[state] else { return end }
-            let kind = diagram.states[state].kind
+            guard clustered.composite(of: state) == nil, let node = clustered.layoutNode(of: state) else { return end }
+            let kind = diagram.model.states[state].kind
             return StateDiagramRouteEnds.attached(end, next: next, center: boxes.center(of: node), layoutSize: clustered.layoutSizes[node],
-                                                  drawnSize: measured.stateSizes[state], isBar: kind == .fork || kind == .join)
+                                                  drawnSize: measured.states[state].size, isBar: kind == .fork || kind == .join)
         }
-        // Each segment's flow, in one list kept from transition to transition; each route's points in a list of its own,
-        // which its path takes.
+        // Each route's points and each segment's flow, in lists kept from transition to transition.
         var segmentAxes: [Bool] = []
-        for (layoutIndex, transitionIndex) in clustered.layoutTransitionIndices.enumerated() {
+        for layoutIndex in 0..<clustered.layoutTransitionIndices.count {
+            let transitionIndex = Int(clustered.layoutTransitionIndices[layoutIndex])
             let range = boxes.compound.routeRange(of: layoutIndex)
             guard range.count >= 2 else { continue }
             let firstLaidOut = boxes.compound.routePoints[range.lowerBound].point
@@ -127,22 +126,22 @@ extension StateDiagramPageAssembly {
             let lastLaidOut = boxes.compound.routePoints[range.upperBound - 1].point
             let beforeLastLaidOut = boxes.compound.routePoints[range.upperBound - 2].point
             let border = Self.border(of: transitionIndex, boxes: boxes, firstPoint: firstLaidOut, lastPoint: lastLaidOut)
-            let transition = diagram.transitions[transitionIndex]
+            let transition = diagram.model.transitions[transitionIndex]
             let sourcePoint = border?.isFirst == true ? border?.point ?? firstLaidOut
                 : attached(firstLaidOut, next: secondLaidOut, state: transition.sourceIndex)
             let targetPoint = border?.isFirst == false ? border?.point ?? lastLaidOut
                 : attached(lastLaidOut, next: beforeLastLaidOut, state: transition.targetIndex)
-            var points = boxes.route(of: layoutIndex, border: border, segmentsRunVertically: &segmentAxes)
-            points[0] = sourcePoint
-            points[points.count - 1] = targetPoint
-            Self.removePointsOnTheEnds(&points, segmentsRunVertically: &segmentAxes)
-            let drawn = DiagramRouteDrawing.path(through: points, segmentsRunVertically: segmentAxes, startTrim: 0,
-                                                 endTrim: DiagramEdgeMark.lineTrim(for: .arrow))
+            boxes.route(of: layoutIndex, border: border, into: &route, segmentsRunVertically: &segmentAxes)
+            route[0] = sourcePoint
+            route[route.count - 1] = targetPoint
+            Self.removePointsOnTheEnds(&route, segmentsRunVertically: &segmentAxes)
+            let drawn = DiagramRouteSegments.append(through: route, segmentsRunVertically: segmentAxes, startTrim: 0,
+                                                    endTrim: DiagramEdgeMark.lineTrim(for: .arrow), into: &segments)
             let textCenter = boxes.labelCenter(of: layoutIndex)
                 ?? CGPoint(x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2)
-            transitions[transitionIndex] = StateDiagramLayoutTransition(
-                path: drawn.path, arrow: DiagramEdgeMark(arrowhead: .arrow, tip: targetPoint, direction: drawn.endDirection),
-                text: Self.centered(measured.transitionTexts[transitionIndex], at: textCenter))
+            transitions[transitionIndex] = StateDiagramPlacedTransition(
+                line: drawn.run, arrow: DiagramEdgeMark(arrowhead: .arrow, tip: targetPoint, direction: drawn.endDirection),
+                text: measured.transitionTexts[transitionIndex]?.centered(at: textCenter))
         }
     }
 
@@ -152,7 +151,7 @@ extension StateDiagramPageAssembly {
     private static func border(of transitionIndex: Int, boxes: StateDiagramPlacedBoxes, firstPoint: CGPoint,
                                lastPoint: CGPoint) -> (point: CGPoint, isFirst: Bool, runsVertically: Bool)? {
         let clustered = boxes.clustered
-        guard transitionIndex < clustered.anchors.count, let anchor = clustered.anchors[transitionIndex]?.anchor else { return nil }
+        guard let anchor = clustered.anchor(of: transitionIndex)?.anchor else { return nil }
         let direction = clustered.compositeDirections[anchor.compositeIndex]
         let point = border(of: anchor, at: anchor.isInward ? firstPoint : lastPoint, frame: boxes.frames[anchor.compositeIndex], direction: direction,
                            title: clustered.titles[anchor.compositeIndex])
@@ -198,10 +197,10 @@ extension StateDiagramPageAssembly {
         for compositeIndex in diagram.composites.indices {
             let frame = boxes.frames[compositeIndex]
             let title = clustered.titles[compositeIndex].map { title in titles.placed(title, in: frame) }
-            composites.append(FlowchartLayoutCluster(frame: frame, title: title, depth: clustered.depths[compositeIndex], isTitleCrossed: false))
+            composites.append(FlowchartLayoutCluster(frame: frame, title: title, depth: Int(clustered.depths[compositeIndex]), isTitleCrossed: false))
         }
-        for regionIndices in clustered.regionClusterIndices where !regionIndices.isEmpty {
-            regionDividers += StateDiagramRegionDividers.dividers(between: regionIndices.map { region in boxes.frames[region] })
+        for composite in 0..<clustered.regionBoxes.count where clustered.regionBoxes[composite].count > 0 {
+            regionDividers += StateDiagramRegionDividers.dividers(between: clustered.regionBoxes[composite].indices.map { region in boxes.frames[region] })
         }
     }
 }
