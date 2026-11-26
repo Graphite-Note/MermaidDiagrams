@@ -4,7 +4,7 @@
  * Layer: Core
  * Description: An edge of a flowchart and how its line is drawn.
  *
- * Authors: Félix Chevalier
+ * Authors: Félix Chevalier, Bahey Shalash
  * Version: 0.3
  * Date: 26/11/2026
  */
