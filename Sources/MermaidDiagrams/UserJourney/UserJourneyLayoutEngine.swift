@@ -6,8 +6,8 @@
  *              of cards.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -88,7 +88,6 @@ public enum UserJourneyLayoutEngine {
         let size = CGSize(width: (width + 2 * padding).rounded(.up), height: (max(bottom, padding) + padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: padding + width / 2, y: padding + titleSize.height / 2)
-        return UserJourneyLayout(size: size, font: font, sections: body.sections, tasks: body.tasks, scaleLevels: body.scaleLevels,
-                                 scoreLine: body.scoreLine, legend: legendEntries, title: placedTitle)
+        return UserJourneyLayout(size: size, font: font, body: body, legend: legendEntries, title: placedTitle)
     }
 }

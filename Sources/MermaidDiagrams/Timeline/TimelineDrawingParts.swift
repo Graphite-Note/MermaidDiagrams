@@ -6,8 +6,8 @@
  *              periods' text.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -64,11 +64,13 @@ public struct TimelineDrawingParts {
         axis = paths.axis.path
         axisArrow = paths.axisArrow.path
         connectors = paths.connectors.path
-        sectionTexts = layout.sections.map(\.text)
-        periodTexts = layout.periods.map(\.text)
-        sectionTextPaints = layout.sections.map { section in Self.ink(.series(section.sectionIndex), of: layout) }
-        periodTextPaints = layout.periods.map { period in Self.ink(period.color, of: layout) }
-        eventTexts = layout.periods.flatMap { period in period.events.map(\.text) }
+        let sections = layout.sections
+        let periods = layout.periods
+        sectionTexts = sections.map(\.text)
+        periodTexts = periods.map(\.text)
+        sectionTextPaints = sections.map { section in Self.ink(.series(section.sectionIndex), of: layout) }
+        periodTextPaints = periods.map { period in Self.ink(period.color, of: layout) }
+        eventTexts = periods.flatMap { period in period.events.map(\.text) }
         title = layout.title
     }
 
@@ -98,36 +100,52 @@ struct TimelineDrawingPaths<Path: DiagramPathRecording> {
 
     init<Maker: DiagramPathMaking>(layout: TimelineLayout, making maker: Maker) where Maker.Path == Path {
         let seriesCount = DiagramPalette.peleSeries.count
-        var groups: [ColorGroup] = []
-        groups.reserveCapacity(seriesCount + 1)
-        for index in 0..<seriesCount {
-            groups.append(ColorGroup(color: .series(index), boxes: maker.makePath(), eventBoxes: maker.makePath(), dots: maker.makePath()))
-        }
-        groups.append(ColorGroup(color: .muted, boxes: maker.makePath(), eventBoxes: maker.makePath(), dots: maker.makePath()))
+        // A color's paths are made when its first box is added: a timeline paints a few of the nine colors.
+        var groups: [ColorGroup?] = Array(repeating: nil, count: seriesCount + 1)
         func group(for color: TimelineColor) -> ColorGroup {
+            let index: Int
             switch color {
-            case .series(let index): groups[index % seriesCount]
-            case .muted: groups[seriesCount]
+            case .series(let series): index = series % seriesCount
+            case .muted: index = seriesCount
             }
+            if let made = groups[index] { return made }
+            let made = ColorGroup(color: index == seriesCount ? .muted : .series(index), boxes: maker.makePath(), eventBoxes: maker.makePath(),
+                                  dots: maker.makePath())
+            groups[index] = made
+            return made
         }
         let radius = TimelineDrawingParts.boxCornerRadius
-        for section in layout.sections {
+        let body = layout.body
+        for section in body.sections {
             Self.addBox(section.frame, to: group(for: .series(section.sectionIndex)).boxes, radius: radius, making: maker)
         }
         connectors = maker.makePath()
         let dotRadius = TimelineDrawingParts.dotRadius
-        for period in layout.periods {
+        for period in body.periods {
             let paths = group(for: period.color)
             Self.addBox(period.frame, to: paths.boxes, radius: radius, making: maker)
-            for event in period.events { Self.addBox(event.frame, to: paths.eventBoxes, radius: radius, making: maker) }
+            for event in body.events[period.eventIndices] { Self.addBox(event.frame, to: paths.eventBoxes, radius: radius, making: maker) }
             paths.dots.addEllipse(in: CGRect(x: period.dot.x - dotRadius, y: period.dot.y - dotRadius, width: 2 * dotRadius, height: 2 * dotRadius))
-            for connector in period.connectors { maker.addEdgeLineInPlace(connector, to: connectors) }
+            for connector in body.connectors[period.connectorIndices] {
+                Self.addConnector(body.connectorPoints[connector.pointIndices], to: connectors, making: maker)
+            }
         }
-        colorGroups = groups.filter { group in !(group.boxes.isEmpty && group.dots.isEmpty) }
+        colorGroups = groups.compactMap { group in group.flatMap { group in group.boxes.isEmpty && group.dots.isEmpty ? nil : group } }
         axis = maker.makePath()
         if let line = layout.axis { DiagramEdgeDrawing.record(line, into: axis) }
         axisArrow = maker.makePath()
         if let mark = layout.axisArrow { DiagramEdgeDrawing.addMark(mark, filled: axisArrow, stroked: maker.makePath()) }
+    }
+
+    /// A connector's straight line through `points`, as `addEdgeLineInPlace` adds its path: recorded straight into a lane
+    /// that does not end with a move, else through a path of its own.
+    private static func addConnector<Maker: DiagramPathMaking>(_ points: ArraySlice<CGPoint>, to path: Path, making maker: Maker) where Maker.Path == Path {
+        if let lane = path as? DiagramPathLane, lane.state.pointee.lastVerb != .move {
+            lane.move(to: points[points.startIndex])
+            for point in points.dropFirst() { lane.addLine(to: point) }
+            return
+        }
+        maker.addEdgeLine(DiagramPath(start: points[points.startIndex], segments: points.dropFirst().map { point in .line(to: point) }), to: path)
     }
 
     /// Adds `CGPath(roundedRect:)` of `frame` to `paths`, as a box is added.

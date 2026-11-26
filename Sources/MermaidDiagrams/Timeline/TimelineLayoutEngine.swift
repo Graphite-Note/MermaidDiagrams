@@ -6,8 +6,8 @@
  *              with its columns sharing the container's width, as Pele turns it.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -47,9 +47,8 @@ public enum TimelineLayoutEngine {
                                                        font: DiagramFont, room: CGFloat = .infinity) -> TimelineLayout {
         let isDown = diagram.direction == .topToBottom
         let measured = TimelineMeasurement(diagram: diagram, periodText: periodText, eventText: eventText, isDown: isDown, room: isDown ? room : .infinity)
-        let placement = TimelinePlacement(diagram: diagram,
-                                          measured: measured,
-                                          groups: TimelineGroup.groups(of: diagram), periodText: periodText, eventText: eventText)
+        let placement = TimelinePlacement(diagram: diagram, measured: consume measured, groups: TimelineGroup.groups(of: diagram), periodText: periodText,
+                                          eventText: eventText)
         let bodyWidth = placement.bodyWidth(isDown: isDown)
         let title = diagram.title.map { title in
             TimelineTextFitting.fitted(DiagramLabelDecoder.label(from: title, form: .literal), measurer: periodText,
@@ -58,12 +57,23 @@ public enum TimelineLayoutEngine {
         let titleSize = title?.size ?? .zero
         let width = max(bodyWidth, titleSize.width)
         let origin = CGPoint(x: padding + (width - bodyWidth) / 2, y: padding + (title == nil ? 0 : titleSize.height + titleGap))
-        let body = isDown ? TimelineDownPlacement(placement: placement).placed(at: origin) : TimelineAcrossPlacement(placement: placement).placed(at: origin)
+        // The placement is handed over whole, so that the sections' headings are measured into lines no one else holds.
+        let body: TimelinePlacedBody
+        let lines: DiagramMeasuredLines
+        if isDown {
+            var down = TimelineDownPlacement(placement: consume placement)
+            body = down.placed(at: origin)
+            lines = down.placement.measured.lines
+        } else {
+            var across = TimelineAcrossPlacement(placement: consume placement)
+            body = across.placed(at: origin)
+            lines = across.placement.measured.lines
+        }
         let size = CGSize(width: (width + 2 * padding).rounded(.up), height: max(body.bottom + padding, 2 * padding).rounded(.up))
         var placedTitle = title
         placedTitle?.center = CGPoint(x: size.width / 2, y: padding + titleSize.height / 2)
-        var layout = TimelineLayout(size: size, font: font, direction: diagram.direction, sections: body.sections, periods: body.periods, axis: body.axis,
-                                    axisArrow: body.axisArrow, title: placedTitle)
+        var layout = TimelineLayout(size: size, font: font, direction: diagram.direction, body: body, title: placedTitle, text: diagram.text,
+                                    lines: lines)
         layout.seriesColors = diagram.seriesColors
         return layout
     }

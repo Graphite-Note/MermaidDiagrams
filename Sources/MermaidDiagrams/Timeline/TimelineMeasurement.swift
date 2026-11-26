@@ -2,12 +2,12 @@
  * File: TimelineMeasurement.swift
  * -------------------------------
  * Layer: Core
- * Description: A timeline's period and event texts measured and wrapped at Pele's column widths, which share a narrow
- *              container's width when the timeline runs down.
+ * Description: A timeline's period and event texts measured from its bytes and wrapped at Pele's column widths, which
+ *              share a narrow container's width when the timeline runs down, into one list of lines.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 23/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -22,9 +22,12 @@ struct TimelineMeasurement {
     let textWidth: CGFloat
     /// The width of an event's text.
     let eventTextWidth: CGFloat
-    let periodTexts: [DiagramTextBlock]
-    /// Each period's events' text.
-    let eventTexts: [[DiagramTextBlock]]
+    /// Each period's text, by period.
+    let periodTexts: [DiagramMeasuredText]
+    /// Each event's text, in `TimelineDiagram.eventTexts`'s order: a period's after the period before it.
+    let eventTexts: [DiagramMeasuredText]
+    /// The lines of the texts, over the timeline's text; the placement adds its sections' headings.
+    var lines = DiagramMeasuredLines()
 
     static let narrowestTextWidth: CGFloat = 152
     static let widestTextWidth: CGFloat = 216
@@ -48,23 +51,46 @@ struct TimelineMeasurement {
             ? min(Self.eventTextWidthDown, max(Self.narrowestEventTextWidth, room - taken - periodTextWidth)) : Self.eventTextWidthDown
         var textWidth = periodTextWidth
         func eventWidth() -> CGFloat { isDown ? eventTextWidthDown : textWidth }
-        var periodTexts = diagram.periods.map { period in TimelineTextFitting.wrapped(period.label, measurer: periodText, maximumWidth: textWidth) }
-        var eventTexts = diagram.periods.map { period in
-            period.events.map { event in TimelineTextFitting.wrapped(event, measurer: eventText, maximumWidth: eventWidth()) }
-        }
-        var widest = periodTexts.map(\.size.width).max() ?? 0
-        if !isDown { widest = max(widest, eventTexts.joined().map(\.size.width).max() ?? 0) }
-        let eventOverflows = isDown && eventTexts.joined().contains { text in text.size.width > eventTextWidthDown }
-        if widest > textWidth || eventOverflows {
-            textWidth = min(max(widest.rounded(.up), periodTextWidth), room.isFinite ? periodTextWidth : Self.widestTextWidth)
-            periodTexts = diagram.periods.map { period in TimelineTextFitting.fitted(period.label, measurer: periodText, maximumWidth: textWidth) }
-            eventTexts = diagram.periods.map { period in
-                period.events.map { event in TimelineTextFitting.fitted(event, measurer: eventText, maximumWidth: eventWidth()) }
+        let periodMeasurer = DiagramFlatMeasurer(periodText)
+        let eventMeasurer = DiagramFlatMeasurer(eventText)
+        var lines = DiagramMeasuredLines()
+        lines.reserveCapacity(lines: diagram.periodRecords.count + diagram.eventTexts.count, derivedBytes: 0)
+        var periodTexts: [DiagramMeasuredText] = []
+        var eventTexts: [DiagramMeasuredText] = []
+        diagram.text.withBytes { bytes in
+            // Measured as 0.7.0 measured them, wrapped first, then fitted at the widened width when a word is too wide.
+            Self.measureEvery(diagram, bytes, periodMeasurer, eventMeasurer, textWidth: textWidth, eventWidth: eventWidth(), cutsWideWords: false,
+                              periodTexts: &periodTexts, eventTexts: &eventTexts, lines: &lines)
+            var widest: CGFloat = 0
+            var eventOverflows = false
+            for text in periodTexts where widest < text.width { widest = text.width }
+            for text in eventTexts {
+                if !isDown, widest < text.width { widest = text.width }
+                if isDown, text.width > eventTextWidthDown { eventOverflows = true }
             }
+            guard widest > textWidth || eventOverflows else { return }
+            textWidth = min(max(widest.rounded(.up), periodTextWidth), room.isFinite ? periodTextWidth : Self.widestTextWidth)
+            lines.removeAll()
+            Self.measureEvery(diagram, bytes, periodMeasurer, eventMeasurer, textWidth: textWidth, eventWidth: eventWidth(), cutsWideWords: true,
+                              periodTexts: &periodTexts, eventTexts: &eventTexts, lines: &lines)
         }
         self.textWidth = textWidth
         eventTextWidth = eventWidth()
         self.periodTexts = periodTexts
         self.eventTexts = eventTexts
+        self.lines = lines
+    }
+
+    /// Every period's text at `textWidth` and every event's at `eventWidth`, wrapped, or fitted when `cutsWideWords`.
+    private static func measureEvery<Measurer>(_ diagram: TimelineDiagram, _ bytes: UnsafeBufferPointer<UInt8>, _ periodMeasurer: DiagramFlatMeasurer<Measurer>,
+                                               _ eventMeasurer: DiagramFlatMeasurer<Measurer>, textWidth: CGFloat, eventWidth: CGFloat, cutsWideWords: Bool,
+                                               periodTexts: inout [DiagramMeasuredText], eventTexts: inout [DiagramMeasuredText],
+                                               lines: inout DiagramMeasuredLines) {
+        periodTexts = diagram.periodRecords.map { period in
+            TimelineText.measured(period.text, in: bytes, measurer: periodMeasurer, maximumWidth: textWidth, cutsWideWords: cutsWideWords, into: &lines)
+        }
+        eventTexts = diagram.eventTexts.map { event in
+            TimelineText.measured(event, in: bytes, measurer: eventMeasurer, maximumWidth: eventWidth, cutsWideWords: cutsWideWords, into: &lines)
+        }
     }
 }
