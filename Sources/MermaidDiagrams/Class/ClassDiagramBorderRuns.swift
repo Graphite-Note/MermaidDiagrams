@@ -5,8 +5,8 @@
  * Description: Relations that leave a class close to its namespace's border run straight to it, as Pele's class renderer draws them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -21,13 +21,16 @@ struct ClassDiagramBorderRuns {
     /// How close two coordinates are to be in line, or a point to be on a border: Pele's half point.
     static let tolerance: CGFloat = 0.5
 
-    let graph: LayeredClusterGraph
+    /// The namespace each node sits in, and the one each namespace is in, or nil.
+    let nodeNamespaces: [Int?]
+    let namespaceParents: [Int?]
     let clusterFrames: [CGRect]
     /// How many relation ends share each side of each node, keyed by `key(node:side:)`.
     let endCounts: [Int: Int]
 
-    init(graph: LayeredClusterGraph, clusterFrames: [CGRect], ends: [ClassDiagramEdgePorts.End]) {
-        self.graph = graph
+    init(nodeNamespaces: [Int?], namespaceParents: [Int?], clusterFrames: [CGRect], ends: [ClassDiagramEdgePorts.End]) {
+        self.nodeNamespaces = nodeNamespaces
+        self.namespaceParents = namespaceParents
         self.clusterFrames = clusterFrames
         var endCounts: [Int: Int] = [:]
         for end in ends { endCounts[Self.key(node: end.node, side: end.side), default: 0] += 1 }
@@ -67,16 +70,16 @@ struct ClassDiagramBorderRuns {
 
     /// Whether `point` lies on the border of one of the namespaces' boxes around `node`.
     private func isOnBorder(_ point: CGPoint, aroundNode node: Int) -> Bool {
-        var current = node < graph.nodeClusters.count ? graph.nodeClusters[node] : nil
+        var current = node < nodeNamespaces.count ? nodeNamespaces[node] : nil
         var steps = 0
-        while let cluster = current, cluster < clusterFrames.count, steps <= graph.clusters.count {
+        while let cluster = current, cluster < clusterFrames.count, steps <= namespaceParents.count {
             let frame = clusterFrames[cluster]
             let across = abs(point.x - frame.midX)
             let down = abs(point.y - frame.midY)
             let onTopOrBottom = abs(down - frame.height / 2) < Self.tolerance && across <= frame.width / 2 + Self.tolerance
             let onLeftOrRight = abs(across - frame.width / 2) < Self.tolerance && down <= frame.height / 2 + Self.tolerance
             if onTopOrBottom || onLeftOrRight { return true }
-            current = graph.clusters[cluster].parent
+            current = namespaceParents[cluster]
             steps += 1
         }
         return false

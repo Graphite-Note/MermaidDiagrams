@@ -1,47 +1,56 @@
 /**
- * File: LayeredClusterGraph.swift
- * -------------------------------
- * Layer: Core
- * Description: A graph whose nodes sit in nested boxes, its edges and where a cluster layout puts them.
+ * File: ReferenceLayeredAdapterTypes.swift
+ * ----------------------------------------
+ * Layer: Tests
+ * Description: The 0.7.0 inputs and placements of the layered and cluster layouts' adapters, which 0.8.0 no longer has,
+ *              kept for the frozen 0.7.0 references that are written with them and the tests that compare them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 23/11/2026
+ * Version: 0.1
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
+@testable import MermaidDiagrams
 
-/// The way the ranks of a layout follow each other on a page whose y runs down.
-enum LayeredDirection: Equatable, Sendable {
-    case topToBottom, bottomToTop, leftToRight, rightToLeft
+/// A graph to lay out in ranks, in flow space: `across` is the axis the nodes of one rank are spread along, `along`
+/// the axis ranks follow each other on. A top-to-bottom diagram has `across` horizontal; a left-to-right one vertical.
+struct LayeredGraph {
+    var nodeSizes: [LayeredSize]
+    var edges: [LayeredEdge]
+    /// How much of the sides edges meet each node shares out between them, across the flow (Pele's `span`); empty, or
+    /// 0 for a node, keeps every end at the middle of its side.
+    var nodeSideSpans: [CGFloat] = []
+}
 
-    /// Whether ranks follow each other down or up the page, rather than across it.
-    var runsVertically: Bool { self == .topToBottom || self == .bottomToTop }
+/// An edge between two different nodes. Edges from a node to itself are laid out beside the node, not in ranks.
+struct LayeredEdge: Equatable {
+    var source: Int
+    var target: Int
+    /// The fewest ranks the edge spans, at least 1.
+    var minimumRankSpan: Int
+    /// The extent of the edge's text, which takes a place of its own between the ranks, or nil.
+    var labelSize: LayeredSize?
+    /// How far across from its source's center the edge leaves, where it is held at a point of a box's side: the
+    /// layout places the source so that this point, not its center, lines up with the edge. 0 for the center.
+    var sourceOffset: CGFloat = 0
+    /// How far across from its target's center the edge arrives.
+    var targetOffset: CGFloat = 0
+}
 
-    /// The side of a box the flow starts from: the first rank is nearest it.
-    var startSide: DiagramSide {
-        switch self {
-        case .topToBottom: .top
-        case .bottomToTop: .bottom
-        case .leftToRight: .left
-        case .rightToLeft: .right
-        }
-    }
-
-    /// The side of a box the flow ends at.
-    var endSide: DiagramSide {
-        switch self {
-        case .topToBottom: .bottom
-        case .bottomToTop: .top
-        case .leftToRight: .right
-        case .rightToLeft: .left
-        }
-    }
-
-    /// An extent on the page as `across` and `along` the ranks.
-    func flowSize(of size: CGSize) -> LayeredSize {
-        runsVertically ? LayeredSize(across: size.width, along: size.height) : LayeredSize(across: size.height, along: size.width)
-    }
+/// Where the layout put everything, in flow space, with the smallest `across` and `along` at 0.
+struct LayeredPlacement: Equatable {
+    var nodeCenters: [CGPoint]
+    /// For each edge, the points it passes through from its source's center to its target's center, both included,
+    /// in the edge's own direction even where the layout turned it around to break a cycle.
+    var edgeRoutes: [[CGPoint]]
+    /// For each edge, the center of its text's place, or nil.
+    var edgeLabelCenters: [CGPoint?]
+    /// For each edge, the route as Pele draws it, from the side of its source, where its end was spread or settled, to
+    /// the side of its target, in the edge's own direction.
+    var edgePaths: [[CGPoint]] = []
+    /// `x` is the extent across, `y` along.
+    var extent: CGSize
 }
 
 /// A graph whose nodes may sit in nested boxes, clusters, to lay out in ranks on a page whose y runs down: each box is
@@ -86,17 +95,6 @@ struct LayeredCluster: Equatable {
         self.sequence = sequence
         self.sideSpan = sideSpan
     }
-}
-
-/// The room inside a box around what it holds, on the page.
-struct LayeredClusterPadding: Equatable {
-    /// On the left and on the right.
-    var side: CGFloat
-    /// Above, where the title is.
-    var top: CGFloat
-    var bottom: CGFloat
-
-    static let none = LayeredClusterPadding(side: 0, top: 0, bottom: 0)
 }
 
 /// What an edge of a cluster graph starts or ends at: a node, or a box itself.

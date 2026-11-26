@@ -4,10 +4,10 @@
  * Layer: Core
  * Description: A use case diagram laid out on spans of the calling thread's scratch arena: without boundaries by the
  *              flat layered layout, with them by the compound layout, the nodes, boxes, routes and label centers read
- *              from the layout's own lists, as the cluster layout's adapter placed them, to the bit.
+ *              from the layout's own lists, as the 0.7.0 cluster layout placed them, to the bit.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 25/11/2026
  */
 
@@ -35,9 +35,9 @@ struct UseCaseRoutes {
 
 /// Where the layered layout put a use case diagram, on the page from the origin: each node's center by its place among the
 /// layout's nodes, each boundary's box by its place among the clusters, each laid-out edge's route and its label's center
-/// (when it has a label), and the size. Built as `LayeredClusterLayout.place` places the cluster graph of
-/// `UseCaseLayoutPass.clusterGraph()`, with the same arithmetic in the same order, but straight into the arena: a diagram
-/// without boundaries through the flat layout (`placeWithoutClusters`), any other through the compound layout.
+/// (when it has a label), and the size. Built straight into the arena, as the 0.7.0 cluster layout placed the
+/// diagram's boundaries as clusters, with the same arithmetic in the same order: a diagram without boundaries through
+/// the flat layout, its one level as the compound layout would lay it out, any other through the compound layout.
 struct UseCasePlacedGraph {
     let size: CGSize
     let nodeCenters: ScratchSpan<CGPoint>
@@ -95,7 +95,7 @@ struct UseCasePlacedGraph {
         return (Double(label.size.width + UseCaseLayoutEngine.edgeLabelRoom.width), Double(label.size.height + UseCaseLayoutEngine.edgeLabelRoom.height))
     }
 
-    /// A diagram without boundaries, as `LayeredClusterLayout.placeWithoutClusters` places it: one flat layout of the nodes
+    /// A diagram without boundaries, as the compound layout lays out a graph of one level: one flat layout of the nodes
     /// and the edges that are not loops, turned onto the page in an unpadded box, each route without its repeated points.
     private static func flat(_ pass: UseCaseLayoutPass, direction: LayeredDirection, spacing: LayeredSpacing, maximumPointCount: Int,
                              arena: DiagramScratchArena) -> UseCasePlacedGraph? {
@@ -116,7 +116,7 @@ struct UseCasePlacedGraph {
                                          tailOffset: 0, headOffset: 0))
         }
         var flowPoints = arena.list(capacity: 4 * edges.count, of: CGPoint.self)
-        guard let laidOut = LayeredFlatLayout.layout(nodes: nodes, edges: edges.elements, points: &flowPoints, options: LayeredLayout.options(spacing),
+        guard let laidOut = LayeredFlatLayout.layout(nodes: nodes, edges: edges.elements, points: &flowPoints, options: LayeredFlatOptions(spacing),
                                                      maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
@@ -177,7 +177,7 @@ struct UseCasePlacedGraph {
         return points.count - start
     }
 
-    /// A diagram with boundaries, as `LayeredClusterLayout.placeInCompoundLayout` places it: the nodes in declaration order
+    /// A diagram with boundaries, as the compound layout places it: the nodes in declaration order
     /// then each boundary as a group after them, laid out by the compound layout, read from its lists.
     private static func compound(_ pass: UseCaseLayoutPass, clusterCount: Int, direction: LayeredDirection, spacing: LayeredSpacing,
                                  maximumPointCount: Int, arena: DiagramScratchArena) -> UseCasePlacedGraph? {
@@ -189,7 +189,7 @@ struct UseCasePlacedGraph {
                                                        minimumLength: pass.graph.edges[drawn.edge].minimumLength,
                                                        labelWidth: room.width, labelHeight: room.height)
         }
-        var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: direction, options: LayeredLayout.options(spacing),
+        var layout = LayeredCompoundLayout(nodes: nodes, edges: edges, rootDirection: direction, options: LayeredFlatOptions(spacing),
                                            maximumVertexCount: maximumPointCount, arena: arena)
         guard LayeredCompoundLayout.layout(&layout) != nil else { return nil }
         return compoundPlacement(layout, nodeCount: nodes.count - clusterCount, clusterCount: clusterCount, arena: arena)

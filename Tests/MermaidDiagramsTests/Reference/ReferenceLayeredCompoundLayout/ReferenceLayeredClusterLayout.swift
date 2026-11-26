@@ -6,8 +6,8 @@
  *              nodes sit in nested boxes with the port of Pele's compound layout.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -34,7 +34,7 @@ enum ReferenceLayeredClusterLayout {
                                 labelWidth: Double(edge.labelSize?.width ?? 0), labelHeight: Double(edge.labelSize?.height ?? 0))
         }
         guard let size = ReferenceLayeredCompoundLayout.layout(nodes: &nodes, edges: &edges, rootDirection: graph.direction,
-                                                      options: LayeredLayout.options(spacing), maximumVertexCount: maximumPointCount) else {
+                                                      options: LayeredFlatOptions(spacing), maximumVertexCount: maximumPointCount) else {
             throw .tooManyPoints
         }
         let frames = graph.clusters.indices.map { cluster in

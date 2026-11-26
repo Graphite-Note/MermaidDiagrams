@@ -5,7 +5,7 @@
  * Description: Lays an entity relationship diagram out in Pele's style, its groups as nested boxes.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.6
+ * Version: 0.7
  * Date: 25/11/2026
  */
 
@@ -77,10 +77,10 @@ public enum EntityRelationshipLayoutEngine {
                                                   tailOffset: 0, headOffset: 0)
         }
         #if DEBUG
-        record(nodes: nodes, edges: edges, maximumPointCount: maximumPointCount)
+        LayeredLayoutRecording.recordPlacement(nodes: nodes, edges: edges, spacing: spacing, maximumPointCount: maximumPointCount)
         #endif
         var points = arena.list(capacity: 4 * edges.count, of: CGPoint.self)
-        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredLayout.options(spacing),
+        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredFlatOptions(spacing),
                                                   maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
@@ -92,45 +92,32 @@ public enum EntityRelationshipLayoutEngine {
         return page
     }
 
-    #if DEBUG
-    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
-    private static func record(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, maximumPointCount: Int) {
-        guard let recording = LayeredLayoutRecording.current else { return }
-        let placed = LayeredGraph(nodeSizes: nodes.map { node in LayeredSize(across: CGFloat(node.width), along: CGFloat(node.height)) },
-                                  edges: edges.map { edge in
-                                      LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
-                                                  labelSize: edge.labelWidth > 0 || edge.labelHeight > 0
-                                                      ? LayeredSize(across: CGFloat(edge.labelWidth), along: CGFloat(edge.labelHeight)) : nil)
-                                  })
-        recording.placements.append(.init(graph: placed, spacing: spacing, maximumPointCount: maximumPointCount))
-    }
-    #endif
-
     /// A diagram with groups: each a box laid out on its own and placed in the box around it, as Pele's renderer does
-    /// (`EntityRelationshipClusterGraph`, `LayeredClusterLayout`).
+    /// (`EntityRelationshipClusterGraph`, `LayeredCompoundLayout`), the compound layout read where it stands in the
+    /// calling thread's arena.
     private static func layoutInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, nameText: Measurer, rowText: Measurer,
                                                                       font: DiagramFont,
                                                                       limits: MermaidDiagramLimits) throws(EntityRelationshipLayoutError) -> EntityRelationshipLayout {
-        let clustered = EntityRelationshipClusterGraph(diagram: diagram, titleText: nameText)
+        let nesting = EntityRelationshipNesting(diagram: diagram)
         let measured = EntityRelationshipMeasurement(diagram: diagram, measurers: EntityRelationshipTextMeasurers(name: nameText, row: rowText),
-                                                     loopsLeaveBelow: clustered.entityRunsAcross)
-        let sizes = measured.layoutSizes()
-        let nodeSizes = diagram.entities.indices.compactMap { entity in clustered.layoutNodeIndices[entity].map { _ in sizes[entity] } }
+                                                     loopsLeaveBelow: EntityRelationshipClusterGraph.entityRunsAcross(nesting))
         let labelSizes = measured.labels.map { label in
             label.map { label in CGSize(width: label.size.width + labelRoom.width, height: label.size.height + labelRoom.height) }
         }
-        let placement: LayeredClusterPlacement
-        do {
-            placement = try LayeredClusterLayout.place(clustered.sized(nodeSizes: nodeSizes, labelSizes: labelSizes), spacing: spacing,
-                                                       maximumPointCount: limits.maximumLayoutPointCount)
-        } catch {
-            throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
+        let page = DiagramScratchArena.withCurrentThread { arena -> EntityRelationshipPageAssembly? in
+            let clustered = EntityRelationshipClusterGraph(diagram: diagram, nesting: nesting, titleText: nameText, layoutSizes: measured.layoutSizes(),
+                                                           labelSizes: labelSizes, arena: arena)
+            guard let compound = clustered.graph.laidOut(spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount, arena: arena) else {
+                return nil
+            }
+            var page = EntityRelationshipPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
+            page.placeBoxes(clustered: clustered, compound: compound)
+            page.placeRelationships(clustered: clustered, compound: compound)
+            page.placeSelfRelationships()
+            page.placeSubgraphs(clustered: clustered, compound: compound)
+            return page
         }
-        var page = EntityRelationshipPageAssembly(diagram: diagram, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0))
-        page.placeBoxes(clustered: clustered, placement: placement)
-        page.placeRelationships(clustered: clustered, placement: placement)
-        page.placeSelfRelationships()
-        page.placeSubgraphs(clustered: clustered, placement: placement)
+        guard var page else { throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount) }
         let title = diagram.title.map { title in DiagramTextBlock(label: DiagramLabel(title), measurer: nameText, maximumWidth: .greatestFiniteMagnitude) }
         return page.finished(font: font, title: title, padding: padding, titleGap: titleGap)
     }

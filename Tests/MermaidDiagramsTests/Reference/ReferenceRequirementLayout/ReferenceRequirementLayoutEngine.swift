@@ -7,8 +7,8 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -45,7 +45,7 @@ enum ReferenceRequirementLayoutEngine {
                                                                                   height: edge.text.size.height + room.height))
                                      return LayeredEdge(source: edge.source, target: edge.target, minimumRankSpan: 1, labelSize: labelSize)
                                  })
-        guard let placement = LayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
+        guard let placement = ReferenceLayeredLayout.place(graph, spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount) else {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }
         var page = ReferenceRequirementPageAssembly(measured: measured,

@@ -5,8 +5,8 @@
  * Description: Counts how often the drawn routes of Pele's compound layout cross (compound.ts routeCrossings).
  *
  * Authors: Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -75,22 +75,6 @@ struct LayeredRouteSegments {
 /// few), pieces sorted into bands down the page, and every pair that crosses counted once, except where two edges fan
 /// in or out at a shared node or merge into a shared run of their ends.
 enum LayeredRouteCrossings {
-    static func count(nodes: [LayeredCompoundNode], edges: [LayeredCompoundEdge], style: LayeredRouteStyle) -> Int {
-        DiagramScratchArena.withCurrentThread { arena in
-            let nodeSpan: ScratchSpan<LayeredCompoundNode> = arena.uninitializedSpan(count: nodes.count)
-            for index in nodes.indices { nodeSpan[index] = nodes[index] }
-            let edgeSpan: ScratchSpan<LayeredCompoundSpanEdge> = arena.uninitializedSpan(count: edges.count)
-            var routePoints = arena.list(capacity: 0, of: LayeredRoutePoint.self)
-            for (index, edge) in edges.enumerated() {
-                edgeSpan[index] = LayeredCompoundSpanEdge(edge)
-                edgeSpan[index].routeStart = routePoints.count
-                edgeSpan[index].routeCount = edge.route.count
-                for point in edge.route { routePoints.append(point) }
-            }
-            return count(nodes: nodeSpan, edges: edgeSpan, routePoints: routePoints.elements, style: style, arena: arena)
-        }
-    }
-
     /// The crossings of `edges`, each route a range of `routePoints`, between `nodes`.
     static func count(nodes: ScratchSpan<LayeredCompoundNode>, edges: ScratchSpan<LayeredCompoundSpanEdge>, routePoints: ScratchSpan<LayeredRoutePoint>,
                       style: LayeredRouteStyle, arena: DiagramScratchArena) -> Int {

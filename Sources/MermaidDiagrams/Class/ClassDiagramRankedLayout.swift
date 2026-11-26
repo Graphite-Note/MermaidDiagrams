@@ -7,8 +7,8 @@
  *              placed spans read on the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -42,10 +42,10 @@ enum ClassDiagramRankedLayout {
                                                   labelHeight: Double(labelSize?.along ?? 0), tailOffset: 0, headOffset: 0)
         }
         #if DEBUG
-        record(nodes: nodes, edges: edges, spacing: spacing, maximumPointCount: maximumPointCount)
+        LayeredLayoutRecording.recordPlacement(nodes: nodes, edges: edges, spacing: spacing, maximumPointCount: maximumPointCount)
         #endif
         var points = arena.list(capacity: 4 * edges.count, of: CGPoint.self)
-        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredLayout.options(spacing),
+        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredFlatOptions(spacing),
                                                   maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
@@ -57,40 +57,20 @@ enum ClassDiagramRankedLayout {
         return page
     }
 
-    #if DEBUG
-    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
-    private static func record(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, spacing: LayeredSpacing, maximumPointCount: Int) {
-        guard let recording = LayeredLayoutRecording.current else { return }
-        let placed = LayeredGraph(nodeSizes: nodes.map { node in LayeredSize(across: CGFloat(node.width), along: CGFloat(node.height)) },
-                                  edges: edges.map { edge in
-                                      LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
-                                                  labelSize: edge.labelWidth > 0 || edge.labelHeight > 0
-                                                      ? LayeredSize(across: CGFloat(edge.labelWidth), along: CGFloat(edge.labelHeight)) : nil)
-                                  })
-        recording.placements.append(.init(graph: placed, spacing: spacing, maximumPointCount: maximumPointCount))
-    }
-    #endif
-
     /// The page of a diagram with namespaces: each a box laid out on its own and placed in the box around it, as Pele's
     /// class renderer does (`ClassDiagramNamespaceTree`, `ClassDiagramClusterGraph`, `LayeredCompoundLayout`), the compound
     /// layout read where it stands; nil when the boxes would need more than `maximumPointCount` nodes and passing points.
     static func boxedPage(clustered: ClassDiagramClusterGraph, measured: ClassDiagramMeasurement, selfLoops: [[Int]], spacing: LayeredSpacing,
                           markRowHeight: CGFloat, direction: FlowchartDirection, maximumPointCount: Int,
                           arena: DiagramScratchArena) -> ClassDiagramPageAssembly? {
-        guard let compound = LayeredClusterLayout.laidOutInCompoundLayout(clustered.graph, spacing: spacing, maximumPointCount: maximumPointCount,
-                                                                          arena: arena, isRecorded: true) else {
-            return nil
-        }
-        let nodeCount = clustered.graph.nodeSizes.count
+        guard let compound = clustered.graph.laidOut(spacing: spacing, maximumPointCount: maximumPointCount, arena: arena) else { return nil }
+        let nodeCount = clustered.graph.nodeCount
         var centers: [CGPoint] = []
         centers.reserveCapacity(nodeCount)
         for node in 0..<nodeCount { centers.append(CGPoint(x: compound.nodes[node].x, y: compound.nodes[node].y)) }
         var frames: [CGRect] = []
-        frames.reserveCapacity(clustered.graph.clusters.count)
-        for cluster in clustered.graph.clusters.indices {
-            let node = compound.nodes[nodeCount + cluster]
-            frames.append(CGRect(x: node.x - node.width / 2, y: node.y - node.height / 2, width: node.width, height: node.height))
-        }
+        frames.reserveCapacity(clustered.graph.boxCount)
+        for cluster in 0..<clustered.graph.boxCount { frames.append(compound.nodes[nodeCount + cluster].frame) }
         var page = ClassDiagramPageAssembly(measured: measured, markRowHeight: markRowHeight, axes: FlowchartFlowAxes(direction: direction, alongExtent: 0))
         page.placeNodes(pageCenters: centers)
         page.placeEdges(clustered: clustered, compound: compound, clusterFrames: frames)

@@ -5,8 +5,8 @@
  * Description: The first two steps of Pele's layered layout: edges that close cycles turned around, then ranks.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 24/11/2026
+ * Version: 0.5
+ * Date: 25/11/2026
  */
 
 /// Pele's `orient` and `rank` (layout/layered.ts), step for step, on spans of a scratch arena; every working list is
@@ -197,18 +197,5 @@ enum LayeredFlatRanking {
         #endif
         orient(nodes: nodes, edges: edges, arena: arena)
         rank(nodes: nodes, edges: edges, step: step, arena: arena)
-    }
-
-    /// `orientAndRank` on lists, with the calling thread's arena.
-    static func orientAndRank(nodes: inout [LayeredFlatNode], edges: inout [LayeredFlatEdge], step: Int) {
-        DiagramScratchArena.withCurrentThread { arena in
-            let nodeSpan: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: nodes.count)
-            for node in nodes.indices { nodeSpan[node] = nodes[node] }
-            let edgeSpan: ScratchSpan<LayeredSpanEdge> = arena.uninitializedSpan(count: edges.count)
-            for edgeIndex in edges.indices { edgeSpan[edgeIndex] = LayeredSpanEdge(edges[edgeIndex]) }
-            orientAndRank(nodes: nodeSpan, edges: edgeSpan, step: step, arena: arena)
-            for node in nodes.indices { nodes[node].rank = nodeSpan[node].rank }
-            for edgeIndex in edges.indices { edges[edgeIndex].isReversed = edgeSpan[edgeIndex].isReversed }
-        }
     }
 }

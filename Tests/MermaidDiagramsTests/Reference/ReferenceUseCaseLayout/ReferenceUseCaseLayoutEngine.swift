@@ -7,8 +7,8 @@
  *              boxes of the layered cluster layout, loops grown into their nodes' boxes, then the page assembled.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -56,7 +56,7 @@ enum ReferenceUseCaseLayoutEngine {
                                      rankSeparation: diagram.rankSpacing.map { CGFloat($0) } ?? rankSeparation, borderSeparation: borderSeparation)
         let placement: LayeredClusterPlacement
         do {
-            placement = try LayeredClusterLayout.place(pass.clusterGraph(), spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
+            placement = try ReferenceLayeredClusterLayout.place(pass.clusterGraph(), spacing: spacing, maximumPointCount: limits.maximumLayoutPointCount)
         } catch {
             throw .tooManyLayoutPoints(limit: limits.maximumLayoutPointCount)
         }

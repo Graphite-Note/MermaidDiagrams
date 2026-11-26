@@ -7,8 +7,8 @@
  *              the page.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -26,11 +26,8 @@ enum FlowchartBoxedLayout {
                                                        spacing: LayeredSpacing, groupPadding: CGFloat, maximumPointCount: Int, title: DiagramTextBlock?,
                                                        arena: DiagramScratchArena) -> FlowchartLayout? {
         let clustered = FlowchartClusterGraph(diagram: diagram, measured: measured, titleText: titleText,
-                                              edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom, groupPadding: groupPadding)
-        guard let compound = LayeredClusterLayout.laidOutInCompoundLayout(clustered.graph, spacing: spacing, maximumPointCount: maximumPointCount,
-                                                                          arena: arena, isRecorded: true) else {
-            return nil
-        }
+                                              edgeTextRoom: FlowchartLayoutEngine.edgeTextRoom, groupPadding: groupPadding, arena: arena)
+        guard let compound = clustered.graph.laidOut(spacing: spacing, maximumPointCount: maximumPointCount, arena: arena) else { return nil }
         let boxes = FlowchartPlacedBoxes(diagram, clustered: clustered, compound: compound, measured: measured, arena: arena)
         let frame = FlowchartPageFrame(extent: CGSize(width: compound.total.width, height: compound.total.height), title: title)
         var edgePoints = arena.list(capacity: 4 * diagram.edgeCount, of: CGPoint.self)
@@ -70,12 +67,9 @@ struct FlowchartPlacedBoxes {
          arena: DiagramScratchArena) {
         self.clustered = clustered
         self.compound = compound
-        let layoutNodeCount = clustered.graph.nodeSizes.count
-        frames = arena.uninitializedSpan(count: clustered.graph.clusters.count)
-        for cluster in 0..<frames.count {
-            let node = compound.nodes[layoutNodeCount + cluster]
-            frames[cluster] = CGRect(x: node.x - node.width / 2, y: node.y - node.height / 2, width: node.width, height: node.height)
-        }
+        let layoutNodeCount = clustered.graph.nodeCount
+        frames = arena.uninitializedSpan(count: clustered.graph.boxCount)
+        for cluster in 0..<frames.count { frames[cluster] = compound.nodes[layoutNodeCount + cluster].frame }
         nodeCenters = arena.uninitializedSpan(count: diagram.nodeCount)
         for node in 0..<diagram.nodeCount {
             if let subgraph = clustered.representedSubgraphs[node] {

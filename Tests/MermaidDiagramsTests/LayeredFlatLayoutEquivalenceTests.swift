@@ -6,8 +6,8 @@
  *              narrow, and hundreds of random graphs give exactly, bit for bit, what the 0.7.0 layout gives them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 25/11/2026
  */
 
 import CoreGraphics
@@ -34,14 +34,16 @@ final class LayeredFlatLayoutEquivalenceTests: XCTestCase {
         XCTAssertEqual(mismatches, 0)
     }
 
-    /// Each graph the corpora placed through `LayeredLayout.place`, placed again by the layout and by the reference:
+    /// Each flat graph the corpora's ranked layouts (flowchart, state, class, ER and requirement diagrams without groups)
+    /// wrote into the flat layout's spans, placed again on the spans and by the 0.7.0 reference as 0.7.0 was handed it:
     /// centers, routes, label centers, paths and extents alike to the bit.
     func testEveryPlacementOfTheCorporaMatchesTheReferenceBitForBit() throws {
         let recording = try LayeredCorpusRecording.shared()
         XCTAssertGreaterThan(recording.placements.count, 500)
         var mismatches = 0
-        for (index, input) in recording.placements.enumerated() {
-            let placed = LayeredLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
+        for (index, recorded) in recording.placements.enumerated() {
+            let input = LayeredPlacementInput(recorded)
+            let placed = LayeredSpanPlacement.place(input)
             let reference = ReferenceLayeredLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
             if LayeredPlacementBits(placed) != LayeredPlacementBits(reference) {
                 mismatches += 1
@@ -74,13 +76,13 @@ final class LayeredFlatLayoutEquivalenceTests: XCTestCase {
         }
     }
 
-    /// Random graphs placed through `LayeredLayout.place`, with side spans, offsets, labels and every routing, alike to
-    /// the bit; some budgets are too small, which both refuse.
+    /// Random graphs placed on the flat layout's spans, with side spans, offsets, labels and every routing, alike to the
+    /// bit; some budgets are too small, which both refuse.
     func testRandomPlacementsMatchTheReferenceBitForBit() {
         var generator = LayeredEquivalenceGenerator(seed: 0x9_1ACE)
         for index in 0..<200 {
             let input = LayeredRandomGraphs.placement(index, using: &generator)
-            let placed = LayeredLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
+            let placed = LayeredSpanPlacement.place(input)
             let reference = ReferenceLayeredLayout.place(input.graph, spacing: input.spacing, maximumPointCount: input.maximumPointCount)
             XCTAssertEqual(LayeredPlacementBits(placed), LayeredPlacementBits(reference), "random placement \(index)")
         }

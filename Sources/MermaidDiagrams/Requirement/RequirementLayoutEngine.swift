@@ -6,14 +6,14 @@
  *              between their boxes' sides with their marks and texts, loops beside their boxes, the title above.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 25/11/2026
  */
 
 import CoreGraphics
 
 /// Lays a requirement diagram out as Pele's requirement renderer does: each box sized around its stereotype, name and
-/// fields (`RequirementMeasurement`); the boxes in ranks along the diagram's direction (`LayeredLayout`), 40 points apart
+/// fields (`RequirementMeasurement`); the boxes in ranks along the diagram's direction (`LayeredFlatLayout`), 40 points apart
 /// in a rank and 56 points between ranks, a relation's text in a rank of its own; relations from the middle of a side,
 /// spread along it where several share it (`RequirementEdgePorts`), as S curves; relations from a box to itself looped
 /// beside it (`RequirementSelfLoops`); and the title above, 12 points over the diagram, all 8 points inside the page.
@@ -64,10 +64,10 @@ public enum RequirementLayoutEngine {
                                                   labelHeight: Double(labelSize.along), tailOffset: 0, headOffset: 0)
         }
         #if DEBUG
-        record(nodes: nodes, edges: edges, maximumPointCount: maximumPointCount)
+        LayeredLayoutRecording.recordPlacement(nodes: nodes, edges: edges, spacing: spacing, maximumPointCount: maximumPointCount)
         #endif
         var points = arena.list(capacity: 4 * edges.count, of: CGPoint.self)
-        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredLayout.options(spacing),
+        guard let size = LayeredFlatLayout.layout(nodes: nodes, edges: edges, points: &points, options: LayeredFlatOptions(spacing),
                                                   maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
@@ -77,19 +77,6 @@ public enum RequirementLayoutEngine {
         page.placeSelfLoops()
         return (page, CGSize(width: size.width, height: size.height))
     }
-
-    #if DEBUG
-    /// The graph as `LayeredLayout.place` would have been handed it, for the tests that check every placement of the corpora.
-    private static func record(nodes: ScratchSpan<LayeredFlatNode>, edges: ScratchSpan<LayeredSpanEdge>, maximumPointCount: Int) {
-        guard let recording = LayeredLayoutRecording.current else { return }
-        let placed = LayeredGraph(nodeSizes: nodes.map { node in LayeredSize(across: CGFloat(node.width), along: CGFloat(node.height)) },
-                                  edges: edges.map { edge in
-                                      LayeredEdge(source: edge.tail, target: edge.head, minimumRankSpan: edge.minimumLength,
-                                                  labelSize: LayeredSize(across: CGFloat(edge.labelWidth), along: CGFloat(edge.labelHeight)))
-                                  })
-        recording.placements.append(.init(graph: placed, spacing: spacing, maximumPointCount: maximumPointCount))
-    }
-    #endif
 }
 
 /// Puts a placed requirement diagram on the page: the boxes at their centers, the relations from side to side through
