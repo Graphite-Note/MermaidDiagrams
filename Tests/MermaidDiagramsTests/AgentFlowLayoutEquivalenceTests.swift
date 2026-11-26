@@ -7,7 +7,7 @@
  *              thread and on twelve at once, alike to the bit.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -133,9 +133,10 @@ final class AgentFlowLayoutEquivalenceTests: XCTestCase {
 }
 
 /// Agent flows made to be hard: long labels, many nodes and edges, flows nested deep, many flows, edges between nodes and
-/// the flows around them (held back), collapsed flows, styles and metadata on every node.
+/// the flows around them (held back), collapsed flows, styles and metadata on every node, and flows with directions of
+/// their own that edges cross or join (which takes their directions away) or leave alone.
 enum AgentFlowHostileTexts {
-    static let all: [String] = [longLabels, manyNodes, deepFlows, manyFlows, heldAndCollapsed]
+    static let all: [String] = [longLabels, manyNodes, deepFlows, manyFlows, heldAndCollapsed, flowDirections]
 
     static var longLabels: String {
         "agentflow-beta LR\n  a[\"\(String(repeating: "word ", count: 2_000))\"] --> b[\(String(repeating: "x", count: 600))]\n  b -->|\(String(repeating: "label ", count: 500))| c"
@@ -170,6 +171,23 @@ enum AgentFlowHostileTexts {
             lines.append("  style inner\(flow) font-size:\(10 + flow)px")
         }
         for flow in 0..<19 { lines.append("  other\(flow) --> inner\(flow + 1)") }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Flows and flows inside them, each with a direction of its own: edges cross some of their borders, some join a node
+    /// and the flow around it, and the rest stay inside, so that some flows lose their directions and some keep them.
+    static var flowDirections: String {
+        let outerDirections = ["TB", "BT", "RL", "LR", "TD"]
+        let innerDirections = ["LR", "TB", "BT"]
+        var lines = ["agentflow-beta LR"]
+        for flow in 0..<12 {
+            lines.append("  flow d\(flow)[\"Directed \(flow)\"]\n    direction \(outerDirections[flow % 5])")
+            lines.append("    flow e\(flow)[\"Inner \(flow)\"]\n      direction \(innerDirections[flow % 3])\n      p\(flow)[P] --> q\(flow)[Q]\n    end")
+            lines.append("    r\(flow)[R] --> s\(flow)[S]\n  end")
+        }
+        for flow in stride(from: 0, to: 11, by: 3) { lines.append("  q\(flow) --> r\(flow + 1)") }
+        for flow in stride(from: 1, to: 12, by: 4) { lines.append("  p\(flow) --> e\(flow)") }
+        for flow in stride(from: 2, to: 12, by: 5) { lines.append("  s\(flow) --> d\(flow)") }
         return lines.joined(separator: "\n")
     }
 }
