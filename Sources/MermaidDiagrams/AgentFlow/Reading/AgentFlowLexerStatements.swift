@@ -6,8 +6,8 @@
  *              found as the greedy regular expressions find them, link identifiers, punctuation and white space.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension AgentFlowLexer {
@@ -17,15 +17,15 @@ extension AgentFlowLexer {
     /// greedy `.*` takes the last place on the line where the statement matches, and `[^\n]*` runs to the line feed.
     mutating func readDirectionStatement() -> Bool {
         guard nextDirection != -1, position >= directionFailedBefore else { return false }
-        if nextDirection < position { nextDirection = Self.firstIndex(of: Self.directionWord, in: units, from: position) ?? -1 }
+        if nextDirection < position { nextDirection = Self.firstIndex(of: Self.directionWord, in: bytes, from: position) ?? -1 }
         guard nextDirection != -1 else { return false }
         if lineEnd < position {
-            lineEnd = (position..<count).first { index in Self.isLineTerminator(Int(units[index])) } ?? count
+            lineEnd = (position..<count).first { index in isLineTerminator(at: index) } ?? count
         }
         guard nextDirection < lineEnd else { return false }
         for (offset, letters) in Self.directionLetters.enumerated() {
             guard let end = directionStatementEnd(letters) else { continue }
-            emit(AgentFlowTokenKind(rawValue: AgentFlowTokenKind.directionTopToBottom.rawValue + offset) ?? .directionTopToBottom, to: end)
+            emit(AgentFlowTokenKind(rawValue: AgentFlowTokenKind.directionTopToBottom.rawValue + UInt8(offset)) ?? .directionTopToBottom, to: end)
             return true
         }
         // No direction statement starts anywhere in the rest of this line either.
@@ -34,7 +34,7 @@ extension AgentFlowLexer {
     }
 
     /// Where the statement for `letters` that starts last on the line ends, or nil.
-    private mutating func directionStatementEnd(_ letters: [UInt16]) -> Int? {
+    private mutating func directionStatementEnd(_ letters: [UInt8]) -> Int? {
         var start = lineEnd - Self.directionWord.count
         while start >= position {
             if startsWith(Self.directionWord, at: start) {
@@ -42,7 +42,7 @@ extension AgentFlowLexer {
                 let lettersAt = whitespaceEnd(from: afterWord)
                 if lettersAt > afterWord, startsWith(letters, at: lettersAt) {
                     var end = lettersAt + letters.count
-                    while end < count, units[end] != UInt16(Unit.lineFeed) { end += 1 }
+                    while end < count, bytes[end] != UInt8(Unit.lineFeed) { end += 1 }
                     return end
                 }
             }
@@ -56,15 +56,15 @@ extension AgentFlowLexer {
     mutating func readLinkIdentifier(_ character: Int) -> Bool {
         guard nextCommercialAt != -1, character != Unit.quotationMark, !Unit.isSpace(character) else { return false }
         if position >= runEnd {
-            if nextCommercialAt < position { nextCommercialAt = units[position...].firstIndex(of: UInt16(Unit.commercialAt)) ?? -1 }
+            if nextCommercialAt < position { nextCommercialAt = bytes[position...].firstIndex(of: UInt8(Unit.commercialAt)) ?? -1 }
             var end = position
-            while end < count, Int(units[end]) != Unit.quotationMark, !Unit.isSpace(Int(units[end])) { end += 1 }
+            while end < count, Int(bytes[end]) != Unit.quotationMark, !isSpace(at: end) { end += 1 }
             runEnd = end
             runLinkIdentifierEnd = -1
             if nextCommercialAt != -1, nextCommercialAt < end {
                 var index = min(end, count - 1) - 1
                 while index >= nextCommercialAt {
-                    if Int(units[index]) == Unit.commercialAt {
+                    if Int(bytes[index]) == Unit.commercialAt {
                         let after = self.character(at: index + 1)
                         if after != Unit.openingBrace, after != Unit.quotationMark {
                             runLinkIdentifierEnd = index
@@ -138,13 +138,9 @@ extension AgentFlowLexer {
                 break
             }
         }
-        if end > position { emit(.newline, to: end) } else { emit(.space, to: position + 1) }
-    }
-
-    static func isLineTerminator(_ character: Int) -> Bool {
-        character == Unit.lineFeed || character == Unit.carriageReturn || character == Unit.lineSeparator || character == Unit.paragraphSeparator
+        if end > position { emit(.newline, to: end) } else { emit(.space, to: position + characterLength(at: position)) }
     }
 
     /// The letters of `TB`, `BT`, `RL`, `LR` and `TD`, in the order of Pele's expressions and of the tokens.
-    static let directionLetters = ["TB", "BT", "RL", "LR", "TD"].map { letters in Array(letters.utf16) }
+    static let directionLetters = ["TB", "BT", "RL", "LR", "TD"].map { letters in Array(letters.utf8) }
 }
