@@ -2,47 +2,92 @@
  * File: AgentFlowDiagram.swift
  * ----------------------------
  * Layer: Core
- * Description: A Mermaid agent flow (`agentflow-beta`) as its text describes it: its nodes, edges, flows and
- *              connectors as Mermaid's database keeps them, what is drawn of them, and the diagnostics found.
+ * Description: A Mermaid agent flow (`agentflow-beta`) as its text describes it: a façade over the flat model its reader
+ *              writes, giving its nodes, edges, flows and connectors as Mermaid's database keeps them, what is drawn of
+ *              them, and the diagnostics found, made when asked for.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 /// A Mermaid agent flow as its text describes it, the way Pele's `AgentflowDb` holds it: every node named (connectors
 /// among them) in the order first named, every edge in the order written, every flow in the order its `end` closes it,
 /// where each statement sits in the text, and the graph drawn of them (`AgentFlowGraph`): flows nested without cycles,
 /// collapsed flows standing for what they hold, shapes reduced to the ones an agent flow has, palette slots.
+///
+/// The diagram keeps the flat records its reader wrote (`AgentFlowModel`): each list here is made from them when it is
+/// read, so a layout that reads the records costs no String, and a host that reads the lists gets 0.7.0's values.
 public struct AgentFlowDiagram: Equatable, Sendable {
-    /// The direction after the keyword as Mermaid normalizes it (`TB`, `BT`, `LR`, `RL`, or what else it read).
-    public internal(set) var directionKeyword: String?
-    public internal(set) var vertices: [AgentFlowVertex] = []
-    public internal(set) var edges: [AgentFlowEdge] = []
-    /// The `flow … end` containers, in the order their `end` closes them: a flow inside another before it.
-    public internal(set) var flows: [AgentFlowFlow] = []
-    /// The identifiers of the `connector` declarations, in the order first declared.
-    public internal(set) var connectorIdentifiers: [String] = []
-    public internal(set) var classDefinitions: [AgentFlowClassDefinition] = []
-    /// `linkStyle default …`, or nil.
-    public internal(set) var defaultEdgeStyle: [String]?
-    /// `linkStyle default interpolate …`, or nil.
-    public internal(set) var defaultInterpolation: String?
-    /// Where each statement sits in the text, in the order read.
-    public internal(set) var mappings: [AgentFlowElementMapping] = []
-    /// What Pele's graph found wrong with shapes and nesting: diagnostics, not errors.
-    public internal(set) var diagnostics: [AgentFlowDiagnostic] = []
-    /// What is drawn: the nodes and the edges of Pele's `buildAgentGraph`.
-    public internal(set) var graph = AgentFlowGraph()
+    var model: AgentFlowModel
     public internal(set) var title: String?
-    public internal(set) var accessibilityTitle: String?
-    public internal(set) var accessibilityDescription: String?
     /// The front matter's and directives' `agentflow:` options.
-    public internal(set) var options = AgentFlowOptions()
+    public internal(set) var options: AgentFlowOptions
+
+    init(model: AgentFlowModel = AgentFlowModel(), options: AgentFlowOptions = AgentFlowOptions()) {
+        self.model = model
+        self.options = options
+    }
+
+    /// The direction after the keyword as Mermaid normalizes it (`TB`, `BT`, `LR`, `RL`, or what else it read).
+    public var directionKeyword: String? { model.text.string(orNil: model.directionKeyword) }
 
     /// The direction the diagram runs in: top to bottom unless it says otherwise.
     public var direction: FlowchartDirection {
         directionKeyword.flatMap(FlowchartDirection.init(keyword:)) ?? .topToBottom
+    }
+
+    /// The identifiers of the `connector` declarations, in the order first declared.
+    public var connectorIdentifiers: [String] { model.connectorIdentifiers.map(model.text.string) }
+
+    /// `linkStyle default …`, or nil.
+    public var defaultEdgeStyle: [String]? { model.defaultEdgeStyle.map(styleStrings) }
+
+    /// `linkStyle default interpolate …`, or nil.
+    public var defaultInterpolation: String? { model.text.string(orNil: model.defaultInterpolation) }
+
+    public var accessibilityTitle: String? { model.text.string(orNil: model.accessibilityTitle) }
+    public var accessibilityDescription: String? { model.text.string(orNil: model.accessibilityDescription) }
+
+    /// Where each statement sits in the text, in the order read.
+    public var mappings: [AgentFlowElementMapping] {
+        model.mappings.map { mapping in AgentFlowElementMapping(identifier: model.text.string(mapping.identifier), kind: mapping.kind, position: mapping.position) }
+    }
+
+    /// What Pele's graph found wrong with shapes and nesting: diagnostics, not errors.
+    public var diagnostics: [AgentFlowDiagnostic] { model.diagnostics }
+
+    /// The `classDef` definitions, in the order first defined.
+    public var classDefinitions: [AgentFlowClassDefinition] {
+        DiagramScratchArena.withCurrentThread { arena in
+            let attributes = AgentFlowGraphStyles.index(model.classAttributes, ownerCount: model.classDefinitions.count, arena: arena)
+            return classDefinitions(attributes)
+        }
+    }
+
+    private func classDefinitions(_ attributes: AgentFlowOwnerIndex) -> [AgentFlowClassDefinition] {
+        model.classDefinitions.indices.map { index in
+            var definition = AgentFlowClassDefinition(identifier: model.text.string(model.classDefinitions[index].identifier))
+            for entry in attributes.entries(of: index) {
+                let attribute = model.classAttributes[Int(entry)]
+                if attribute.kind == .textStyle { definition.textStyles.append(model.text.string(attribute.value)) } else { definition.styles.append(model.text.string(attribute.value)) }
+            }
+            return definition
+        }
+    }
+
+    /// The strings of a run of the model's style ranges.
+    func styleStrings(_ run: Range<Int32>) -> [String] {
+        run.map { style in model.text.string(model.styleRanges[Int(style)]) }
+    }
+
+    public static func == (left: AgentFlowDiagram, right: AgentFlowDiagram) -> Bool {
+        left.title == right.title && left.options == right.options && left.directionKeyword == right.directionKeyword && left.vertices == right.vertices
+            && left.edges == right.edges && left.flows == right.flows && left.connectorIdentifiers == right.connectorIdentifiers
+            && left.classDefinitions == right.classDefinitions && left.defaultEdgeStyle == right.defaultEdgeStyle
+            && left.defaultInterpolation == right.defaultInterpolation && left.mappings == right.mappings && left.diagnostics == right.diagnostics
+            && left.graph == right.graph && left.accessibilityTitle == right.accessibilityTitle
+            && left.accessibilityDescription == right.accessibilityDescription
     }
 }
 
@@ -71,81 +116,6 @@ public enum AgentFlowVertexKind: String, Equatable, Sendable, CaseIterable {
         case .connector: 5
         case .action: 6
         }
-    }
-}
-
-/// A node as Mermaid's database keeps it.
-public struct AgentFlowVertex: Equatable, Sendable {
-    public let identifier: String
-    public internal(set) var text: String?
-    public internal(set) var labelType: AgentFlowLabelType = .text
-    /// The shape its brackets or its metadata name (`square`, `diamond`, `subroutine`), or nil.
-    public internal(set) var type: String?
-    public internal(set) var styles: [String] = []
-    public internal(set) var classes: [String] = []
-    /// What a node statement's text gave it beyond its label; nil for a connector no node statement named.
-    public internal(set) var properties: [String: String]?
-    /// A `click … href` link made safe, or nil; and its target.
-    public internal(set) var link: String?
-    public internal(set) var linkTarget: String?
-    public internal(set) var isConnector = false
-    var metadata: AgentFlowMetadata?
-
-    init(identifier: String) {
-        self.identifier = identifier
-    }
-
-    /// The metadata's keys, in no order.
-    public var metadataKeys: Set<String> { Set(metadata.map { metadata in Array(metadata.keys) } ?? []) }
-
-    /// The metadata's value for `key` as JavaScript's `String` writes it, or nil.
-    public func metadataText(_ key: String) -> String? {
-        metadata?[key].map(\.javaScriptText)
-    }
-}
-
-/// What an edge means: `-->` a step, `--x` a failure, `-.-` a reference.
-public enum AgentFlowEdgeSemantic: String, Equatable, Sendable {
-    case sequence, reference, failure
-}
-
-/// An edge as Mermaid's database keeps it.
-public struct AgentFlowEdge: Equatable, Sendable {
-    public let start: String
-    public let end: String
-    /// `arrow_point`, `arrow_cross`, `arrow_open`, or `INVALID` for a split arrow whose halves disagree.
-    public internal(set) var type: String?
-    public internal(set) var text = ""
-    public internal(set) var labelType: AgentFlowLabelType = .text
-    /// `normal` or `dotted`.
-    public internal(set) var stroke: String?
-    public internal(set) var semantic: AgentFlowEdgeSemantic?
-    /// The ranks it spans, at most 10.
-    public internal(set) var length: Int?
-    public internal(set) var style: [String]?
-    public internal(set) var classes: [String] = []
-    public internal(set) var identifier: String
-    public internal(set) var isUserDefinedIdentifier = false
-    public internal(set) var interpolation: String?
-    var metadata: AgentFlowMetadata?
-}
-
-/// A `flow … end` container.
-public struct AgentFlowFlow: Equatable, Sendable {
-    public let identifier: String
-    /// What it holds directly, by identifier, in the order named; a flow, a global node or a node another flow holds is
-    /// never here.
-    public internal(set) var nodeIdentifiers: [String]
-    public internal(set) var title: String
-    public internal(set) var classes: [String] = []
-    public internal(set) var directionKeyword: String?
-    public internal(set) var labelType: AgentFlowLabelType
-    var metadata: AgentFlowMetadata?
-
-    /// Whether `@{ view: collapsed }` asks for the flow drawn as one node.
-    public var isCollapsed: Bool {
-        if case .text("collapsed") = metadata?["view"] { return true }
-        return false
     }
 }
 

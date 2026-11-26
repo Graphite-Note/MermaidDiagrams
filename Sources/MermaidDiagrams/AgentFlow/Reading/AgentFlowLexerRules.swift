@@ -7,8 +7,8 @@
  *              node strings.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension AgentFlowLexer {
@@ -19,7 +19,7 @@ extension AgentFlowLexer {
     mutating func whitespaceEnd(from start: Int) -> Int {
         if start >= whitespaceRun.from, start <= whitespaceRun.to { return whitespaceRun.to }
         var end = start
-        while end < count, Unit.isSpace(Int(units[end])) { end += 1 }
+        while case let length = spaceLength(at: end), length > 0 { end += length }
         whitespaceRun = (start, end)
         return end
     }
@@ -34,7 +34,7 @@ extension AgentFlowLexer {
 
     func blanks(from start: Int) -> Int {
         var end = start
-        while end < count, units[end] == UInt16(Unit.space) || units[end] == UInt16(Unit.tab) { end += 1 }
+        while end < count, bytes[end] == UInt8(Unit.space) || bytes[end] == UInt8(Unit.tab) { end += 1 }
         return end
     }
 
@@ -84,7 +84,7 @@ extension AgentFlowLexer {
         guard character(at: start) == Unit.percentSign, character(at: start + 1) == Unit.percentSign,
               character(at: start + 2) != Unit.openingBrace else { return -1 }
         var index = start + 2
-        while index < count, units[index] != UInt16(Unit.lineFeed) { index += 1 }
+        while index < count, bytes[index] != UInt8(Unit.lineFeed) { index += 1 }
         return index
     }
 
@@ -137,11 +137,11 @@ extension AgentFlowLexer {
     mutating func readNodeString() -> Bool {
         var index = position
         while index < count {
-            let unit = Int(units[index])
+            let unit = Int(bytes[index])
             if Unit.isNodeStringCharacter(unit) {
                 index += 1
             } else if unit == Unit.hyphen, index + 1 < count {
-                let next = Int(units[index + 1])
+                let next = Int(bytes[index + 1])
                 if next == Unit.greaterThan || next == Unit.hyphen || next == Unit.fullStop { break }
                 index += 1
             } else {
