@@ -2,13 +2,13 @@
  * File: StateDiagramLayoutEquivalenceTests.swift
  * ----------------------------------------------
  * Layer: Tests
- * Description: Every state diagram of the corpora, Pele's generated machines and random state diagrams laid out by the
- *              state diagram layout and by the 0.7.0 engine kept as the reference, as they run and fitted to Graphite's
- *              narrow columns, alike to the bit; small layout budgets refused alike.
+ * Description: Every state diagram of the corpora, Pele's generated machines, random state diagrams and composites
+ *              with several notes laid out by the state diagram layout and by the 0.7.0 engine kept as the reference, as
+ *              they run and fitted to Graphite's narrow columns, alike to the bit; small layout budgets refused alike.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -58,6 +58,35 @@ final class StateDiagramLayoutEquivalenceTests: XCTestCase {
         XCTAssertGreaterThan(compositeCount, 600)
     }
 
+    /// Composites with several notes each, on either side, around loops and nested composites: the notes of one composite
+    /// are laid out in the order written (the random diagrams rarely put two notes on one composite).
+    func testCompositesWithSeveralNotesMatchTheReferenceBitForBit() throws {
+        var generator = SeededNumbers(state: 0x5EED_0A7E)
+        let texts = ["a", "short note", "a much longer note that is wide", "two\\nlines", "x"]
+        var noteCount = 0
+        for index in 0..<300 {
+            var lines = ["stateDiagram-v2"]
+            if index % 3 == 1 { lines.append("  direction LR") }
+            let compositeCount = 1 + index % 3
+            for composite in 0..<compositeCount {
+                lines.append("  state C\(composite) {")
+                lines.append("    a\(composite) --> b\(composite)")
+                if index % 4 == 2 { lines += ["    state D\(composite) {", "      d\(composite) --> e\(composite)", "    }", "    note right of D\(composite) : inner"] }
+                lines.append("  }")
+                for _ in 0..<(2 + generator.next(4)) {
+                    lines.append("  note \(generator.next(2) == 0 ? "left" : "right") of C\(composite) : \(texts[generator.next(texts.count)])")
+                    noteCount += 1
+                }
+                if generator.next(2) == 0 { lines.append("  C\(composite) --> C\(composite) : loop") }
+                lines.append("  x --> C\(composite)")
+            }
+            let source = lines.joined(separator: "\n")
+            guard case .stateDiagram(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { return XCTFail("not a state diagram") }
+            if let difference = Self.firstDifference(diagram, limits: .standard) { XCTFail("diagram \(index): \(difference) differs for:\n\(source)") }
+        }
+        XCTAssertGreaterThan(noteCount, 1_000)
+    }
+
     /// Budgets of layout points too small for some diagrams: both refuse the same ones alike.
     func testSmallLayoutBudgetsAreRefusedAlike() throws {
         var limits = MermaidDiagramLimits.standard
@@ -86,6 +115,16 @@ final class StateDiagramLayoutEquivalenceTests: XCTestCase {
             if laidOut != reference { return "the layout \(width) points wide" }
         }
         return nil
+    }
+}
+
+/// Numbers below a bound from a seed, the same each run (a linear congruential generator).
+private struct SeededNumbers {
+    var state: UInt64
+
+    mutating func next(_ bound: Int) -> Int {
+        state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return Int((state >> 33) % UInt64(bound))
     }
 }
 
