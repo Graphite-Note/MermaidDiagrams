@@ -6,7 +6,7 @@
  *              layout's spans read on the page with no placement made in between.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -30,7 +30,7 @@ enum StateDiagramBoxedLayout {
         page.placeStates(boxes: boxes)
         page.placeTransitions(boxes: boxes)
         page.placeSelfLoops()
-        page.placeComposites(boxes: boxes)
+        page.placeComposites(boxes: boxes, arena: arena)
         return page.finished(font: font, title: title, padding: StateDiagramLayoutEngine.padding, titleGap: StateDiagramLayoutEngine.titleGap)
     }
 }
@@ -117,6 +117,7 @@ extension StateDiagramPageAssembly {
         }
         // Each route's points and each segment's flow, in lists kept from transition to transition.
         var segmentAxes: [Bool] = []
+        segmentAxes.reserveCapacity(Self.routeCapacity)
         for layoutIndex in 0..<clustered.layoutTransitionIndices.count {
             let transitionIndex = Int(clustered.layoutTransitionIndices[layoutIndex])
             let range = boxes.compound.routeRange(of: layoutIndex)
@@ -190,9 +191,9 @@ extension StateDiagramPageAssembly {
     /// The composite states' boxes, each name in the band along its box's top, clear of the transitions' bends where it
     /// can be (`StateDiagramCompositeTitles`, from the layout's routes as Pele reads them), and a dashed line between
     /// each two concurrent regions of a body.
-    mutating func placeComposites(boxes: StateDiagramPlacedBoxes) {
+    mutating func placeComposites(boxes: StateDiagramPlacedBoxes, arena: DiagramScratchArena) {
         let clustered = boxes.clustered
-        let titles = StateDiagramCompositeTitles(compound: boxes.compound)
+        let titles = StateDiagramCompositeTitles(compound: boxes.compound, arena: arena)
         composites.reserveCapacity(diagram.composites.count)
         for compositeIndex in diagram.composites.indices {
             let frame = boxes.frames[compositeIndex]

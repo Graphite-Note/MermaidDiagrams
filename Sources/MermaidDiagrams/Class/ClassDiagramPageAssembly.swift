@@ -6,7 +6,7 @@
  *              records over one list of segments and its texts as measured texts.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.9
+ * Version: 0.10
  * Date: 26/11/2026
  */
 
@@ -26,6 +26,9 @@ struct ClassDiagramPageAssembly {
     static let straightEndShare: CGFloat = 0.35
     /// A straight end shorter than this is not worth drawing.
     static let shortestStraightEnd: CGFloat = 4
+    /// The segments made room for an edge, and the points for one route, before the lists grow.
+    static let segmentsPerEdge = 6
+    static let routeCapacity = 16
 
     let measured: ClassDiagramMeasurement
     let markRowHeight: CGFloat
@@ -50,7 +53,8 @@ struct ClassDiagramPageAssembly {
         self.markRowHeight = markRowHeight
         self.axes = axes
         edges = Array(repeating: nil, count: measured.edges.count)
-        segments.reserveCapacity(4 * measured.edges.count)
+        segments.reserveCapacity(Self.segmentsPerEdge * measured.edges.count)
+        route.reserveCapacity(Self.routeCapacity)
     }
 
     /// The nodes of a diagram laid out in ranks, at their flat nodes' centers.

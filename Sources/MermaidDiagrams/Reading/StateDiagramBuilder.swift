@@ -8,7 +8,7 @@
  *              point.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -29,10 +29,16 @@ struct StateDiagramBuilder {
     /// which `finished` puts in a run a state (`secondNumbers`).
     private var lists = GraphDiagramReadingLists()
     /// The `[*]` states by their scope (`scopeKey`): a few in a list, searched in order, and past them a dictionary.
-    private var startOrEndScopes: [(key: UInt64, index: Int)] = []
+    private var startOrEndScopes: [StartOrEndScope] = []
     private var startOrEndIndexByScope: [UInt64: Int] = [:]
     /// The composite bodies open now, outermost first, with the region being read in each.
     private var openBodies: [OpenBody] = []
+
+    /// A scope's `[*]` state: its scope's key and its index.
+    private struct StartOrEndScope {
+        let key: UInt64
+        let index: Int
+    }
 
     private struct OpenBody {
         let compositeIndex: Int
@@ -118,7 +124,7 @@ struct StateDiagramBuilder {
             return
         }
         if startOrEndScopes.isEmpty { startOrEndScopes.reserveCapacity(Self.listedScopeCount) }
-        startOrEndScopes.append((scope, index))
+        startOrEndScopes.append(StartOrEndScope(key: scope, index: index))
     }
 
     /// The descriptions made room for when the first is read.

@@ -7,7 +7,7 @@
  *              each piece.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -52,7 +52,7 @@ enum ClassDiagramMemberBytes {
         let nameStart = isVisibility(first) ? 1 : 0
         if nameStart == 1 { shown.append(first) }
         let end = max(nameStart, classifier == .plain ? bytes.count : bytes.count - 1)
-        appendAngleBracketed(normalizedName(bytes, nameStart..<end), to: &shown)
+        appendNormalizedName(bytes, nameStart..<end, to: &shown)
         appendDisplayed(shown, to: &memberBytes)
         return (start, memberBytes.count, classifier, false)
     }
@@ -66,13 +66,31 @@ enum ClassDiagramMemberBytes {
         }
     }
 
+    /// `appendAngleBracketed(normalizedName(bytes, range), to:)`, the name written straight from `bytes` when it holds
+    /// no tilde, which `appendAngleBracketed` would only copy.
+    private static func appendNormalizedName(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>, to shown: inout [UInt8]) {
+        let kept = trimmed(bytes, range)
+        guard !UnsafeBufferPointer(rebasing: bytes[kept]).contains(MermaidByte.tilde) else {
+            return appendAngleBracketed(normalizedName(bytes, range), to: &shown)
+        }
+        if range.lowerBound < range.upperBound, bytes[range.lowerBound] == MermaidByte.space { shown.append(MermaidByte.space) }
+        shown.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[kept]))
+    }
+
+    /// `appendAngleBracketed(Array(bytes[range]), to:)`, the bytes written straight when they hold no tilde.
+    private static func appendAngleBracketed(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>, to shown: inout [UInt8]) {
+        let part = UnsafeBufferPointer(rebasing: bytes[range])
+        guard part.contains(MermaidByte.tilde) else { return shown.append(contentsOf: part) }
+        appendAngleBracketed(Array(part), to: &shown)
+    }
+
     /// Writes a method's shown text and returns its classifier, or returns nil when the text is no method.
     private static func appendMethod(_ bytes: UnsafeBufferPointer<UInt8>, to shown: inout [UInt8]) -> ClassDiagramMemberClassifier? {
         guard let close = bytes.lastIndex(of: closingParenthesis), close > 0,
               let open = UnsafeBufferPointer(rebasing: bytes[..<close]).lastIndex(of: openingParenthesis), open > 0 else { return nil }
         let hasVisibility = isVisibility(bytes[0]) && open > 1
         if hasVisibility { shown.append(bytes[0]) }
-        let name = normalizedName(bytes, (hasVisibility ? 1 : 0)..<open)
+        let nameRange = (hasVisibility ? 1 : 0)..<open
         let parameters = trimmed(bytes, (open + 1)..<close)
         var rest = close + 1
         var classifier = ClassDiagramMemberClassifier.plain
@@ -86,13 +104,15 @@ enum ClassDiagramMemberBytes {
             classifier = marked
             returnType = returnType.lowerBound..<(returnType.upperBound - 1)
         }
-        appendAngleBracketed(name, to: &shown)
+        appendNormalizedName(bytes, nameRange, to: &shown)
         shown.append(openingParenthesis)
-        appendAngleBracketed(Array(bytes[parameters]), to: &shown)
+        appendAngleBracketed(bytes, parameters, to: &shown)
         shown.append(closingParenthesis)
         if !returnType.isEmpty {
-            shown.append(contentsOf: [MermaidByte.space, MermaidByte.colon, MermaidByte.space])
-            appendAngleBracketed(Array(bytes[returnType]), to: &shown)
+            shown.append(MermaidByte.space)
+            shown.append(MermaidByte.colon)
+            shown.append(MermaidByte.space)
+            appendAngleBracketed(bytes, returnType, to: &shown)
         }
         return classifier
     }

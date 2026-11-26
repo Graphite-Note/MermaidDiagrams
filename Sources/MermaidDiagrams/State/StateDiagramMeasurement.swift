@@ -6,7 +6,7 @@
  *              with the spans its transitions spread along.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -23,7 +23,7 @@ struct StateDiagramMeasuredState {
 }
 
 /// A state diagram's text measured and its shapes sized, Pele's: what the layout needs before it places anything.
-struct StateDiagramMeasurement {
+final class StateDiagramMeasurement {
     static let horizontalPadding: CGFloat = 16
     static let verticalPadding: CGFloat = 10
     static let minimumBoxWidth: CGFloat = 56
