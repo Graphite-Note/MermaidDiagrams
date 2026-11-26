@@ -7,7 +7,7 @@
  *              direction, made into values when a host reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -35,6 +35,13 @@ public struct RequirementDiagram: Equatable, Sendable {
         self.title = title
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
+    }
+
+    /// A diagram of the model the reading made, moved out of `model` by swapping, which is left empty: the model's lists
+    /// keep their single owner, so that no list is copied or retained.
+    init(direction: FlowchartDirection, taking model: inout RequirementModel, accessibilityTitle: String?, accessibilityDescription: String?) {
+        self.init(direction: direction, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
+        swap(&self.model, &model)
     }
 
     init(direction: FlowchartDirection = .topToBottom, requirements: [RequirementDiagramRequirement], elements: [RequirementDiagramElement] = [],

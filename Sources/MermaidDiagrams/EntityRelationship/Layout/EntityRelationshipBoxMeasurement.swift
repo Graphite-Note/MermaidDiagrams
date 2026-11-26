@@ -6,7 +6,7 @@
  *              lines and its rows' heights and columns' widths kept for when the box is placed.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -85,7 +85,7 @@ enum EntityRelationshipBoxMeasurement {
     static func box<Measurer>(ofEntity index: Int, cells cellMeasuring: EntityRelationshipCellMeasuring<Measurer>,
                               measurers: EntityRelationshipFlatMeasurers<Measurer>, minimumSize: CGSize, into measured: inout EntityRelationshipMeasurement,
                               constantCells: inout EntityRelationshipConstantCells) -> EntityRelationshipMeasuredBox {
-        let entity = cellMeasuring.model.entities[index]
+        let entity = cellMeasuring.model.pointee.entities[index]
         var name = cellMeasuring.label(entity.label, measurer: measurers.name, maximumWidth: nameWrappingWidth, into: &measured.lines)
         let nameHeight = max(name.size.height, measurers.name.singleLineHeight)
         let narrowest = max(minimumWidth, minimumSize.width, name.size.width + 2 * nameHorizontalPadding)
@@ -99,10 +99,10 @@ enum EntityRelationshipBoxMeasurement {
         let firstRow = measured.rowHeights.count
         var table = EntityRelationshipAttributeTable(rowLineHeight: measurers.row.singleLineHeight)
         for attributeIndex in entity.attributeIndices {
-            let attribute = cellMeasuring.model.attributes[attributeIndex]
+            let attribute = cellMeasuring.model.pointee.attributes[attributeIndex]
             let type = cellMeasuring.typeOrName(attribute.type, of: attribute, isType: true, measurer: measurers.row, into: &measured.lines)
             let attributeName = cellMeasuring.typeOrName(attribute.name, of: attribute, isType: false, measurer: measurers.row, into: &measured.lines)
-            let keys = constantCells.keys(of: attribute, model: cellMeasuring.model, measurer: measurers.key, into: &measured.lines)
+            let keys = constantCells.keys(of: attribute, model: cellMeasuring.model.pointee, measurer: measurers.key, into: &measured.lines)
             let comment = attribute.hasComment
                 ? cellMeasuring.comment(of: attribute, measurer: measurers.row, maximumWidth: commentWrappingWidth, into: &measured.lines)
                 : constantCells.noComment(measurer: measurers.row.measurer, into: &measured.lines)

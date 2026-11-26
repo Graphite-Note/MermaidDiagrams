@@ -7,7 +7,7 @@
  *              their boxes, everything moved inside the padding below the title when the drawing's bounds are known.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.7
+ * Version: 0.8
  * Date: 26/11/2026
  */
 
@@ -20,7 +20,9 @@ import CoreGraphics
 /// the offset, as 0.7.0 moved each path; the centers, the placed relationships and the loops' reaches live in the
 /// calling thread's arena.
 struct EntityRelationshipPageAssembly {
-    let model: EntityRelationshipModel
+    /// The diagram's relationships, and how many entities it has.
+    let relationshipRecords: [EntityRelationshipRelationshipRecord]
+    let entityCount: Int
     let measured: EntityRelationshipMeasurement
     let axes: FlowchartFlowAxes
     let arena: DiagramScratchArena
@@ -47,7 +49,8 @@ struct EntityRelationshipPageAssembly {
     static let shortestRouteWithStraightRuns = 3 * EntityRelationshipCardinalityMark.length
 
     init(model: EntityRelationshipModel, measured: EntityRelationshipMeasurement, axes: FlowchartFlowAxes, arena: DiagramScratchArena) {
-        self.model = model
+        relationshipRecords = model.relationships
+        entityCount = model.entities.count
         self.measured = measured
         self.axes = axes
         self.arena = arena
@@ -73,7 +76,7 @@ struct EntityRelationshipPageAssembly {
     /// Relationship `index` through `points`: its line written into the segments (each segment along the flow, or along
     /// `segmentAxes[i]` when given), its marks where it meets its boxes, its label at `labelCenter`.
     mutating func setRelationship(at index: Int, along points: ScratchSpan<CGPoint>, segmentAxes: ScratchSpan<Bool>?, labelCenter: CGPoint) {
-        let relationship = model.relationships[index]
+        let relationship = relationshipRecords[index]
         let first = points[0]
         let last = points[points.count - 1]
         let firstSegment = segments.count
@@ -91,7 +94,7 @@ struct EntityRelationshipPageAssembly {
     /// The loops of every entity that has relationships with itself; a group's off the right side of its box, the
     /// drawing widened by their reach, as Pele hangs them (`er/render.ts`).
     mutating func placeSelfRelationships() {
-        for entity in 0..<model.entities.count {
+        for entity in 0..<entityCount {
             let loops = measured.loopIndices(of: entity)
             guard !loops.isEmpty else { continue }
             let isGroup = standsForGroup(entity)
@@ -123,7 +126,7 @@ struct EntityRelationshipPageAssembly {
 
     /// Relationship `index`, a loop: its three segments, its marks where it leaves and comes back, its label.
     private mutating func placeLoop(_ loop: EntityRelationshipSelfLoops.Loop, at index: Int) {
-        let relationship = model.relationships[index]
+        let relationship = relationshipRecords[index]
         let firstSegment = segments.count
         segments.append(loop.out)
         segments.append(loop.around)

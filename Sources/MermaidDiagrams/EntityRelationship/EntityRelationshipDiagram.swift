@@ -6,7 +6,7 @@
  *              records its reading made, made into values when a host reads them.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -43,6 +43,15 @@ public struct EntityRelationshipDiagram: Equatable, Sendable {
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
         self.unappliedStatementCount = unappliedStatementCount
+    }
+
+    /// A diagram of the model the reading made, moved out of `model` by swapping, which is left empty: the model's lists
+    /// keep their single owner, so that no list is copied or retained.
+    init(direction: FlowchartDirection, taking model: inout EntityRelationshipModel, subgraphCount: Int, accessibilityTitle: String?,
+         accessibilityDescription: String?, unappliedStatementCount: Int) {
+        self.init(direction: direction, subgraphCount: subgraphCount, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription,
+                  unappliedStatementCount: unappliedStatementCount)
+        swap(&self.model, &model)
     }
 
     init(direction: FlowchartDirection = .topToBottom, entities: [EntityRelationshipEntity], relationships: [EntityRelationship] = [],

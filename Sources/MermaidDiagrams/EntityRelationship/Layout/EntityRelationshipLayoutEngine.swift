@@ -6,7 +6,7 @@
  *              records, every list it works in a list of the thread's scratch arena.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
+ * Version: 0.9
  * Date: 26/11/2026
  */
 
@@ -55,10 +55,9 @@ public enum EntityRelationshipLayoutEngine {
     /// graph would need more than `maximumPointCount` nodes and passing points.
     private static func rankedPage<Measurer>(_ diagram: EntityRelationshipDiagram, measurers: EntityRelationshipTextMeasurers<Measurer>,
                                              maximumPointCount: Int, arena: DiagramScratchArena) -> EntityRelationshipPageAssembly? {
-        let model = diagram.model
         let flowAxes = FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0)
-        let measured = EntityRelationshipMeasurement(model: model, measurers: measurers,
-                                                     loopsLeaveBelow: arena.span(count: model.entities.count, repeating: !flowAxes.flowIsVertical),
+        let measured = EntityRelationshipMeasurement(model: diagram.model, measurers: measurers,
+                                                     loopsLeaveBelow: arena.span(count: diagram.entityCount, repeating: !flowAxes.flowIsVertical),
                                                      title: diagram.title, arena: arena)
         let layoutSizes = measured.layoutSizes(arena: arena)
         let nodes: ScratchSpan<LayeredFlatNode> = arena.uninitializedSpan(count: layoutSizes.count)
@@ -66,7 +65,7 @@ public enum EntityRelationshipLayoutEngine {
             let size = flowAxes.flowSize(of: layoutSizes[node])
             nodes[node] = LayeredFlatNode(width: Double(size.across), height: Double(size.along))
         }
-        let (layered, edges) = layeredEdges(of: model, measured: measured, flowAxes: flowAxes, arena: arena)
+        let (layered, edges) = layeredEdges(of: diagram.model, measured: measured, flowAxes: flowAxes, arena: arena)
         #if DEBUG
         LayeredLayoutRecording.recordPlacement(nodes: nodes, edges: edges, spacing: spacing, maximumPointCount: maximumPointCount)
         #endif
@@ -75,7 +74,7 @@ public enum EntityRelationshipLayoutEngine {
                                                   maximumVertexCount: maximumPointCount, arena: arena) else {
             return nil
         }
-        var page = EntityRelationshipPageAssembly(model: model, measured: measured,
+        var page = EntityRelationshipPageAssembly(model: diagram.model, measured: measured,
                                                   axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: CGFloat(size.height)), arena: arena)
         page.placeBoxes(flowNodes: nodes)
         page.placeRelationships(layeredIndices: layered.elements, nodes: nodes, edges: edges, points: points.elements)
@@ -110,15 +109,14 @@ public enum EntityRelationshipLayoutEngine {
     private static func pageInBoxes<Measurer: DiagramTextMeasuring>(_ diagram: EntityRelationshipDiagram, measurers: EntityRelationshipTextMeasurers<Measurer>,
                                                                     titleText: Measurer, maximumPointCount: Int,
                                                                     arena: DiagramScratchArena) -> EntityRelationshipPageAssembly? {
-        let model = diagram.model
-        let nesting = EntityRelationshipNesting(model: model, direction: diagram.direction, arena: arena)
-        let measured = EntityRelationshipMeasurement(model: model, measurers: measurers, loopsLeaveBelow: nesting.loopsLeaveBelow, title: diagram.title,
+        let nesting = EntityRelationshipNesting(model: diagram.model, direction: diagram.direction, arena: arena)
+        let measured = EntityRelationshipMeasurement(model: diagram.model, measurers: measurers, loopsLeaveBelow: nesting.loopsLeaveBelow, title: diagram.title,
                                                      arena: arena)
-        let clustered = EntityRelationshipClusterGraph(model: model, direction: diagram.direction, nesting: nesting, titleText: titleText,
+        let clustered = EntityRelationshipClusterGraph(model: diagram.model, direction: diagram.direction, nesting: nesting, titleText: titleText,
                                                        layoutSizes: measured.layoutSizes(arena: arena), measured: measured, arena: arena)
         guard let compound = clustered.graph.laidOut(spacing: spacing, maximumPointCount: maximumPointCount, arena: arena) else { return nil }
-        var page = EntityRelationshipPageAssembly(model: model, measured: measured, axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0),
-                                                  arena: arena)
+        var page = EntityRelationshipPageAssembly(model: diagram.model, measured: measured,
+                                                  axes: FlowchartFlowAxes(direction: diagram.direction, alongExtent: 0), arena: arena)
         page.placeBoxes(clustered: clustered, nesting: nesting, compound: compound)
         page.placeRelationships(clustered: clustered, compound: compound)
         page.placeSelfRelationships()

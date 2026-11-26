@@ -8,7 +8,7 @@
  *              order they were given, every list made at its size.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -39,7 +39,7 @@ extension RequirementDiagramBuilder {
             }
         }
         if !lists.styleClasses.isEmpty || !lists.declarations.isEmpty || !lists.classGifts.isEmpty { gatherStyles(into: &model, derivedOffset: prepared.count) }
-        return RequirementDiagram(direction: direction, model: model, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
+        return RequirementDiagram(direction: direction, taking: &model, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
     }
 
     /// The diagram as read so far, over a copy of the bytes read.

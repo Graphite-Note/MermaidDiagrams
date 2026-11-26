@@ -6,7 +6,7 @@
  *              they hold, its names interned from the text's bytes, in the thread's reading lists.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -168,7 +168,7 @@ struct EntityRelationshipDiagramBuilder {
         model.relationships = Self.exactCopy(lists.relationships)
         if !lists.attributes.isEmpty { gatherAttributes(into: &model) }
         if !lists.groups.isEmpty { gatherGroups(into: &model) }
-        return EntityRelationshipDiagram(direction: direction, model: model, subgraphCount: subgraphCount, accessibilityTitle: accessibilityTitle,
+        return EntityRelationshipDiagram(direction: direction, taking: &model, subgraphCount: subgraphCount, accessibilityTitle: accessibilityTitle,
                                          accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
     }
 

@@ -8,7 +8,7 @@
  *              of lines and kept as a measured text, the boxes, rows and edges in lists of the thread's arena.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
+ * Version: 0.6
  * Date: 26/11/2026
  */
 
@@ -90,11 +90,15 @@ struct RequirementMeasurement {
     private(set) var unappliedStatementCount = 0
 
     init<Measurer: DiagramTextMeasuring>(diagram: RequirementDiagram, measurers: RequirementTextMeasurers<Measurer>, arena: DiagramScratchArena) {
-        let model = diagram.model
+        self.init(model: diagram.model, measurers: measurers, arena: arena)
+    }
+
+    /// The model read where it stands, borrowed.
+    private init<Measurer: DiagramTextMeasuring>(model: RequirementModel, measurers: RequirementTextMeasurers<Measurer>, arena: DiagramScratchArena) {
         boxes = arena.list(capacity: model.boxCount, of: RequirementMeasuredBox.self)
         rows = arena.list(capacity: 4 * model.requirementCount + 2 * model.elementCount, of: RequirementMeasuredRow.self)
         edges = arena.list(capacity: model.relations.count, of: RequirementMeasuredEdge.self)
-        var styleResolution = RequirementStyleResolution(model: model)
+        var styleResolution = RequirementStyleResolution()
         var texts = RequirementConstantTexts(measurers: measurers, arena: arena)
         let names = DiagramFlatMeasurer(measurers.names)
         lines.reserveCapacity(lines: 16 + 8 * model.requirementCount + 5 * model.elementCount, derivedBytes: 256)
@@ -105,13 +109,13 @@ struct RequirementMeasurement {
                 appendRow(.text, record.secondField, of: bytes, to: &box, texts: &texts)
                 if let risk = record.risk { appendRow(.risk, texts.value(of: risk, into: &lines), to: &box, texts: &texts) }
                 if let method = record.verificationMethod { appendRow(.verification, texts.value(of: method, into: &lines), to: &box, texts: &texts) }
-                finishBox(box, isRequirement: true, style: styleResolution.style(of: record))
+                finishBox(box, isRequirement: true, style: styleResolution.style(of: record, in: model))
             }
             for record in model.elements {
                 var box = startBox(name: record.name, of: bytes, stereotype: texts.elementStereotype(into: &lines), names: names)
                 appendRow(.type, record.firstField, of: bytes, to: &box, texts: &texts)
                 appendRow(.documentReference, record.secondField, of: bytes, to: &box, texts: &texts)
-                finishBox(box, isRequirement: false, style: styleResolution.style(of: record))
+                finishBox(box, isRequirement: false, style: styleResolution.style(of: record, in: model))
             }
         }
         unappliedStatementCount = styleResolution.unappliedCount
@@ -209,33 +213,33 @@ extension RequirementDiagram {
     /// How many style declarations the requirements and elements hold, each time it is given, that their look has no place
     /// for (`font-weight`, `font-style`, `font-size`) or does not read; the colors and strokes are applied.
     public var unappliedStatementCount: Int {
-        var styles = RequirementStyleResolution(model: model)
-        for record in model.requirements { _ = styles.style(of: record) }
-        for record in model.elements { _ = styles.style(of: record) }
+        var styles = RequirementStyleResolution()
+        for record in model.requirements { _ = styles.style(of: record, in: model) }
+        for record in model.elements { _ = styles.style(of: record, in: model) }
         return styles.unappliedCount
     }
 }
 
-/// The look each box's declarations give it, as Pele's `resolveStyle` gives it (each property's last value wins), each
-/// declaration read once, on its bytes, the first time a box holds it.
+/// The look each box's declarations give it, as Pele's `resolveStyle` gives it (each property's last value wins). A
+/// diagram's few declarations are read on their bytes each time a box holds one, which costs less than keeping what was
+/// read; past `largestUncachedCopyCount` copies (a class given to many boxes), each declaration is read once and kept.
 struct RequirementStyleResolution {
-    private let model: RequirementModel
-    /// By declaration number, once read.
+    static let largestUncachedCopyCount = 256
+
+    /// By declaration number, once read, for a diagram of many copies.
     private var read: [(style: DiagramElementStyle, isUnapplied: Bool)?] = []
     private(set) var unappliedCount = 0
 
-    init(model: RequirementModel) {
-        self.model = model
-    }
-
-    mutating func style(of record: RequirementNodeRecord) -> DiagramElementStyle? {
+    /// The look of `record`, a node of `model`.
+    mutating func style(of record: RequirementNodeRecord, in model: RequirementModel) -> DiagramElementStyle? {
         guard record.styleDeclarationCount > 0 else { return nil }
-        if read.isEmpty { read = Array(repeating: nil, count: model.ranges.count) }
+        let keepsReadings = model.numbers.count > Self.largestUncachedCopyCount
+        if keepsReadings, read.isEmpty { read = Array(repeating: nil, count: model.ranges.count) }
         var style = DiagramElementStyle()
         for position in record.styleDeclarationIndices {
             let number = model.numbers[position]
             let reading: (style: DiagramElementStyle, isUnapplied: Bool)
-            if let known = read[Int(number)] {
+            if keepsReadings, let known = read[Int(number)] {
                 reading = known
             } else {
                 let parsed = model.withDeclarationBytes(number) { bytes in
@@ -243,7 +247,7 @@ struct RequirementStyleResolution {
                                                               : DiagramElementStyle.reading(String(decoding: bytes, as: UTF8.self))
                 }
                 reading = (parsed.style, parsed.hasUnappliedDeclaration)
-                read[Int(number)] = reading
+                if keepsReadings { read[Int(number)] = reading }
             }
             style = style.overridden(by: reading.style)
             if reading.isUnapplied { unappliedCount += 1 }
