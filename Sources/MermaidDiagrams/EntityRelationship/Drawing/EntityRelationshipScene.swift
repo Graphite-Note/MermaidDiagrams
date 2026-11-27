@@ -6,8 +6,8 @@
  *              Pele paints them, its paths recorded into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -36,6 +36,12 @@ extension DiagramScene {
 enum EntityRelationshipSceneRecording {
     /// Every line is drawn one point wide with round caps and joins.
     static func add(_ layout: EntityRelationshipLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        layout.source.withUnsafeBufferPointer { source in add(layout, source: source, to: &builder, workspace: workspace) }
+    }
+
+    /// The painting, the names' and cells' lines read from `source`, the layout's text, borrowed.
+    private static func add(_ layout: EntityRelationshipLayout, source: UnsafeBufferPointer<UInt8>, to builder: inout DiagramSceneBuilder,
+                            workspace: DiagramSceneWorkspace) {
         let lineWidth = EntityRelationshipDrawingParts.lineWidth
         let line = DiagramStroke.rounded(lineWidth: lineWidth)
         let subgraphs = FlowchartClusterPaths(clusters: layout.subgraphs, making: workspace)
@@ -47,22 +53,25 @@ enum EntityRelationshipSceneRecording {
         builder.fill(paths.markFills, .background, part: .marker)
         builder.stroke(paths.markOutlines, .line, line, part: .marker)
         builder.fill(paths.labelPatches, .background, part: .labelBackground)
-        for relationship in layout.relationships { builder.text(relationship.label, .foreground, part: .edgeLabel) }
+        let lines = layout.lines
+        for relationship in layout.placedRelationships where relationship.hasLabel {
+            builder.text(relationship.label, of: lines, source: source, .foreground, part: .edgeLabel)
+        }
         builder.fill(paths.boxFills, .surface, part: .node)
         builder.fill(paths.rowStripes, .background, part: .node)
         builder.stroke(paths.boxOutlines, .border, line, part: .node)
-        for entity in layout.entities {
-            builder.text(entity.name, .foreground, part: .label)
-            for row in entity.rows {
-                for cell in row.texts where !EntityRelationshipDrawingParts.isInMutedColor(cell.column) { builder.text(cell.text, .foreground, part: .label) }
+        for entity in layout.placedEntities {
+            builder.text(entity.name, of: lines, source: source, .foreground, part: .label)
+            for row in layout.placedRows[entity.rowIndices] {
+                for cell in layout.placedCells[row.cellIndices] where !cell.isInMutedColor { builder.text(cell.text, of: lines, source: source, .foreground, part: .label) }
             }
         }
         let muted = DiagramPaint.foreground.atOpacity(EntityRelationshipDrawingParts.mutedTextOpacity)
-        for entity in layout.entities {
-            for row in entity.rows {
-                for cell in row.texts where EntityRelationshipDrawingParts.isInMutedColor(cell.column) { builder.text(cell.text, muted, part: .label) }
+        for entity in layout.placedEntities {
+            for row in layout.placedRows[entity.rowIndices] {
+                for cell in layout.placedCells[row.cellIndices] where cell.isInMutedColor { builder.text(cell.text, of: lines, source: source, muted, part: .label) }
             }
         }
-        builder.title(layout.title)
+        builder.title(layout.placedTitle, of: lines, source: source)
     }
 }

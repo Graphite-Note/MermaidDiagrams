@@ -6,7 +6,7 @@
  *              kind a drawing records, and its renderer.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -121,7 +121,13 @@ struct RequirementPaths<Path: DiagramPathRecording> {
         for relation in layout.placedRelations {
             let madeCount = maker.madePathCount
             let line = maker.makePath()
-            DiagramEdgeDrawing.record(relation.path, into: line)
+            line.move(to: relation.start)
+            for segment in layout.segments[relation.segmentIndices] {
+                switch segment {
+                case .line(let end): line.addLine(to: end)
+                case .curve(let end, let firstControl, let secondControl): line.addCurve(to: end, control1: firstControl, control2: secondControl)
+                }
+            }
             (relation.kind == .contains ? solidLines : dashedLines).addPath(line)
             RequirementDrawingParts.addMark(relation.mark, to: marks)
             let radius = RequirementDrawingParts.textPatchCornerRadius

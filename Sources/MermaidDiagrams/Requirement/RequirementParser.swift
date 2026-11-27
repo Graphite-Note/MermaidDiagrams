@@ -7,8 +7,8 @@
  *              direction and the accessibility text, each error at its line.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 /// Reads a requirement diagram over `RequirementLexer`'s tokens, statement by statement as Pele's `parser.ts` reads them,
@@ -20,31 +20,41 @@ struct RequirementParser {
     private var token: RequirementToken
     var builder: RequirementDiagramBuilder
     private let prepared: RequirementPreparedSource
-    /// The names and values of the statement being read, kept between statements so that their room is made once.
-    private var names: [Range<Int>] = []
-    private var values: [Range<Int>] = []
-    private var declarationBytes: [UInt8] = []
 
-    /// Reads the requirement diagram whose keyword, `keyword` as written, ends at the cursor. Any keyword that starts with
-    /// `requirement` names a requirement diagram, as Pele detects one, and its lexer then reads the keyword itself, in the
-    /// text as Pele hands it to its parser (`RequirementSourcePreparation`).
-    static func parse(_ cursor: MermaidTextCursor, keyword: String, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RequirementDiagram {
-        let prepared = RequirementSourcePreparation.prepared(cursor.bytes, from: cursor.position - keyword.utf8.count)
+    /// Reads the requirement diagram whose keyword, `keywordLength` bytes as written, ends at the cursor. Any keyword that
+    /// starts with `requirement` names a requirement diagram, as Pele detects one, and its lexer then reads the keyword
+    /// itself, in the text as Pele hands it to its parser (`RequirementSourcePreparation`). The reading works in the
+    /// thread's lists (`RequirementReadingScratch`) and gives them back.
+    static func parse(_ cursor: MermaidTextCursor, keywordLength: Int, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> RequirementDiagram {
+        let prepared = RequirementSourcePreparation.prepared(cursor.bytes, from: cursor.position - keywordLength)
         return try prepared.bytes.withUnsafeBufferPointer { bytes throws(MermaidDiagramReadError) in
-            var parser = RequirementParser(prepared: prepared, bytes: bytes, limits: limits)
-            guard parser.kind == .diagramKeyword else { throw parser.failure(.expectedKeyword) }
-            parser.advance()
-            try parser.expect(.lineBreak, else: .expectedLineBreak)
-            try parser.readStatements()
-            return parser.builder.diagram
+            try RequirementReadingScratch.withLists(isASCII: GraphDiagramNameTable.isASCII(bytes)) { lists throws(MermaidDiagramReadError) in
+                var parser = RequirementParser(prepared: prepared, bytes: bytes, limits: limits)
+                swap(&parser.builder.lists, &lists)
+                defer { swap(&lists, &parser.builder.lists) }
+                parser.builder.reserveNames()
+                guard parser.kind == .diagramKeyword else { throw parser.failure(.expectedKeyword) }
+                parser.advance()
+                try parser.expect(.lineBreak, else: .expectedLineBreak)
+                try parser.readStatements()
+                return parser.builder.finished(text: prepared.bytes)
+            }
         }
+    }
+
+    /// Whether the keyword `bytes[keyword]` names a requirement diagram: it starts with `requirement`, as Pele detects one.
+    static func isKeyword(_ bytes: UnsafeBufferPointer<UInt8>, _ keyword: MermaidTextRange) -> Bool {
+        let prefix: StaticString = "requirement"
+        guard keyword.start >= 0, keyword.upperBound <= bytes.count, keyword.count >= prefix.utf8CodeUnitCount else { return false }
+        return UnsafeBufferPointer(rebasing: bytes[keyword.lowerBound..<(keyword.lowerBound + prefix.utf8CodeUnitCount)])
+            .elementsEqual(UnsafeBufferPointer(start: prefix.utf8Start, count: prefix.utf8CodeUnitCount))
     }
 
     private init(prepared: RequirementPreparedSource, bytes: UnsafeBufferPointer<UInt8>, limits: MermaidDiagramLimits) {
         self.prepared = prepared
         lexer = RequirementLexer(bytes: bytes, start: prepared.start)
         token = lexer.next()
-        builder = RequirementDiagramBuilder(limits: limits, bytes: bytes, isASCII: GraphDiagramNameTable.isASCII(bytes))
+        builder = RequirementDiagramBuilder(limits: limits, bytes: bytes)
     }
 
     var kind: RequirementTokenKind { token.kind }
@@ -102,7 +112,7 @@ struct RequirementParser {
             if let requirementKind { try builder.addRequirement(named: name, kind: requirementKind, fields: fields) } else {
                 try builder.addElement(named: name, fields: fields)
             }
-            if hasClasses { try builder.setClasses(names: [name], classNames: values) }
+            if hasClasses { try builder.setClasses(names: [name], classNames: builder.lists.statementValues) }
         } catch {
             throw refused(error, at: statementStart)
         }
@@ -175,13 +185,17 @@ struct RequirementParser {
         try readNameList(into: .names)
         if statement == .classAssignment {
             try readNameList(into: .values)
-            do { try builder.setClasses(names: names, classNames: values) } catch { throw refused(error, at: statementStart) }
+            do {
+                try builder.setClasses(names: builder.lists.statementNames, classNames: builder.lists.statementValues)
+            } catch {
+                throw refused(error, at: statementStart)
+            }
             return
         }
         let declarations = try readDeclarations()
         do {
-            if statement == .style { try builder.setStyle(names: names, declarations: declarations) } else {
-                try builder.defineClasses(names: names, declarations: declarations)
+            if statement == .style { try builder.setStyle(names: builder.lists.statementNames, declarations: declarations) } else {
+                try builder.defineClasses(names: builder.lists.statementNames, declarations: declarations, copies: declarations)
             }
         } catch {
             throw refused(error, at: statementStart)
@@ -198,7 +212,7 @@ struct RequirementParser {
         case .styleSeparator:
             advance()
             try readNameList(into: .values)
-            do { try builder.setClasses(names: [name], classNames: values) } catch { throw refused(error, at: statementStart) }
+            do { try builder.setClasses(names: [name], classNames: builder.lists.statementValues) } catch { throw refused(error, at: statementStart) }
         case .leftArrowEnd, .line:
             advance()
             guard case .relation(let relation) = kind else { throw failure(.expectedRelationKind) }
@@ -236,8 +250,8 @@ extension RequirementParser {
     private mutating func readNameList(into which: NameList) throws(MermaidDiagramReadError) {
         var list: [Range<Int>] = []
         switch which {
-        case .names: swap(&list, &names)
-        case .values: swap(&list, &values)
+        case .names: swap(&list, &builder.lists.statementNames)
+        case .values: swap(&list, &builder.lists.statementValues)
         }
         list.removeAll(keepingCapacity: true)
         while true {
@@ -248,23 +262,27 @@ extension RequirementParser {
             advance()
         }
         switch which {
-        case .names: swap(&list, &names)
-        case .values: swap(&list, &values)
+        case .names: swap(&list, &builder.lists.statementNames)
+        case .values: swap(&list, &builder.lists.statementValues)
         }
     }
 
-    /// Declarations separated by commas, each the parts of a style statement run together.
-    private mutating func readDeclarations() throws(MermaidDiagramReadError) -> [String] {
-        var declarations: [String] = []
+    /// Declarations separated by commas, each the parts of a style statement run together: the numbers the builder gives
+    /// them, one after the other.
+    private mutating func readDeclarations() throws(MermaidDiagramReadError) -> Range<Int32> {
+        let first = Int32(builder.lists.declarations.count)
         while true {
             guard kind.isStylePart else { throw failure(.expectedStyle) }
-            declarationBytes.removeAll(keepingCapacity: true)
+            var parts: [Range<Int>] = []
+            swap(&parts, &builder.lists.declarationParts)
+            parts.removeAll(keepingCapacity: true)
             while kind.isStylePart {
-                declarationBytes.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[token.textRange]))
+                parts.append(token.textRange)
                 advance()
             }
-            declarations.append(String(decoding: declarationBytes, as: UTF8.self))
-            guard kind == .comma else { return declarations }
+            _ = builder.addDeclaration(joining: parts)
+            swap(&parts, &builder.lists.declarationParts)
+            guard kind == .comma else { return first..<Int32(builder.lists.declarations.count) }
             advance()
         }
     }

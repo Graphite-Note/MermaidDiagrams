@@ -6,8 +6,8 @@
  *              or spread along it in the order of where they head when several share it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -21,32 +21,40 @@ struct RequirementEdgePorts {
 
     /// One end of a relation on a side of a box.
     struct End {
-        let edgeIndex: Int
+        let edgeIndex: Int32
         let isSourceEnd: Bool
-        let box: Int
+        let box: Int32
         let side: DiagramSide
         /// Where, along the side, the route's next point is.
         let toward: CGFloat
     }
 
-    /// The page points of each edge's ends, by edge index; nil for an edge with no end placed.
-    private(set) var sourcePoints: [CGPoint?]
-    private(set) var targetPoints: [CGPoint?]
+    /// The page points of each edge's ends, by edge index, set where `isSourcePlaced` and `isTargetPlaced` say: spans of
+    /// the thread's arena.
+    let sourcePoints: ScratchSpan<CGPoint>
+    let targetPoints: ScratchSpan<CGPoint>
+    let isSourcePlaced: ScratchSpan<Bool>
+    let isTargetPlaced: ScratchSpan<Bool>
 
-    init(ends: [End], edgeCount: Int, centers: [CGPoint], sizes: [CGSize]) {
-        sourcePoints = Array(repeating: nil, count: edgeCount)
-        targetPoints = Array(repeating: nil, count: edgeCount)
+    init(ends: ScratchSpan<End>, edgeCount: Int, centers: ScratchSpan<CGPoint>, sizes: ScratchSpan<CGSize>, arena: DiagramScratchArena) {
+        sourcePoints = arena.uninitializedSpan(count: edgeCount)
+        targetPoints = arena.uninitializedSpan(count: edgeCount)
+        isSourcePlaced = arena.span(count: edgeCount, repeating: false)
+        isTargetPlaced = arena.span(count: edgeCount, repeating: false)
         // The ends sorted by their side, then by where they head and the order they were listed in, as JavaScript's
-        // stable sort orders them: each side's ends together, in the order they take along it.
-        var ordered = Array(ends.indices)
-        ordered.sort { first, second in
+        // stable sort orders them: each side's ends together, in the order they take along it. Sorted as an array of
+        // them sorts, by the same sort on the same order.
+        let ordered: ScratchSpan<Int> = arena.uninitializedSpan(count: ends.count)
+        for index in 0..<ends.count { ordered[index] = index }
+        var orderedBuffer = ordered.buffer
+        orderedBuffer.sort { first, second in
             (Self.slot(of: ends[first]), ends[first].toward, first) < (Self.slot(of: ends[second]), ends[second].toward, second)
         }
         var first = 0
         while first < ordered.count {
             var last = first + 1
             while last < ordered.count, Self.slot(of: ends[ordered[last]]) == Self.slot(of: ends[ordered[first]]) { last += 1 }
-            let box = ends[ordered[first]].box
+            let box = Int(ends[ordered[first]].box)
             let side = ends[ordered[first]].side
             let count = last - first
             let span = (side.isHorizontal ? sizes[box].width : sizes[box].height) - 2 * Self.endMargin
@@ -55,14 +63,20 @@ struct RequirementEdgePorts {
                 let end = ends[ordered[first + position]]
                 let offset = (CGFloat(position) - CGFloat(count - 1) / 2) * step
                 let point = ClassDiagramEdgePorts.sidePoint(center: centers[box], size: sizes[box], side: side, offset: offset)
-                if end.isSourceEnd { sourcePoints[end.edgeIndex] = point } else { targetPoints[end.edgeIndex] = point }
+                if end.isSourceEnd {
+                    sourcePoints[Int(end.edgeIndex)] = point
+                    isSourcePlaced[Int(end.edgeIndex)] = true
+                } else {
+                    targetPoints[Int(end.edgeIndex)] = point
+                    isTargetPlaced[Int(end.edgeIndex)] = true
+                }
             }
             first = last
         }
     }
 
     /// The side an end is on, numbered by box and side.
-    private static func slot(of end: End) -> Int { end.box * 4 + sideNumber(end.side) }
+    private static func slot(of end: End) -> Int { Int(end.box) * 4 + sideNumber(end.side) }
 
     private static func sideNumber(_ side: DiagramSide) -> Int {
         switch side {

@@ -5,8 +5,8 @@
  * Description: Reads Mermaid text: front matter, comments, directives and the diagram's type.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.27
- * Date: 24/11/2026
+ * Version: 0.28
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -63,6 +63,12 @@ public enum MermaidDiagramReader {
         case .flowchart: return .flowchart(try FlowchartParser.parse(frontEnd, limits: limits))
         case .swimlane: return .swimlane(try FlowchartParser.parse(frontEnd, limits: limits))
         case .other:
+            // Pele detects any text that starts with `requirement` as a requirement diagram: told from its bytes, before
+            // the keyword is made a String to look for the other types it may name.
+            if frontEnd.text.withBytes({ bytes in RequirementParser.isKeyword(bytes, frontEnd.keyword) }) {
+                let parsed = try RequirementParser.parse(MermaidTextCursor(frontEnd), keywordLength: frontEnd.keyword.count, limits: limits)
+                return .requirement(titled(parsed, frontMatterTitle: frontEnd.frontMatterTitle))
+            }
             return try diagram(named: frontEnd.keywordText, at: MermaidTextCursor(frontEnd), limits: limits, frontMatterTitle: frontEnd.frontMatterTitle)
         default: return try namedDiagram(frontEnd, limits: limits)
         }
@@ -170,7 +176,7 @@ public enum MermaidDiagramReader {
             return .architecture(titled(try ArchitectureParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         // Pele detects any text that starts with `requirement` as a requirement diagram; its lexer then reads the keyword.
         case _ where keyword.hasPrefix("requirement"):
-            return .requirement(titled(try RequirementParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
+            return .requirement(titled(try RequirementParser.parse(cursor, keywordLength: keyword.utf8.count, limits: limits), frontMatterTitle: title))
         case "usecase-beta": return .useCase(titled(try UseCaseParser.parse(keyword: keyword, endingAt: cursor, limits: limits), frontMatterTitle: title))
         case "agentflow-beta": return .agentFlow(titled(try AgentFlowParser.parse(cursor, keyword: keyword, limits: limits), frontMatterTitle: title))
         default: throw .unsupportedDiagramType(keyword: keyword)

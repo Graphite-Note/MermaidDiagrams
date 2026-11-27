@@ -6,7 +6,7 @@
  *              a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -31,9 +31,10 @@ extension MermaidDiagramAccessibility {
     /// test_req”, “test_entity satisfies test_req”.
     init(requirement diagram: RequirementDiagram) {
         self.init(kind: .requirement, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let requirements = diagram.requirements.map { requirement in "\(requirement.kind.rawValue) \(requirement.name)" }
-            let elements = diagram.elements.map { element in "Element \(element.name)" }
-            let relations = diagram.relations.map { relation in "\(relation.source) \(relation.kind.rawValue) \(relation.target)" }
+            let model = diagram.model
+            let requirements = model.requirements.map { record in "\(record.kind.rawValue) \(model.string(record.name))" }
+            let elements = model.elements.map { record in "Element \(model.string(record.name))" }
+            let relations = model.relations.map { record in "\(model.string(record.source)) \(record.kind.rawValue) \(model.string(record.target))" }
             return requirements + elements + relations
         }
     }

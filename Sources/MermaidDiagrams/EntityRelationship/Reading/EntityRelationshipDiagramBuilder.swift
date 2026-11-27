@@ -2,58 +2,44 @@
  * File: EntityRelationshipDiagramBuilder.swift
  * --------------------------------------------
  * Layer: Core
- * Description: Collects an entity relationship diagram as its statements are read, its groups and what they hold, its
- *              names interned from the text's bytes.
+ * Description: Collects an entity relationship diagram's flat records as its statements are read, its groups and what
+ *              they hold, its names interned from the text's bytes, in the thread's reading lists.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 /// Collects an entity relationship diagram as its statements are read: entities by name, added when the statement
-/// that names them is complete, relationships within the limits, and the groups open at each point. Names are byte
-/// ranges of the text, interned (`GraphDiagramNameTable`), so that each is compared as 0.7.0's String keys compared it.
+/// that names them is complete, their attributes in one list with the entity of each, relationships within the limits,
+/// and the groups open at each point. Names are byte ranges of the text, interned (`GraphDiagramNameTable`), so that
+/// each is compared as 0.7.0's String keys compared it; the records keep the ranges, and texts are decoded only when
+/// read (`EntityRelationshipText`).
 struct EntityRelationshipDiagramBuilder {
-    private(set) var diagram = EntityRelationshipDiagram()
     private let limits: MermaidDiagramLimits
-    private let bytes: GraphDiagramBytes
-    private var names: GraphDiagramNameTable
-    /// What each name number names, by the number.
-    private var namedByNumber: [Named] = []
-    /// The `subgraph` groups open now, outermost first: each one's identifier, title, direction and where the names its
-    /// statements write start in `writtenNames`.
-    private var openSubgraphs: [OpenSubgraph] = []
-    /// The names the open groups' statements write, by number, each group's after those of the groups around it.
-    private var writtenNames: [Int32] = []
-    /// For each group that has ended, in that order, the names it holds, by number: `heldNames` from `heldNameStarts`.
-    private var heldNames: [Int32] = []
-    private var heldNameStarts: [Int32] = []
+    let bytes: GraphDiagramBytes
+    /// The name table, the records and the groups' names (`EntityRelationshipReadingLists`).
+    var lists = EntityRelationshipReadingLists()
+    private var direction = FlowchartDirection.topToBottom
+    private var subgraphCount = 0
+    private var accessibilityTitle: String?
+    private var accessibilityDescription: String?
+    private var unappliedStatementCount = 0
 
-    /// What a name names: the entity of that name, the first group to end with it as its identifier, each -1 for none,
-    /// whether a group that has ended holds it, and the last group closing that saw it, so that a group takes a name once.
-    private struct Named {
-        var entityIndex: Int32 = -1
-        var subgraphIndex: Int32 = -1
-        var isClaimed = false
-        var lastClosingThatSawIt: Int32 = -1
-    }
-
-    private struct OpenSubgraph {
-        let identifier: MermaidTextRange
-        let title: DiagramLabel
-        var direction: FlowchartDirection?
-        let firstWrittenName: Int
-    }
-
+    /// A builder with empty lists, which the reading swaps for its thread's (`EntityRelationshipReadingScratch`) before it
+    /// reads, so that they are moved and never copied.
     init(limits: MermaidDiagramLimits, bytes: GraphDiagramBytes) {
         self.limits = limits
         self.bytes = bytes
-        names = GraphDiagramNameTable(isASCII: bytes.isASCII)
+    }
+
+    /// Room for about as many names as the text writes.
+    mutating func reserveNames() {
         let nameCount = min((bytes.buffer.count - bytes.position) / Self.bytesPerName + 4, Self.mostReserved)
-        names.reserveCapacity(nameCount)
-        namedByNumber.reserveCapacity(nameCount)
-        diagram.entities.reserveCapacity(min(nameCount, limits.maximumNodeCount))
-        diagram.relationships.reserveCapacity(min(nameCount, limits.maximumEdgeCount))
+        lists.names.reserveCapacity(nameCount)
+        lists.namedByNumber.reserveCapacity(nameCount)
+        lists.entities.reserveCapacity(min(nameCount, limits.maximumNodeCount))
+        lists.relationships.reserveCapacity(min(nameCount, limits.maximumEdgeCount))
     }
 
     /// About the bytes an entity's name takes with what is written around it.
@@ -63,125 +49,186 @@ struct EntityRelationshipDiagramBuilder {
 
     /// The number of the name `range` spells.
     private mutating func number(of range: MermaidTextRange) -> Int {
-        let (number, isNew) = names.intern(bytes.buffer, range)
-        if isNew { namedByNumber.append(Named()) }
+        let (number, isNew) = lists.names.intern(bytes.buffer, range)
+        if isNew { lists.namedByNumber.append(EntityRelationshipNamed()) }
         return number
     }
 
     /// The index of the entity `name` names, added with its name as its text the first time it is named.
     mutating func entityIndex(for name: EntityRelationshipName) throws(MermaidDiagramReadError) -> Int {
         let number = number(of: name.range)
-        let existing = namedByNumber[number].entityIndex
+        let existing = lists.namedByNumber[number].entityIndex
         if existing >= 0 { return Int(existing) }
-        guard diagram.entities.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        diagram.entities.append(EntityRelationshipEntity(identifier: bytes.text(name.range), label: name.label(in: bytes)))
-        namedByNumber[number].entityIndex = Int32(diagram.entities.count - 1)
-        return diagram.entities.count - 1
+        guard lists.entities.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        lists.entities.append(EntityRelationshipEntityRecord(identifier: name.range, label: EntityRelationshipText(name: name.range, form: name.form)))
+        lists.namedByNumber[number].entityIndex = Int32(lists.entities.count - 1)
+        return lists.entities.count - 1
     }
 
     /// Gives the entity an alias, unless an earlier statement gave it one: Mermaid keeps the first.
     mutating func setAlias(_ alias: EntityRelationshipName, ofEntityAt index: Int) {
-        guard !diagram.entities[index].hasAlias else { return }
-        diagram.entities[index].label = alias.label(in: bytes)
-        diagram.entities[index].hasAlias = true
+        guard !lists.entities[index].hasAlias else { return }
+        lists.entities[index].label = EntityRelationshipText(name: alias.range, form: alias.form)
+        lists.entities[index].hasAlias = true
     }
 
-    /// Adds the rows of one `{ … }` block after those of the entity's earlier blocks.
-    mutating func addAttributes(_ attributes: [EntityRelationshipAttribute], toEntityAt index: Int) {
-        guard !attributes.isEmpty else { return }
-        if diagram.entities[index].attributes.isEmpty {
-            diagram.entities[index].attributes = attributes
-        } else {
-            diagram.entities[index].attributes.append(contentsOf: attributes)
-        }
+    /// Where the next attribute read goes in the attributes' list.
+    var attributeCount: Int { lists.attributes.count }
+
+    /// The attributes read from `first` on, one `{ … }` block's, belong to the entity at `index`, after those of its
+    /// earlier blocks.
+    mutating func giveAttributes(from first: Int, toEntityAt index: Int) {
+        let count = lists.attributes.count - first
+        guard count > 0 else { return }
+        lists.attributeOwners.append(contentsOf: repeatElement(Int32(index), count: count))
+        lists.entities[index].attributeCount += Int32(count)
     }
 
-    mutating func addRelationship(_ relationship: EntityRelationship) throws(MermaidDiagramReadError) {
-        guard diagram.relationships.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-        diagram.relationships.append(relationship)
+    mutating func addRelationship(_ relationship: EntityRelationshipRelationshipRecord) throws(MermaidDiagramReadError) {
+        guard lists.relationships.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+        lists.relationships.append(relationship)
     }
 
     /// A `direction` inside a group sets the group's direction; outside, the diagram's.
     mutating func setDirection(_ direction: FlowchartDirection) {
-        guard !openSubgraphs.isEmpty else {
-            diagram.direction = direction
+        guard !lists.openGroups.isEmpty else {
+            self.direction = direction
             return
         }
-        openSubgraphs[openSubgraphs.count - 1].direction = direction
+        lists.openGroups[lists.openGroups.count - 1].direction = direction
     }
 
     mutating func openSubgraph(identifier: MermaidTextRange, title: DiagramLabel) {
-        openSubgraphs.append(OpenSubgraph(identifier: identifier, title: title, firstWrittenName: writtenNames.count))
-        diagram.subgraphCount += 1
+        lists.labels.append(title)
+        lists.openGroups.append(EntityRelationshipOpenGroup(identifier: identifier, title: Int32(lists.labels.count - 1),
+                                                            firstWrittenName: lists.writtenNames.count))
+        subgraphCount += 1
     }
 
     /// Records that the innermost open group's statements write the two names a relationship writes; nothing when no
     /// group is open, as in most diagrams.
     mutating func noteNamesInOpenSubgraph(_ first: MermaidTextRange, _ second: MermaidTextRange) {
-        guard !openSubgraphs.isEmpty else { return }
-        writtenNames.append(Int32(number(of: first)))
-        writtenNames.append(Int32(number(of: second)))
+        guard !lists.openGroups.isEmpty else { return }
+        lists.writtenNames.append(Int32(number(of: first)))
+        lists.writtenNames.append(Int32(number(of: second)))
     }
 
     /// Records that the innermost open group's statements write `name`.
     mutating func noteNameInOpenSubgraph(_ name: MermaidTextRange) {
-        guard !openSubgraphs.isEmpty else { return }
-        writtenNames.append(Int32(number(of: name)))
+        guard !lists.openGroups.isEmpty else { return }
+        lists.writtenNames.append(Int32(number(of: name)))
     }
 
     /// Closes the innermost group, which takes the names it writes that no group ended before it holds, and is a name
     /// written in the group around it; false when none is open.
     mutating func closeSubgraph() -> Bool {
-        guard let closed = openSubgraphs.popLast() else { return false }
-        let closing = Int32(diagram.subgraphs.count)
-        heldNameStarts.append(Int32(heldNames.count))
-        for name in writtenNames[closed.firstWrittenName...] {
+        guard let closed = lists.openGroups.popLast() else { return false }
+        let closing = Int32(lists.groups.count)
+        lists.heldNameStarts.append(Int32(lists.heldNames.count))
+        for position in closed.firstWrittenName..<lists.writtenNames.count {
+            let name = lists.writtenNames[position]
             let index = Int(name)
-            guard namedByNumber[index].lastClosingThatSawIt != closing, !namedByNumber[index].isClaimed else { continue }
-            namedByNumber[index].lastClosingThatSawIt = closing
-            heldNames.append(name)
+            guard lists.namedByNumber[index].lastClosingThatSawIt != closing, !lists.namedByNumber[index].isClaimed else { continue }
+            lists.namedByNumber[index].lastClosingThatSawIt = closing
+            lists.heldNames.append(name)
         }
-        for name in heldNames[Int(heldNameStarts[heldNameStarts.count - 1])...] { namedByNumber[Int(name)].isClaimed = true }
-        writtenNames.removeSubrange(closed.firstWrittenName...)
+        for position in Int(lists.heldNameStarts[lists.heldNameStarts.count - 1])..<lists.heldNames.count {
+            lists.namedByNumber[Int(lists.heldNames[position])].isClaimed = true
+        }
+        lists.writtenNames.removeSubrange(closed.firstWrittenName...)
         let identifierNumber = number(of: closed.identifier)
-        if namedByNumber[identifierNumber].subgraphIndex < 0 { namedByNumber[identifierNumber].subgraphIndex = closing }
-        diagram.subgraphs.append(EntityRelationshipSubgraph(identifier: bytes.text(closed.identifier), title: closed.title, direction: closed.direction))
+        if lists.namedByNumber[identifierNumber].subgraphIndex < 0 { lists.namedByNumber[identifierNumber].subgraphIndex = closing }
+        lists.groups.append(EntityRelationshipGroupRecord(identifier: closed.identifier, title: closed.title, direction: closed.direction))
         noteNameInOpenSubgraph(closed.identifier)
         return true
     }
 
     /// The identifier of the innermost group still open, or nil.
     var innermostOpenSubgraphIdentifier: String? {
-        openSubgraphs.last.map { open in bytes.text(open.identifier) }
-    }
-
-    /// The diagram, each group holding the entities and groups its names name.
-    func finished() -> EntityRelationshipDiagram {
-        guard !heldNameStarts.isEmpty else { return diagram }
-        var finished = diagram
-        for index in heldNameStarts.indices {
-            let end = index + 1 < heldNameStarts.count ? Int(heldNameStarts[index + 1]) : heldNames.count
-            for name in heldNames[Int(heldNameStarts[index])..<end] {
-                let named = namedByNumber[Int(name)]
-                if named.subgraphIndex >= 0, Int(named.subgraphIndex) != index {
-                    finished.subgraphs[index].childSubgraphIndices.append(Int(named.subgraphIndex))
-                } else if named.entityIndex >= 0 {
-                    finished.subgraphs[index].entityIndices.append(Int(named.entityIndex))
-                }
-            }
-        }
-        return finished
+        lists.openGroups.last.map { open in bytes.text(open.identifier) }
     }
 
     mutating func setAccessibilityTitle(_ title: String) {
-        diagram.accessibilityTitle = title
+        accessibilityTitle = title
     }
 
     mutating func setAccessibilityDescription(_ description: String) {
-        diagram.accessibilityDescription = description
+        accessibilityDescription = description
     }
 
     mutating func countUnappliedStatement() {
-        diagram.unappliedStatementCount += 1
+        unappliedStatementCount += 1
+    }
+
+    /// The diagram over `text`, the bytes the builder read, which the model keeps.
+    func finished(text: [UInt8]) -> EntityRelationshipDiagram {
+        var model = EntityRelationshipModel()
+        model.text = text
+        model.entities = Self.exactCopy(lists.entities)
+        model.relationships = Self.exactCopy(lists.relationships)
+        if !lists.attributes.isEmpty { gatherAttributes(into: &model) }
+        if !lists.groups.isEmpty { gatherGroups(into: &model) }
+        return EntityRelationshipDiagram(direction: direction, taking: &model, subgraphCount: subgraphCount, accessibilityTitle: accessibilityTitle,
+                                         accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
+    }
+
+    /// Each entity's attributes, in the order read, as one run of `attributes`: counted, then placed, each entity's
+    /// count counting the attributes placed so far while they are placed.
+    private func gatherAttributes(into model: inout EntityRelationshipModel) {
+        var start: Int32 = 0
+        for index in model.entities.indices {
+            model.entities[index].firstAttribute = start
+            start += model.entities[index].attributeCount
+            model.entities[index].attributeCount = 0
+        }
+        let attributes = lists.attributes
+        let owners = lists.attributeOwners
+        model.attributes = [EntityRelationshipAttributeRecord](unsafeUninitializedCapacity: attributes.count) { buffer, count in
+            model.entities.withUnsafeMutableBufferPointer { entities in
+                for position in attributes.indices {
+                    let owner = Int(owners[position])
+                    buffer.initializeElement(at: Int(entities[owner].firstAttribute + entities[owner].attributeCount), to: attributes[position])
+                    entities[owner].attributeCount += 1
+                }
+            }
+            count = attributes.count
+        }
+        model.keys = Self.exactCopy(lists.keys)
+    }
+
+    /// Each group holding the entities and groups its names name, the entities then the groups in one run of `members`,
+    /// the groups' titles, and the group each entity stands for: the first to end with its name as identifier.
+    private func gatherGroups(into model: inout EntityRelationshipModel) {
+        model.groups = Self.exactCopy(lists.groups)
+        model.labels = lists.labels
+        model.representedGroups = [Int32](repeating: -1, count: model.entities.count)
+        for named in lists.namedByNumber where named.entityIndex >= 0 && named.subgraphIndex >= 0 {
+            model.representedGroups[Int(named.entityIndex)] = named.subgraphIndex
+        }
+        for index in lists.heldNameStarts.indices {
+            let end = index + 1 < lists.heldNameStarts.count ? Int(lists.heldNameStarts[index + 1]) : lists.heldNames.count
+            let held = Int(lists.heldNameStarts[index])..<end
+            model.groups[index].firstMember = Int32(model.members.count)
+            for position in held {
+                let named = lists.namedByNumber[Int(lists.heldNames[position])]
+                if !(named.subgraphIndex >= 0 && Int(named.subgraphIndex) != index), named.entityIndex >= 0 { model.members.append(named.entityIndex) }
+            }
+            model.groups[index].entityCount = Int32(model.members.count) - model.groups[index].firstMember
+            for position in held {
+                let named = lists.namedByNumber[Int(lists.heldNames[position])]
+                if named.subgraphIndex >= 0, Int(named.subgraphIndex) != index { model.members.append(named.subgraphIndex) }
+            }
+            model.groups[index].childCount = Int32(model.members.count) - model.groups[index].firstMember - model.groups[index].entityCount
+        }
+    }
+
+    /// A list of exactly `list`'s elements, made for the model to keep: an empty list makes nothing.
+    @inline(__always)
+    static func exactCopy<Element>(_ list: [Element]) -> [Element] {
+        guard !list.isEmpty else { return [] }
+        return [Element](unsafeUninitializedCapacity: list.count) { buffer, initializedCount in
+            _ = buffer.initialize(from: list)
+            initializedCount = list.count
+        }
     }
 }

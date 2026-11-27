@@ -6,8 +6,8 @@
  *              or in any kind a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -108,19 +108,25 @@ struct EntityRelationshipPaths<Path: DiagramPathRecording> {
         markFills = maker.makePath()
         markOutlines = maker.makePath()
         labelPatches = maker.makePath()
-        for relationship in layout.relationships {
+        for relationship in layout.placedRelationships {
             let madeCount = maker.madePathCount
             let line = maker.makePath()
-            DiagramEdgeDrawing.record(relationship.path, into: line)
+            line.move(to: relationship.start)
+            for segment in layout.segments[relationship.segmentIndices] {
+                switch segment {
+                case .line(let end): line.addLine(to: end)
+                case .curve(let end, let firstControl, let secondControl): line.addCurve(to: end, control1: firstControl, control2: secondControl)
+                }
+            }
             switch relationship.identification {
             case .identifying: identifyingLines.addPath(line)
             case .nonIdentifying: nonIdentifyingLines.addPath(line)
             }
             EntityRelationshipCardinalityDrawing.addMark(relationship.firstEntityMark, fills: markFills, outlines: markOutlines)
             EntityRelationshipCardinalityDrawing.addMark(relationship.secondEntityMark, fills: markFills, outlines: markOutlines)
-            if let label = relationship.label {
+            if relationship.hasLabel {
                 let radius = EntityRelationshipDrawingParts.labelPatchCornerRadius
-                labelPatches.addPath(maker.roundedRectangle(label.frame.insetBy(dx: -EntityRelationshipDrawingParts.labelPatchExtraWidth / 2, dy: 0),
+                labelPatches.addPath(maker.roundedRectangle(relationship.label.frame.insetBy(dx: -EntityRelationshipDrawingParts.labelPatchExtraWidth / 2, dy: 0),
                                                             cornerWidth: radius, cornerHeight: radius))
             }
             maker.givePathsBack(downTo: madeCount)
@@ -128,24 +134,26 @@ struct EntityRelationshipPaths<Path: DiagramPathRecording> {
         boxFills = maker.makePath()
         rowStripes = maker.makePath()
         boxOutlines = maker.makePath()
-        Self.addBoxes(of: layout.entities, fills: boxFills, stripes: rowStripes, outlines: boxOutlines, making: maker)
+        Self.addBoxes(of: layout, fills: boxFills, stripes: rowStripes, outlines: boxOutlines, making: maker)
     }
 
     /// The boxes to fill, the rows striped over them, and their outlines and header dividers.
-    private static func addBoxes<Maker: DiagramPathMaking>(of entities: [EntityRelationshipLayoutEntity], fills: Path, stripes: Path, outlines: Path,
+    private static func addBoxes<Maker: DiagramPathMaking>(of layout: EntityRelationshipLayout, fills: Path, stripes: Path, outlines: Path,
                                                            making maker: Maker) where Maker.Path == Path {
         let radius = EntityRelationshipDrawingParts.boxCornerRadius
-        for entity in entities {
+        for entity in layout.placedEntities {
             let madeCount = maker.madePathCount
             defer { maker.givePathsBack(downTo: madeCount) }
             fills.addPath(maker.roundedRectangle(entity.frame, cornerWidth: radius, cornerHeight: radius), alsoTo: outlines)
-            if let firstRow = entity.rows.first {
+            let rows = entity.rowIndices
+            if !rows.isEmpty {
+                let firstRow = layout.placedRows[rows.lowerBound]
                 outlines.move(to: CGPoint(x: entity.frame.minX, y: firstRow.frame.minY))
                 outlines.addLine(to: CGPoint(x: entity.frame.maxX, y: firstRow.frame.minY))
             }
-            for (index, row) in entity.rows.enumerated() where index.isMultiple(of: 2) {
-                let frame = row.frame
-                guard index == entity.rows.count - 1 else {
+            for (index, rowIndex) in rows.enumerated() where index.isMultiple(of: 2) {
+                let frame = layout.placedRows[rowIndex].frame
+                guard index == rows.count - 1 else {
                     stripes.addRect(frame)
                     continue
                 }

@@ -2,12 +2,13 @@
  * File: ReferenceEntityRelationshipDiagramBuilder.swift
  * -----------------------------------------------------
  * Layer: Tests
- * Description: 0.7.0's EntityRelationshipDiagramBuilder, kept unchanged but for its names as the reference the entity
+ * Description: 0.7.0's EntityRelationshipDiagramBuilder, kept unchanged but for its names, and for the values it builds
+ *              into, 0.7.0's diagram's lists, which make the diagram when it is finished, as the reference the entity
  *              relationship reader on bytes is compared with (EntityRelationshipReadingEquivalenceTests).
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 @testable import MermaidDiagrams
@@ -15,7 +16,7 @@
 /// Collects an entity relationship diagram as its statements are read: entities by name, added when the statement
 /// that names them is complete, relationships within the limits, and the groups open at each point.
 struct ReferenceEntityRelationshipDiagramBuilder {
-    private(set) var diagram = EntityRelationshipDiagram()
+    private(set) var diagram = ReferenceEntityRelationshipDiagramValues()
     private let limits: MermaidDiagramLimits
     private var entityIndexByIdentifier: [String: Int] = [:]
     /// The `subgraph` groups open now, outermost first: each one's identifier, title, direction and the names its
@@ -122,7 +123,7 @@ struct ReferenceEntityRelationshipDiagramBuilder {
                 }
             }
         }
-        return finished
+        return finished.made
     }
 
     mutating func setAccessibilityTitle(_ title: String) {
@@ -135,5 +136,23 @@ struct ReferenceEntityRelationshipDiagramBuilder {
 
     mutating func countUnappliedStatement() {
         diagram.unappliedStatementCount += 1
+    }
+}
+
+/// 0.7.0's entity relationship diagram as the lists the reference builds, made into the diagram when it is finished.
+struct ReferenceEntityRelationshipDiagramValues {
+    var direction = FlowchartDirection.topToBottom
+    var entities: [EntityRelationshipEntity] = []
+    var relationships: [EntityRelationship] = []
+    var subgraphCount = 0
+    var subgraphs: [EntityRelationshipSubgraph] = []
+    var accessibilityTitle: String?
+    var accessibilityDescription: String?
+    var unappliedStatementCount = 0
+
+    var made: EntityRelationshipDiagram {
+        EntityRelationshipDiagram(direction: direction, entities: entities, relationships: relationships, subgraphs: subgraphs, subgraphCount: subgraphCount,
+                                  accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription,
+                                  unappliedStatementCount: unappliedStatementCount)
     }
 }

@@ -2,41 +2,80 @@
  * File: RequirementDiagram.swift
  * ------------------------------
  * Layer: Core
- * Description: A Mermaid requirement diagram as its text describes it: requirements, elements, the relations between
- *              them, the styles and classes written for them, and the direction.
+ * Description: A Mermaid requirement diagram as its text describes it, over the flat records its reading made:
+ *              requirements, elements, the relations between them, the styles and classes written for them, and the
+ *              direction, made into values when a host reads them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// A requirement diagram (`requirementDiagram`) as Mermaid's database holds it: the requirements and the elements in the
 /// order they are first declared (a name declared again keeps its first declaration), the relations in the order they are
 /// written, whether or not they name anything declared, and the style classes.
+///
+/// The diagram keeps the flat records its reading made (`RequirementModel`): `requirements`, `elements`, `relations` and
+/// `styleClasses` are made from them each time they are read, so a loop over a diagram's requirements reads
+/// `requirementCount` and `requirement(at:)` instead.
 public struct RequirementDiagram: Equatable, Sendable {
     /// `direction TB`, `BT`, `LR` or `RL`; top to bottom by default.
     public internal(set) var direction: FlowchartDirection
-    public internal(set) var requirements: [RequirementDiagramRequirement]
-    public internal(set) var elements: [RequirementDiagramElement]
-    public internal(set) var relations: [RequirementDiagramRelation]
-    /// The `classDef` classes, in the order they are first defined.
-    public internal(set) var styleClasses: [RequirementDiagramStyleClass]
+    /// The requirements, elements, relations and classes, as the reading made them.
+    private(set) var model: RequirementModel
     /// The front matter's `title:`, or nil: the grammar has no `title` statement.
     public internal(set) var title: String?
     public internal(set) var accessibilityTitle: String?
     public internal(set) var accessibilityDescription: String?
 
-    init(direction: FlowchartDirection = .topToBottom, requirements: [RequirementDiagramRequirement] = [], elements: [RequirementDiagramElement] = [],
-         relations: [RequirementDiagramRelation] = [], styleClasses: [RequirementDiagramStyleClass] = [], title: String? = nil,
+    init(direction: FlowchartDirection = .topToBottom, model: RequirementModel = RequirementModel(), title: String? = nil,
          accessibilityTitle: String? = nil, accessibilityDescription: String? = nil) {
         self.direction = direction
-        self.requirements = requirements
-        self.elements = elements
-        self.relations = relations
-        self.styleClasses = styleClasses
+        self.model = model
         self.title = title
         self.accessibilityTitle = accessibilityTitle
         self.accessibilityDescription = accessibilityDescription
+    }
+
+    /// A diagram of the model the reading made, moved out of `model` by swapping, which is left empty: the model's lists
+    /// keep their single owner, so that no list is copied or retained.
+    init(direction: FlowchartDirection, taking model: inout RequirementModel, accessibilityTitle: String?, accessibilityDescription: String?) {
+        self.init(direction: direction, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
+        swap(&self.model, &model)
+    }
+
+    init(direction: FlowchartDirection = .topToBottom, requirements: [RequirementDiagramRequirement], elements: [RequirementDiagramElement] = [],
+         relations: [RequirementDiagramRelation] = [], styleClasses: [RequirementDiagramStyleClass] = [], title: String? = nil,
+         accessibilityTitle: String? = nil, accessibilityDescription: String? = nil) {
+        self.init(direction: direction, model: RequirementModel(requirements: requirements, elements: elements, relations: relations, styleClasses: styleClasses),
+                  title: title, accessibilityTitle: accessibilityTitle, accessibilityDescription: accessibilityDescription)
+    }
+
+    /// The requirements in the order they are first declared, made from the model on each read.
+    public var requirements: [RequirementDiagramRequirement] { (0..<requirementCount).map(model.requirement(at:)) }
+    /// The elements in the order they are first declared, made from the model on each read.
+    public var elements: [RequirementDiagramElement] { (0..<elementCount).map(model.element(at:)) }
+    /// The relations in the order they are written, made from the model on each read.
+    public var relations: [RequirementDiagramRelation] { (0..<relationCount).map(model.relation(at:)) }
+    /// The `classDef` classes, in the order they are first defined, made from the model on each read.
+    public var styleClasses: [RequirementDiagramStyleClass] { model.styleClasses.indices.map(model.styleClass(at:)) }
+
+    public var requirementCount: Int { model.requirementCount }
+    public var elementCount: Int { model.elementCount }
+    public var relationCount: Int { model.relations.count }
+
+    public func requirement(at index: Int) -> RequirementDiagramRequirement { model.requirement(at: index) }
+    public func element(at index: Int) -> RequirementDiagramElement { model.element(at: index) }
+    public func relation(at index: Int) -> RequirementDiagramRelation { model.relation(at: index) }
+
+    /// Diagrams are equal when they read the same: the same requirements, elements, relations, classes, direction and
+    /// texts, whatever text their models index.
+    public static func == (left: RequirementDiagram, right: RequirementDiagram) -> Bool {
+        left.direction == right.direction && left.title == right.title && left.accessibilityTitle == right.accessibilityTitle
+            && left.accessibilityDescription == right.accessibilityDescription && left.requirementCount == right.requirementCount
+            && left.elementCount == right.elementCount && left.relationCount == right.relationCount
+            && left.model.styleClasses.count == right.model.styleClasses.count && left.requirements == right.requirements
+            && left.elements == right.elements && left.relations == right.relations && left.styleClasses == right.styleClasses
     }
 }
 
@@ -103,7 +142,7 @@ public enum RequirementVerificationMethod: String, Equatable, Sendable, CaseIter
 }
 
 /// What a relation says, by the word written, which the relation's text draws in guillemets.
-public enum RequirementRelationKind: String, Equatable, Sendable, CaseIterable {
+public enum RequirementRelationKind: String, Equatable, Sendable, CaseIterable, BitwiseCopyable {
     case contains, copies, derives, satisfies, verifies, refines, traces
 }
 

@@ -8,7 +8,7 @@
  *              accessibility text and scene text the same to the byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
+ * Version: 0.5
  * Date: 26/11/2026
  */
 
@@ -22,12 +22,14 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
     /// Every input of every corpus prepared with its texts measured from their written bytes, against prepared as it is:
     /// the digest's line of each (its SVG, the palette's SVG, its spoken texts and its narrow scenes' SVGs) and the lines
     /// of each text of its scene the same.
-    /// The graph types whose layouts give their scenes blocks, and those whose layouts measure their texts themselves
-    /// (`DiagramMeasuredText`).
+    /// The graph types whose layouts measure their texts themselves (`DiagramMeasuredText`); none gives its scenes blocks
+    /// of its own any more.
     /// State and class diagrams measure their texts too: their scenes are given no block but their boxes' titles
     /// (GraphBoxTitleSceneTextTests).
-    private static let graphCorporaGivingBlocks = ["er-docs"]
     private static let graphCorporaMeasuringTheirTexts = ["requirement-docs", "c4-docs"]
+    /// The graph types whose layouts measure their texts themselves but give their groups' titles, a flowchart's cluster
+    /// blocks, to their scenes as blocks: their inputs without groups give their scenes no block at all.
+    private static let graphCorporaMeasuringTheirTextsButGroupTitles = ["er-docs"]
 
     func testEveryCorpusSceneBuiltFromWrittenBytesIsTheSame() throws {
         let typography = DiagramTypography(font: DiagramFont(postScriptName: nil, size: 16))
@@ -35,12 +37,23 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
         var differences: [String] = []
         var inputCount = 0
         var countsByCorpus: [String: (substituted: Int, fromLabels: Int, kept: Int)] = [:]
+        var blockedInputsWithoutGroups: [String] = []
+        var inputsWithoutGroupsCount = 0
         for (corpus, sources) in try OutputDigest.corpora() {
             let before = (remeasuring.substitutedCount, remeasuring.fromLabelCount, remeasuring.keptCount)
             defer {
                 countsByCorpus[corpus] = (remeasuring.substitutedCount - before.0, remeasuring.fromLabelCount - before.1, remeasuring.keptCount - before.2)
             }
             for (index, source) in sources.enumerated() {
+                let blocksBefore = remeasuring.substitutedCount + remeasuring.fromLabelCount + remeasuring.keptCount
+                defer {
+                    if Self.graphCorporaMeasuringTheirTextsButGroupTitles.contains(corpus), Self.hasNoGroup(source) {
+                        inputsWithoutGroupsCount += 1
+                        if remeasuring.substitutedCount + remeasuring.fromLabelCount + remeasuring.keptCount != blocksBefore {
+                            blockedInputsWithoutGroups.append("\(corpus) \(index)")
+                        }
+                    }
+                }
                 let expected = OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: OutputDigest.narrowColumnWidths)
                 let expectedLines = Self.sceneLines(source, typography: typography)
                 let outcome = remeasuring.whileSubstituting {
@@ -60,19 +73,21 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
         XCTAssertGreaterThan(remeasuring.substitutedCount, 28_000, "texts drawn from their written bytes")
         XCTAssertGreaterThan(remeasuring.substitutedCount + remeasuring.fromLabelCount, 4 * remeasuring.keptCount, "texts drawn from measured texts")
         XCTAssertGreaterThan(remeasuring.brokenCount, 50, "texts broken between characters drawn from their written bytes")
-        // The graph types that still give their scenes blocks: every one has texts drawn from their written bytes, and most
-        // of the rest from their labels.
-        for corpus in Self.graphCorporaGivingBlocks {
-            let counts = countsByCorpus[corpus] ?? (0, 0, 0)
-            XCTAssertGreaterThan(counts.substituted, 100, "\(corpus): \(counts.substituted) texts drawn from their bytes")
-            XCTAssertGreaterThan(counts.substituted + counts.fromLabels, 2 * counts.kept, "\(corpus): \(counts) kept")
-        }
         // Those whose layouts measure their texts themselves give their scenes no block at all.
         for corpus in Self.graphCorporaMeasuringTheirTexts {
             let counts = countsByCorpus[corpus] ?? (-1, -1, -1)
             XCTAssertTrue(counts == (0, 0, 0), "\(corpus): \(counts) blocks given to its scenes")
         }
+        // Those that give their groups' titles alone: an input without groups gives its scenes no block.
+        XCTAssertEqual(blockedInputsWithoutGroups, [], "inputs without groups that gave their scenes blocks")
+        XCTAssertGreaterThan(inputsWithoutGroupsCount, 15)
         print(countsByCorpus.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))
+    }
+
+    /// Whether `source` reads as an entity relationship diagram without groups.
+    private static func hasNoGroup(_ source: String) -> Bool {
+        guard case .entityRelationship(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else { return false }
+        return diagram.subgraphCount == 0
     }
 
     /// The lines of each text of the input's regular scene, or none when it is refused.

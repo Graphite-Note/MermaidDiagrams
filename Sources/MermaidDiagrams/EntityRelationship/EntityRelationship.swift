@@ -1,3 +1,15 @@
+/**
+ * File: EntityRelationship.swift
+ * ------------------------------
+ * Layer: Core
+ * Description: A relationship of an entity relationship diagram as a host reads it, its cardinalities and whether it
+ *              identifies, the two kept as plain values the layout's records hold.
+ *
+ * Authors: Félix Chevalier, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 /// A relationship between two entities (`CUSTOMER ||--o{ ORDER : places`), from the entity written first to the
 /// entity written second, which may be the same one.
 public struct EntityRelationship: Equatable, Sendable {
@@ -29,7 +41,7 @@ public struct EntityRelationship: Equatable, Sendable {
 /// How many instances of the entity at one end of a relationship relate to one instance of the entity at the other
 /// end, drawn in crow's foot notation where the line meets that end's box. Each is written with symbols on either
 /// side of the line (`|o` or `o|`) or with words.
-public enum EntityRelationshipCardinality: Equatable, Sendable, CaseIterable {
+public enum EntityRelationshipCardinality: Equatable, Sendable, CaseIterable, BitwiseCopyable {
     /// `|o`, `o|`, `zero or one`, `one or zero`.
     case zeroOrOne
     /// `||`, `one`, `only one`, `1`.
@@ -43,7 +55,7 @@ public enum EntityRelationshipCardinality: Equatable, Sendable, CaseIterable {
 }
 
 /// Whether the entity at one end cannot exist without the other.
-public enum EntityRelationshipIdentification: Equatable, Sendable, CaseIterable {
+public enum EntityRelationshipIdentification: Equatable, Sendable, CaseIterable, BitwiseCopyable {
     /// `--` or `to`: drawn as a solid line.
     case identifying
     /// `..`, `.-`, `-.` or `optionally to`: both entities exist on their own; drawn as a dashed line.

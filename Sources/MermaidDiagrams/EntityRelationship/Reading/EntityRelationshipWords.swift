@@ -3,11 +3,11 @@
  * -----------------------------------
  * Layer: Core
  * Description: The words and symbols Mermaid's entity relationship lexer reads as cardinalities, lines and keywords
- *              wherever they stand, found on the text's borrowed bytes by their first byte.
+ *              wherever they stand, found on the text's borrowed bytes by their first byte and compared with literals.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// The words and symbols that Mermaid's entity relationship lexer reads as cardinalities, lines and statement keywords
@@ -63,30 +63,61 @@ enum EntityRelationshipWords {
     ]
 
     /// Reads the first entry that matches at the cursor and returns its token, or nil when none does. `u` before `.`,
-    /// `-` or `|` is the parent cardinality; the character after it stays for the line.
+    /// `-` or `|` is the parent cardinality; the character after it stays for the line. The entries that start with the
+    /// cursor's byte are tried in their order (`entries`), each compared with a literal of its word.
     static func readToken(_ bytes: inout GraphDiagramBytes) -> EntityRelationshipToken? {
         guard let first = bytes.peek().map(MermaidByte.lowercased) else { return nil }
         if first == letterU, let next = bytes.peek(1), next == MermaidByte.period || next == MermaidByte.hyphen || next == MermaidByte.verticalBar {
             bytes.advance()
             return .cardinality(.parent)
         }
-        guard first < 0x80, case let candidates = entryIndicesByFirstByte[Int(first)], !candidates.isEmpty else { return nil }
-        for index in candidates where bytes.hasCaseInsensitivePrefix(entries[index].word) {
-            let entry = entries[index]
-            if entry.endsAtWordBoundary, let next = bytes.peek(entry.word.count), isWordByte(next) { continue }
-            bytes.advance(by: entry.word.count)
-            return entry.token
+        switch first {
+        case UInt8(ascii: "e"):
+            return read("erdiagram", .keyword(.diagram), true, &bytes) ?? read("end", .keyword(.end), true, &bytes)
+        case UInt8(ascii: "s"):
+            return read("style", .keyword(.style), true, &bytes) ?? read("subgraph", .keyword(.subgraph), true, &bytes)
+        case UInt8(ascii: "c"):
+            return read("classdef", .keyword(.classDefinition), true, &bytes) ?? read("class", .keyword(.classAssignment), true, &bytes)
+        case UInt8(ascii: "o"): return readStartingWithO(&bytes)
+        case UInt8(ascii: "z"):
+            return read("zero or one", .cardinality(.zeroOrOne), true, &bytes) ?? read("zero or more", .cardinality(.zeroOrMore), true, &bytes)
+                ?? read("zero or many", .cardinality(.zeroOrMore), true, &bytes)
+        case UInt8(ascii: "m"):
+            return read("many(0)", .cardinality(.zeroOrMore), false, &bytes) ?? read("many(1)", .cardinality(.oneOrMore), false, &bytes)
+                ?? read("many", .cardinality(.zeroOrMore), true, &bytes)
+        case UInt8(ascii: "t"): return read("to", .identification(.identifying), true, &bytes)
+        case MermaidByte.verticalBar:
+            return read("|o", .cardinality(.zeroOrOne), true, &bytes) ?? read("||", .cardinality(.exactlyOne), false, &bytes)
+                ?? read("|{", .cardinality(.oneOrMore), false, &bytes)
+        case MermaidByte.closingBrace:
+            return read("}o", .cardinality(.zeroOrMore), true, &bytes) ?? read("}|", .cardinality(.oneOrMore), false, &bytes)
+        case MermaidByte.period:
+            return read("..", .identification(.nonIdentifying), false, &bytes) ?? read(".-", .identification(.nonIdentifying), false, &bytes)
+        case MermaidByte.hyphen:
+            return read("--", .identification(.identifying), false, &bytes) ?? read("-.", .identification(.nonIdentifying), false, &bytes)
+        default: return nil
         }
-        return nil
     }
 
-    /// The indexes of `entries` by their word's first byte, in their order, so that a name's first byte is looked up
-    /// once instead of compared with every entry.
-    private static let entryIndicesByFirstByte: [[Int]] = {
-        var indices = [[Int]](repeating: [], count: 128)
-        for (index, entry) in entries.enumerated() { indices[Int(entry.word[0])].append(index) }
-        return indices
-    }()
+    /// The entries that start with `o`, in their order.
+    private static func readStartingWithO(_ bytes: inout GraphDiagramBytes) -> EntityRelationshipToken? {
+        read("one or zero", .cardinality(.zeroOrOne), true, &bytes) ?? read("one or more", .cardinality(.oneOrMore), true, &bytes)
+            ?? read("one or many", .cardinality(.oneOrMore), true, &bytes) ?? read("one", .cardinality(.exactlyOne), true, &bytes)
+            ?? read("only one", .cardinality(.exactlyOne), true, &bytes) ?? read("o|", .cardinality(.zeroOrOne), false, &bytes)
+            ?? read("o{", .cardinality(.zeroOrMore), false, &bytes) ?? read("optionally to", .identification(.nonIdentifying), true, &bytes)
+    }
+
+    /// `token` when `word` (lowercase) is written at the cursor in any case, and, when `endsAtWordBoundary`, no letter,
+    /// digit or `_` follows it: the cursor then moves past it. Nil otherwise, the cursor left.
+    @inline(__always)
+    private static func read(_ word: StaticString, _ token: EntityRelationshipToken, _ endsAtWordBoundary: Bool,
+                             _ bytes: inout GraphDiagramBytes) -> EntityRelationshipToken? {
+        guard bytes.hasCaseInsensitivePrefix(word) else { return nil }
+        let count = word.utf8CodeUnitCount
+        if endsAtWordBoundary, let next = bytes.peek(count), isWordByte(next) { return nil }
+        bytes.advance(by: count)
+        return token
+    }
 
     /// A letter, a digit or `_`: what a word boundary has on one side only.
     static func isWordByte(_ byte: UInt8) -> Bool {
