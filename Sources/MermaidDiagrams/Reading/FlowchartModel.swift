@@ -4,11 +4,12 @@
  * Layer: Core
  * Description: A flowchart read into flat lists of small records whose names and texts are ranges of the text read:
  *              two lists for the usual diagram, its nodes and its edges, and one box for what few flowcharts have
- *              (groups, labels decoded while reading, icons and pictures, styles).
+ *              (groups, labels decoded while reading, icons and pictures, styles), all kept in one box so that the model
+ *              copies as one reference.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// The text of a node, an edge or a group, by reference: none; the range that is the label's one line, trimmed and
@@ -104,12 +105,20 @@ final class FlowchartModelExtras: Sendable {
     }
 }
 
-/// A flowchart as flat lists, over the text it was read from: the usual diagram is its nodes and its edges.
+/// A flowchart as flat lists, over the text it was read from: the usual diagram is its nodes and its edges. The lists
+/// and the text are kept in one box that nothing changes once made (`FlowchartModelStorage`), so that a flowchart, which
+/// its reading, its preparation and its layout hand on by value, copies as one reference.
 struct FlowchartModel: Sendable {
-    var text: MermaidSourceText
-    var nodes: [FlowchartNodeRecord]
-    var edges: [FlowchartEdgeRecord]
-    var extras: FlowchartModelExtras?
+    private let storage: FlowchartModelStorage
+
+    init(text: MermaidSourceText, nodes: [FlowchartNodeRecord], edges: [FlowchartEdgeRecord], extras: FlowchartModelExtras?) {
+        storage = FlowchartModelStorage(text: text, nodes: nodes, edges: edges, extras: extras)
+    }
+
+    var text: MermaidSourceText { storage.text }
+    var nodes: [FlowchartNodeRecord] { storage.nodes }
+    var edges: [FlowchartEdgeRecord] { storage.edges }
+    var extras: FlowchartModelExtras? { storage.extras }
 
     /// The text of `range`: of the text read, or of the side bytes when its start is negative.
     func string(_ range: MermaidTextRange) -> String {
@@ -144,5 +153,20 @@ struct FlowchartModel: Sendable {
     /// The identifier of the group at `index`.
     func groupIdentifier(_ group: FlowchartGroupRecord) -> String {
         group.generatedNumber >= 0 ? "subGraph\(group.generatedNumber)" : string(group.identifier)
+    }
+}
+
+/// What a flowchart's model holds, made once and only read after.
+final class FlowchartModelStorage: Sendable {
+    let text: MermaidSourceText
+    let nodes: [FlowchartNodeRecord]
+    let edges: [FlowchartEdgeRecord]
+    let extras: FlowchartModelExtras?
+
+    init(text: MermaidSourceText, nodes: [FlowchartNodeRecord], edges: [FlowchartEdgeRecord], extras: FlowchartModelExtras?) {
+        self.text = text
+        self.nodes = nodes
+        self.edges = edges
+        self.extras = extras
     }
 }

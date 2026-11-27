@@ -3,11 +3,12 @@
  * ---------------------------------
  * Layer: Core
  * Description: A laid-out flowchart's edges and nodes of the usual look grouped by how they are painted, recorded into
- *              Core Graphics paths for the public drawing parts or into lanes for the scene, by the same drawing.
+ *              Core Graphics paths for the public drawing parts or into lanes for the scene, by the same drawing, from
+ *              the layout's flat records.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -22,15 +23,15 @@ struct FlowchartEdgePaths<Path: DiagramPathRecording> {
     let strokedMarks: Path
     let textPatches: Path
 
-    init<Maker: DiagramPathMaking>(edges: [FlowchartLayoutEdge], making maker: Maker) where Maker.Path == Path {
+    init<Maker: DiagramPathMaking>(records: FlowchartLayoutRecords, making maker: Maker) where Maker.Path == Path {
         solid = maker.makePath()
         thick = maker.makePath()
         dotted = maker.makePath()
         filledMarks = maker.makePath()
         strokedMarks = maker.makePath()
         textPatches = maker.makePath()
-        for edge in edges {
-            if !Self.isStyled(edge) { addLineAndMarks(of: edge, making: maker) }
+        for edge in records.edges {
+            if !edge.isStyled { addLineAndMarks(of: edge, in: records, making: maker) }
             if let text = edge.text {
                 let madeCount = maker.madePathCount
                 textPatches.addPath(maker.roundedRectangle(text.frame.insetBy(dx: -FlowchartDrawingParts.edgeTextPatchExtraWidth / 2, dy: 0),
@@ -47,7 +48,8 @@ struct FlowchartEdgePaths<Path: DiagramPathRecording> {
         return edge.stroke != .invisible
     }
 
-    private func addLineAndMarks<Maker: DiagramPathMaking>(of edge: FlowchartLayoutEdge, making maker: Maker) where Maker.Path == Path {
+    private func addLineAndMarks<Maker: DiagramPathMaking>(of edge: FlowchartPlacedEdge, in records: FlowchartLayoutRecords,
+                                                           making maker: Maker) where Maker.Path == Path {
         let grouped: Path
         switch edge.stroke {
         case .solid: grouped = solid
@@ -57,7 +59,7 @@ struct FlowchartEdgePaths<Path: DiagramPathRecording> {
         }
         let madeCount = maker.madePathCount
         let line = maker.makePath()
-        DiagramEdgeDrawing.record(edge.path, into: line)
+        DiagramEdgeDrawing.record(edge, of: records, into: line)
         grouped.addPath(line)
         maker.givePathsBack(downTo: madeCount)
         if let mark = edge.sourceMark { DiagramEdgeDrawing.addMark(mark, filled: filledMarks, stroked: strokedMarks) }
@@ -71,14 +73,16 @@ struct FlowchartNodePaths<Path: DiagramPathRecording> {
     let fills: Path
     let outlines: Path
 
-    init<Maker: DiagramPathMaking>(nodes: [FlowchartLayoutNode], making maker: Maker) where Maker.Path == Path {
+    init<Maker: DiagramPathMaking>(records: FlowchartLayoutRecords, making maker: Maker) where Maker.Path == Path {
         fills = maker.makePath()
         outlines = maker.makePath()
-        for node in nodes where node.hasUsualLook {
+        for node in records.nodes where node.hasUsualLook {
             let madeCount = maker.madePathCount
             defer { maker.givePathsBack(downTo: madeCount) }
-            if let asset = node.asset {
-                if let frame = FlowchartNodeAssetDrawing.frame(of: asset, in: node, making: maker) { fills.addPath(frame, alsoTo: outlines) }
+            if let asset = records.asset(at: node.assetIndex) {
+                if let frame = FlowchartNodeAssetDrawing.frame(of: asset, in: node.frame, hasLabel: node.text.lineCount > 0, making: maker) {
+                    fills.addPath(frame, alsoTo: outlines)
+                }
                 continue
             }
             if FlowchartLayeredShapeDrawing.isPaintedPieceByPiece(node.shape) { continue }

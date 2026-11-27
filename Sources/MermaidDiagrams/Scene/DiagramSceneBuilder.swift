@@ -9,8 +9,8 @@
  *              blocks, or as texts measured from their source's bytes (DiagramSceneBuilderMeasuredText.swift).
  *
  * Authors: Bahey Shalash
- * Version: 0.10
- * Date: 25/11/2026
+ * Version: 0.11
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -162,33 +162,39 @@ struct DiagramSceneBuilder: ~Copyable {
     /// `path` merged into the open run, or made the outline of its one filled path, or else the start of a new run.
     private mutating func add(_ path: CGPath, painting: DiagramShapePainting, part: DiagramScenePart) {
         guard !path.isEmpty else { return }
-        if openRun?.outline(path, painting: painting, part: part) == true { return outlineOpenRun() }
-        if openRun?.merge(path, painting: painting, part: part) == true { return }
+        if openRun != nil {
+            let last = paintings.count - 1
+            if let outlined = openRun?.outlinedPainting(path, painting: painting, runPainting: paintings[last], part: part) {
+                paintings[last] = outlined
+                return
+            }
+            if openRun?.merge(path, painting: painting, runPainting: paintings[last], part: part) == true { return }
+        }
         finishRun()
-        openRun(DiagramSceneShapeRun(path: path, painting: painting, part: part))
+        openRun(DiagramSceneShapeRun(path: path, part: part), painting: painting)
     }
 
     /// `lane` merged into the open run, or made the outline of its one filled path, or else copied as the start of a new run.
     private mutating func add(_ lane: DiagramPathLane, painting: DiagramShapePainting, part: DiagramScenePart) {
         guard !lane.isEmpty else { return }
-        if openRun?.outline(lane, painting: painting, part: part) == true { return outlineOpenRun() }
-        if openRun?.merge(lane, painting: painting, part: part) == true { return }
+        if openRun != nil {
+            let last = paintings.count - 1
+            if let outlined = openRun?.outlinedPainting(lane, painting: painting, runPainting: paintings[last], part: part) {
+                paintings[last] = outlined
+                return
+            }
+            if openRun?.merge(lane, painting: painting, runPainting: paintings[last], part: part) == true { return }
+        }
         finishRun()
         guard let runLane else { preconditionFailure("lanes are added to a builder made with their workspace") }
-        openRun(DiagramSceneShapeRun(lane: lane, into: runLane, painting: painting, part: part))
+        openRun(DiagramSceneShapeRun(lane: lane, into: runLane, part: part), painting: painting)
     }
 
-    /// `run` made the open run, its painting the last of the paintings.
-    private mutating func openRun(_ run: DiagramSceneShapeRun) {
+    /// `run` made the open run, `painting` the last of the paintings.
+    private mutating func openRun(_ run: DiagramSceneShapeRun, painting: DiagramShapePainting) {
         if paintings.isEmpty { paintings.reserveCapacity(Self.firstListCapacity) }
-        paintings.append(run.painting)
+        paintings.append(painting)
         openRun = run
-    }
-
-    /// The open run's fill made a fill and stroke: its painting, the last, follows.
-    private mutating func outlineOpenRun() {
-        guard let openRun else { return }
-        paintings[paintings.count - 1] = openRun.painting
     }
 
     /// The open run recorded as one shape, after the items before it; its painting is already the last.
