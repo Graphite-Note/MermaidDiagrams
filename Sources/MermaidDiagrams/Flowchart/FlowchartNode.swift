@@ -5,8 +5,8 @@
  * Description: A node of a flowchart, the shapes it is drawn in, and the icon or picture it may show instead.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 23/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 /// A node of a flowchart: the identifier edges name it by, the text drawn in it and its shape.
@@ -32,7 +32,7 @@ public struct FlowchartNode: Equatable, Sendable {
 /// The shapes a flowchart node is drawn in, Pele's catalogue (`svg/shapes.ts`): Mermaid's classic shapes, written with
 /// brackets around the text (`A[text]`, `A{text}`) or by name (`A@{ shape: diam }`), and the shapes written by name
 /// only (`A@{ shape: cloud }`), each named by Mermaid's documented names (`documentedNames`).
-public enum FlowchartNodeShape: Equatable, Sendable, CaseIterable {
+public enum FlowchartNodeShape: Equatable, Sendable, CaseIterable, BitwiseCopyable {
     /// `[text]`.
     case rectangle
     /// `(text)`.

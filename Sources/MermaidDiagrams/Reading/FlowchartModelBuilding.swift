@@ -6,8 +6,8 @@
  *              whose collapsed groups are folded), and the same model with its groups' directions changed.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 extension FlowchartModel {
@@ -76,11 +76,10 @@ extension FlowchartModel {
 
     private func withGroups(_ groups: [FlowchartGroupRecord], decodedLabels: [DiagramLabel]) -> FlowchartModel {
         guard let extras else { return self }
-        var changed = self
-        changed.extras = FlowchartModelExtras(groups: groups, groupMembers: extras.groupMembers, decodedLabels: decodedLabels,
-                                              assetAttributes: extras.assetAttributes, nodeStyles: extras.nodeStyles, edgeStyles: extras.edgeStyles,
-                                              sideBytes: extras.sideBytes)
-        return changed
+        return FlowchartModel(text: text, nodes: nodes, edges: edges,
+                              extras: FlowchartModelExtras(groups: groups, groupMembers: extras.groupMembers, decodedLabels: decodedLabels,
+                                                           assetAttributes: extras.assetAttributes, nodeStyles: extras.nodeStyles,
+                                                           edgeStyles: extras.edgeStyles, sideBytes: extras.sideBytes))
     }
 }
 

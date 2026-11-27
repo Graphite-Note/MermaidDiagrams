@@ -6,8 +6,8 @@
  *              spans.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.8
- * Date: 25/11/2026
+ * Version: 0.9
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -123,7 +123,7 @@ struct FlowchartClusterGraph {
             let source = end(of: ends.source)
             let target = end(of: ends.target)
             guard source != target else { continue }
-            let labelSize = measured.edgeTexts[edgeIndex].map { text in
+            let labelSize = measured.edgeText(of: edgeIndex).map { text in
                 CGSize(width: text.size.width + edgeTextRoom.width, height: text.size.height + edgeTextRoom.height)
             }
             edges.append(LayeredCompoundSpanEdge(source: source, target: target, minimumRankSpan: diagram.edgeMinimumRankSpan(at: edgeIndex),
