@@ -2,17 +2,28 @@
  * File: StateDiagramMeasurement.swift
  * -----------------------------------
  * Layer: Core
- * Description: A state diagram's text measured and its shapes sized, Pele's, with the spans its transitions spread along.
+ * Description: A state diagram's text measured from its records into one list of lines and its shapes sized, Pele's,
+ *              with the spans its transitions spread along.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.6
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
 
+/// A state's texts measured and its shape sized.
+struct StateDiagramMeasuredState {
+    /// The name, or nil for a start, an end, a choice, a fork or a join.
+    let name: DiagramMeasuredText?
+    /// A box's descriptions after the first, or nil.
+    let details: DiagramMeasuredText?
+    /// The drawn size on the page.
+    let size: CGSize
+}
+
 /// A state diagram's text measured and its shapes sized, Pele's: what the layout needs before it places anything.
-struct StateDiagramMeasurement {
+final class StateDiagramMeasurement {
     static let horizontalPadding: CGFloat = 16
     static let verticalPadding: CGFloat = 10
     static let minimumBoxWidth: CGFloat = 56
@@ -31,15 +42,13 @@ struct StateDiagramMeasurement {
     /// The room around a note's text.
     static let notePadding = CGSize(width: 24, height: 16)
 
-    /// Each state's name, or nil for a start, an end, a choice, a fork or a join.
-    let names: [DiagramTextBlock?]
-    /// Each box's descriptions after the first, or nil.
-    let details: [DiagramTextBlock?]
-    /// Each state's drawn size on the page.
-    let stateSizes: [CGSize]
+    /// The lines of every text measured here, which the measured texts index.
+    var lines = DiagramMeasuredLines()
+    /// Each state's texts and drawn size on the page.
+    let states: [StateDiagramMeasuredState]
     /// Each transition's text, or nil.
-    let transitionTexts: [DiagramTextBlock?]
-    let noteTexts: [DiagramTextBlock]
+    let transitionTexts: [DiagramMeasuredText?]
+    let noteTexts: [DiagramMeasuredText]
     let noteSizes: [CGSize]
     /// For each state, the indexes of its transitions to itself, in their written order.
     let selfLoopTransitionIndices: [[Int]]
@@ -47,8 +56,8 @@ struct StateDiagramMeasurement {
     /// How much of each side of a state's box its transitions share out, clear of its corners (Pele's `span`: the box's
     /// side across the flow less 24); 0 for the marks, which keep their transitions at the middle.
     func sideSpan(of state: Int, in diagram: StateDiagram, flowIsVertical: Bool) -> CGFloat {
-        guard diagram.states[state].kind == .state else { return 0 }
-        return max(0, (flowIsVertical ? stateSizes[state].width : stateSizes[state].height) - Self.spanCornerClearance)
+        guard diagram.model.states[state].kind == .state else { return 0 }
+        return max(0, (flowIsVertical ? states[state].size.width : states[state].size.height) - Self.spanCornerClearance)
     }
 
     /// What `sideSpan` keeps clear of a box's corners, on both sides together.
@@ -56,77 +65,85 @@ struct StateDiagramMeasurement {
 
     init<Measurer: DiagramTextMeasuring>(diagram: StateDiagram, nameText: Measurer, smallText: Measurer, flowIsVertical: Bool,
                                          wrappingWidth: CGFloat, noteWrappingWidth: CGFloat) {
-        let transitionCounts = Self.busierSideTransitionCounts(diagram)
-        let stateCount = diagram.states.count
-        var names: [DiagramTextBlock?] = []
-        var details: [DiagramTextBlock?] = []
-        var stateSizes: [CGSize] = []
-        names.reserveCapacity(stateCount)
-        details.reserveCapacity(stateCount)
-        stateSizes.reserveCapacity(stateCount)
-        for (index, state) in diagram.states.enumerated() {
-            switch state.kind {
-            case .state:
-                let name = DiagramTextBlock(label: state.name, measurer: nameText, maximumWidth: wrappingWidth)
-                let detail = state.descriptions.count < 2 ? nil
-                    : Self.details(of: state, measurer: smallText, wrappingWidth: wrappingWidth).flatMap { block in block.lineCount == 0 ? nil : block }
-                names.append(name)
-                details.append(detail)
-                stateSizes.append(Self.boxSize(name: name, details: detail))
-            case .start, .end, .choice, .fork, .join:
-                names.append(nil)
-                details.append(nil)
-                stateSizes.append(Self.markSize(of: state.kind, transitionCount: transitionCounts.isEmpty ? 0 : transitionCounts[index],
-                                                 flowIsVertical: flowIsVertical))
+        let model = diagram.model
+        let transitionCounts = Self.busierSideTransitionCounts(model)
+        var lines = DiagramMeasuredLines()
+        lines.reserveCapacity(lines: model.states.count + model.transitions.count + model.notes.count + 1, derivedBytes: 0)
+        var states: [StateDiagramMeasuredState] = []
+        states.reserveCapacity(model.states.count)
+        let measured = model.text.withBytes { source in
+            let nameMeasuring = StateDiagramTextMeasuring<Measurer>(source: source, measurer: DiagramFlatMeasurer(nameText))
+            let smallMeasuring = StateDiagramTextMeasuring<Measurer>(source: source, measurer: DiagramFlatMeasurer(smallText))
+            for (index, state) in model.states.enumerated() {
+                switch state.kind {
+                case .state:
+                    let name = nameMeasuring.measureName(of: index, in: model, maximumWidth: wrappingWidth, into: &lines)
+                    let detail = state.descriptionCount < 2 ? nil : Self.details(of: index, in: model, measuring: smallMeasuring, wrappingWidth: wrappingWidth,
+                                                                                into: &lines)
+                    states.append(StateDiagramMeasuredState(name: name, details: detail, size: Self.boxSize(name: name, details: detail)))
+                case .start, .end, .choice, .fork, .join:
+                    let size = Self.markSize(of: state.kind, transitionCount: transitionCounts.isEmpty ? 0 : transitionCounts[index], flowIsVertical: flowIsVertical)
+                    states.append(StateDiagramMeasuredState(name: nil, details: nil, size: size))
+                }
             }
+            let transitions = Self.transitionTexts(of: model, measuring: smallMeasuring, wrappingWidth: wrappingWidth, into: &lines)
+            let notes = Self.notes(of: model, measuring: smallMeasuring, wrappingWidth: noteWrappingWidth, into: &lines)
+            return (transitions, notes)
         }
-        self.names = names
-        self.details = details
-        self.stateSizes = stateSizes
-        (transitionTexts, selfLoopTransitionIndices) = Self.transitionTexts(of: diagram, measurer: smallText, wrappingWidth: wrappingWidth)
-        (noteTexts, noteSizes) = Self.notes(of: diagram, measurer: smallText, wrappingWidth: noteWrappingWidth)
+        self.lines = lines
+        self.states = states
+        (transitionTexts, selfLoopTransitionIndices) = measured.0
+        (noteTexts, noteSizes) = measured.1
     }
 
     /// Each transition's text, or nil, and each state's loops.
-    private static func transitionTexts<Measurer: DiagramTextMeasuring>(of diagram: StateDiagram, measurer: Measurer, wrappingWidth: CGFloat)
-        -> (texts: [DiagramTextBlock?], selfLoopTransitionIndices: [[Int]]) {
-        var transitionTexts: [DiagramTextBlock?] = []
-        transitionTexts.reserveCapacity(diagram.transitions.count)
-        var selfLoopTransitionIndices = [[Int]](repeating: [], count: diagram.states.count)
-        for (transitionIndex, transition) in diagram.transitions.enumerated() {
-            transitionTexts.append(transition.label.map { label in DiagramTextBlock(label: label, measurer: measurer, maximumWidth: wrappingWidth) }
-                .flatMap { text in text.lineCount == 0 ? nil : text })
-            if transition.sourceIndex == transition.targetIndex { selfLoopTransitionIndices[transition.sourceIndex].append(transitionIndex) }
+    private static func transitionTexts<Measurer>(of model: StateDiagramModel, measuring: StateDiagramTextMeasuring<Measurer>, wrappingWidth: CGFloat,
+                                                  into lines: inout DiagramMeasuredLines)
+        -> (texts: [DiagramMeasuredText?], selfLoopTransitionIndices: [[Int]]) {
+        var transitionTexts: [DiagramMeasuredText?] = []
+        transitionTexts.reserveCapacity(model.transitions.count)
+        var selfLoopTransitionIndices = [[Int]](repeating: [], count: model.states.count)
+        for (transitionIndex, transition) in model.transitions.enumerated() {
+            if transition.label.isNone {
+                transitionTexts.append(nil)
+            } else {
+                let text = measuring.measure(transition.label, in: model, maximumWidth: wrappingWidth, into: &lines)
+                transitionTexts.append(text.lineCount == 0 ? nil : text)
+            }
+            if transition.source == transition.target { selfLoopTransitionIndices[transition.sourceIndex].append(transitionIndex) }
         }
         return (transitionTexts, selfLoopTransitionIndices)
     }
 
     /// Each note's text and its sheet's size.
-    private static func notes<Measurer: DiagramTextMeasuring>(of diagram: StateDiagram, measurer: Measurer,
-                                                              wrappingWidth: CGFloat) -> (texts: [DiagramTextBlock], sizes: [CGSize]) {
-        var noteTexts: [DiagramTextBlock] = []
+    private static func notes<Measurer>(of model: StateDiagramModel, measuring: StateDiagramTextMeasuring<Measurer>, wrappingWidth: CGFloat,
+                                        into lines: inout DiagramMeasuredLines) -> (texts: [DiagramMeasuredText], sizes: [CGSize]) {
+        var noteTexts: [DiagramMeasuredText] = []
         var noteSizes: [CGSize] = []
-        noteTexts.reserveCapacity(diagram.notes.count)
-        noteSizes.reserveCapacity(diagram.notes.count)
-        for note in diagram.notes {
-            let text = DiagramTextBlock(label: note.text, measurer: measurer, maximumWidth: wrappingWidth)
+        noteTexts.reserveCapacity(model.notes.count)
+        noteSizes.reserveCapacity(model.notes.count)
+        for note in model.notes {
+            let text = measuring.measure(note.text, in: model, maximumWidth: wrappingWidth, into: &lines)
             noteTexts.append(text)
-            noteSizes.append(CGSize(width: text.size.width + notePadding.width, height: text.size.height + notePadding.height))
+            noteSizes.append(CGSize(width: text.width + notePadding.width, height: text.height + notePadding.height))
         }
         return (noteTexts, noteSizes)
     }
 
-    /// A box's descriptions after the first, in one block, or nil when they hold no line.
-    private static func details<Measurer: DiagramTextMeasuring>(of state: StateDiagramState, measurer: Measurer,
-                                                                wrappingWidth: CGFloat) -> DiagramTextBlock? {
-        let detailLines = state.descriptions.dropFirst().flatMap(\.lines)
-        return detailLines.isEmpty ? nil : DiagramTextBlock(label: DiagramLabel(lines: detailLines), measurer: measurer, maximumWidth: wrappingWidth)
+    /// A box's descriptions after the first, in one text of their lines as decoded (`DiagramLabel(lines:)`), or nil when
+    /// they hold no line.
+    private static func details<Measurer>(of state: Int, in model: StateDiagramModel, measuring: StateDiagramTextMeasuring<Measurer>,
+                                          wrappingWidth: CGFloat, into lines: inout DiagramMeasuredLines) -> DiagramMeasuredText? {
+        let detailLines = model.states[state].descriptionIndices.dropFirst().flatMap { index in model.label(model.descriptions[index]).lines }
+        guard !detailLines.isEmpty else { return nil }
+        let text = DiagramFlatTextMeasuring.measure(DiagramLabel(lines: detailLines), measurer: measuring.measurer, maximumWidth: wrappingWidth, into: &lines)
+        return text.lineCount == 0 ? nil : text
     }
 
     /// A box around its name, and its other descriptions under a line.
-    private static func boxSize(name: DiagramTextBlock, details: DiagramTextBlock?) -> CGSize {
+    private static func boxSize(name: DiagramMeasuredText, details: DiagramMeasuredText?) -> CGSize {
         let textWidth = max(name.size.width, details?.size.width ?? 0)
-        let detailsHeight = details.map { block in detailsGap + block.size.height } ?? 0
+        let detailsHeight = details.map { text in detailsGap + text.size.height } ?? 0
         return CGSize(width: max(textWidth + 2 * horizontalPadding, minimumBoxWidth), height: name.size.height + 2 * verticalPadding + detailsHeight)
     }
 
@@ -145,11 +162,11 @@ struct StateDiagramMeasurement {
 
     /// For each state, the larger of how many transitions leave it and how many arrive.
     /// Empty for a diagram without forks and joins, the only states whose size follows it.
-    private static func busierSideTransitionCounts(_ diagram: StateDiagram) -> [Int] {
-        guard diagram.states.contains(where: { state in state.kind == .fork || state.kind == .join }) else { return [] }
-        let stateCount = diagram.states.count
+    private static func busierSideTransitionCounts(_ model: StateDiagramModel) -> [Int] {
+        guard model.states.contains(where: { state in state.kind == .fork || state.kind == .join }) else { return [] }
+        let stateCount = model.states.count
         var counts = [Int](repeating: 0, count: 2 * stateCount)
-        for transition in diagram.transitions {
+        for transition in model.transitions {
             counts[transition.sourceIndex] += 1
             counts[stateCount + transition.targetIndex] += 1
         }

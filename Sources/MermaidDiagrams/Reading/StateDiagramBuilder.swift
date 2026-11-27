@@ -2,48 +2,64 @@
  * File: StateDiagramBuilder.swift
  * -------------------------------
  * Layer: Core
- * Description: Collects a state diagram as its statements are read on the text's bytes: states by their interned
- *              names, one start and one end per scope, transitions and notes within the limits, and the composite
- *              bodies open at each point.
+ * Description: Collects a state diagram as its statements are read on the text's bytes, as records over the text:
+ *              states by their interned names, one start and one end per scope, transitions and notes within the
+ *              limits, texts as ranges where the decoder reads them as written, and the composite bodies open at each
+ *              point.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 /// Collects a state diagram as its statements are read: states by identifier, one start and one end per scope (the
 /// top level, or a region of a composite's body), transitions and notes within the limits, and the composite bodies
 /// open at each point, which take the states named inside them.
 struct StateDiagramBuilder {
-    private(set) var diagram = StateDiagram()
+    private(set) var model: StateDiagramRecords
+    private var direction = FlowchartDirection.topToBottom
+    private var composites: [StateDiagramComposite] = []
+    private var accessibilityTitle: String?
+    private var accessibilityDescription: String?
+    private var unappliedStatementCount = 0
     private let limits: MermaidDiagramLimits
-    /// The names read, interned; the state each names by its number.
-    private var names: GraphDiagramNameTable
-    private var stateIndexByName: [Int32] = []
+    /// The thread's working lists, given back when the reading ends: the names read, interned (`names`); the state each
+    /// names by its number (`indexByName`); the composite of each state that has a body, by the state's index, -1 for
+    /// none (`firstNumbers`); the state each description in `model.descriptions` is written for, in the order written,
+    /// which `finished` puts in a run a state (`secondNumbers`).
+    private var lists = GraphDiagramReadingLists()
     /// The `[*]` states by their scope (`scopeKey`): a few in a list, searched in order, and past them a dictionary.
-    private var startOrEndScopes: [(key: UInt64, index: Int)] = []
+    private var startOrEndScopes: [StartOrEndScope] = []
     private var startOrEndIndexByScope: [UInt64: Int] = [:]
-    /// The composite of each state that has a body, by the state's index, -1 for none.
-    private var compositeIndexByStateIndex: [Int32] = []
     /// The composite bodies open now, outermost first, with the region being read in each.
     private var openBodies: [OpenBody] = []
+
+    /// A scope's `[*]` state: its scope's key and its index.
+    private struct StartOrEndScope {
+        let key: UInt64
+        let index: Int
+    }
 
     private struct OpenBody {
         let compositeIndex: Int
         var regionIndex: Int
     }
 
-    /// - Parameter byteCount: The length of the text, which bounds what it can name: room is made for a state and a
-    ///   transition every `bytesPerStatement` bytes, within the limits, so that most diagrams grow no list.
-    init(limits: MermaidDiagramLimits, isASCII: Bool, byteCount: Int) {
+    /// - Parameters:
+    ///   - text: The text the statements are read from, which the records index.
+    ///   - byteCount: The length of the text, which bounds what it can name: room is made for a state and a transition
+    ///     every `bytesPerStatement` bytes, within the limits, so that most diagrams grow no list.
+    ///   - lists: The thread's working lists, emptied for this text, which the builder holds until `finished` gives them back.
+    init(text: MermaidSourceText, limits: MermaidDiagramLimits, byteCount: Int, lists: inout GraphDiagramReadingLists) {
+        model = StateDiagramRecords(text: text)
         self.limits = limits
-        names = GraphDiagramNameTable(isASCII: isASCII)
+        swap(&self.lists, &lists)
         let statementCount = min(byteCount / Self.bytesPerStatement + 4, limits.maximumNodeCount, Self.mostReserved)
-        names.reserveCapacity(statementCount)
-        stateIndexByName.reserveCapacity(statementCount)
-        compositeIndexByStateIndex.reserveCapacity(statementCount)
-        diagram.states.reserveCapacity(statementCount)
-        diagram.transitions.reserveCapacity(min(byteCount / Self.bytesPerStatement + 4, limits.maximumEdgeCount, Self.mostReserved))
+        self.lists.names.reserveCapacity(statementCount)
+        self.lists.indexByName.reserveCapacity(statementCount)
+        self.lists.firstNumbers.reserveCapacity(statementCount)
+        model.states.reserveCapacity(statementCount)
+        model.transitions.reserveCapacity(min(byteCount / Self.bytesPerStatement + 4, limits.maximumEdgeCount, Self.mostReserved))
     }
 
     /// About the bytes a short statement takes (`  A --> B`).
@@ -66,25 +82,33 @@ struct StateDiagramBuilder {
         let index: Int
         switch reference {
         case .named(let range):
-            let (number, isNew) = names.intern(bytes.buffer, range)
-            index = isNew ? try addNamedState(identifier: bytes.text(range), kind: kind) : Int(stateIndexByName[number])
+            let (number, isNew) = lists.names.intern(bytes.buffer, range)
+            index = isNew ? try addNamedState(StateDiagramStateRecord(identifierStart: range.start, identifierEnd: range.end, writtenIdentifierIndex: -1,
+                                                                      kind: kind)) : Int(lists.indexByName[number])
         case .written(let identifier):
-            let (number, isNew) = names.intern(identifier)
-            index = isNew ? try addNamedState(identifier: identifier, kind: kind) : Int(stateIndexByName[number])
+            let (number, isNew) = lists.names.intern(identifier)
+            index = isNew ? try addNamedState(writtenState(identifier, kind: kind)) : Int(lists.indexByName[number])
         case .startOrEnd:
             let scope = scopeKey(isStart: isFirst)
             if let existing = startOrEndIndex(of: scope) {
                 index = existing
             } else {
-                index = try addState(identifier: "[*]", kind: isFirst ? .start : .end)
+                index = try addState(StateDiagramStateRecord(identifierStart: 0, identifierEnd: 0,
+                                                             writtenIdentifierIndex: StateDiagramStateRecord.startOrEndIdentifier, kind: isFirst ? .start : .end))
                 addStartOrEnd(index, of: scope)
             }
         }
-        if let innermost = openBodies.last, diagram.composites[innermost.compositeIndex].stateIndex != index {
-            diagram.states[index].compositeIndex = innermost.compositeIndex
-            diagram.states[index].regionIndex = innermost.regionIndex
+        if let innermost = openBodies.last, composites[innermost.compositeIndex].stateIndex != index {
+            model.states[index].composite = Int32(innermost.compositeIndex)
+            model.states[index].region = Int32(innermost.regionIndex)
         }
         return index
+    }
+
+    /// A state whose identifier is not a range of the text.
+    private mutating func writtenState(_ identifier: String, kind: StateDiagramStateKind) -> StateDiagramStateRecord {
+        model.identifiers.append(identifier)
+        return StateDiagramStateRecord(identifierStart: 0, identifierEnd: 0, writtenIdentifierIndex: Int32(model.identifiers.count - 1), kind: kind)
     }
 
     private func startOrEndIndex(of scope: UInt64) -> Int? {
@@ -99,60 +123,70 @@ struct StateDiagramBuilder {
             startOrEndIndexByScope[scope] = index
             return
         }
-        startOrEndScopes.append((scope, index))
+        if startOrEndScopes.isEmpty { startOrEndScopes.reserveCapacity(Self.listedScopeCount) }
+        startOrEndScopes.append(StartOrEndScope(key: scope, index: index))
     }
+
+    /// The descriptions made room for when the first is read.
+    private static let firstDescriptionCapacity = 16
 
     /// The scopes a list holds before a dictionary takes them.
     private static let listedScopeCount = 8
 
     /// Adds the state a name read for the first time names; the name's number is the next.
-    private mutating func addNamedState(identifier: String, kind: StateDiagramStateKind) throws(MermaidDiagramReadError) -> Int {
-        let index = try addState(identifier: identifier, kind: kind)
-        stateIndexByName.append(Int32(index))
+    private mutating func addNamedState(_ state: StateDiagramStateRecord) throws(MermaidDiagramReadError) -> Int {
+        let index = try addState(state)
+        lists.indexByName.append(Int32(index))
         return index
     }
 
-    private mutating func addState(identifier: String, kind: StateDiagramStateKind) throws(MermaidDiagramReadError) -> Int {
-        guard diagram.states.count + diagram.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        diagram.states.append(StateDiagramState(identifier: identifier, kind: kind))
-        compositeIndexByStateIndex.append(-1)
-        return diagram.states.count - 1
+    private mutating func addState(_ state: StateDiagramStateRecord) throws(MermaidDiagramReadError) -> Int {
+        guard model.states.count + model.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        model.states.append(state)
+        lists.firstNumbers.append(-1)
+        return model.states.count - 1
     }
 
-    /// Adds the texts written for a state. A state given a text is drawn as a box with it, whatever it was first
-    /// declared as, as in Mermaid.
-    mutating func addDescription(_ description: DiagramLabel, toStateAt index: Int) {
-        guard !description.isEmpty else { return }
-        diagram.states[index].descriptions.append(description)
-        diagram.states[index].kind = .state
+    /// Adds a text written for a state. A state given a text is drawn as a box with it, whatever it was first declared
+    /// as, as in Mermaid; an empty text is not kept.
+    mutating func addDescription(_ description: StateDiagramReadText, in bytes: GraphDiagramBytes, toStateAt index: Int) {
+        guard !description.isEmpty(in: bytes) else { return }
+        if lists.secondNumbers.isEmpty {
+            lists.secondNumbers.reserveCapacity(Self.firstDescriptionCapacity)
+            model.descriptions.reserveCapacity(Self.firstDescriptionCapacity)
+        }
+        model.descriptions.append(kept(description))
+        lists.secondNumbers.append(Int32(index))
+        model.states[index].kind = .state
     }
 
-    mutating func addDescriptions(_ descriptions: [DiagramLabel], toStateAt index: Int) {
-        let written = descriptions.filter { description in !description.isEmpty }
-        guard !written.isEmpty else { return }
-        diagram.states[index].descriptions.append(contentsOf: written)
-        diagram.states[index].kind = .state
+    mutating func addTransition(from sourceIndex: Int, to targetIndex: Int, label: StateDiagramReadText?) throws(MermaidDiagramReadError) {
+        guard model.transitions.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
+        model.transitions.append(StateDiagramTransitionRecord(source: Int32(sourceIndex), target: Int32(targetIndex), label: label.map { kept($0) } ?? .none))
     }
 
-    mutating func addTransition(from sourceIndex: Int, to targetIndex: Int, label: DiagramLabel?) throws(MermaidDiagramReadError) {
-        guard diagram.transitions.count < limits.maximumEdgeCount else { throw .tooManyEdges(limit: limits.maximumEdgeCount) }
-        diagram.transitions.append(StateDiagramTransition(sourceIndex: sourceIndex, targetIndex: targetIndex, label: label))
+    mutating func addNote(toStateAt stateIndex: Int, side: StateDiagramNoteSide, text: StateDiagramReadText) throws(MermaidDiagramReadError) {
+        guard model.states.count + model.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
+        model.notes.append(StateDiagramNoteRecord(state: Int32(stateIndex), side: side, text: kept(text)))
     }
 
-    mutating func addNote(toStateAt stateIndex: Int, side: StateDiagramNoteSide, text: DiagramLabel) throws(MermaidDiagramReadError) {
-        guard diagram.states.count + diagram.notes.count < limits.maximumNodeCount else { throw .tooManyNodes(limit: limits.maximumNodeCount) }
-        diagram.notes.append(StateDiagramNote(stateIndex: stateIndex, side: side, text: text))
+    /// The text as a record: its range, or its label kept among the model's.
+    private mutating func kept(_ text: StateDiagramReadText) -> StateDiagramText {
+        switch text {
+        case .range(let range): StateDiagramText(range: range)
+        case .label(let label): model.written(label)
+        }
     }
 
     /// Opens a body of the composite state at `stateIndex`: the states named until it closes are inside it.
     mutating func openBody(ofStateAt stateIndex: Int) {
         let compositeIndex: Int
-        if compositeIndexByStateIndex[stateIndex] >= 0 {
-            compositeIndex = Int(compositeIndexByStateIndex[stateIndex])
+        if lists.firstNumbers[stateIndex] >= 0 {
+            compositeIndex = Int(lists.firstNumbers[stateIndex])
         } else {
-            compositeIndex = diagram.composites.count
-            diagram.composites.append(StateDiagramComposite(stateIndex: stateIndex, parentCompositeIndex: openBodies.last?.compositeIndex))
-            compositeIndexByStateIndex[stateIndex] = Int32(compositeIndex)
+            compositeIndex = composites.count
+            composites.append(StateDiagramComposite(stateIndex: stateIndex, parentCompositeIndex: openBodies.last?.compositeIndex))
+            lists.firstNumbers[stateIndex] = Int32(compositeIndex)
         }
         openBodies.append(OpenBody(compositeIndex: compositeIndex, regionIndex: 0))
     }
@@ -166,33 +200,75 @@ struct StateDiagramBuilder {
     mutating func startRegion() -> Bool {
         guard let innermost = openBodies.last else { return false }
         openBodies[openBodies.count - 1].regionIndex += 1
-        diagram.composites[innermost.compositeIndex].regionCount += 1
+        composites[innermost.compositeIndex].regionCount += 1
         return true
     }
 
     /// The identifier of the composite whose body is the innermost still open, or nil.
     var innermostOpenCompositeIdentifier: String? {
-        openBodies.last.map { body in diagram.states[diagram.composites[body.compositeIndex].stateIndex].identifier }
+        openBodies.last.map { body in
+            let state = model.states[composites[body.compositeIndex].stateIndex]
+            if state.writtenIdentifierIndex >= 0 { return model.identifiers[Int(state.writtenIdentifierIndex)] }
+            return model.text.string(MermaidTextRange(start: Int(state.identifierStart), end: Int(state.identifierEnd)))
+        }
     }
 
     /// Sets the direction of the body being read, or of the top level.
     mutating func setDirection(_ direction: FlowchartDirection) {
         if let innermost = openBodies.last {
-            diagram.composites[innermost.compositeIndex].direction = direction
+            composites[innermost.compositeIndex].direction = direction
         } else {
-            diagram.direction = direction
+            self.direction = direction
         }
     }
 
     mutating func setAccessibilityTitle(_ title: String) {
-        diagram.accessibilityTitle = title
+        accessibilityTitle = title
     }
 
     mutating func setAccessibilityDescription(_ description: String) {
-        diagram.accessibilityDescription = description
+        accessibilityDescription = description
     }
 
     mutating func countUnappliedStatement() {
-        diagram.unappliedStatementCount += 1
+        unappliedStatementCount += 1
+    }
+
+    /// The diagram read, each state's descriptions put in a run in the order written; the working lists given back to
+    /// `lists`. The records are moved out, not copied.
+    mutating func finished(returning lists: inout GraphDiagramReadingLists) -> StateDiagram {
+        StateDiagramDescriptionRuns.group(&model, describedStates: self.lists.secondNumbers)
+        swap(&self.lists, &lists)
+        var records = StateDiagramRecords(text: model.text)
+        swap(&records, &model)
+        return StateDiagram(direction: direction, model: StateDiagramModel(records), composites: composites, accessibilityTitle: accessibilityTitle,
+                            accessibilityDescription: accessibilityDescription, unappliedStatementCount: unappliedStatementCount)
+    }
+}
+
+/// Puts the descriptions read, in the order written, in one run a state, in the states' order.
+enum StateDiagramDescriptionRuns {
+    static func group(_ model: inout StateDiagramRecords, describedStates: [Int32]) {
+        guard !describedStates.isEmpty else { return }
+        for state in describedStates { model.states[Int(state)].descriptionCount += 1 }
+        var next: Int32 = 0
+        for state in model.states.indices {
+            model.states[state].firstDescription = next
+            next += model.states[state].descriptionCount
+        }
+        // Written in the states' order, as they mostly are, the descriptions are in their runs already.
+        var isInOrder = true
+        for index in 1..<describedStates.count where describedStates[index] < describedStates[index - 1] {
+            isInOrder = false
+            break
+        }
+        guard !isInOrder else { return }
+        var placed = [StateDiagramText](repeating: .none, count: model.descriptions.count)
+        var written = [Int32](repeating: 0, count: model.states.count)
+        for (index, state) in describedStates.enumerated() {
+            placed[Int(model.states[Int(state)].firstDescription + written[Int(state)])] = model.descriptions[index]
+            written[Int(state)] += 1
+        }
+        model.descriptions = placed
     }
 }

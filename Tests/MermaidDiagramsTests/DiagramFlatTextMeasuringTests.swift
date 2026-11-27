@@ -8,8 +8,8 @@
  *              summable faces; character breaking; constant texts; measuring on many threads at once; and long texts.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 24/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -159,9 +159,31 @@ final class DiagramFlatTextMeasuringTests: XCTestCase {
         DiagramLabelDecodingObservation.observer = { text, form, _ in decoded.add(text, form) }
         defer { DiagramLabelDecodingObservation.observer = nil }
         for (_, sources) in try OutputDigest.corpora() {
-            for source in sources { _ = OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: OutputDigest.narrowColumnWidths) }
+            for source in sources {
+                _ = OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: OutputDigest.narrowColumnWidths)
+                addTextsReadAsWritten(of: source, to: decoded)
+            }
         }
         return decoded.texts
+    }
+
+    /// The texts state and class diagrams keep as ranges of their source, which the decoder reads as written and their
+    /// readers therefore no longer decode: still among the texts measured both ways, as when they were decoded.
+    private static func addTextsReadAsWritten(of source: String, to decoded: DecodedTexts) {
+        var texts: [MermaidTextRange] = []
+        let bytes: MermaidSourceText
+        switch try? MermaidDiagramReader.read(source, limits: .standard) {
+        case .stateDiagram(let diagram)?:
+            let model = diagram.model
+            bytes = model.text
+            texts = (model.descriptions + model.transitions.map(\.label) + model.notes.map(\.text)).filter(\.isSourceRange).map(\.range)
+        case .classDiagram(let diagram)?:
+            let model = diagram.model
+            bytes = model.text
+            texts = (model.classes.map(\.label) + model.relations.map(\.label) + model.notes.map(\.text)).filter(\.isSourceRange).map(\.range)
+        default: return
+        }
+        for range in texts { decoded.add(bytes.string(range), .plain) }
     }
 
     /// Why `measured`, in `lines` over `source`, is not `block` to the bit, or nil when it is.

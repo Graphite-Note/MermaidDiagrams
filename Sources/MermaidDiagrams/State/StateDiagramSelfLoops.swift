@@ -1,3 +1,15 @@
+/**
+ * File: StateDiagramSelfLoops.swift
+ * ---------------------------------
+ * Layer: Core
+ * Description: A state diagram's transitions from a state to itself, Pele's loops, their curves written into the
+ *              layout's one list of segments.
+ *
+ * Authors: felixchvl, Bahey Shalash
+ * Version: 0.2
+ * Date: 26/11/2026
+ */
+
 import CoreGraphics
 
 /// Transitions from a state to itself, Pele's: each loops out of the state's side across the flow (its right in a
@@ -33,26 +45,26 @@ enum StateDiagramSelfLoops {
 
     /// One loop: its line, its arrow, and the center of its text.
     struct Loop {
-        let path: DiagramPath
+        /// The loop's line, a run of the layout's segments.
+        let line: DiagramSegmentRun
         let arrow: DiagramEdgeMark
         let textCenter: CGPoint?
     }
 
     /// The loops of a state centered at `center`, drawn `size`, one per text size (nil for a loop without text).
-    static func loops(center: CGPoint, size: CGSize, flowIsVertical: Bool, textSizes: [CGSize?]) -> [Loop] {
+    static func loops(center: CGPoint, size: CGSize, flowIsVertical: Bool, textSizes: [CGSize?], into segments: inout [DiagramPathSegment]) -> [Loop] {
         let side = LoopSide(center: center, size: size, flowIsVertical: flowIsVertical)
         let textCenters = stackedTextCenters(side: side, textSizes: textSizes)
         return textSizes.indices.map { loopIndex in
             let reach = loopReach + CGFloat(loopIndex) * reachStep
             let spread = max(min(side.halfLength - sideClearance, spreadBase + CGFloat(loopIndex) * spreadStep), minimumSpread)
             let trim = DiagramEdgeMark.lineTrim(for: .arrow) / max((reach * reach + spread * spread).squareRoot(), 1)
-            let path = DiagramPath(start: side.point(outward: 0, along: -spread), segments: [
-                .curve(to: side.point(outward: reach * trim, along: spread + spread * trim), control1: side.point(outward: reach, along: -2 * spread),
-                       control2: side.point(outward: reach, along: 2 * spread)),
-            ])
+            segments.append(.curve(to: side.point(outward: reach * trim, along: spread + spread * trim), control1: side.point(outward: reach, along: -2 * spread),
+                                   control2: side.point(outward: reach, along: 2 * spread)))
+            let line = DiagramSegmentRun(start: side.point(outward: 0, along: -spread), firstSegment: Int32(segments.count - 1), segmentCount: 1)
             let arrow = DiagramEdgeMark(arrowhead: .arrow, tip: side.point(outward: 0, along: spread),
                                         direction: side.unitVector(outward: -reach, along: -spread))
-            return Loop(path: path, arrow: arrow, textCenter: textCenters[loopIndex])
+            return Loop(line: line, arrow: arrow, textCenter: textCenters[loopIndex])
         }
     }
 

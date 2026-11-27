@@ -5,8 +5,8 @@
  * Description: What sits beside each state across the flow, its loops and its notes, and the place it takes in its rank.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 25/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -39,14 +39,15 @@ struct StateDiagramSurroundings {
 
     init(diagram: StateDiagram, measured: StateDiagramMeasurement, axes: FlowchartFlowAxes) {
         // A diagram without notes makes no list of them by side.
-        var notesBySide = [[Int]](repeating: [], count: diagram.notes.isEmpty ? 0 : diagram.states.count * StateDiagramNoteSide.allCases.count)
-        for (noteIndex, note) in diagram.notes.enumerated() { notesBySide[Self.slot(state: note.stateIndex, side: note.side)].append(noteIndex) }
+        let model = diagram.model
+        var notesBySide = [[Int]](repeating: [], count: model.notes.isEmpty ? 0 : model.states.count * StateDiagramNoteSide.allCases.count)
+        for (noteIndex, note) in model.notes.enumerated() { notesBySide[Self.slot(state: note.stateIndex, side: note.side)].append(noteIndex) }
         var placeSizes: [LayeredSize] = []
-        var noteOffsets = [CGVector](repeating: .zero, count: diagram.notes.count)
-        var noteStackPositions = [StackPosition](repeating: StackPosition(index: 0, count: 1), count: diagram.notes.count)
-        placeSizes.reserveCapacity(diagram.states.count)
-        for state in diagram.states.indices {
-            let shape = axes.flowSize(of: measured.stateSizes[state])
+        var noteOffsets = [CGVector](repeating: .zero, count: model.notes.count)
+        var noteStackPositions = [StackPosition](repeating: StackPosition(index: 0, count: 1), count: model.notes.count)
+        placeSizes.reserveCapacity(model.states.count)
+        for state in model.states.indices {
+            let shape = axes.flowSize(of: measured.states[state].size)
             let loopTextSizes = measured.selfLoopTransitionIndices[state].map { transitionIndex in measured.transitionTexts[transitionIndex]?.size }
             let loops = StateDiagramSelfLoops.extent(textSizes: loopTextSizes, flowIsVertical: axes.flowIsVertical)
             let halfAcross = shape.across / 2 + loops.room

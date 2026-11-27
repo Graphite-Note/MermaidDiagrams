@@ -8,7 +8,7 @@
  *              accessibility text and scene text the same to the byte.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -24,7 +24,9 @@ final class DiagramSceneMeasuredTextCorpusTests: XCTestCase {
     /// of each text of its scene the same.
     /// The graph types whose layouts give their scenes blocks, and those whose layouts measure their texts themselves
     /// (`DiagramMeasuredText`).
-    private static let graphCorporaGivingBlocks = ["state-docs", "class-docs", "er-docs"]
+    /// State and class diagrams measure their texts too: their scenes are given no block but their boxes' titles
+    /// (GraphBoxTitleSceneTextTests).
+    private static let graphCorporaGivingBlocks = ["er-docs"]
     private static let graphCorporaMeasuringTheirTexts = ["requirement-docs", "c4-docs"]
 
     func testEveryCorpusSceneBuiltFromWrittenBytesIsTheSame() throws {
