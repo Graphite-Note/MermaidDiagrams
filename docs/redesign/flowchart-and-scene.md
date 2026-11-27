@@ -41,7 +41,7 @@ sample(1) of the flowchart documentation examples (Pele's 114) on main ba176e5, 
 
 ## Measured
 
-All runs are against main ba176e5 Release, under load from the other agents (load average 8 to 20).
+All runs are against main ba176e5 Release, under load from other builds on the machine (load average 8 to 20).
 
 Pele comparison (`--pele-comparison`), two runs each, alternated, on commit ab4c6bd (items 1 to 3):
 
