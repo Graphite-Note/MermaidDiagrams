@@ -53,7 +53,7 @@ Measured on an Apple M5 Max against Pele 1.13.0's own benchmark on the same inpu
 | Sequence diagrams | 10.1 µs | 4.4 µs (2.3×) | 7.8 µs (1.3×) |
 | Block diagrams | 5.8 µs | 3.1 µs (1.8×) | 4.9 µs (1.2×) |
 
-Every type reads, lays out and writes its SVG faster than Pele's `render`, and 0.8.0 reads and lays out 1.1 to 5.4 times as fast as 0.7.0 with the same drawings. [docs/Benchmarks.md](docs/Benchmarks.md) has every type, the iOS simulators and how it is measured.
+Every type reads, lays out and writes its SVG faster than Pele's `render`, and 0.8.0 reads and lays out 1.1 to 5.4 times as fast as 0.7.0 with the same drawings. In the iPad and iPhone simulators it reads and lays out 1.9 to 5.9 times as fast as Pele in WebKit. [docs/Benchmarks.md](docs/Benchmarks.md) has every type, the iOS simulators and how it is measured.
 
 ## Documentation
 
