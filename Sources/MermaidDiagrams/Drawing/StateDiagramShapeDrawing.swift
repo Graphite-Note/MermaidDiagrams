@@ -6,8 +6,8 @@
  *              drawing records (lanes of the scene's workspace).
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -90,8 +90,13 @@ enum StateDiagramShapeDrawing {
     }
 
     static func rule<Maker: DiagramPathMaking>(in frame: CGRect, below name: DiagramTextBlock, making maker: Maker) -> Maker.Path {
+        rule(in: frame, belowNameEndingAt: name.frame.maxY, making: maker)
+    }
+
+    /// The line across `frame` under a name whose frame ends at `nameBottom`.
+    static func rule<Maker: DiagramPathMaking>(in frame: CGRect, belowNameEndingAt nameBottom: CGFloat, making maker: Maker) -> Maker.Path {
         let path = maker.makePath()
-        let ruleHeight = name.frame.maxY + ruleGap
+        let ruleHeight = nameBottom + ruleGap
         path.move(to: CGPoint(x: frame.minX, y: ruleHeight))
         path.addLine(to: CGPoint(x: frame.maxX, y: ruleHeight))
         return path

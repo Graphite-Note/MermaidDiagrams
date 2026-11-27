@@ -5,7 +5,7 @@
  * Description: Whether a diagram read holds anything to draw.
  *
  * Authors: Bahey Shalash
- * Version: 0.11
+ * Version: 0.12
  * Date: 26/11/2026
  */
 
@@ -17,8 +17,8 @@ extension MermaidDiagram {
     public var hasNothingToDraw: Bool {
         switch self {
         case .flowchart(let diagram): diagram.nodeCount == 0
-        case .stateDiagram(let diagram): diagram.states.isEmpty
-        case .classDiagram(let diagram): diagram.classes.isEmpty && diagram.notes.isEmpty
+        case .stateDiagram(let diagram): diagram.stateCount == 0
+        case .classDiagram(let diagram): diagram.classCount == 0 && diagram.noteCount == 0
         case .sequence(let diagram): diagram.participants.isEmpty
         case .entityRelationship(let diagram): diagram.entities.isEmpty
         case .mindmap(let diagram): diagram.nodes.isEmpty

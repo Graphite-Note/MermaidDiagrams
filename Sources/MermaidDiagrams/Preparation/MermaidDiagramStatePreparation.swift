@@ -6,8 +6,8 @@
  *              it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -28,13 +28,9 @@ extension MermaidDiagramAccessibility {
     /// The names of the composite states, then of the states drawn as boxes, in the order the diagram names them: a
     /// composite state is named by its box's title, before the states it holds.
     init(stateDiagram diagram: StateDiagram, layout: StateDiagramLayout) {
-        // The composites and the states alone are taken into the work, not the whole layout.
-        let composites = layout.composites
-        let states = layout.states
+        // The layout's records are kept until the names are asked for, and the names made from them then.
         self.init(kind: .stateDiagram, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let compositeNames = composites.compactMap { composite in composite.title?.lines.joined(separator: " ") }
-            let stateNames = states.compactMap { state in state.name?.lines.joined(separator: " ") }
-            return compositeNames + stateNames
+            layout.spokenNames()
         }
     }
 }

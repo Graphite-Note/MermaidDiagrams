@@ -6,15 +6,15 @@
  *              to `end note`, or a floating note, which is read and not drawn.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// A note statement that sits beside a state.
 struct StateDiagramNoteDeclaration: Equatable {
     let state: StateDiagramStateReference
     let side: StateDiagramNoteSide
-    let text: DiagramLabel
+    let text: StateDiagramReadText
 }
 
 /// Reads what follows the keyword `note`: `left of Id : text` on one line, `left of Id` with lines up to a line that
@@ -38,7 +38,7 @@ enum StateDiagramNoteSyntax {
             return StateDiagramNoteDeclaration(state: state, side: side, text: text)
         }
         let text = try readLinesUpToEndNote(&bytes, keyword: keyword)
-        return StateDiagramNoteDeclaration(state: state, side: side, text: StateDiagramTextSyntax.label(bytes, text))
+        return StateDiagramNoteDeclaration(state: state, side: side, text: StateDiagramTextSyntax.text(bytes, text))
     }
 
     /// `left of` or `right of`, in any case, followed by a space.

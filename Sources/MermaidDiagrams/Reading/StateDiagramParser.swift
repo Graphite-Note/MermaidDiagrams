@@ -7,8 +7,8 @@
  *              and the statements that only style the diagram, counted and left.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 import Foundation
@@ -27,9 +27,12 @@ struct StateDiagramParser {
     static func parse(_ cursor: MermaidTextCursor, limits: MermaidDiagramLimits) throws(MermaidDiagramReadError) -> StateDiagram {
         try cursor.bytes.withUnsafeBufferPointer { buffer throws(MermaidDiagramReadError) in
             let bytes = GraphDiagramBytes(buffer, position: cursor.position)
-            var parser = StateDiagramParser(bytes: bytes, builder: StateDiagramBuilder(limits: limits, isASCII: bytes.isASCII, byteCount: buffer.count - cursor.position))
-            try parser.readStatements()
-            return parser.builder.diagram
+            return try GraphDiagramReadingScratch.withLists(isASCII: bytes.isASCII) { lists throws(MermaidDiagramReadError) in
+                var parser = StateDiagramParser(bytes: bytes, builder: StateDiagramBuilder(text: MermaidSourceText(bytes: cursor.bytes), limits: limits,
+                                                                                          byteCount: buffer.count - cursor.position, lists: &lists))
+                try parser.readStatements()
+                return parser.builder.finished(returning: &lists)
+            }
         }
     }
 
@@ -128,7 +131,7 @@ struct StateDiagramParser {
         bytes.skipSpaces()
         guard Self.isAtTransitionArrow(bytes) else {
             let stateIndex = try builder.stateIndex(for: first, in: bytes, isFirst: true)
-            if let description = StateDiagramTextSyntax.readColonText(&bytes) { builder.addDescription(description, toStateAt: stateIndex) }
+            if let description = StateDiagramTextSyntax.readColonText(&bytes) { builder.addDescription(description, in: bytes, toStateAt: stateIndex) }
             return
         }
         bytes.advance(by: 3)
@@ -158,7 +161,7 @@ struct StateDiagramParser {
             _ = try builder.stateIndex(for: .named(identifier), in: bytes, isFirst: true, kind: kind)
         case .described(let identifier, let descriptions, let opensBody):
             let stateIndex = try builder.stateIndex(for: identifier, in: bytes, isFirst: true)
-            builder.addDescriptions(descriptions, toStateAt: stateIndex)
+            for description in descriptions { builder.addDescription(description, in: bytes, toStateAt: stateIndex) }
             if opensBody { builder.openBody(ofStateAt: stateIndex) }
         case .composite(let identifier):
             builder.openBody(ofStateAt: try builder.stateIndex(for: .named(identifier), in: bytes, isFirst: true))

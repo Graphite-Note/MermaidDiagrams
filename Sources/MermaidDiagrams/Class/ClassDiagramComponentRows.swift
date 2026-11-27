@@ -6,8 +6,8 @@
  *              wrapComponents sets them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -30,11 +30,11 @@ enum ClassDiagramComponentRows {
     struct Edge {
         let source: Int
         let target: Int
-        let placed: ClassDiagramLayoutEdge
+        let placed: ClassDiagramPlacedEdge
     }
 
     static func placement(namespaceFrames: [CGRect], namespaceParents: [Int?], nodeFrames: [CGRect], nodeNamespaces: [Int?], edges: [Edge?],
-                          rowWidth: CGFloat, gap: CGFloat) -> Placement? {
+                          segments: [DiagramPathSegment], rowWidth: CGFloat, gap: CGFloat) -> Placement? {
         let namespaceCount = namespaceFrames.count
         var roots = LayeredUnionFind(count: namespaceCount + nodeFrames.count)
         for (namespace, parent) in namespaceParents.enumerated() { if let parent { roots.join(namespace, into: parent) } }
@@ -57,7 +57,7 @@ enum ClassDiagramComponentRows {
         let edgeParts = edges.map { edge in edge.map { edge in itemParts[namespaceCount + edge.source] } }
         for (edge, partIndex) in zip(edges, edgeParts) {
             guard let edge, let partIndex else { continue }
-            parts[partIndex] = parts[partIndex].union(covered(by: edge.placed))
+            parts[partIndex] = parts[partIndex].union(covered(by: edge.placed, segments: segments))
         }
         guard let rows = rows(of: parts, width: rowWidth, gap: gap) else { return nil }
         return Placement(namespaceOffsets: itemParts.prefix(namespaceCount).map { part in rows.shifts[part] },
@@ -92,10 +92,10 @@ enum ClassDiagramComponentRows {
     }
 
     /// What an edge covers as Pele counts it: the points of its line, its text's patch and its cardinalities.
-    private static func covered(by edge: ClassDiagramLayoutEdge) -> CGRect {
+    private static func covered(by edge: ClassDiagramPlacedEdge, segments: [DiagramPathSegment]) -> CGRect {
         var bounds = CGRect(origin: edge.path.start, size: .zero)
-        for segment in edge.path.segments {
-            switch segment {
+        for index in edge.path.segmentIndices {
+            switch segments[index] {
             case .line(let end): bounds = bounds.union(CGRect(origin: end, size: .zero))
             case .curve(let end, let firstControl, let secondControl):
                 for point in [end, firstControl, secondControl] { bounds = bounds.union(CGRect(origin: point, size: .zero)) }

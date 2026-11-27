@@ -7,8 +7,8 @@
  *              otherwise, so that two names are one exactly when 0.7.0's String keys made them one.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 #if canImport(Darwin)
@@ -23,7 +23,7 @@ import Glibc
 /// name, so names are kept as Strings, as 0.7.0's dictionaries keyed them. The hash is FNV-1a on 64 bits from a basis
 /// drawn once per process, so that a text cannot be written to make its names collide.
 struct GraphDiagramNameTable {
-    private let isASCII: Bool
+    private var isASCII: Bool
     /// A power of two long once a name is added: a name's number + 1, or 0 for an empty slot.
     private var slots: [Int32] = []
     private var hashes: [UInt64] = []
@@ -35,6 +35,42 @@ struct GraphDiagramNameTable {
     init(isASCII: Bool) {
         self.isASCII = isASCII
     }
+
+    /// The table emptied for the names of another text, its room kept (`GraphDiagramReadingScratch`); a table grown past
+    /// `GraphDiagramReadingLists.largestKept` names is let go.
+    mutating func reset(isASCII: Bool) {
+        self.isASCII = isASCII
+        if hashes.capacity > GraphDiagramReadingLists.largestKept {
+            slots = []
+            hashes = []
+            ranges = []
+        } else if count > 0 {
+            emptySlots()
+            hashes.removeAll(keepingCapacity: true)
+            ranges.removeAll(keepingCapacity: true)
+        }
+        if !numberByString.isEmpty { numberByString = [:] }
+        count = 0
+    }
+
+    /// Every slot emptied. A table that a large text grew and a small one filled again empties only the slots its names
+    /// hold, each found as `intern` placed it, so that a small text read after a large one on the same thread does not
+    /// clear the large one's slots each time.
+    private mutating func emptySlots() {
+        guard hashes.count * Self.slotsPerNameClearedOneByOne < slots.count else {
+            return slots.withUnsafeMutableBufferPointer { slots in slots.update(repeating: 0) }
+        }
+        let mask = slots.count &- 1
+        for number in hashes.indices {
+            let entry = Int32(number + 1)
+            var slot = Int(truncatingIfNeeded: hashes[number]) & mask
+            while slots[slot] != entry { slot = (slot &+ 1) & mask }
+            slots[slot] = 0
+        }
+    }
+
+    /// Past this many slots a name, a table is emptied slot by slot rather than cleared whole.
+    private static let slotsPerNameClearedOneByOne = 16
 
     /// Room for `count` names before the table grows.
     mutating func reserveCapacity(_ count: Int) {

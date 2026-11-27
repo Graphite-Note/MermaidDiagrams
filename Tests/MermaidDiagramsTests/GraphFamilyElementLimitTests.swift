@@ -7,7 +7,7 @@
  *              refuses it as too many path elements instead of drawing it with the path missing.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -54,8 +54,7 @@ final class GraphFamilyElementLimitTests: XCTestCase {
     func testAStateDiagramsScenePastItsElementLimitIsRefused() throws {
         guard case .stateDiagram(let diagram) = try read("stateDiagram-v2\n  [*] --> A\n  A --> B : go\n  B --> [*]") else { return XCTFail("not a state diagram") }
         let layout = try StateDiagramLayoutEngine.layout(diagram, typography: typography, limits: .standard)
-        let lengthened = StateDiagramLayout(size: layout.size, font: layout.font, states: layout.states, transitions: layout.transitions,
-                                            notes: layout.notes, title: layout.title, composites: layout.composites, regionDividers: [longPath])
+        let lengthened = layout.replacingRegionDividers(with: [longPath])
         assertRefusedUnderSmallLimits { limits in DiagramScene(layout: lengthened, limits: limits) }
         assertSameDrawing(DiagramScene(layout: layout, limits: smallLimits), DiagramScene(layout: layout))
     }

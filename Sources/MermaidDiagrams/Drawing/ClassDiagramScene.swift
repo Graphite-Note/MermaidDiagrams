@@ -6,8 +6,8 @@
  *              them, its paths recorded into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.4
- * Date: 25/11/2026
+ * Version: 0.5
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -50,28 +50,29 @@ enum ClassDiagramSceneRecording {
         builder.stroke(paths.strokedMarks, .line, line, part: .marker)
         FlowchartSceneRecording.addCrossedTitles(of: namespaces, to: &builder)
         builder.fill(paths.edgeTextPatches, .background, part: .labelBackground)
-        for edge in layout.relations { builder.text(edge.text, .foreground, part: .edgeLabel) }
-        for edge in layout.relations {
-            builder.text(edge.sourceCardinality, .muted, part: .edgeLabel)
-            builder.text(edge.targetCardinality, .muted, part: .edgeLabel)
-        }
-        builder.fill(paths.classFills, .surface, part: .node)
-        builder.fill(paths.noteFills, .alternateSurface, part: .note)
-        builder.stroke(paths.outlines, .border, line, part: .node)
-        for box in layout.classes { builder.texts(box.annotations, .muted, part: .label) }
-        for box in layout.classes { builder.text(box.name, .foreground, isBold: true, part: .label) }
-        for box in layout.classes {
-            for member in box.members {
+        layout.source.withBytes { source in
+            let lines = layout.lines
+            for edge in layout.placedRelations { if let text = edge.text { builder.text(text, of: lines, source: source, .foreground, part: .edgeLabel) } }
+            for edge in layout.placedRelations {
+                if let text = edge.sourceCardinality { builder.text(text, of: lines, source: source, .muted, part: .edgeLabel) }
+                if let text = edge.targetCardinality { builder.text(text, of: lines, source: source, .muted, part: .edgeLabel) }
+            }
+            builder.fill(paths.classFills, .surface, part: .node)
+            builder.fill(paths.noteFills, .alternateSurface, part: .note)
+            builder.stroke(paths.outlines, .border, line, part: .node)
+            builder.texts(layout.placedAnnotations, of: lines, source: source, .muted, part: .label)
+            for box in layout.placedClasses { builder.text(box.name, of: lines, source: source, .foreground, isBold: true, part: .label) }
+            for member in layout.placedMembers {
                 switch member.classifier {
-                case .plain, .static: builder.text(member.text, .foreground, part: .label)
-                case .abstract: builder.text(member.text, .foreground, isItalic: true, part: .label)
+                case .plain, .static: builder.text(member.text, of: lines, source: source, .foreground, part: .label)
+                case .abstract: builder.text(member.text, of: lines, source: source, .foreground, isItalic: true, part: .label)
                 }
             }
+            builder.stroke(paths.memberUnderlines, .foreground, line, part: .label)
+            for note in layout.placedNotes { builder.text(note.text, of: lines, source: source, .foreground, part: .note) }
+            builder.texts(layout.placedInterfaces, of: lines, source: source, .foreground, part: .note)
+            builder.title(layout.placedTitle, of: lines, source: source)
         }
-        builder.stroke(paths.memberUnderlines, .foreground, line, part: .label)
-        for note in layout.notes { builder.text(note.text, .foreground, part: .note) }
-        builder.texts(layout.interfaces, .foreground, part: .note)
-        builder.title(layout.title)
     }
 }
 

@@ -6,8 +6,8 @@
  *              as Pele's state renderer runs them.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 19/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 /// A transition between a composite state and a state inside it (`Moving --> slow` with `slow` in `Moving`), as Pele's
@@ -25,42 +25,56 @@ struct StateDiagramCompositeAnchor: Equatable {
 }
 
 enum StateDiagramCompositeAnchors {
-    /// The anchors of a diagram's transitions, in their order.
-    static func anchors(of diagram: StateDiagram, compositeOfState: [Int?]) -> [StateDiagramCompositeAnchor] {
-        diagram.transitions.enumerated().compactMap { transitionIndex, transition in
-            if let composite = compositeOfState[transition.sourceIndex], encloses(composite, transition.targetIndex, in: diagram) {
-                return StateDiagramCompositeAnchor(transitionIndex: transitionIndex, compositeIndex: composite, isInward: true)
+    /// The anchors of a diagram's transitions, in their order, in `arena`.
+    static func anchors(of diagram: StateDiagram, compositeIndices: ScratchSpan<Int32>, arena: DiagramScratchArena) -> ScratchSpan<StateDiagramCompositeAnchor> {
+        var anchors = arena.list(capacity: diagram.model.transitions.count, of: StateDiagramCompositeAnchor.self)
+        for (transitionIndex, transition) in diagram.model.transitions.enumerated() {
+            let source = compositeIndices[transition.sourceIndex]
+            if source >= 0, encloses(Int(source), transition.targetIndex, in: diagram) {
+                anchors.append(StateDiagramCompositeAnchor(transitionIndex: transitionIndex, compositeIndex: Int(source), isInward: true))
+                continue
             }
-            if let composite = compositeOfState[transition.targetIndex], encloses(composite, transition.sourceIndex, in: diagram) {
-                return StateDiagramCompositeAnchor(transitionIndex: transitionIndex, compositeIndex: composite, isInward: false)
+            let target = compositeIndices[transition.targetIndex]
+            if target >= 0, encloses(Int(target), transition.sourceIndex, in: diagram) {
+                anchors.append(StateDiagramCompositeAnchor(transitionIndex: transitionIndex, compositeIndex: Int(target), isInward: false))
             }
-            return nil
         }
+        return anchors.elements
     }
 
-    /// Whether `state` sits inside the composite, at any depth; the walk out is bounded by the number of composites.
+    /// Whether `state` was last named inside the composite at `compositeIndex`, directly or in composites inside it.
     private static func encloses(_ compositeIndex: Int, _ state: Int, in diagram: StateDiagram) -> Bool {
-        var current = diagram.states[state].compositeIndex
+        let states = diagram.model.states
+        var current = states[state].compositeIndex
         var steps = 0
         while let index = current, steps <= diagram.composites.count {
             if index == compositeIndex { return true }
-            current = diagram.states[diagram.composites[index].stateIndex].compositeIndex
+            current = states[diagram.composites[index].stateIndex].compositeIndex
             steps += 1
         }
         return false
     }
 
-    /// The direction each composite's box runs in: its own, else the box around it's, else the diagram's.
+    /// The direction each composite's box runs in: its own, else that of the nearest composite around it that has one,
+    /// else the diagram's.
     static func compositeDirections(of diagram: StateDiagram) -> [FlowchartDirection] {
-        diagram.composites.indices.map { index in
+        let states = diagram.model.states
+        var directions: [FlowchartDirection] = []
+        directions.reserveCapacity(diagram.composites.count)
+        for index in diagram.composites.indices {
+            var direction = diagram.direction
             var current: Int? = index
             var steps = 0
             while let composite = current, steps <= diagram.composites.count {
-                if let direction = diagram.composites[composite].direction { return direction }
-                current = diagram.states[diagram.composites[composite].stateIndex].compositeIndex
+                if let own = diagram.composites[composite].direction {
+                    direction = own
+                    break
+                }
+                current = states[diagram.composites[composite].stateIndex].compositeIndex
                 steps += 1
             }
-            return diagram.direction
+            directions.append(direction)
         }
+        return directions
     }
 }

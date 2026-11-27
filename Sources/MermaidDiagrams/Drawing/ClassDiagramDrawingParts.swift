@@ -6,8 +6,8 @@
  *              a drawing records.
  *
  * Authors: Félix Chevalier, Bahey Shalash
- * Version: 0.3
- * Date: 24/11/2026
+ * Version: 0.4
+ * Date: 26/11/2026
  */
 
 import CoreGraphics
@@ -112,8 +112,8 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
         edgeTextPatches = maker.makePath()
         let lines = LinePaths(solid: solidLines, dashed: dashedLines, dotted: dottedLines, filledMarks: filledMarks, strokedMarks: strokedMarks,
                               textPatches: edgeTextPatches)
-        for edge in layout.relations { lines.addLine(of: edge, making: maker) }
-        for edge in layout.noteLinks { lines.addLine(of: edge, making: maker) }
+        for edge in layout.placedRelations { lines.addLine(of: edge, segments: layout.segments, making: maker) }
+        for edge in layout.placedNoteLinks { lines.addLine(of: edge, segments: layout.segments, making: maker) }
         classFills = maker.makePath()
         noteFills = maker.makePath()
         outlines = maker.makePath()
@@ -125,18 +125,19 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
     /// The classes' boxes and the notes, filled and outlined, with the lines between compartments and the notes' folds.
     private static func addBoxes<Maker: DiagramPathMaking>(of layout: ClassDiagramLayout, fills classFills: Path, noteFills: Path, outlines: Path,
                                                            making maker: Maker) where Maker.Path == Path {
-        for box in layout.classes {
+        for box in layout.placedClasses {
             let madeCount = maker.madePathCount
             let outline = maker.roundedRectangle(box.frame, cornerWidth: ClassDiagramDrawingParts.boxCornerRadius,
                                                  cornerHeight: ClassDiagramDrawingParts.boxCornerRadius)
             classFills.addPath(outline, alsoTo: outlines)
             maker.givePathsBack(downTo: madeCount)
-            for y in box.dividerYs {
-                outlines.move(to: CGPoint(x: box.frame.minX, y: y))
-                outlines.addLine(to: CGPoint(x: box.frame.maxX, y: y))
-            }
+            guard box.hasDividers else { continue }
+            outlines.move(to: CGPoint(x: box.frame.minX, y: box.dividerYs.title))
+            outlines.addLine(to: CGPoint(x: box.frame.maxX, y: box.dividerYs.title))
+            outlines.move(to: CGPoint(x: box.frame.minX, y: box.dividerYs.attributes))
+            outlines.addLine(to: CGPoint(x: box.frame.maxX, y: box.dividerYs.attributes))
         }
-        for note in layout.notes {
+        for note in layout.placedNotes {
             let frame = note.frame
             let fold = ClassDiagramDrawingParts.noteFold
             let madeCount = maker.madePathCount
@@ -154,13 +155,11 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
 
     /// A line under each static member's text, from its first character to its last.
     private static func addUnderlines(of layout: ClassDiagramLayout, to memberUnderlines: Path) {
-        for box in layout.classes {
-            for member in box.members where member.classifier == .static {
-                let text = member.text
-                let y = text.center.y + text.fontSize * (DiagramTextDrawing.baselineShiftRatio + ClassDiagramDrawingParts.underlineDropRatio)
-                memberUnderlines.move(to: CGPoint(x: text.frame.minX, y: y))
-                memberUnderlines.addLine(to: CGPoint(x: text.frame.maxX, y: y))
-            }
+        for member in layout.placedMembers where member.classifier == .static {
+            let text = member.text
+            let y = text.center.y + text.fontSize * (DiagramTextDrawing.baselineShiftRatio + ClassDiagramDrawingParts.underlineDropRatio)
+            memberUnderlines.move(to: CGPoint(x: text.frame.minX, y: y))
+            memberUnderlines.addLine(to: CGPoint(x: text.frame.maxX, y: y))
         }
     }
 
@@ -174,11 +173,11 @@ struct ClassDiagramPaths<Path: DiagramPathRecording> {
         let textPatches: Path
 
         /// A relation's or a note's line by its stroke, its marks, and the patch behind its text.
-        func addLine<Maker: DiagramPathMaking>(of edge: ClassDiagramLayoutEdge, making maker: Maker) where Maker.Path == Path {
+        func addLine<Maker: DiagramPathMaking>(of edge: ClassDiagramPlacedEdge, segments: [DiagramPathSegment], making maker: Maker) where Maker.Path == Path {
             let madeCount = maker.madePathCount
             defer { maker.givePathsBack(downTo: madeCount) }
             let line = maker.makePath()
-            DiagramEdgeDrawing.record(edge.path, into: line)
+            DiagramRouteSegments.record(edge.path, of: segments, into: line)
             switch edge.line {
             case .solid: solid.addPath(line)
             case .dashed: dashed.addPath(line)
