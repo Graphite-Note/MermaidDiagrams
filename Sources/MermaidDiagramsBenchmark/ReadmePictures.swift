@@ -4,11 +4,12 @@
  * Layer: Benchmark
  * Description: Paints one documentation example of every diagram type with DiagramSceneRenderer as PNG pictures
  *              of at most 256 colors (IndexedPNGWriter), in the light and the dark palette Obsidian's default theme
- *              gives Pele, cropped to the diagram, and prints the README's gallery that shows them.
+ *              gives Pele, cropped to the diagram, and prints the gallery that shows them (docs/Gallery.md); paints
+ *              one diagram of a text file the same way, as the README's speed chart.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 23/11/2026
+ * Version: 0.2
+ * Date: 27/11/2026
  */
 
 import CoreGraphics
@@ -16,9 +17,11 @@ import Foundation
 import MermaidDiagrams
 
 /// `--readme-pictures <folder>` writes `<type>-light.png` and `<type>-dark.png` for the example of each type chosen
-/// here, then prints the README's gallery (the type's name, a `<picture>` that follows the reader's appearance, and the
-/// example's text in a collapsed `<details>`). `--readme-pictures <folder> --every-example` writes instead every example
-/// of every corpus (`<type>-<index>-light.png` and `-dark.png`), to choose from.
+/// here, then prints the gallery's text for `docs/Gallery.md` (the type's name, a `<picture>` that follows the reader's
+/// appearance, and the example's text in a collapsed `<details>`). `--readme-pictures <folder> --every-example` writes
+/// instead every example of every corpus (`<type>-<index>-light.png` and `-dark.png`), to choose from.
+/// `--readme-pictures <folder> --diagram <text file> <name>` writes the one diagram of that file as `<name>-light.png`
+/// and `<name>-dark.png` and prints its `<picture>` for the README (the speed chart, an XY chart of measured numbers).
 enum ReadmePictures {
     /// The documentation example a type's picture shows: its corpus and the example's place in it.
     struct ChosenExample {
@@ -36,7 +39,7 @@ enum ReadmePictures {
     /// The day a Gantt chart's today line is drawn at, so that the pictures do not change from one run to the next.
     static let ganttToday = Date(timeIntervalSince1970: 1_706_745_600) // 2024-02-01, inside the documentation's charts.
 
-    /// The example of each type the README shows, in the README's order.
+    /// The example of each type the gallery shows, in the gallery's order.
     static let chosenExamples: [ChosenExample] = [
         ChosenExample(kind: .flowchart, corpus: "flowchart-docs", exampleIndex: 113),
         ChosenExample(kind: .sequence, corpus: "sequence-docs", exampleIndex: 1),
@@ -109,6 +112,10 @@ enum ReadmePictures {
             try writeEveryExample(into: folder, typography: typography)
             return
         }
+        if let diagramIndex = arguments.firstIndex(of: "--diagram") {
+            try writeOneDiagram(arguments: Array(arguments[(diagramIndex + 1)...]), into: folder, typography: typography)
+            return
+        }
         var gallery: [String] = []
         for chosen in chosenExamples {
             let sources = try PeleResults.sources(ofCorpus: chosen.corpus)
@@ -133,6 +140,19 @@ enum ReadmePictures {
                 }
             }
         }
+    }
+
+    /// `<text file> <name>`: the file's diagram painted as `<name>-light.png` and `<name>-dark.png`, and its `<picture>`.
+    private static func writeOneDiagram(arguments: [String], into folder: URL, typography: DiagramTypography) throws {
+        guard arguments.count >= 2 else {
+            throw PictureFailure(description: "--diagram needs the text file and the name of its pictures")
+        }
+        let source = try String(contentsOf: URL(fileURLWithPath: arguments[0]), encoding: .utf8)
+        let name = arguments[1]
+        let pixelWidth = try write(source, named: name, into: folder, typography: typography)
+        let pointWidth = Int((CGFloat(pixelWidth) / pixelsPerPoint).rounded(.up))
+        print(pictureElement(named: name, folder: "docs/pictures", alternativeText: "Speed beside Pele, drawn by the package",
+                             pointWidth: pointWidth))
     }
 
     /// The source prepared and painted in each appearance into `<name>-<appearance>.png`; the widest picture's pixels.
@@ -190,18 +210,15 @@ enum ReadmePictures {
         return CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
     }
 
-    /// The README's entry for one type: its name, the picture in the reader's appearance at its size in points (a page
+    /// The gallery's entry for one type: its name, the picture in the reader's appearance at its size in points (a page
     /// narrower than that shrinks it), the example's text.
     private static func galleryEntry(for kind: MermaidDiagramKind, source: String, pointWidth: Int) -> String {
         let name = kind.peleName
         let shownSource = source.trimmingCharacters(in: .newlines)
         return """
-        ### \(kind.spokenName)
+        ## \(kind.spokenName)
 
-        <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="docs/pictures/\(name)-dark.png">
-          <img alt="\(kind.spokenName), drawn by the package" width="\(pointWidth)" src="docs/pictures/\(name)-light.png">
-        </picture>
+        \(pictureElement(named: name, folder: "pictures", alternativeText: "\(kind.spokenName), drawn by the package", pointWidth: pointWidth))
 
         <details><summary>Source</summary>
 
@@ -211,6 +228,16 @@ enum ReadmePictures {
 
         </details>
 
+        """
+    }
+
+    /// A `<picture>` showing `<folder>/<name>-dark.png` in the dark appearance and `-light.png` otherwise, `pointWidth` wide.
+    static func pictureElement(named name: String, folder: String, alternativeText: String, pointWidth: Int) -> String {
+        """
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="\(folder)/\(name)-dark.png">
+          <img alt="\(alternativeText)" width="\(pointWidth)" src="\(folder)/\(name)-light.png">
+        </picture>
         """
     }
 

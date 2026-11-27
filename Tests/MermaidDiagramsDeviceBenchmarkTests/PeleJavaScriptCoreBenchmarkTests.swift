@@ -15,7 +15,7 @@ import MermaidDiagramsBenchmark
 import XCTest
 
 /// `xcodebuild test -scheme MermaidDiagramsDeviceBenchmark -configuration Release -enableCodeCoverage NO
-/// -destination id=<device> -allowProvisioningUpdates` (README, Beside Pele): the shared scheme sets
+/// -destination id=<device> -allowProvisioningUpdates` (docs/Benchmarks.md, Beside Pele): the shared scheme sets
 /// MERMAID_DIAGRAMS_DEVICE_BENCHMARK. With `TEST_RUNNER_MERMAID_DIAGRAMS_CHECK_TARGETS=1` before `xcodebuild`
 /// (MERMAID_DIAGRAMS_CHECK_TARGETS in the test), each target of Graphite's plan a median misses fails the test, as
 /// `--check-targets` makes the Mac's benchmark exit with status 1.

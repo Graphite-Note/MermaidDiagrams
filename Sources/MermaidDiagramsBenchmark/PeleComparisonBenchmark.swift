@@ -44,7 +44,7 @@ public struct PeleComparisonRow: Sendable {
     /// How many times faster than Pele the package reads and lays out.
     public var speedUp: Double { pele.medianMicroseconds / readingAndLayout.medianMicroseconds }
 
-    /// The row of the README's table: median / 99th percentile in µs.
+    /// The row of the table in docs/Benchmarks.md: median / 99th percentile in µs.
     public var tableRow: String {
         String(format: "| %@ | %d | %.2f / %.2f | %.2f / %.2f | %.1f× | %.2f / %.2f |", name, diagramCount, pele.medianMicroseconds,
                pele.percentile99Microseconds, readingAndLayout.medianMicroseconds, readingAndLayout.percentile99Microseconds, speedUp,

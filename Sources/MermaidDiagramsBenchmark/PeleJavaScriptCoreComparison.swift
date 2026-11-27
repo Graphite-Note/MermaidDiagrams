@@ -36,7 +36,7 @@ public struct PeleJavaScriptCoreRow: Sendable {
     public let peleInContext: BenchmarkTiming
     public let peleInWebKit: BenchmarkTiming?
 
-    /// The row of the README's table: median / 99th percentile in µs.
+    /// The row of the table in docs/Benchmarks.md: median / 99th percentile in µs.
     public var tableRow: String {
         let webKit = peleInWebKit.map { timing in String(format: "%.2f / %.2f", timing.medianMicroseconds, timing.percentile99Microseconds) } ?? "not run"
         return String(format: "| %@ | %d | %@ | %.2f / %.2f | %.2f / %.2f | %.1f× | %.2f / %.2f |", comparison.name, comparison.diagramCount, webKit,
@@ -57,7 +57,7 @@ public struct PeleJavaScriptCoreReport: Sendable {
 
     public var missedTargets: [String] { rows.flatMap(\.comparison.missedTargets) }
 
-    /// The report as the README's "Beside Pele" section writes it, one line for each case.
+    /// The report as docs/Benchmarks.md's "Beside Pele" section writes it, one line for each case.
     public var lines: [String] {
         [machine] + pele + ["drawings differing from Pele's in Deno: \(differingDrawings.count)"] + differingDrawings
             + ["| Inputs | Diagrams | Pele in WebKit, render | Pele in a JSContext, render | Package, read and layout | Speed-up | Package, prepared with SVG |",

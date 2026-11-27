@@ -5,8 +5,8 @@
  * Description: A Mermaid info diagram as its text describes it: a title and the accessibility statements, nothing else.
  *
  * Authors: Bahey Shalash
- * Version: 0.5
- * Date: 23/11/2026
+ * Version: 0.6
+ * Date: 27/11/2026
  */
 
 /// A Mermaid info diagram (`info`, optionally `showInfo`): the page that says which version drew it. It states nothing but
@@ -30,7 +30,7 @@ public struct InfoDiagram: Equatable, Sendable {
 public enum MermaidDiagramsVersion {
     public static let name = "MermaidDiagrams"
     /// The version the next release of the package carries; kept in step with its tag.
-    public static let number = "0.7.0"
+    public static let number = "0.8.0"
     /// What an info diagram says under its title.
     public static let text = "\(name) v\(number)"
 }

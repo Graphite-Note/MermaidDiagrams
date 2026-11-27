@@ -4,7 +4,7 @@
  * Layer: Benchmark
  * Description: Times reading, laying out and drawing every diagram type on Pele's benchmark inputs and Mermaid's
  *              documentation examples, the memory a layout holds, what each type's scene and SVG add, and the same
- *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked; paints the README's
+ *              inputs beside Pele's own times, checking the targets of Graphite's plan when asked; paints the gallery's
  *              pictures.
  *
  * Authors: Félix Chevalier, Bahey Shalash
@@ -40,7 +40,7 @@ struct MermaidDiagramsBenchmark {
     /// `--output-digest [folder]` prints a digest of every corpus input's output to compare two builds (`OutputDigest`);
     /// `--layout-memory` measures the heap a layout and a preparation hold per case (`LayoutMemoryBenchmark`); `--scenes`
     /// times only what each type's scene, preparation and SVG add (`DiagramSceneBenchmark`); `--readme-pictures` paints
-    /// the README's pictures of every type (`ReadmePictures`); `--flat-text` times the flat text measuring against the text
+    /// the gallery's pictures of every type (`ReadmePictures`); `--flat-text` times the flat text measuring against the text
     /// block (`FlatTextMeasuringBenchmark`); `--measured-scene-text` times texts taken to a scene as blocks against
     /// measured texts (`MeasuredSceneTextBenchmark`).
     static func main() async throws {
