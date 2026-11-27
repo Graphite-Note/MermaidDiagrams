@@ -14,7 +14,7 @@ It was written for [Graphite](https://github.com/Graphite-Note/Graphite), whose 
 Add the package to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/Graphite-Note/MermaidDiagrams.git", exact: "0.8.0")
+.package(url: "https://github.com/Graphite-Note/MermaidDiagrams.git", exact: "0.8.1")
 ```
 
 and the product `MermaidDiagrams` to your target's dependencies. Any diagram goes through one path:

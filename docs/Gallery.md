@@ -953,7 +953,7 @@ agentflow-beta TB
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="pictures/info-dark.png">
-  <img alt="Info diagram, drawn by the package" width="204" src="pictures/info-light.png">
+  <img alt="Info diagram, drawn by the package" width="201" src="pictures/info-light.png">
 </picture>
 
 <details><summary>Source</summary>

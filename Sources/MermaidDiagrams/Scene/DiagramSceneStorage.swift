@@ -6,8 +6,8 @@
  *              the points and the verbs of every shape's path, as Core Graphics gives a path's elements out.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 24/11/2026
+ * Version: 0.3
+ * Date: 27/11/2026
  */
 
 import CoreGraphics
@@ -90,6 +90,9 @@ struct DiagramSceneStorage: @unchecked Sendable {
     }
 
     var itemCount: Int { block.header.itemCount }
+
+    /// The block's identity, shared by every copy of the storage (`DiagramScene.storageIdentifier`).
+    var identifier: ObjectIdentifier { ObjectIdentifier(block) }
 }
 
 /// The regions of a scene's storage: its records, its points and its verbs.

@@ -7,8 +7,8 @@
  *              as their elements in one block, and a Core Graphics path is made only for a reader that asks for one.
  *
  * Authors: Bahey Shalash
- * Version: 0.9
- * Date: 24/11/2026
+ * Version: 0.10
+ * Date: 27/11/2026
  */
 
 import CoreGraphics
@@ -68,6 +68,12 @@ public struct DiagramScene: Sendable {
 
     /// How many items the scene paints.
     public var itemCount: Int { storage.itemCount }
+
+    /// Tells this scene and its copies from every other scene alive: a scene never changes once made, and its copies
+    /// share its storage. A host keying what it made from a scene (a picture painted from it) keeps the scene with it,
+    /// since, as any `ObjectIdentifier`, the identifier can be given to another scene once this one and its copies are
+    /// gone. Reading it costs nothing, where `items` makes every shape's path anew.
+    public var storageIdentifier: ObjectIdentifier { storage.identifier }
 
     /// Calls `body` with each item, back to front, where the scene keeps it: a shape's elements are read without a Core
     /// Graphics path. A shape's view keeps the scene's storage, so that it stays valid wherever it is kept.
