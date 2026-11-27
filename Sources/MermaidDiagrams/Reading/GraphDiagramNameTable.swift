@@ -7,7 +7,7 @@
  *              otherwise, so that two names are one exactly when 0.7.0's String keys made them one.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -45,13 +45,32 @@ struct GraphDiagramNameTable {
             hashes = []
             ranges = []
         } else if count > 0 {
-            slots.withUnsafeMutableBufferPointer { slots in slots.update(repeating: 0) }
+            emptySlots()
             hashes.removeAll(keepingCapacity: true)
             ranges.removeAll(keepingCapacity: true)
         }
         if !numberByString.isEmpty { numberByString = [:] }
         count = 0
     }
+
+    /// Every slot emptied. A table that a large text grew and a small one filled again empties only the slots its names
+    /// hold, each found as `intern` placed it, so that a small text read after a large one on the same thread does not
+    /// clear the large one's slots each time.
+    private mutating func emptySlots() {
+        guard hashes.count * Self.slotsPerNameClearedOneByOne < slots.count else {
+            return slots.withUnsafeMutableBufferPointer { slots in slots.update(repeating: 0) }
+        }
+        let mask = slots.count &- 1
+        for number in hashes.indices {
+            let entry = Int32(number + 1)
+            var slot = Int(truncatingIfNeeded: hashes[number]) & mask
+            while slots[slot] != entry { slot = (slot &+ 1) & mask }
+            slots[slot] = 0
+        }
+    }
+
+    /// Past this many slots a name, a table is emptied slot by slot rather than cleared whole.
+    private static let slotsPerNameClearedOneByOne = 16
 
     /// Room for `count` names before the table grows.
     mutating func reserveCapacity(_ count: Int) {
