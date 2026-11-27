@@ -7,7 +7,7 @@
  *              label decoder's Markdown pass keeps no state between threads.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
+ * Version: 0.3
  * Date: 26/11/2026
  */
 
@@ -22,7 +22,8 @@ final class GraphFamilyThreadTests: XCTestCase {
     /// Twelve threads prepare the same inputs at once, each starting at another input, regular and at two narrow widths:
     /// every SVG, narrow SVG and spoken text is the one prepared alone, before the threads start. The inputs are the
     /// four corpora, each also kept to ASCII (the readers' byte paths) and with a name beyond ASCII (their String
-    /// paths), a state machine large enough to grow its name table, and random and generated requirement diagrams.
+    /// paths), a state machine large enough to grow its name table, and random and generated requirement and entity
+    /// relationship diagrams.
     func testGraphDiagramsPreparedOnManyThreadsAtOnceAreThosePreparedAlone() throws {
         let typography = DiagramSceneSamples.typography
         var sources: [String] = []
@@ -36,7 +37,12 @@ final class GraphFamilyThreadTests: XCTestCase {
         var requirementTexts = RequirementRandomTexts(seed: 0x7E_4D)
         sources += (0..<60).map { _ in requirementTexts.text(statementCount: 22) }
         sources.append(RequirementCorpus.generated(requirementCount: 40, direction: "LR"))
-        XCTAssertGreaterThan(sources.count, 310)
+        // Random entity relationship diagrams, groups, loops and attribute rows among them, whose readings and layouts work
+        // in each thread's lists and arena, and a schema large enough to grow them.
+        var entityRelationshipTexts = EntityRelationshipRandomTexts(seed: 0xE2_7D)
+        sources += (0..<60).map { _ in entityRelationshipTexts.text(statementCount: 22) }
+        sources.append(EntityRelationshipCorpus.schema(entityCount: 120))
+        XCTAssertGreaterThan(sources.count, 370)
         let widths: [CGFloat] = [280, 390]
         let expected = sources.map { source in OutputDigest.Outcome(source: source, typography: typography, narrowColumnWidths: widths).summaryLine }
         let shared = GraphThreadSharedInputs(sources: sources, expected: expected, typography: typography, widths: widths)

@@ -6,7 +6,7 @@
  *              into lanes of the scene's workspace.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -34,30 +34,40 @@ extension DiagramScene {
 /// a moment and given back.
 enum RequirementSceneRecording {
     static func add(_ layout: RequirementLayout, to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
+        layout.source.withUnsafeBufferPointer { source in add(layout, source: source, to: &builder, workspace: workspace) }
+    }
+
+    /// The painting, the names' and fields' lines read from `source`, the layout's text, borrowed.
+    private static func add(_ layout: RequirementLayout, source: UnsafeBufferPointer<UInt8>, to builder: inout DiagramSceneBuilder,
+                            workspace: DiagramSceneWorkspace) {
         let lineWidth = RequirementDrawingParts.lineWidth
         let line = DiagramStroke.rounded(lineWidth: lineWidth)
         let paths = RequirementPaths(layout: layout, making: workspace)
         let lines = layout.lines
-        builder.title(layout.placedTitle, of: lines)
+        builder.title(layout.placedTitle, of: lines, source: source)
         builder.stroke(paths.solidLines, .line, line, part: .edge)
         builder.stroke(paths.dashedLines, .line, .rounded(lineWidth: lineWidth, dashLengths: RequirementDrawingParts.dashedLineLengths), part: .edge)
         builder.stroke(paths.marks, .line, line, part: .marker)
         builder.fill(paths.textPatches, .background, part: .labelBackground)
-        for relation in layout.placedRelations { builder.text(relation.text, of: lines, .muted, part: .edgeLabel) }
+        for relation in layout.placedRelations { builder.text(relation.text, of: lines, source: source, .muted, part: .edgeLabel) }
         let outline = DiagramStroke(lineWidth: lineWidth)
         builder.fill(paths.boxFills, .surface, part: .node)
         builder.stroke(paths.boxOutlines, .border, outline, part: .node)
-        for box in layout.placedBoxes where box.style == nil { builder.text(box.stereotype, of: lines, .muted, part: .stereotype) }
-        for box in layout.placedBoxes where box.style == nil { builder.text(box.name, of: lines, .foreground, isBold: true, part: .label) }
-        for box in layout.placedBoxes where box.style == nil { builder.texts(layout.fieldTexts[box.fieldNames], of: lines, .muted, part: .field) }
-        for box in layout.placedBoxes where box.style == nil { builder.texts(layout.fieldTexts[box.fieldValues], of: lines, .foreground, part: .value) }
-        for box in layout.placedBoxes where box.style != nil { addStyledBox(box, of: layout, to: &builder, workspace: workspace) }
+        for box in layout.placedBoxes where box.style == nil { builder.text(box.stereotype, of: lines, source: source, .muted, part: .stereotype) }
+        for box in layout.placedBoxes where box.style == nil { builder.text(box.name, of: lines, source: source, .foreground, isBold: true, part: .label) }
+        for box in layout.placedBoxes where box.style == nil {
+            builder.texts(layout.fieldTexts[box.fieldNames], of: lines, source: source, .muted, part: .field)
+        }
+        for box in layout.placedBoxes where box.style == nil {
+            builder.texts(layout.fieldTexts[box.fieldValues], of: lines, source: source, .foreground, part: .value)
+        }
+        for box in layout.placedBoxes where box.style != nil { addStyledBox(box, of: layout, source: source, to: &builder, workspace: workspace) }
     }
 
     /// A box in the colors and stroke its style sets, and the usual ones for the rest; all its text in its style's color, or
     /// else, on a fill it sets, in the ink that contrasts more with that fill (Pele's `inkFill`), or else in the usual roles.
-    private static func addStyledBox(_ box: RequirementPlacedBox, of layout: RequirementLayout, to builder: inout DiagramSceneBuilder,
-                                     workspace: DiagramSceneWorkspace) {
+    private static func addStyledBox(_ box: RequirementPlacedBox, of layout: RequirementLayout, source: UnsafeBufferPointer<UInt8>,
+                                     to builder: inout DiagramSceneBuilder, workspace: DiagramSceneWorkspace) {
         let style = box.style ?? DiagramElementStyle()
         let madeCount = workspace.madePathCount
         defer { workspace.givePathsBack(downTo: madeCount) }
@@ -71,9 +81,9 @@ enum RequirementSceneRecording {
                        part: .node)
         let text = style.textColor.map(DiagramPaint.color) ?? TreemapInk.paint(onFill: style.fill)
         let lines = layout.lines
-        builder.text(box.stereotype, of: lines, text ?? .muted, part: .stereotype)
-        builder.text(box.name, of: lines, text ?? .foreground, isBold: true, part: .label)
-        builder.texts(layout.fieldTexts[box.fieldNames], of: lines, text ?? .muted, part: .field)
-        builder.texts(layout.fieldTexts[box.fieldValues], of: lines, text ?? .foreground, part: .value)
+        builder.text(box.stereotype, of: lines, source: source, text ?? .muted, part: .stereotype)
+        builder.text(box.name, of: lines, source: source, text ?? .foreground, isBold: true, part: .label)
+        builder.texts(layout.fieldTexts[box.fieldNames], of: lines, source: source, text ?? .muted, part: .field)
+        builder.texts(layout.fieldTexts[box.fieldValues], of: lines, source: source, text ?? .foreground, part: .value)
     }
 }

@@ -3,11 +3,12 @@
  * -----------------------------
  * Layer: Core
  * Description: A requirement diagram laid out on a page: its boxes with their texts, its relations with their marks and
- *              texts, and its title, kept as placed records of measured texts over one list of lines that the scene reads
- *              directly, with the boxes, relations and title as blocks made when a host asks; and why a layout is refused.
+ *              texts, and its title, kept as placed records of measured texts over one list of lines and of path segments
+ *              over one list that the scene reads directly, with the boxes, relations and title as blocks and paths made
+ *              when a host asks; and why a layout is refused.
  *
  * Authors: Bahey Shalash
- * Version: 0.3
+ * Version: 0.4
  * Date: 26/11/2026
  */
 
@@ -20,14 +21,18 @@ import CoreGraphics
 public struct RequirementLayout: Sendable {
     public let size: CGSize
     public let font: DiagramFont
-    /// The lines of every text below, all of them derived bytes.
+    /// The lines of every text below: ranges of the diagram's text (`source`), or derived bytes.
     let lines: DiagramMeasuredLines
+    /// The text the diagram was read from, which the names' and fields' lines are ranges of.
+    let source: [UInt8]
     /// The requirements, then the elements, in the order the diagram declares them.
     let placedBoxes: [RequirementPlacedBox]
     /// The lines of the boxes' fields' names and values, each placed: a box's are its ranges of it.
     let fieldTexts: [DiagramMeasuredText]
     /// The relations between two boxes drawn, in the order written.
     let placedRelations: [RequirementPlacedRelation]
+    /// The segments of every relation's line, each relation's a run of them.
+    let segments: [DiagramPathSegment]
     /// The title placed, or nil without one or for a title of no line.
     let placedTitle: DiagramMeasuredText?
     /// The diagram's `unappliedStatementCount`, which its measuring counted.
@@ -46,15 +51,20 @@ public struct RequirementLayout: Sendable {
     /// when read.
     public var relations: [RequirementLayoutRelation] {
         placedRelations.map { relation in
-            RequirementLayoutRelation(kind: relation.kind, path: relation.path, mark: relation.mark, text: block(of: relation.text))
+            RequirementLayoutRelation(kind: relation.kind, path: path(of: relation), mark: relation.mark, text: block(of: relation.text))
         }
     }
 
     public var title: DiagramTextBlock? { placedTitle.map(block(of:)) }
 
+    /// A relation's line, made from its segments.
+    func path(of relation: RequirementPlacedRelation) -> DiagramPath {
+        DiagramPath(start: relation.start, segments: Array(segments[relation.segmentIndices]))
+    }
+
     /// `text`, a text of this layout's lines, as a block.
     func block(of text: DiagramMeasuredText) -> DiagramTextBlock {
-        DiagramTextBlock(text, of: lines, source: DiagramMeasuredLines.noSource)
+        source.withUnsafeBufferPointer { source in DiagramTextBlock(text, of: lines, source: source) }
     }
 }
 
@@ -78,19 +88,17 @@ struct RequirementPlacedBox: Sendable {
     let style: DiagramElementStyle?
 }
 
-/// A relation placed, its text a measured text of the layout's lines.
+/// A relation placed: its line from `start` through `segmentCount` of the layout's `segments` from `firstSegment`, its
+/// mark, and its text, a measured text of the layout's lines.
 struct RequirementPlacedRelation: Sendable {
     let kind: RequirementRelationKind
-    var path: DiagramPath
-    var mark: RequirementRelationMark
-    var text: DiagramMeasuredText
+    let start: CGPoint
+    let firstSegment: Int32
+    let segmentCount: Int32
+    let mark: RequirementRelationMark
+    let text: DiagramMeasuredText
 
-    /// Moved by `offset` where it stands, each point as `RequirementLayoutRelation.translate(by:)` moves it.
-    mutating func translate(by offset: CGVector) {
-        path.translate(by: offset)
-        mark = mark.translated(by: offset)
-        text = text.translated(by: offset)
-    }
+    var segmentIndices: Range<Int> { Int(firstSegment)..<Int(firstSegment + segmentCount) }
 }
 
 /// A requirement's or an element's box: its stereotype (`«Requirement»`, `«Element»`) and bold name centered in its head,
@@ -120,7 +128,7 @@ public struct RequirementLayoutRelation: Equatable, Sendable {
 }
 
 /// The mark at a relation's end.
-public enum RequirementRelationMark: Equatable, Sendable {
+public enum RequirementRelationMark: Equatable, Sendable, BitwiseCopyable {
     /// A circled plus whose rim touches `point`, the source's side, `towardBox` pointing into the source.
     case containment(point: CGPoint, towardBox: CGVector)
     /// An open arrowhead with its tip at `tip`, pointing along `direction`.

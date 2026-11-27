@@ -6,9 +6,15 @@
  *              there: words as byte ranges, keys, comments and punctuation.
  *
  * Authors: felixchvl, Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
+
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 /// The tokens inside an entity's `{ … }`, as Mermaid's lexer reads them there: whitespace and line breaks only
 /// separate them, `PK`, `FK` and `UK` are keys in any case, and a run holding `~` is one word to the last `~` of its
@@ -100,7 +106,9 @@ struct EntityRelationshipAttributeWords {
     /// (`List~int~`, `Map~K, V~`); nil when the run holds none, or its `~` is the line's last.
     private mutating func readRunHoldingTildes() -> MermaidTextRange? {
         let position = cursor.position
-        if nextTildePosition < position { nextTildePosition = firstPosition(from: position) { index in cursor.buffer[index] == Self.tilde } }
+        if nextTildePosition < position { nextTildePosition = Self.firstIndex(of: Self.tilde, in: cursor.buffer, from: position) }
+        // With no `~` before the text's end no run holds one, and the whitespace need not be found.
+        guard nextTildePosition < cursor.buffer.count else { return nil }
         if nextWhitespacePosition < position { nextWhitespacePosition = firstPosition(from: position) { index in whitespaceLength(at: index) > 0 } }
         guard nextTildePosition < nextWhitespacePosition else { return nil }
         if tildeLineEnd < position {
@@ -170,6 +178,13 @@ struct EntityRelationshipAttributeWords {
         guard index < bytes.count else { return 0 }
         if EntityRelationshipLexer.isWhitespace(bytes[index]) { return 1 }
         return bytes[index] == Self.leadByteBelowU00C0 && index + 1 < bytes.count && bytes[index + 1] == Self.noBreakSpaceSecondByte ? 2 : 0
+    }
+
+    /// The first `byte` at or after `start`, or the text's end.
+    private static func firstIndex(of byte: UInt8, in bytes: UnsafeBufferPointer<UInt8>, from start: Int) -> Int {
+        guard start < bytes.count, let base = bytes.baseAddress else { return bytes.count }
+        guard let found = memchr(base + start, Int32(byte), bytes.count - start) else { return bytes.count }
+        return base.distance(to: found.assumingMemoryBound(to: UInt8.self))
     }
 
     /// The first index from `start` that `matches`, or the end of the text.

@@ -6,8 +6,8 @@
  *              and says what a screen reader hears of it.
  *
  * Authors: Bahey Shalash
- * Version: 0.2
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 extension MermaidDiagramPreparationContext {
@@ -32,9 +32,10 @@ extension MermaidDiagramAccessibility {
     /// Each entity's text, then each relationship as its two entities around its label: “CUSTOMER places ORDER”.
     init(entityRelationship diagram: EntityRelationshipDiagram) {
         self.init(kind: .entityRelationship, title: diagram.accessibilityTitle ?? diagram.title, description: diagram.accessibilityDescription) {
-            let entityTexts = diagram.entities.map(\.label.spokenText)
-            let relationships = diagram.relationships.map { relationship in
-                [entityTexts[relationship.firstEntityIndex], relationship.label.spokenText, entityTexts[relationship.secondEntityIndex]]
+            let model = diagram.model
+            let entityTexts = model.entities.map { entity in model.label(entity.label).spokenText }
+            let relationships = model.relationships.map { relationship in
+                [entityTexts[Int(relationship.firstEntityIndex)], model.label(relationship.label).spokenText, entityTexts[Int(relationship.secondEntityIndex)]]
                     .filter { part in !part.isEmpty }.joined(separator: " ")
             }
             return entityTexts + relationships

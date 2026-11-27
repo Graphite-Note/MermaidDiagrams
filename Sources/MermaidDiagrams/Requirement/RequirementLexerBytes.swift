@@ -3,12 +3,12 @@
  * ---------------------------------
  * Layer: Core
  * Description: The byte tests and searches the requirement lexer makes on a diagram's borrowed bytes: word characters,
- *              the ends of an unquoted text, line ends and line breaks, JavaScript's trimming, and keywords compared
- *              without regard to case.
+ *              the ends of an unquoted text, line ends and line breaks, and JavaScript's trimming (keywords are told in
+ *              RequirementKeywordWords).
  *
  * Authors: Bahey Shalash
- * Version: 0.1
- * Date: 25/11/2026
+ * Version: 0.3
+ * Date: 26/11/2026
  */
 
 #if canImport(Darwin)
@@ -18,9 +18,14 @@ import Glibc
 #endif
 
 extension RequirementLexer {
-    /// A character of `\w`.
+    /// A character of `\w`: an ASCII letter, digit or `_`, told by its bit in two masks of the 128 ASCII bytes.
     @inline(__always) static func isWordByte(_ byte: UInt8) -> Bool {
-        MermaidByte.isLetter(byte) || MermaidByte.isDigit(byte) || byte == MermaidByte.underscore
+        isMarked(byte, low: 0x03FF_0000_0000_0000, high: 0x07FF_FFFE_87FF_FFFE)
+    }
+
+    /// Whether `byte` is ASCII and its bit is set: bit `byte` of `low` for the first 64 bytes, of `high` for the next.
+    @inline(__always) private static func isMarked(_ byte: UInt8, low: UInt64, high: UInt64) -> Bool {
+        byte < 64 ? (low >> UInt64(byte)) & 1 != 0 : byte < 128 && (high >> UInt64(byte - 64)) & 1 != 0
     }
 
     /// An ASCII byte that is no whitespace of JavaScript's: no whitespace character starts with it.
@@ -28,13 +33,25 @@ extension RequirementLexer {
         byte < 0x80 && byte != MermaidByte.space && (byte < MermaidByte.tab || byte > MermaidByte.carriageReturn)
     }
 
-    /// The bytes that end an unquoted text: `:,\r\n{<>-=`.
+    /// The bytes that end an unquoted text: `:,\r\n{<>-=`, told by their bits.
     @inline(__always) static func endsUnquotedText(_ byte: UInt8) -> Bool {
-        switch byte {
-        case MermaidByte.colon, MermaidByte.comma, MermaidByte.carriageReturn, MermaidByte.newline, MermaidByte.openingBrace, MermaidByte.lessThan,
-             MermaidByte.greaterThan, MermaidByte.hyphen, MermaidByte.equals: true
-        default: false
+        isMarked(byte, low: 0x7400_3000_0000_2400, high: 0x0800_0000_0000_0000)
+    }
+
+    /// The end of the run of JavaScript's whitespace that starts at `start`, as `JavaScriptWhitespace.endOfRun` finds it:
+    /// a space, a tab, a line feed, a vertical tab, a form feed or a carriage return passed a byte at a time, the rest of
+    /// the run, from a byte past ASCII, found by it.
+    @inline(__always) static func endOfWhitespace(in bytes: UnsafeBufferPointer<UInt8>, from start: Int) -> Int {
+        var end = start
+        while end < bytes.count {
+            let byte = bytes[end]
+            if byte == MermaidByte.space || (byte >= MermaidByte.tab && byte <= MermaidByte.carriageReturn) {
+                end += 1
+            } else {
+                return byte < 0xC2 ? end : JavaScriptWhitespace.endOfRun(in: bytes, from: end)
+            }
         }
+        return end
     }
 
     /// A line terminator, what JavaScript's `.` does not match: a line feed, a carriage return, U+2028 or U+2029.
@@ -79,29 +96,4 @@ extension RequirementLexer {
         for offset in 0..<count where MermaidByte.lowercased(bytes[position + offset]) != wordBytes[offset] { return false }
         return true
     }
-}
-
-extension RequirementKeywords {
-    /// The keyword the word from `start` to `end` is in any case, or nil: compared byte by byte, made lowercase, with the
-    /// keywords of its length that start with its first letter, without making it a string to look it up.
-    static func keyword(from start: Int, to end: Int, in bytes: UnsafeBufferPointer<UInt8>) -> RequirementTokenKind? {
-        let first = MermaidByte.lowercased(bytes[start])
-        guard first < 0x80 else { return nil }
-        let length = end - start
-        candidates: for (word, kind) in keywordsByFirstByte[Int(first)] where word.count == length {
-            for offset in 1..<length where MermaidByte.lowercased(bytes[start + offset]) != word[offset] { continue candidates }
-            return kind
-        }
-        return nil
-    }
-
-    /// `byLowercaseWord`'s words as bytes, by their first byte.
-    private static let keywordsByFirstByte: [[(word: [UInt8], kind: RequirementTokenKind)]] = {
-        var byFirstByte = [[(word: [UInt8], kind: RequirementTokenKind)]](repeating: [], count: 128)
-        for (word, kind) in byLowercaseWord {
-            let bytes = Array(word.utf8)
-            byFirstByte[Int(bytes[0])].append((bytes, kind))
-        }
-        return byFirstByte
-    }()
 }
