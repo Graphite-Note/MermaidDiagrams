@@ -6,10 +6,11 @@
  *              relationship layout and by the 0.7.0 engine kept as the reference, alike to the bit: types with a `?`
  *              written right after them or after spaces, with pairs of `~`, in backticks beyond ASCII; lists of no key
  *              to eight keys (packed and kept apart); comments plain, wrapped, with markup, entity codes, line breaks,
- *              `~` and bytes beyond ASCII; the same rows set on a diagram in code; and texts mixing them at random.
+ *              `~` and bytes beyond ASCII; the same rows set on a diagram in code; rows with pairs of `~`, each read and
+ *              laid out alone, and those 0.7.0 refuses refused alike; and texts mixing them at random.
  *
  * Authors: Bahey Shalash
- * Version: 0.1
+ * Version: 0.2
  * Date: 26/11/2026
  */
 
@@ -26,13 +27,16 @@ final class EntityRelationshipCellEquivalenceTests: XCTestCase {
         "\"tab\tinside\"", "\"inner_underscore_words\"", "\"`code`\"",
     ]
 
-    /// Rows with pairs of `~`, each alone on its line where the run holding them reads to the line's last `~`.
-    private static let rowsWithTildes = ["    List~int~ items", "    Map~K,V~? lookup PK \"plain\"", "    string List~int~ FK", "    string x \"List~int~ here\"",
-                                         "    Set~List~int~~ nested UK", "    string ~tilde \"a ~ alone\""]
+    /// Rows with pairs of `~` in their types and names, which are drawn as angle brackets, never as the bytes written.
+    private static let rowsWithTildes = ["    List~int~ items", "    Map~K,V~? lookup PK \"plain\"", "    string List~int~ FK", "    Set~List~int~~ nested UK",
+                                         "    List~int~ ? maybe", "    List~é~ items"]
+    /// Rows whose word holding a `~` runs to the line's last `~`, into the comment's quotation, which leaves it unclosed:
+    /// 0.7.0 refuses them, and so must the reader.
+    private static let refusedRowsWithTildes = ["    string x \"List~int~ here\"", "    string ~tilde \"a ~ alone\""]
 
     /// Every type, name, keys and comment, one row each, in an entity of their own, laid out as written, across, and in a group.
     func testEveryWayOfMeasuringACellMatchesTheReferenceBitForBit() throws {
-        var rows: [String] = Self.rowsWithTildes
+        var rows: [String] = []
         for (index, type) in Self.types.enumerated() {
             for (keyIndex, keys) in Self.keys.enumerated() {
                 let comment = Self.comments[(index + keyIndex) % Self.comments.count]
@@ -45,7 +49,10 @@ final class EntityRelationshipCellEquivalenceTests: XCTestCase {
                 let block = rows[chunk..<min(chunk + 7, rows.count)].joined(separator: "\n")
                 let suffix = prefix.contains("subgraph") ? "\nend\n" : "\n"
                 let source = prefix + "  E\(chunk) {\n" + block + "\n  }\n  E\(chunk) ||--o{ F : \"has *many*\"\n  F {\n" + block + "\n  }" + suffix
-                guard case .entityRelationship(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else { continue }
+                guard case .entityRelationship(let diagram)? = try? MermaidDiagramReader.read(source, limits: .standard) else {
+                    XCTFail("not read:\n\(source)")
+                    continue
+                }
                 comparedCount += 1
                 XCTAssertNil(EntityRelationshipLayoutEquivalenceTests.firstDifference(diagram, limits: .standard), source)
                 // The same rows set in code: their texts as they are, their comments decoded already.
@@ -54,7 +61,31 @@ final class EntityRelationshipCellEquivalenceTests: XCTestCase {
                 XCTAssertNil(EntityRelationshipLayoutEquivalenceTests.firstDifference(built, limits: .standard), "set in code:\n\(source)")
             }
         }
-        XCTAssertGreaterThan(comparedCount, 24)
+        XCTAssertEqual(comparedCount, 3 * ((rows.count + 6) / 7))
+    }
+
+    /// Each row with pairs of `~` in an entity of its own, laid out as written, across and in a group, and the same rows
+    /// set in code: their words are measured and drawn as the angle brackets their text reads, never on the flat path as
+    /// the bytes written (taking a word with `~` as written fails each of the rows read).
+    func testRowsWithPairsOfTildesMatchTheReferenceBitForBit() throws {
+        var comparedCount = 0
+        for prefix in ["erDiagram\n", "erDiagram\ndirection LR\n", "erDiagram\nsubgraph g [Group]\n"] {
+            for row in Self.rowsWithTildes {
+                let suffix = prefix.contains("subgraph") ? "\nend\n" : "\n"
+                let source = prefix + "  E {\n" + row + "\n    int count\n  }\n  E ||--o{ F : has\n  F {\n" + row + "\n  }" + suffix
+                guard case .entityRelationship(let diagram) = try MermaidDiagramReader.read(source, limits: .standard) else { return XCTFail(source) }
+                XCTAssertTrue(diagram.entities[0].attributes.contains { attribute in (attribute.type + attribute.name).contains("<") }, source)
+                comparedCount += 1
+                XCTAssertNil(EntityRelationshipLayoutEquivalenceTests.firstDifference(diagram, limits: .standard), source)
+                var built = diagram
+                built.entities = diagram.entities
+                XCTAssertNil(EntityRelationshipLayoutEquivalenceTests.firstDifference(built, limits: .standard), "set in code:\n\(source)")
+            }
+        }
+        XCTAssertEqual(comparedCount, 3 * Self.rowsWithTildes.count)
+        let refused = Self.refusedRowsWithTildes.map { row in "erDiagram\n  E {\n" + row + "\n  }\n" }
+        XCTAssertEqual(EntityRelationshipReadingEquivalenceTests.assertReadAlike(refused), refused.count)
+        for source in refused { XCTAssertThrowsError(try MermaidDiagramReader.read(source, limits: .standard), source) }
     }
 
     /// Random rows of those pieces, many to an entity, several entities and relationships to a diagram.
